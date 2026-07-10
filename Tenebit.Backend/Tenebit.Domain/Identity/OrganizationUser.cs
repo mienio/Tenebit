@@ -20,10 +20,21 @@ public sealed class OrganizationUser
     public string DisplayName { get; private set; } = string.Empty;
     public bool IsActive { get; private set; }
     public string? PasswordHash { get; private set; }
+    public bool IsEmailVerified { get; private set; }
+    public string? TotpSecret { get; private set; }
+    public bool IsTwoFactorEnabled { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public List<OrganizationUserRole> Roles { get; private set; } = [];
 
     public void SetPasswordHash(string passwordHash) => PasswordHash = passwordHash;
+    public void MarkEmailVerified() => IsEmailVerified = true;
+    public void SetPendingTotpSecret(string secret) => TotpSecret = secret;
+    public void EnableTwoFactor() => IsTwoFactorEnabled = true;
+    public void DisableTwoFactor()
+    {
+        IsTwoFactorEnabled = false;
+        TotpSecret = null;
+    }
 
     public void Update(string email, string displayName, bool isActive, IEnumerable<string> roles)
     {

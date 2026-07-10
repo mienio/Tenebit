@@ -16,6 +16,9 @@ public sealed class OrganizationUserRepository : IOrganizationUserRepository
     public Task<OrganizationUser?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.OrganizationUsers.Include(x => x.Roles).FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 
+    public Task<OrganizationUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        _db.OrganizationUsers.Include(x => x.Roles).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
     public Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingId, CancellationToken cancellationToken) =>
         _db.OrganizationUsers.AnyAsync(x => x.OrganizationId == organizationId && x.Email == email.Trim().ToLowerInvariant() && (!excludingId.HasValue || x.Id != excludingId.Value), cancellationToken);
 

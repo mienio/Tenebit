@@ -23,6 +23,9 @@ fi
 
 mkdir -p "$BACKUPS"
 
+echo "  Backup bazy danych..."
+docker exec tenebit-db pg_dump -U postgres tenebit 2>/dev/null | gzip > "$BACKUPS/db-$STAMP.sql.gz" || echo "  WARN: backup bazy danych nie powiódł się (kontener tenebit-db niedostępny?)"
+
 # === BACKEND ===
 echo -e "\n[1/4] Backend..."
 

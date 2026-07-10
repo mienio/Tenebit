@@ -28,6 +28,9 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<JobProfile> JobProfiles => Set<JobProfile>();
     public DbSet<OrganizationUser> OrganizationUsers => Set<OrganizationUser>();
     public DbSet<ExternalLogin> ExternalLogins => Set<ExternalLogin>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AssetStatusSetting> AssetStatusSettings => Set<AssetStatusSetting>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
@@ -85,6 +88,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Email).HasMaxLength(240).IsRequired();
             entity.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(400);
+            entity.Property(x => x.TotpSecret).HasMaxLength(64);
             entity.HasIndex(x => new { x.OrganizationId, x.Email }).IsUnique();
             entity.HasIndex(x => x.Email).IsUnique();
             entity.OwnsMany(x => x.Roles, owned =>
@@ -103,6 +107,33 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Provider).HasMaxLength(40).IsRequired();
             entity.Property(x => x.ProviderUserId).HasMaxLength(240).IsRequired();
             entity.HasIndex(x => new { x.Provider, x.ProviderUserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.ToTable("password_reset_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.OrganizationUserId);
+        });
+
+        modelBuilder.Entity<EmailVerificationToken>(entity =>
+        {
+            entity.ToTable("email_verification_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.OrganizationUserId);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.OrganizationUserId);
         });
     }
 

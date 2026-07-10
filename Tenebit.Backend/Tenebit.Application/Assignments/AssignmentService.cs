@@ -95,7 +95,7 @@ public sealed class AssignmentService
                 assets.First(x => x.Id == requestedAsset.AssetId).AssignTo(person.Id);
             }
 
-            foreach (var procedure in procedures.Where(x => x.RequiresAcceptance))
+            foreach (var procedure in procedures.Where(x => x.RequiresAcceptance && x.Status == ProcedureStatus.Published))
             {
                 assignment.AddProcedureAcceptance(organizationId, procedure.Id, person.Id, _clock.UtcNow);
             }
@@ -107,7 +107,7 @@ public sealed class AssignmentService
             try
             {
                 var acceptedAssets = assets.Where(x => request.Assets.Any(item => item.AssetId == x.Id)).ToList();
-                var requiredProcedures = procedures.Where(x => x.RequiresAcceptance).Select(x => x.Title).ToList();
+                var requiredProcedures = procedures.Where(x => x.RequiresAcceptance && x.Status == ProcedureStatus.Published).Select(x => x.Title).ToList();
                 var link = _linkBuilder.BuildAssignmentAcceptanceLink(organizationId, assignment.Id);
                 var html = BuildAssignmentEmailHtml(person.FirstName, assignment.ProtocolNumber, acceptedAssets.Select(x => x.Name), requiredProcedures, link);
                 await _emailSender.SendAsync(person.Email, $"Nowy sprzęt do odebrania — {assignment.ProtocolNumber}", html, cancellationToken);

@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import { apiRequest, setAccessTokenProvider } from '../api/apiClient';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { apiRequest, refreshAccessToken, setAccessTokenProvider } from '../api/apiClient';
 import { clearStoredToken, decodeToken, getStoredToken, isTokenExpired, setStoredToken } from './authConfig';
 
 type AuthUser = {
@@ -9,9 +9,13 @@ type AuthUser = {
   email: string;
   displayName: string;
   roles: string[];
+  isEmailVerified: boolean;
+  isTwoFactorEnabled: boolean;
 };
 
 type LoginResponse = { token: string; user: AuthUser };
+type LoginStartResponse = LoginResponse | { requiresTwoFactor: true; challengeToken: string };
+export type LoginOutcome = { requiresTwoFactor: true; challengeToken: string } | { requiresTwoFactor: false };
 
 type AuthContextValue = {
   isAuthenticated: boolean;
@@ -20,7 +24,10 @@ type AuthContextValue = {
   userEmail: string;
   organizationName: string;
   roles: string[];
-  login: (email: string, password: string) => Promise<void>;
+  isEmailVerified: boolean;
+  isTwoFactorEnabled: boolean;
+  login: (email: string, password: string) => Promise<LoginOutcome>;
+  completeTwoFactorLogin: (challengeToken: string, code: string) => Promise<void>;
   register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string) => Promise<void>;
   loginWithToken: (token: string) => boolean;
   logout: () => void;
@@ -34,7 +41,16 @@ function userFromToken(token: string): AuthUser | null {
   const payload = decodeToken(token);
   if (!payload || isTokenExpired(payload)) return null;
   const roles = Array.isArray(payload.roles) ? payload.roles : payload.roles ? [payload.roles] : [];
-  return { id: payload.sub, organizationId: payload.organization_id, organizationName: payload.organization_name, email: payload.email, displayName: payload.name, roles };
+  return {
+    id: payload.sub,
+    organizationId: payload.organization_id,
+    organizationName: payload.organization_name,
+    email: payload.email,
+    displayName: payload.name,
+    roles,
+    isEmailVerified: payload.email_verified === 'true',
+    isTwoFactorEnabled: payload.two_factor_enabled === 'true'
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -45,6 +61,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!fromToken) { clearStoredToken(); return null; }
     return fromToken;
   });
+  const [isLoading, setIsLoading] = useState(user === null);
+  const attemptedRefresh = useRef(false);
+
+  useEffect(() => {
+    if (user || attemptedRefresh.current) { setIsLoading(false); return; }
+    attemptedRefresh.current = true;
+    let cancelled = false;
+    refreshAccessToken().then(token => {
+      if (cancelled) return;
+      const fromToken = token ? userFromToken(token) : null;
+      if (fromToken) setUser(fromToken);
+      setIsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [user]);
 
   function applySession(response: LoginResponse) {
     setStoredToken(response.token);
@@ -53,13 +84,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => ({
     isAuthenticated: Boolean(user),
-    isLoading: false,
+    isLoading,
     userName: user?.displayName ?? '',
     userEmail: user?.email ?? '',
     organizationName: user?.organizationName ?? '',
     roles: user?.roles ?? [],
+    isEmailVerified: user?.isEmailVerified ?? true,
+    isTwoFactorEnabled: user?.isTwoFactorEnabled ?? false,
     login: async (email, password) => {
-      const response = await apiRequest<LoginResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      const response = await apiRequest<LoginStartResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      if ('requiresTwoFactor' in response && response.requiresTwoFactor) {
+        return { requiresTwoFactor: true, challengeToken: response.challengeToken };
+      }
+      applySession(response as LoginResponse);
+      return { requiresTwoFactor: false };
+    },
+    completeTwoFactorLogin: async (challengeToken, code) => {
+      const response = await apiRequest<LoginResponse>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ challengeToken, code }) });
       applySession(response);
     },
     register: async (organizationName, displayName, email, password, currency, language) => {
@@ -74,10 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     },
     logout: () => {
+      apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
       clearStoredToken();
       setUser(null);
     }
-  }), [user]);
+  }), [user, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

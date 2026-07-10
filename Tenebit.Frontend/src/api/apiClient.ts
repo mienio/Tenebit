@@ -1,3 +1,5 @@
+import { setStoredToken } from '../auth/authConfig';
+
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -26,7 +28,25 @@ export function setLanguageProvider(provider: LanguageProvider | null) {
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000').replace(/\/$/, '');
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+let refreshPromise: Promise<string | null> | null = null;
+
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${apiBaseUrl}/api/auth/refresh`, { method: 'POST', credentials: 'include' })
+      .then(async res => {
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => null);
+        if (typeof data?.token !== 'string') return null;
+        setStoredToken(data.token);
+        return data.token as string;
+      })
+      .catch(() => null)
+      .finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+}
+
+async function performFetch(path: string, init: RequestInit, token: string | null): Promise<Response> {
   const headers = new Headers(init.headers);
   const hasBody = init.body !== undefined && init.body !== null;
 
@@ -38,7 +58,6 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('Accept', 'application/json');
   }
 
-  const token = tokenProvider ? await tokenProvider() : null;
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
@@ -47,11 +66,22 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('X-Ui-Language', languageProvider());
   }
 
-  let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers });
+    return await fetch(`${apiBaseUrl}${path}`, { ...init, headers, credentials: 'include' });
   } catch {
     throw new ApiError('Nie można połączyć się z backendem. Sprawdź VITE_API_BASE_URL i działanie API.');
+  }
+}
+
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = tokenProvider ? await tokenProvider() : null;
+  let response = await performFetch(path, init, token);
+
+  if (response.status === 401 && path !== '/api/auth/refresh' && !path.startsWith('/api/auth/login') && !path.startsWith('/api/auth/register')) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      response = await performFetch(path, init, newToken);
+    }
   }
 
   if (response.status === 204) {
@@ -82,7 +112,7 @@ export async function apiBlob(path: string): Promise<Blob> {
   if (languageProvider) headers.set('X-Ui-Language', languageProvider());
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}${path}`, { headers });
+    response = await fetch(`${apiBaseUrl}${path}`, { headers, credentials: 'include' });
   } catch {
     throw new ApiError('Nie można połączyć się z backendem.');
   }

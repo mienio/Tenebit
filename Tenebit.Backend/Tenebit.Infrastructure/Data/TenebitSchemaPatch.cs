@@ -117,5 +117,54 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX_external_logins_Provider_ProviderUserId"
 
 CREATE INDEX IF NOT EXISTS "IX_external_logins_OrganizationUserId"
     ON tenebit.external_logins ("OrganizationUserId");
+
+CREATE TABLE IF NOT EXISTS tenebit.password_reset_tokens (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationUserId" uuid NOT NULL,
+    "TokenHash" character varying(120) NOT NULL,
+    "ExpiresAt" timestamp with time zone NOT NULL,
+    "UsedAt" timestamp with time zone NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_password_reset_tokens_TokenHash"
+    ON tenebit.password_reset_tokens ("TokenHash");
+
+CREATE INDEX IF NOT EXISTS "IX_password_reset_tokens_OrganizationUserId"
+    ON tenebit.password_reset_tokens ("OrganizationUserId");
+
+ALTER TABLE tenebit.organization_users ADD COLUMN IF NOT EXISTS "IsEmailVerified" boolean NOT NULL DEFAULT FALSE;
+ALTER TABLE tenebit.organization_users ADD COLUMN IF NOT EXISTS "TotpSecret" character varying(64) NULL;
+ALTER TABLE tenebit.organization_users ADD COLUMN IF NOT EXISTS "IsTwoFactorEnabled" boolean NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS tenebit.email_verification_tokens (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationUserId" uuid NOT NULL,
+    "TokenHash" character varying(120) NOT NULL,
+    "ExpiresAt" timestamp with time zone NOT NULL,
+    "UsedAt" timestamp with time zone NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_email_verification_tokens_TokenHash"
+    ON tenebit.email_verification_tokens ("TokenHash");
+
+CREATE INDEX IF NOT EXISTS "IX_email_verification_tokens_OrganizationUserId"
+    ON tenebit.email_verification_tokens ("OrganizationUserId");
+
+CREATE TABLE IF NOT EXISTS tenebit.refresh_tokens (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationUserId" uuid NOT NULL,
+    "TokenHash" character varying(120) NOT NULL,
+    "ExpiresAt" timestamp with time zone NOT NULL,
+    "RevokedAt" timestamp with time zone NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_refresh_tokens_TokenHash"
+    ON tenebit.refresh_tokens ("TokenHash");
+
+CREATE INDEX IF NOT EXISTS "IX_refresh_tokens_OrganizationUserId"
+    ON tenebit.refresh_tokens ("OrganizationUserId");
 """;
 }

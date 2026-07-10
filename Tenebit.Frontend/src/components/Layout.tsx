@@ -2,6 +2,7 @@ import { BarChart3, Boxes, ClipboardCheck, FileText, History, LayoutDashboard, L
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Button } from './Button';
+import { EmailVerificationBanner } from './EmailVerificationBanner';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 
@@ -62,7 +63,10 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="content"><Outlet /></main>
+      <main className="content">
+        <EmailVerificationBanner />
+        <Outlet />
+      </main>
     </div>
   );
 }

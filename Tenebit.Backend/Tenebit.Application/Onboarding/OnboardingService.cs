@@ -120,7 +120,8 @@ public sealed class OnboardingService
 
             var assignment = new Assignment(organizationId, person.Id, CreateProtocolNumber(_clock.UtcNow), _clock.UtcNow, request.ReturnDueDate, "Pakiet utworzony przez onboarding pracownika.", _currentUser.Subject);
             assignment.AddAsset(asset.Id, "Wydane w stanie dobrym");
-            assignment.AddProcedureAcceptance(organizationId, procedure.Id, person.Id, _clock.UtcNow);
+            // Procedura jest w szkicu (brak pliku) — akceptacja zostanie dodana dopiero po jej publikacji,
+            // żeby pracownik nie musiał "zaakceptować" dokumentu, którego jeszcze nie może przeczytać.
             _assignments.Add(assignment);
 
             _activity.Add(new ActivityLog(organizationId, "onboarding.starter_package.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));

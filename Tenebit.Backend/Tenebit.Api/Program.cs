@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
+using Serilog;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Auth.OAuth;
 using Tenebit.Api.Endpoints;
@@ -15,6 +16,13 @@ using Tenebit.Infrastructure;
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, loggerConfig) => loggerConfig
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("logs/tenebit-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14));
 
 // Mikrus/docker reverse proxy compatibility: old compose configs may point to 5000,
 // newer .NET container defaults use 8080. Bind both so the backend stays reachable.
@@ -38,7 +46,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy => policy
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
-        .AllowAnyMethod());
+        .AllowAnyMethod()
+        .AllowCredentials());
 });
 
 builder.Services.AddScoped<TokenIssuer>();
@@ -46,6 +55,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 builder.Services.Configure<OAuthOptions>(builder.Configuration.GetSection(OAuthOptions.SectionName));
 builder.Services.AddSingleton<OAuthStateStore>();
+builder.Services.AddSingleton<TwoFactorChallengeStore>();
 builder.Services.AddScoped<ExternalAuthService>();
 
 builder.Services.AddRateLimiter(options =>
@@ -83,9 +93,17 @@ if (builder.Environment.IsProduction())
     {
         throw new InvalidOperationException("Auth:SigningKey musi być ustawiony na unikalny sekret w środowisku produkcyjnym (zmienna środowiskowa Auth__SigningKey).");
     }
+
+    var connectionString = builder.Configuration.GetConnectionString("TenebitDb") ?? string.Empty;
+    if (connectionString.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("ConnectionStrings:TenebitDb używa domyślnego hasła z repozytorium. Ustaw silne hasło w środowisku produkcyjnym (zmienna środowiskowa ConnectionStrings__TenebitDb).");
+    }
 }
 
 var app = builder.Build();
+
+app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler(errorApp =>
 {

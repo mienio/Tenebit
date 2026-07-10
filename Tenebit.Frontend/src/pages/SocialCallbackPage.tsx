@@ -23,7 +23,15 @@ export function SocialCallbackPage() {
       return;
     }
 
-    setError(t('auth.socialLoginFailed'));
+    const message = params.get('message');
+    const code = params.get('error');
+    if (message) {
+      setError(message);
+    } else if (code === 'oauth_expired') {
+      setError(t('auth.socialLoginExpired'));
+    } else {
+      setError(t('auth.socialLoginFailed'));
+    }
   }, [auth, navigate, t]);
 
   return (

@@ -19,6 +19,9 @@ import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PricingPage } from './pages/PricingPage';
 import { SocialCallbackPage } from './pages/SocialCallbackPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 
 function HomeRoute() {
   const auth = useAuth();
@@ -32,6 +35,9 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/auth/callback" element={<SocialCallbackPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/accept/:organizationId/:assignmentId" element={<PublicAssignmentPage />} />
       <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
       <Route element={<RequireAuth><Layout /></RequireAuth>}>

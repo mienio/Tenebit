@@ -9,6 +9,8 @@ import { LocationInventoryModal } from '../components/LocationInventoryModal';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { TwoFactorCard } from '../components/TwoFactorCard';
+import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAuth } from '../auth/AuthProvider';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { formatDate, formatDateTime } from '../utils/format';
@@ -82,6 +84,8 @@ export function MyWorkspacePage() {
     return (
       <div className="pageStack pageStack--narrow">
         <PageHeader eyebrow={t('page.my.eyebrow')} title={t('nav.my')} />
+        <TwoFactorCard />
+        <AccountLinksCard />
         <Card>
           <EmptyState
             title={t('myWorkspace.noPersonTitle')}
@@ -114,6 +118,8 @@ export function MyWorkspacePage() {
       <PageHeader eyebrow={t('page.my.eyebrow')} title={`${t('page.my.greeting')}, ${data.personName ?? ''}`} />
 
       {message ? <div className="toastStack" aria-live="polite"><div className={`toast toast--${message.type}`}>{message.text}</div></div> : null}
+
+      <TwoFactorCard />
 
       {pendingAssignments.length > 0 && (
         <Card>

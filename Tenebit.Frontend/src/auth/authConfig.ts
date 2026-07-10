@@ -18,6 +18,8 @@ export type TokenPayload = {
   organization_name: string;
   name: string;
   email: string;
+  email_verified?: string;
+  two_factor_enabled?: string;
   roles?: string | string[];
   exp: number;
 };

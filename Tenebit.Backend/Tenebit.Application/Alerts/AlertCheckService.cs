@@ -53,7 +53,9 @@ public sealed class AlertCheckService
         foreach (var thresholdDays in WarrantyThresholdDays)
         {
             var targetDate = today.AddDays(thresholdDays);
-            foreach (var asset in assets.Where(a => a.WarrantyUntil == targetDate))
+            // "<=" (not "==") so a missed run (restart/deploy/downtime) still catches the alert on the
+            // next run instead of permanently skipping it — dedup against sent_alerts keeps it a one-time send.
+            foreach (var asset in assets.Where(a => a.WarrantyUntil.HasValue && a.WarrantyUntil.Value <= targetDate && a.WarrantyUntil.Value >= today))
             {
                 var alertKey = $"warranty_{thresholdDays}d";
                 if (await _sentAlerts.ExistsAsync(organization.Id, alertKey, asset.Id, cancellationToken)) continue;

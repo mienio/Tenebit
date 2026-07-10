@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
@@ -24,8 +25,9 @@ public sealed class AssetService
     private readonly IQrCodeGenerator _qrCodeGenerator;
     private readonly IAppLinkBuilder _linkBuilder;
     private readonly IEmailSender _emailSender;
+    private readonly ILogger<AssetService> _logger;
 
-    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender)
+    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger)
     {
         _assets = assets;
         _categories = categories;
@@ -41,6 +43,7 @@ public sealed class AssetService
         _qrCodeGenerator = qrCodeGenerator;
         _linkBuilder = linkBuilder;
         _emailSender = emailSender;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<AssetResponse>> ListAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
@@ -211,7 +214,14 @@ public sealed class AssetService
 
         foreach (var email in adminEmails)
         {
-            try { await _emailSender.SendAsync(email, subject, html, cancellationToken); } catch { /* best-effort */ }
+            try
+            {
+                await _emailSender.SendAsync(email, subject, html, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Nie udało się wysłać powiadomienia o zgłoszeniu ze skanu QR do {Email}", email);
+            }
         }
 
         _activity.Add(new ActivityLog(organizationId, "asset.scan_reported", "asset", asset.Id, "public-scan", asset.Name, _clock.UtcNow));

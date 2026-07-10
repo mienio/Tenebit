@@ -19,14 +19,16 @@ public sealed class TokenIssuer
             new("organization_id", user.OrganizationId.ToString()),
             new("organization_name", user.OrganizationName),
             new("name", user.DisplayName),
-            new("email", user.Email)
+            new("email", user.Email),
+            new("email_verified", user.IsEmailVerified ? "true" : "false"),
+            new("two_factor_enabled", user.IsTwoFactorEnabled ? "true" : "false")
         };
         claims.AddRange(user.Roles.Select(role => new Claim("roles", role)));
 
         var credentials = new SigningCredentials(JwtSigningKey.Get(_configuration), SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(12),
+            expires: DateTime.UtcNow.AddMinutes(30),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

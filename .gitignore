@@ -4,6 +4,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 Release/*.zip
+logs/
 .vs/
 *.user
 appsettings.*.local.json

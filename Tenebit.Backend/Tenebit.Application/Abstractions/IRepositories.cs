@@ -87,6 +87,7 @@ public interface IOrganizationUserRepository
 {
     Task<IReadOnlyList<OrganizationUser>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<OrganizationUser?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<OrganizationUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingId, CancellationToken cancellationToken);
     Task<OrganizationUser?> FindByEmailAsync(string email, CancellationToken cancellationToken);
     void Add(OrganizationUser user);
@@ -96,7 +97,28 @@ public interface IExternalLoginRepository
 {
     Task<OrganizationUser?> FindLinkedUserAsync(string provider, string providerUserId, CancellationToken cancellationToken);
     Task<bool> ExistsAsync(Guid organizationUserId, string provider, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ListProvidersAsync(Guid organizationUserId, CancellationToken cancellationToken);
+    Task<ExternalLogin?> FindAsync(Guid organizationUserId, string provider, CancellationToken cancellationToken);
     void Add(ExternalLogin externalLogin);
+    void Remove(ExternalLogin externalLogin);
+}
+
+public interface IPasswordResetTokenRepository
+{
+    Task<PasswordResetToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    void Add(PasswordResetToken token);
+}
+
+public interface IEmailVerificationTokenRepository
+{
+    Task<EmailVerificationToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    void Add(EmailVerificationToken token);
+}
+
+public interface IRefreshTokenRepository
+{
+    Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    void Add(RefreshToken token);
 }
 
 public interface IJobProfileRepository
