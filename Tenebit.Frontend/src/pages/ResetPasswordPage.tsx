@@ -2,6 +2,7 @@ import { KeyRound } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
+import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
@@ -36,7 +37,7 @@ export function ResetPasswordPage() {
     <main className="authShell">
       <section className="authCard">
         <div className="authTop">
-          <div className="authIcon"><KeyRound size={24} /></div>
+          <BackButton to="/login" />
           <LanguageSwitcher />
         </div>
         <h1>{t('auth.resetTitle')}</h1>

@@ -59,7 +59,7 @@ export function LandingPage() {
           <div className="tableWrap">
             <table className="dense-table">
               <thead>
-                <tr><th></th><th>Nazwa</th><th>Tag</th><th>Status</th><th>Osoba</th><th style={{ textAlign: 'right' }}>Wartość</th></tr>
+                <tr><th></th><th>{t('assets.nameLabel')}</th><th>{t('assets.colTag')}</th><th>{t('assets.statusLabel')}</th><th>{t('assets.colPerson')}</th><th style={{ textAlign: 'right' }}>{t('assets.colValue')}</th></tr>
               </thead>
               <tbody>
                 {previewRows.map(row => (

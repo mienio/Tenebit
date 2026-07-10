@@ -1,7 +1,7 @@
-import { MailCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
+import { BackButton } from '../components/BackButton';
 import { useI18n } from '../i18n/I18nProvider';
 
 export function VerifyEmailPage() {
@@ -29,7 +29,7 @@ export function VerifyEmailPage() {
     <main className="authShell">
       <section className="authCard">
         <div className="authTop">
-          <div className="authIcon"><MailCheck size={24} /></div>
+          <BackButton to="/login" />
         </div>
         <h1>{t('auth.verifyTitle')}</h1>
         {status === 'loading' ? <p>{t('auth.verifyLoading')}</p> : null}

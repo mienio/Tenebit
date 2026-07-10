@@ -2,6 +2,7 @@ import { KeyRound } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
+import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
 import { useI18n } from '../i18n/I18nProvider';
@@ -32,7 +33,7 @@ export function ForgotPasswordPage() {
     <main className="authShell">
       <section className="authCard">
         <div className="authTop">
-          <div className="authIcon"><KeyRound size={24} /></div>
+          <BackButton to="/login" />
           <LanguageSwitcher />
         </div>
         <h1>{t('auth.forgotTitle')}</h1>

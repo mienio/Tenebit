@@ -231,6 +231,8 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .authCard h1 { margin: 0; letter-spacing: -0.04em; }
 .authCard p { color: var(--muted); line-height: 1.55; }
 .authIcon { width: 50px; height: 50px; display: grid; place-items: center; border-radius: 17px; background: var(--brand-soft); }
+button.authIcon { border: none; font: inherit; color: inherit; cursor: pointer; transition: filter 0.15s ease; }
+button.authIcon:hover { filter: brightness(0.94); }
 .authFooter { text-align: center; font-size: 14px; margin: 0; }
 .authTop { display: flex; align-items: center; justify-content: space-between; }
 .authCard .formGrid > .button { grid-column: 1 / -1; }

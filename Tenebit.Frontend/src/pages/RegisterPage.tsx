@@ -1,6 +1,7 @@
 import { Rocket } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
@@ -45,7 +46,7 @@ export function RegisterPage() {
     <main className="authShell">
       <section className="authCard">
         <div className="authTop">
-          <div className="authIcon"><Rocket size={24} /></div>
+          <BackButton to="/" />
           <LanguageSwitcher />
         </div>
         <h1>{t('auth.registerTitle')}</h1>

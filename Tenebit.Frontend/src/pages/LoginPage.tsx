@@ -1,6 +1,7 @@
-import { LogIn, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, LogIn, ShieldCheck } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
@@ -56,7 +57,7 @@ export function LoginPage() {
       <main className="authShell">
         <section className="authCard">
           <div className="authTop">
-            <div className="authIcon"><ShieldCheck size={24} /></div>
+            <button type="button" className="authIcon" aria-label={t('common.back')} title={t('common.back')} onClick={() => { setChallengeToken(null); setError(null); }}><ArrowLeft size={24} /></button>
             <LanguageSwitcher />
           </div>
           <h1>{t('auth.twoFactorTitle')}</h1>
@@ -77,7 +78,7 @@ export function LoginPage() {
     <main className="authShell">
       <section className="authCard">
         <div className="authTop">
-          <div className="authIcon"><LogIn size={24} /></div>
+          <BackButton to="/" />
           <LanguageSwitcher />
         </div>
         <h1>{t('auth.loginTitle')}</h1>
