@@ -233,6 +233,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .authIcon { width: 50px; height: 50px; display: grid; place-items: center; border-radius: 17px; background: var(--brand-soft); }
 .authFooter { text-align: center; font-size: 14px; margin: 0; }
 .authTop { display: flex; align-items: center; justify-content: space-between; }
+.authCard .formGrid > .button { grid-column: 1 / -1; }
 
 .socialAuth { display: grid; gap: 14px; }
 .socialButtons { display: grid; gap: 10px; }

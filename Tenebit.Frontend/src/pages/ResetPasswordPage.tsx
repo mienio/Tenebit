@@ -43,6 +43,7 @@ export function ResetPasswordPage() {
         {token ? (
           <form className="formGrid" onSubmit={handleSubmit}>
             <Field label={t('auth.newPasswordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required autoFocus value={password} onChange={e => setPassword(e.target.value)} /></Field>
+            {!password ? <p className="formHint">{t('auth.passwordHint')}</p> : null}
             <PasswordStrengthMeter password={password} />
             {error ? <p className="formMessage formMessage--error">{error}</p> : null}
             <Button disabled={submitting} icon={<KeyRound size={16} />}>{submitting ? t('auth.resetLoading') : t('auth.resetButton')}</Button>

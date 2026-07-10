@@ -60,6 +60,7 @@ export function RegisterPage() {
             </SelectInput>
           </Field>
           <Field label={t('auth.passwordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></Field>
+          {!password ? <p className="formHint">{t('auth.passwordHint')}</p> : null}
           <PasswordStrengthMeter password={password} />
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
           <Button disabled={submitting} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>

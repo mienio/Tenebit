@@ -120,6 +120,7 @@ export function MyWorkspacePage() {
       {message ? <div className="toastStack" aria-live="polite"><div className={`toast toast--${message.type}`}>{message.text}</div></div> : null}
 
       <TwoFactorCard />
+      <AccountLinksCard />
 
       {pendingAssignments.length > 0 && (
         <Card>
