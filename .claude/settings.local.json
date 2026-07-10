@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(D:\\Tenebit\\**)",
+      "Write(D:\\Tenebit\\**)",
+      "Edit(D:\\Tenebit\\**)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "PowerShell([System.IO.File]::ReadAllText\\('D:\\\\Tenebit\\\\specification.docx', [System.Text.Encoding]::UTF8\\) -replace '[^\\\\x20-\\\\x7E\\\\n\\\\r]', '' | Select-String -Pattern '\\\\w{3,}' | Select-Object -First 100)",
+      "Skill(update-config)",
+      "PowerShell(Move-Item *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(chmod +x *)",
+      "Bash(mv AssignmentsPage.tsx AssignmentsPage.new.tsx)",
+      "Bash(mv AssignmentsPage.old.tsx AssignmentsPage.tsx)",
+      "Bash(mv ProceduresPage.tsx ProceduresPage.new.tsx)",
+      "Bash(mv ProceduresPage.old.tsx ProceduresPage.tsx)",
+      "Bash(zip -r /d/Tenebit.Frontend.zip src/ public/ index.html package.json package-lock.json tsconfig.json tsconfig.node.json vite.config.ts -q)",
+      "Bash(tee /tmp/build.log)",
+      "PowerShell(Compress-Archive *)"
+    ],
+    "deny": [
+      "Write(D:\\Tenebit\\README.md)",
+      "Write(D:\\Tenebit\\CHANGELOG.md)",
+      "Write(D:\\Tenebit\\**\\README.md)",
+      "Write(D:\\Tenebit\\**\\CHANGELOG.md)"
+    ]
+  }
+}

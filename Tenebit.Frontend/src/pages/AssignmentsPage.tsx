@@ -1,0 +1,211 @@
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Download, Eye, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
+import { api } from '../api/endpoints';
+import { Button } from '../components/Button';
+import { Card } from '../components/Card';
+import { DetailGrid, DetailItem } from '../components/DetailGrid';
+import { Modal } from '../components/Modal';
+import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
+import { PageHeader } from '../components/PageHeader';
+import { PersonPreviewModal } from '../components/PersonPreviewModal';
+import { Pagination, paginate } from '../components/Pagination';
+import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { StatusBadge } from '../components/StatusBadge';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import type { Assignment, AssignmentStatus } from '../types/domain';
+import { assignmentStatusValues } from '../utils/labels';
+import { formatDate, formatDateTime, toNullable } from '../utils/format';
+import { useI18n } from '../i18n/I18nProvider';
+
+const pageSize = 10;
+
+export function AssignmentsPage() {
+  const { t } = useI18n();
+  const assignments = useAsyncData(api.assignments, []);
+  const people = useAsyncData(() => api.people(), []);
+  const assets = useAsyncData(() => api.assets({ status: 'InStock' }), []);
+  const procedures = useAsyncData(() => api.procedures(), []);
+  const locations = useAsyncData(api.locations, []);
+  const [drawerMode, setDrawerMode] = useState<'create' | 'details' | 'return' | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<AssignmentStatus | ''>('');
+  const [page, setPage] = useState(1);
+  const [viewPersonId, setViewPersonId] = useState<string | null>(null);
+  const debouncedSearch = useDebouncedValue(search.trim().toLowerCase(), 250);
+  const isLoading = assignments.isLoading || people.isLoading || assets.isLoading || procedures.isLoading || locations.isLoading;
+  const error = assignments.error || people.error || assets.error || procedures.error || locations.error;
+  const publishedProcedures = useMemo(() => procedures.data?.filter(item => item.status === 'Published') ?? [], [procedures.data]);
+  const filteredAssignments = useMemo(() => {
+    const rows = assignments.data ?? [];
+    return rows.filter(item => {
+      const matchesStatus = !status || item.status === status;
+      const haystack = `${item.protocolNumber} ${item.personName ?? ''} ${item.assets.map(asset => `${asset.assetName ?? ''} ${asset.assetTag ?? ''}`).join(' ')}`.toLowerCase();
+      const matchesSearch = !debouncedSearch || haystack.includes(debouncedSearch);
+      return matchesStatus && matchesSearch;
+    });
+  }, [assignments.data, debouncedSearch, status]);
+  const pagedAssignments = useMemo(() => paginate(filteredAssignments, page, pageSize), [filteredAssignments, page]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timeout = window.setTimeout(() => setMessage(null), message.type === 'success' ? 3500 : 6500);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  function toggle(list: string[], value: string) {
+    return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
+  }
+
+  function reloadAll() {
+    void Promise.all([assignments.reload(), people.reload(), assets.reload(), procedures.reload(), locations.reload()]);
+  }
+
+  async function createAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const personId = String(form.get('personId') ?? '');
+    if (!personId || selectedAssetIds.length === 0) return setMessage({ type: 'error', text: t('assignments.selectPersonAndAsset') });
+    try {
+      await api.createAssignment({
+        personId,
+        assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: 'Sprawny przy wydaniu' })),
+        procedureIds: selectedProcedureIds,
+        dueDate: toNullable(String(form.get('dueDate') ?? '')),
+        notes: toNullable(String(form.get('notes') ?? ''))
+      });
+      setSelectedAssetIds([]);
+      setSelectedProcedureIds([]);
+      setDrawerMode(null);
+      setMessage({ type: 'success', text: t('assignments.created') });
+      await Promise.all([assignments.reload(), assets.reload()]);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.createFailed') });
+    }
+  }
+
+  async function acceptAssignment(item: Assignment) {
+    try {
+      await api.acceptAssignment(item.id);
+      setMessage({ type: 'success', text: t('assignments.accepted') });
+      await assignments.reload();
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.acceptFailed') });
+    }
+  }
+
+  async function returnAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAssignment) return;
+    const form = new FormData(event.currentTarget);
+    try {
+      await api.returnAssignment(selectedAssignment.id, {
+        returnCondition: toNullable(String(form.get('returnCondition') ?? '')),
+        destinationLocation: toNullable(String(form.get('destinationLocation') ?? ''))
+      });
+      setDrawerMode(null);
+      setSelectedAssignment(null);
+      setMessage({ type: 'success', text: t('assignments.returned') });
+      await Promise.all([assignments.reload(), assets.reload()]);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.returnFailed') });
+    }
+  }
+
+  async function downloadProtocol(item: Assignment) {
+    try {
+      const blob = await api.downloadAssignmentProtocol(item.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${item.protocolNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.downloadProtocolFailed') });
+    }
+  }
+
+  if (isLoading && !assignments.data) return <LoadingState title={t('assignments.loadingTitle')} description={t('assignments.loadingDesc')} />;
+  if (error) return <ErrorState message={error} onRetry={reloadAll} />;
+
+  return (
+    <div className="pageStack">
+      <PageHeader eyebrow={t('page.assignments.eyebrow')} title={t('page.assignments.title')} actions={<Button onClick={() => setDrawerMode('create')} icon={<Plus size={16} />}>{t('assignments.newAssignment')}</Button>} />
+
+      {message ? <div className="toastStack" aria-live="polite"><div className={`toast toast--${message.type}`}>{message.text}</div></div> : null}
+
+      <Card className="toolbarCard">
+        <div className="filters filters--three">
+          <Field label={t('common.search')}><TextInput value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder={t('assignments.searchPlaceholder')} /></Field>
+          <Field label={t('assets.statusLabel')}>
+            <SelectInput value={status} onChange={event => { setStatus(event.target.value as AssignmentStatus | ''); setPage(1); }}>
+              <option value="">{t('assets.allStatuses')}</option>
+              {assignmentStatusValues.map(value => <option key={value} value={value}>{t(`status.${value}`)}</option>)}
+            </SelectInput>
+          </Field>
+          <span className="toolbarHint"><Search size={16} /> {filteredAssignments.length} {t('assignments.results')}</span>
+        </div>
+      </Card>
+
+      {!filteredAssignments.length ? <EmptyState title={t('assignments.emptyTitle')} description={t('assignments.emptyDesc')} action={<Button onClick={() => setDrawerMode('create')} icon={<Plus size={16} />}>{t('assignments.newAssignment')}</Button>} /> : (
+        <Card>
+          <div className="tableWrap"><table><thead><tr><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th><th>{t('assignments.colDueDate')}</th><th></th></tr></thead><tbody>
+            {pagedAssignments.items.map(item => <tr key={item.id}><td><strong>{item.protocolNumber}</strong><small>{formatDateTime(item.issuedAt)}</small></td><td>{item.personId ? <button type="button" className="inlineAction" onClick={() => setViewPersonId(item.personId)}>{item.personName ?? t('assignments.unknownPerson')}</button> : (item.personName ?? t('assignments.unknownPerson'))}</td><td><StatusBadge status={item.status} /></td><td>{item.assets.length}</td><td>{formatDate(item.dueDate)}</td><td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? <button aria-label={t('assignments.acceptAria')} className="iconButton iconButton--success" onClick={() => acceptAssignment(item)}><CheckCircle2 size={16} /></button> : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td></tr>)}
+          </tbody></table></div>
+          <Pagination page={pagedAssignments.page} total={pagedAssignments.total} pageSize={pageSize} onPageChange={setPage} />
+        </Card>
+      )}
+
+      <Modal open={drawerMode === 'create'} title={t('assignments.newAssignment')} onClose={() => setDrawerMode(null)} width="wide">
+        <form className="formGrid" onSubmit={createAssignment}>
+          <Field label={t('assignments.personLabel')}><SelectInput name="personId" required><option value="">{t('assignments.choosePersonOption')}</option>{people.data?.map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}</SelectInput></Field>
+          <Field label={t('assignments.dueDateLabel')}><TextInput name="dueDate" type="date" /></Field>
+          <Field label={t('assignments.notesLabel')}><TextArea name="notes" /></Field>
+          <fieldset className="choiceBox"><legend>{t('assignments.assetsFromStock')}</legend>{!assets.data?.length ? <p className="muted">{t('assignments.noAssetsInStock')}</p> : assets.data.map(asset => <label key={asset.id}><input type="checkbox" checked={selectedAssetIds.includes(asset.id)} onChange={() => setSelectedAssetIds(current => toggle(current, asset.id))} /> {asset.name} · {asset.assetTag}</label>)}</fieldset>
+          <fieldset className="choiceBox"><legend>{t('assignments.proceduresLegend')}</legend>{!publishedProcedures.length ? <p className="muted">{t('assignments.noPublishedProcedures')}</p> : publishedProcedures.map(procedure => <label key={procedure.id}><input type="checkbox" checked={selectedProcedureIds.includes(procedure.id)} onChange={() => setSelectedProcedureIds(current => toggle(current, procedure.id))} /> {procedure.title}</label>)}</fieldset>
+          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button icon={<PackageCheck size={16} />}>{t('assignments.create')}</Button></div>
+        </form>
+      </Modal>
+
+      <Modal open={drawerMode === 'return'} title={t('assignments.returnTitle')} description={selectedAssignment ? selectedAssignment.protocolNumber : undefined} onClose={() => setDrawerMode(null)}>
+        <form className="formGrid" onSubmit={returnAssignment}>
+          <Field label={t('assignments.returnConditionLabel')}><TextArea name="returnCondition" placeholder={t('assignments.returnConditionPlaceholder')} required /></Field>
+          <Field label={t('assignments.destinationLocationLabel')}><SelectInput name="destinationLocation"><option value="">{t('assignments.mainWarehouseOption')}</option>{locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}</SelectInput></Field>
+          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button icon={<RotateCcw size={16} />}>{t('assignments.saveReturn')}</Button></div>
+        </form>
+      </Modal>
+
+      <Modal open={drawerMode === 'details'} title={t('assignments.detailsTitle')} onClose={() => setDrawerMode(null)} width="wide">{selectedAssignment ? <AssignmentDetails assignment={selectedAssignment} onDownload={downloadProtocol} onViewPerson={setViewPersonId} /> : null}</Modal>
+      {viewPersonId && <PersonPreviewModal personId={viewPersonId} onClose={() => setViewPersonId(null)} />}
+    </div>
+  );
+}
+
+function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignment: Assignment; onDownload: (assignment: Assignment) => void; onViewPerson: (personId: string) => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="pageStack">
+      <div className="formActions formActions--split">
+        <div />
+        <Button variant="secondary" onClick={() => onDownload(assignment)} icon={<Download size={16} />}>{t('assignments.downloadProtocol')}</Button>
+      </div>
+      <DetailGrid>
+        <DetailItem label={t('assignments.colProtocol')} value={assignment.protocolNumber} />
+        <DetailItem label={t('assets.statusLabel')} value={<StatusBadge status={assignment.status} />} />
+        <DetailItem label={t('assignments.colPerson')} value={assignment.personId ? <button type="button" className="inlineAction" onClick={() => onViewPerson(assignment.personId)}>{assignment.personName ?? t('assignments.unknownPerson')}</button> : (assignment.personName ?? t('assignments.unknownPerson'))} />
+        <DetailItem label={t('assignments.issuedLabel')} value={formatDateTime(assignment.issuedAt)} />
+        <DetailItem label={t('assignments.dueLabel')} value={formatDate(assignment.dueDate)} />
+        <DetailItem label={t('assignments.notesFieldLabel')} value={assignment.notes ?? t('assignments.notesFallback')} />
+      </DetailGrid>
+      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '—'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
+      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><StatusBadge status={item.status} /></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
+    </div>
+  );
+}

@@ -1,0 +1,9 @@
+bin/
+obj/
+node_modules/
+dist/
+*.tsbuildinfo
+Release/*.zip
+.vs/
+*.user
+appsettings.*.local.json

@@ -1,0 +1,50 @@
+using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
+using Tenebit.Domain.Audit;
+using Tenebit.Domain.Common;
+using Tenebit.Domain.People;
+
+namespace Tenebit.Application.People;
+
+public sealed class TeamService
+{
+    private readonly ITeamRepository _teams;
+    private readonly IActivityLogRepository _activity;
+    private readonly ICurrentUser _currentUser;
+    private readonly IClock _clock;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public TeamService(ITeamRepository teams, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    {
+        _teams = teams;
+        _activity = activity;
+        _currentUser = currentUser;
+        _clock = clock;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<IReadOnlyList<TeamResponse>> ListAsync(CancellationToken cancellationToken)
+    {
+        var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
+        return teams.Select(Map).ToList();
+    }
+
+    public async Task<Result<TeamResponse>> CreateAsync(CreateTeamRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        if (access.IsFailure) return Result<TeamResponse>.Failure(access.Error!);
+        try
+        {
+            var organizationId = _currentUser.OrganizationId;
+            if (await _teams.NameExistsAsync(organizationId, request.Name, null, cancellationToken)) return Result<TeamResponse>.Failure(Error.Conflict("Zespół o tej nazwie już istnieje."));
+            var team = new Team(organizationId, request.Name, request.ManagerId, request.CostCenter);
+            _teams.Add(team);
+            _activity.Add(new ActivityLog(organizationId, "team.created", "team", team.Id, _currentUser.Subject, team.Name, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result<TeamResponse>.Success(Map(team));
+        }
+        catch (DomainException ex) { return Result<TeamResponse>.Failure(Error.Validation(ex.Message)); }
+    }
+
+    private static TeamResponse Map(Team team) => new(team.Id, team.Name, team.ManagerId, team.CostCenter);
+}

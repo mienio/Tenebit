@@ -1,0 +1,23 @@
+using Microsoft.Extensions.Configuration;
+using Tenebit.Application.Abstractions;
+
+namespace Tenebit.Infrastructure.Services;
+
+public sealed class AppLinkBuilder : IAppLinkBuilder
+{
+    private readonly IConfiguration _configuration;
+
+    public AppLinkBuilder(IConfiguration configuration) => _configuration = configuration;
+
+    public string BuildAssignmentAcceptanceLink(Guid organizationId, Guid assignmentId)
+    {
+        var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        return $"{baseUrl}/accept/{organizationId}/{assignmentId}";
+    }
+
+    public string BuildAssetScanLink(Guid organizationId, Guid assetId)
+    {
+        var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        return $"{baseUrl}/scan/{organizationId}/{assetId}";
+    }
+}
