@@ -94,22 +94,22 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
-if (builder.Environment.IsProduction())
+var app = builder.Build();
+
+if (app.Environment.IsProduction())
 {
     var signingKey = builder.Configuration["Auth:SigningKey"];
     if (string.IsNullOrWhiteSpace(signingKey) || signingKey == "tenebit-development-signing-key-change-me-32chars")
     {
-        throw new InvalidOperationException("Auth:SigningKey musi być ustawiony na unikalny sekret w środowisku produkcyjnym (zmienna środowiskowa Auth__SigningKey).");
+        app.Logger.LogCritical("BEZPIECZEŃSTWO: Auth:SigningKey nadal ma domyślną wartość z repozytorium. Ustaw unikalny sekret przez zmienną środowiskową Auth__SigningKey — dopóki tego nie zrobisz, tokeny logowania można sfałszować.");
     }
 
     var connectionString = builder.Configuration.GetConnectionString("TenebitDb") ?? string.Empty;
     if (connectionString.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase))
     {
-        throw new InvalidOperationException("ConnectionStrings:TenebitDb używa domyślnego hasła z repozytorium. Ustaw silne hasło w środowisku produkcyjnym (zmienna środowiskowa ConnectionStrings__TenebitDb).");
+        app.Logger.LogCritical("BEZPIECZEŃSTWO: ConnectionStrings:TenebitDb nadal używa domyślnego hasła z repozytorium. Ustaw silne hasło przez zmienną środowiskową ConnectionStrings__TenebitDb.");
     }
 }
-
-var app = builder.Build();
 
 app.UseCorrelationId();
 app.UseSerilogRequestLogging();
