@@ -3,6 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
+import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
@@ -16,6 +17,7 @@ export function RegisterPage() {
   const { t, language } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [password, setPassword] = useState('');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,7 +59,8 @@ export function RegisterPage() {
               {currencies.map(code => <option key={code} value={code}>{code}</option>)}
             </SelectInput>
           </Field>
-          <Field label={t('auth.passwordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required /></Field>
+          <Field label={t('auth.passwordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></Field>
+          <PasswordStrengthMeter password={password} />
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
           <Button disabled={submitting} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>
         </form>

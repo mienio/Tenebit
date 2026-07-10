@@ -19,6 +19,7 @@ public sealed class AuthService
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
     private readonly IEmailVerificationTokenRepository _emailVerificationTokens;
     private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly IDeviceTrustTokenRepository _deviceTrustTokens;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly IQrCodeGenerator _qrCodeGenerator;
@@ -35,6 +36,7 @@ public sealed class AuthService
         IPasswordResetTokenRepository passwordResetTokens,
         IEmailVerificationTokenRepository emailVerificationTokens,
         IRefreshTokenRepository refreshTokens,
+        IDeviceTrustTokenRepository deviceTrustTokens,
         IEmailSender emailSender,
         IAppLinkBuilder appLinkBuilder,
         IQrCodeGenerator qrCodeGenerator,
@@ -50,6 +52,7 @@ public sealed class AuthService
         _passwordResetTokens = passwordResetTokens;
         _emailVerificationTokens = emailVerificationTokens;
         _refreshTokens = refreshTokens;
+        _deviceTrustTokens = deviceTrustTokens;
         _emailSender = emailSender;
         _appLinkBuilder = appLinkBuilder;
         _qrCodeGenerator = qrCodeGenerator;
@@ -100,7 +103,7 @@ public sealed class AuthService
         }
     }
 
-    public async Task<Result<LoginOutcome>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
+    public async Task<Result<LoginOutcome>> LoginAsync(LoginRequest request, string? deviceTrustToken, CancellationToken cancellationToken)
     {
         var user = await _users.FindByEmailAsync(request.Email, cancellationToken);
         if (user is null || !user.IsActive || !PasswordHasher.Verify(request.Password, user.PasswordHash))
@@ -108,7 +111,11 @@ public sealed class AuthService
             return Result<LoginOutcome>.Failure(Error.Validation("Nieprawidłowy e-mail lub hasło."));
         }
 
-        if (user.IsTwoFactorEnabled)
+        var trustedDevice = user.IsTwoFactorEnabled
+            && !string.IsNullOrEmpty(deviceTrustToken)
+            && await _deviceTrustTokens.FindValidAsync(user.Id, TokenHasher.Hash(deviceTrustToken), _clock.UtcNow, cancellationToken) is not null;
+
+        if (user.IsTwoFactorEnabled && !trustedDevice)
         {
             return Result<LoginOutcome>.Success(new LoginOutcome(true, user.Id, null));
         }
@@ -120,6 +127,15 @@ public sealed class AuthService
         }
 
         return Result<LoginOutcome>.Success(new LoginOutcome(false, null, Map(user, organization)));
+    }
+
+    public async Task<string> IssueDeviceTrustTokenAsync(Guid organizationUserId, CancellationToken cancellationToken)
+    {
+        var rawToken = TokenHasher.NewRawToken();
+        var token = new DeviceTrustToken(organizationUserId, TokenHasher.Hash(rawToken), _clock.UtcNow.AddDays(30));
+        _deviceTrustTokens.Add(token);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return rawToken;
     }
 
     public async Task<Result<AuthUserResponse>> CompleteTwoFactorLoginAsync(Guid userId, string code, CancellationToken cancellationToken)

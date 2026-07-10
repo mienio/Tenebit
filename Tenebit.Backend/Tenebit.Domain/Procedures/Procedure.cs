@@ -30,6 +30,11 @@ public sealed class Procedure
 
     public void Update(string title, string version, string owner, string? appliesTo, DateOnly? reviewDate, bool requiresAcceptance)
     {
+        if (Status == ProcedureStatus.Published)
+        {
+            throw new DomainException("Nie można edytować opublikowanej procedury — osoby już ją zaakceptowały. Zarchiwizuj ją i utwórz nową wersję.");
+        }
+
         if (string.IsNullOrWhiteSpace(title)) throw new DomainException("Tytuł procedury jest wymagany.");
         if (string.IsNullOrWhiteSpace(version)) throw new DomainException("Wersja procedury jest wymagana.");
 
@@ -58,10 +63,16 @@ public sealed class Procedure
 
     public void Publish(DateTimeOffset publishedAt)
     {
+        if (Status == ProcedureStatus.Archived) throw new DomainException("Nie można opublikować zarchiwizowanej procedury.");
+        if (Status == ProcedureStatus.Published) return;
         if (!Documents.Any()) throw new DomainException("Nie można opublikować procedury bez pliku.");
         Status = ProcedureStatus.Published;
         PublishedAt = publishedAt;
     }
 
-    public void Archive() => Status = ProcedureStatus.Archived;
+    public void Archive()
+    {
+        if (Status == ProcedureStatus.Archived) return;
+        Status = ProcedureStatus.Archived;
+    }
 }

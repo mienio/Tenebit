@@ -26,6 +26,12 @@ public static class LocationEndpoints
                 return Results.BadRequest(new { message = "Nazwa lokalizacji jest wymagana.", code = "VALIDATION_ERROR" });
             }
 
+            var existingRows = await LoadLocationsAsync(db, currentUser.OrganizationId, cancellationToken);
+            if (request.ParentId.HasValue && existingRows.All(x => x.Id != request.ParentId.Value))
+            {
+                return Results.BadRequest(new { message = "Lokalizacja nadrzędna nie istnieje.", code = "VALIDATION_ERROR" });
+            }
+
             var id = Guid.NewGuid();
             var connection = db.Database.GetDbConnection();
             if (connection.State != ConnectionState.Open)
@@ -61,6 +67,28 @@ public static class LocationEndpoints
             if (request.ParentId == id)
             {
                 return Results.BadRequest(new { message = "Lokalizacja nie może być nadrzędna sama dla siebie.", code = "VALIDATION_ERROR" });
+            }
+
+            var existingRows = await LoadLocationsAsync(db, currentUser.OrganizationId, cancellationToken);
+            if (request.ParentId.HasValue)
+            {
+                var byId = existingRows.ToDictionary(x => x.Id);
+                if (!byId.ContainsKey(request.ParentId.Value))
+                {
+                    return Results.BadRequest(new { message = "Lokalizacja nadrzędna nie istnieje.", code = "VALIDATION_ERROR" });
+                }
+
+                var ancestor = byId[request.ParentId.Value];
+                var guard = 0;
+                while (ancestor is not null && guard++ < 20)
+                {
+                    if (ancestor.Id == id)
+                    {
+                        return Results.BadRequest(new { message = "Nie można ustawić lokalizacji podrzędnej jako nadrzędnej — utworzyłoby to cykl.", code = "VALIDATION_ERROR" });
+                    }
+
+                    ancestor = ancestor.ParentId.HasValue && byId.TryGetValue(ancestor.ParentId.Value, out var next) ? next : null;
+                }
             }
 
             var connection = db.Database.GetDbConnection();

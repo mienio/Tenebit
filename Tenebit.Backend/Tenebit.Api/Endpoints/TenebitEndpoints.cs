@@ -89,9 +89,10 @@ public static class TenebitEndpoints
             .WithTags("Auth")
             .WithOpenApi();
 
-        api.MapPost("/auth/login", async (LoginRequest request, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/login", async (LoginRequest request, HttpRequest httpRequest, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
-                var result = await service.LoginAsync(request, cancellationToken);
+                var deviceTrustToken = httpRequest.Cookies[DeviceTrustCookie.CookieName];
+                var result = await service.LoginAsync(request, deviceTrustToken, cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 
                 if (result.Value!.RequiresTwoFactor)
@@ -123,6 +124,13 @@ public static class TenebitEndpoints
 
                 var refreshToken = await service.IssueRefreshTokenAsync(result.Value!.Id, cancellationToken);
                 RefreshTokenCookie.Append(response, refreshToken, env.IsDevelopment());
+
+                if (request.RememberDevice)
+                {
+                    var deviceTrustToken = await service.IssueDeviceTrustTokenAsync(result.Value!.Id, cancellationToken);
+                    DeviceTrustCookie.Append(response, deviceTrustToken, env.IsDevelopment());
+                }
+
                 return Results.Ok(new { token = tokens.Issue(result.Value!), user = result.Value });
             })
             .AllowAnonymous()
@@ -571,6 +579,11 @@ public static class TenebitEndpoints
             .WithTags("Procedures")
             .WithOpenApi();
 
+        api.MapPost("/procedures/{id:guid}/archive", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
+                (await service.ArchiveAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Procedures")
+            .WithOpenApi();
+
         api.MapGet("/procedures/{id:guid}/acceptances", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.GetAcceptanceStatusAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Procedures")
@@ -620,12 +633,14 @@ public static class TenebitEndpoints
         api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}", async (Guid organizationId, Guid assignmentId, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.GetPublicAsync(organizationId, assignmentId, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
 
         api.MapPost("/public/assignments/{organizationId:guid}/{assignmentId:guid}/accept", async (Guid organizationId, Guid assignmentId, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.AcceptPublicAsync(organizationId, assignmentId, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
 
@@ -637,6 +652,7 @@ public static class TenebitEndpoints
                 : Results.File(result.Value, "application/pdf", $"protokol-{assignmentId}.pdf");
         })
             .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
     }
@@ -646,12 +662,14 @@ public static class TenebitEndpoints
         api.MapGet("/public/assets/{organizationId:guid}/{assetId:guid}", async (Guid organizationId, Guid assetId, AssetService service, CancellationToken cancellationToken) =>
                 (await service.GetPublicScanAsync(organizationId, assetId, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assets")
             .WithOpenApi();
 
         api.MapPost("/public/assets/{organizationId:guid}/{assetId:guid}/report", async (Guid organizationId, Guid assetId, ReportAssetIssueRequest request, AssetService service, CancellationToken cancellationToken) =>
                 (await service.ReportPublicIssueAsync(organizationId, assetId, request, cancellationToken)).ToNoContentResult())
             .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assets")
             .WithOpenApi();
     }

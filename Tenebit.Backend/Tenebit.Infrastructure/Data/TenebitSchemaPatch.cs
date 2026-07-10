@@ -166,5 +166,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX_refresh_tokens_TokenHash"
 
 CREATE INDEX IF NOT EXISTS "IX_refresh_tokens_OrganizationUserId"
     ON tenebit.refresh_tokens ("OrganizationUserId");
+
+CREATE TABLE IF NOT EXISTS tenebit.device_trust_tokens (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationUserId" uuid NOT NULL,
+    "TokenHash" character varying(120) NOT NULL,
+    "ExpiresAt" timestamp with time zone NOT NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_device_trust_tokens_UserId_TokenHash"
+    ON tenebit.device_trust_tokens ("OrganizationUserId", "TokenHash");
 """;
 }

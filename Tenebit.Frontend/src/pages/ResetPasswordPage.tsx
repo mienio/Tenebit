@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
+import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 
@@ -14,6 +15,7 @@ export function ResetPasswordPage() {
   const token = searchParams.get('token') ?? '';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [password, setPassword] = useState('');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,7 +42,8 @@ export function ResetPasswordPage() {
         <h1>{t('auth.resetTitle')}</h1>
         {token ? (
           <form className="formGrid" onSubmit={handleSubmit}>
-            <Field label={t('auth.newPasswordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required autoFocus /></Field>
+            <Field label={t('auth.newPasswordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required autoFocus value={password} onChange={e => setPassword(e.target.value)} /></Field>
+            <PasswordStrengthMeter password={password} />
             {error ? <p className="formMessage formMessage--error">{error}</p> : null}
             <Button disabled={submitting} icon={<KeyRound size={16} />}>{submitting ? t('auth.resetLoading') : t('auth.resetButton')}</Button>
           </form>

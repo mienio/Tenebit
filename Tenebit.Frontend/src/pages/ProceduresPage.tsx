@@ -1,5 +1,5 @@
 import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
-import { Download, FileCheck2, Pencil, Plus, Search, Send, Trash2 } from 'lucide-react';
+import { Archive, Download, FileCheck2, Pencil, Plus, Search, Send, Trash2 } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -114,6 +114,18 @@ export function ProceduresPage() {
     }
   }
 
+  async function archive(item: Procedure) {
+    if (item.status !== 'Published') return;
+    setMessage(null);
+    try {
+      await api.archiveProcedure(item.id);
+      setMessage({ type: 'success', text: t('procedures.archived') });
+      await procedures.reload();
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('procedures.archiveFailed') });
+    }
+  }
+
   async function uploadFiles(files: File[]) {
     if (!files.length || !editedProcedure) return;
     setUploading(true);
@@ -213,6 +225,7 @@ export function ProceduresPage() {
                 <div className="rowActions">
                   <Button variant="ghost" onClick={() => setDialog({ mode: 'edit', procedure: item })} icon={<Pencil size={16} />}>{t('procedures.openSet')}</Button>
                   {item.status === 'Draft' ? <Button variant="secondary" onClick={() => publish(item)} icon={<Send size={16} />}>{t('procedures.publish')}</Button> : null}
+                  {item.status === 'Published' ? <Button variant="secondary" onClick={() => archive(item)} icon={<Archive size={16} />}>{t('procedures.archive')}</Button> : null}
                 </div>
               </article>)}
             </div>
@@ -222,15 +235,19 @@ export function ProceduresPage() {
       </Card>
 
       <Modal open={dialog?.mode === 'create' || dialog?.mode === 'edit'} title={editedProcedure ? t('procedures.editSet', { title: editedProcedure.title }) : t('procedures.newSetTitle')} onClose={() => setDialog(null)} width="wide">
-        <form className="formGrid" onSubmit={saveProcedure} key={editedProcedure?.id ?? 'new-procedure'}>
-          <Field label={t('procedures.titleLabel')}><TextInput name="title" defaultValue={editedProcedure?.title ?? ''} required /></Field>
-          <Field label={t('procedures.versionLabel')}><TextInput name="version" defaultValue={editedProcedure?.version ?? '1.0'} /></Field>
-          <Field label={t('procedures.ownerLabel')}><TextInput name="owner" defaultValue={editedProcedure?.owner ?? 'HR / IT'} /></Field>
-          <Field label={t('procedures.reviewDateLabel')}><TextInput name="reviewDate" type="date" defaultValue={editedProcedure?.reviewDate ?? ''} /></Field>
-          <Field label={t('procedures.scopeLabel')}><TextArea name="appliesTo" defaultValue={editedProcedure?.appliesTo ?? ''} /></Field>
-          <label className="checkField"><input name="requiresAcceptance" type="checkbox" defaultChecked={editedProcedure?.requiresAcceptance ?? true} /> {t('procedures.requiresAcceptance')}</label>
-          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDialog(null)}>{t('common.close')}</Button><Button disabled={saving} icon={<FileCheck2 size={16} />}>{saving ? t('common.saving') : t('procedures.save')}</Button></div>
-        </form>
+        {editedProcedure?.status === 'Published' ? (
+          <p className="formMessage">{t('procedures.lockedForEditing')}</p>
+        ) : (
+          <form className="formGrid" onSubmit={saveProcedure} key={editedProcedure?.id ?? 'new-procedure'}>
+            <Field label={t('procedures.titleLabel')}><TextInput name="title" defaultValue={editedProcedure?.title ?? ''} required /></Field>
+            <Field label={t('procedures.versionLabel')}><TextInput name="version" defaultValue={editedProcedure?.version ?? '1.0'} /></Field>
+            <Field label={t('procedures.ownerLabel')}><TextInput name="owner" defaultValue={editedProcedure?.owner ?? 'HR / IT'} /></Field>
+            <Field label={t('procedures.reviewDateLabel')}><TextInput name="reviewDate" type="date" defaultValue={editedProcedure?.reviewDate ?? ''} /></Field>
+            <Field label={t('procedures.scopeLabel')}><TextArea name="appliesTo" defaultValue={editedProcedure?.appliesTo ?? ''} /></Field>
+            <label className="checkField"><input name="requiresAcceptance" type="checkbox" defaultChecked={editedProcedure?.requiresAcceptance ?? true} /> {t('procedures.requiresAcceptance')}</label>
+            <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDialog(null)}>{t('common.close')}</Button><Button disabled={saving} icon={<FileCheck2 size={16} />}>{saving ? t('common.saving') : t('procedures.save')}</Button></div>
+          </form>
+        )}
 
         {editedProcedure ? (
           <div className="procedureFiles">

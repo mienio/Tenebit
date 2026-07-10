@@ -138,6 +138,7 @@ export const api = {
   downloadProcedureDocument: (procedureId: string, documentId: string) => apiBlob(`/api/procedures/${procedureId}/documents/${documentId}`),
   deleteProcedureDocument: (procedureId: string, documentId: string) => apiRequest<Procedure>(`/api/procedures/${procedureId}/documents/${documentId}`, { method: 'DELETE' }),
   publishProcedure: (id: string) => apiRequest<Procedure>(`/api/procedures/${id}/publish`, { method: 'POST' }),
+  archiveProcedure: (id: string) => apiRequest<Procedure>(`/api/procedures/${id}/archive`, { method: 'POST' }),
   procedureAcceptances: (id: string) => apiRequest<import('../types/domain').ProcedureAcceptanceStatus[]>(`/api/procedures/${id}/acceptances`),
 
   assignments: () => apiRequest<Assignment[]>('/api/assignments'),

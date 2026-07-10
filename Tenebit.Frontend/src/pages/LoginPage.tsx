@@ -42,7 +42,7 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await auth.completeTwoFactorLogin(challengeToken, String(form.get('code') ?? ''));
+      await auth.completeTwoFactorLogin(challengeToken, String(form.get('code') ?? ''), form.get('rememberDevice') === 'on');
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nieprawidłowy kod.');
@@ -63,6 +63,7 @@ export function LoginPage() {
           <p>{t('auth.twoFactorPrompt')}</p>
           <form className="formGrid" onSubmit={handleTwoFactorSubmit}>
             <Field label={t('auth.twoFactorCodeLabel')}><TextInput name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoFocus /></Field>
+            <label className="checkField"><input name="rememberDevice" type="checkbox" /> {t('auth.rememberDevice')}</label>
             {error ? <p className="formMessage formMessage--error">{error}</p> : null}
             <Button disabled={submitting} icon={<ShieldCheck size={16} />}>{submitting ? t('auth.loginLoading') : t('auth.twoFactorVerifyButton')}</Button>
           </form>

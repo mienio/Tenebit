@@ -145,6 +145,19 @@ public sealed class ProcedureService
         catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
     }
 
+    public async Task<Result<ProcedureResponse>> ArchiveAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.ProcedureManager);
+        if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+        var organizationId = _currentUser.OrganizationId;
+        var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
+        if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+        procedure.Archive();
+        _activity.Add(new ActivityLog(organizationId, "procedure.archived", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<ProcedureResponse>.Success(Map(procedure));
+    }
+
     public async Task<Result<ProcedureResponse>> RemoveDocumentAsync(Guid id, Guid documentId, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager);

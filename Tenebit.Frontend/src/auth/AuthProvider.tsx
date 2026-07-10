@@ -27,7 +27,7 @@ type AuthContextValue = {
   isEmailVerified: boolean;
   isTwoFactorEnabled: boolean;
   login: (email: string, password: string) => Promise<LoginOutcome>;
-  completeTwoFactorLogin: (challengeToken: string, code: string) => Promise<void>;
+  completeTwoFactorLogin: (challengeToken: string, code: string, rememberDevice: boolean) => Promise<void>;
   register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string) => Promise<void>;
   loginWithToken: (token: string) => boolean;
   logout: () => void;
@@ -99,8 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applySession(response as LoginResponse);
       return { requiresTwoFactor: false };
     },
-    completeTwoFactorLogin: async (challengeToken, code) => {
-      const response = await apiRequest<LoginResponse>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ challengeToken, code }) });
+    completeTwoFactorLogin: async (challengeToken, code, rememberDevice) => {
+      const response = await apiRequest<LoginResponse>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ challengeToken, code, rememberDevice }) });
       applySession(response);
     },
     register: async (organizationName, displayName, email, password, currency, language) => {

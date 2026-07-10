@@ -17,12 +17,14 @@ QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+const string LogOutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {CorrelationId}{NewLine}{Exception}";
+
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File("logs/tenebit-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14));
+    .WriteTo.Console(outputTemplate: LogOutputTemplate)
+    .WriteTo.File("logs/tenebit-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14, outputTemplate: LogOutputTemplate));
 
 // Mikrus/docker reverse proxy compatibility: old compose configs may point to 5000,
 // newer .NET container defaults use 8080. Bind both so the backend stays reachable.
@@ -67,6 +69,12 @@ builder.Services.AddRateLimiter(options =>
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
     });
+    options.AddFixedWindowLimiter("public", limiter =>
+    {
+        limiter.PermitLimit = 60;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
 });
 
 builder.Services
@@ -103,15 +111,17 @@ if (builder.Environment.IsProduction())
 
 var app = builder.Build();
 
+app.UseCorrelationId();
 app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
     {
+        var correlationId = context.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var id) ? id?.ToString() : null;
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new ErrorResponse("Wystąpił nieoczekiwany błąd aplikacji.", "INTERNAL_ERROR"));
+        await context.Response.WriteAsJsonAsync(new { message = "Wystąpił nieoczekiwany błąd aplikacji.", code = "INTERNAL_ERROR", correlationId });
     });
 });
 

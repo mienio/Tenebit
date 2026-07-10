@@ -31,6 +31,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<DeviceTrustToken> DeviceTrustTokens => Set<DeviceTrustToken>();
     public DbSet<AssetStatusSetting> AssetStatusSettings => Set<AssetStatusSetting>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
@@ -134,6 +135,14 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasIndex(x => x.OrganizationUserId);
+        });
+
+        modelBuilder.Entity<DeviceTrustToken>(entity =>
+        {
+            entity.ToTable("device_trust_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationUserId, x.TokenHash }).IsUnique();
         });
     }
 

@@ -18,7 +18,7 @@ public sealed record RefreshResult(AuthUserResponse User, string RefreshToken);
 
 public sealed record LoginOutcome(bool RequiresTwoFactor, Guid? PendingUserId, AuthUserResponse? User);
 
-public sealed record TwoFactorLoginRequest(string ChallengeToken, string Code);
+public sealed record TwoFactorLoginRequest(string ChallengeToken, string Code, bool RememberDevice = false);
 
 public sealed record TwoFactorSetupResponse(string Secret, string OtpAuthUri, string QrSvg);
 

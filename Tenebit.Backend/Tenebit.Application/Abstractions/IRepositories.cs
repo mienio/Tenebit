@@ -121,6 +121,12 @@ public interface IRefreshTokenRepository
     void Add(RefreshToken token);
 }
 
+public interface IDeviceTrustTokenRepository
+{
+    Task<DeviceTrustToken?> FindValidAsync(Guid organizationUserId, string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    void Add(DeviceTrustToken token);
+}
+
 public interface IJobProfileRepository
 {
     Task<IReadOnlyList<JobProfile>> ListAsync(Guid organizationId, CancellationToken cancellationToken);

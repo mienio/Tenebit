@@ -130,6 +130,16 @@ public sealed class InMemoryRefreshTokenRepository : IRefreshTokenRepository
     public void Add(RefreshToken token) => Tokens.Add(token);
 }
 
+public sealed class InMemoryDeviceTrustTokenRepository : IDeviceTrustTokenRepository
+{
+    public List<DeviceTrustToken> Tokens { get; } = [];
+
+    public Task<DeviceTrustToken?> FindValidAsync(Guid organizationUserId, string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
+        Task.FromResult(Tokens.FirstOrDefault(x => x.OrganizationUserId == organizationUserId && x.TokenHash == tokenHash && x.IsValid(now)));
+
+    public void Add(DeviceTrustToken token) => Tokens.Add(token);
+}
+
 public sealed class FakeEmailSender : IEmailSender
 {
     public List<(string To, string Subject)> Sent { get; } = [];

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Tenebit.Application.Identity;
 using Tenebit.Tests.Fakes;
@@ -6,6 +7,24 @@ namespace Tenebit.Tests;
 
 public class AuthServiceTests
 {
+    // Independent RFC 6238 reference implementation used only to compute a valid TOTP code for a known secret in tests.
+    private static string ComputeTotpCode(string secret)
+    {
+        var counter = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var key = Base32.Decode(secret);
+        var counterBytes = BitConverter.GetBytes(counter);
+        if (BitConverter.IsLittleEndian) Array.Reverse(counterBytes);
+
+        var hash = new HMACSHA1(key).ComputeHash(counterBytes);
+        var offset = hash[^1] & 0x0F;
+        var binaryCode = ((hash[offset] & 0x7F) << 24)
+            | ((hash[offset + 1] & 0xFF) << 16)
+            | ((hash[offset + 2] & 0xFF) << 8)
+            | (hash[offset + 3] & 0xFF);
+
+        return (binaryCode % 1_000_000).ToString().PadLeft(6, '0');
+    }
+
     private static (AuthService Service, InMemoryOrganizationRepository Organizations, InMemoryOrganizationUserRepository Users) CreateService()
     {
         var organizations = new InMemoryOrganizationRepository();
@@ -19,6 +38,7 @@ public class AuthServiceTests
             new InMemoryPasswordResetTokenRepository(),
             new InMemoryEmailVerificationTokenRepository(),
             new InMemoryRefreshTokenRepository(),
+            new InMemoryDeviceTrustTokenRepository(),
             new FakeEmailSender(),
             new FakeAppLinkBuilder(),
             new FakeQrCodeGenerator(),
@@ -67,7 +87,7 @@ public class AuthServiceTests
         var (service, _, _) = CreateService();
         await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
 
-        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "wrong-password"), CancellationToken.None);
+        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "wrong-password"), null, CancellationToken.None);
         Assert.True(result.IsFailure);
     }
 
@@ -77,7 +97,7 @@ public class AuthServiceTests
         var (service, _, _) = CreateService();
         await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
 
-        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), CancellationToken.None);
+        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), null, CancellationToken.None);
         Assert.True(result.IsSuccess);
         Assert.False(result.Value!.RequiresTwoFactor);
         Assert.NotNull(result.Value!.User);
@@ -134,5 +154,52 @@ public class AuthServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(registered.Value!.Id, result.Value!.Id);
         Assert.Single(organizations.Organizations);
+    }
+
+    [Fact]
+    public async Task LoginAsync_RequiresTwoFactorWhenEnabledAndNoTrustedDevicePresented()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), null, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.RequiresTwoFactor);
+    }
+
+    [Fact]
+    public async Task LoginAsync_SkipsTwoFactorWhenValidDeviceTrustTokenPresented()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        var deviceTrustToken = await service.IssueDeviceTrustTokenAsync(registered.Value!.Id, CancellationToken.None);
+        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), deviceTrustToken, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value!.RequiresTwoFactor);
+        Assert.NotNull(result.Value!.User);
+    }
+
+    [Fact]
+    public async Task LoginAsync_DoesNotHonorDeviceTrustTokenIssuedForADifferentUser()
+    {
+        var (service, _, _) = CreateService();
+        var owner = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(owner.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(owner.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        var otherUser = await service.RegisterAsync(new RegisterRequest("OtherCo", "other@other.test", "password123", "Other", "PLN"), CancellationToken.None);
+        var foreignDeviceToken = await service.IssueDeviceTrustTokenAsync(otherUser.Value!.Id, CancellationToken.None);
+
+        var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), foreignDeviceToken, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.RequiresTwoFactor);
     }
 }
