@@ -52,10 +52,12 @@ public sealed class InMemoryAssetCategoryRepository : IAssetCategoryRepository
         Task.FromResult(Categories.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
     public Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingCategoryId, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+        Task.FromResult(Categories.Any(x => x.OrganizationId == organizationId && x.Name == name && (!excludingCategoryId.HasValue || x.Id != excludingCategoryId.Value)));
+
+    public bool IsUsed { get; set; }
 
     public Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+        Task.FromResult(IsUsed);
 
     public void Add(AssetCategory category) => Categories.Add(category);
     public void Remove(AssetCategory category) => Categories.Remove(category);

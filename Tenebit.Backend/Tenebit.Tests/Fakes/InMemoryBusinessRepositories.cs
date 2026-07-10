@@ -21,7 +21,7 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         Task.FromResult(Assets.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
     public Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+        Task.FromResult(Assets.Any(x => x.OrganizationId == organizationId && x.AssetTag == assetTag && (!excludingAssetId.HasValue || x.Id != excludingAssetId.Value)));
 
     public void Add(Asset asset) => Assets.Add(asset);
     public void Remove(Asset asset) => Assets.Remove(asset);
@@ -41,10 +41,12 @@ public sealed class InMemoryPersonRepository : IPersonRepository
         Task.FromResult(People.FirstOrDefault(x => x.OrganizationId == organizationId && x.Email == email));
 
     public Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingPersonId, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+        Task.FromResult(People.Any(x => x.OrganizationId == organizationId && x.Email == email && (!excludingPersonId.HasValue || x.Id != excludingPersonId.Value)));
+
+    public bool HasBlockingRelations { get; set; }
 
     public Task<bool> HasBlockingRelationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+        Task.FromResult(HasBlockingRelations);
 
     public void Add(Person person) => People.Add(person);
     public void Remove(Person person) => People.Remove(person);
@@ -61,7 +63,7 @@ public sealed class InMemoryTeamRepository : ITeamRepository
         Task.FromResult(Teams.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
     public Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingTeamId, CancellationToken cancellationToken) =>
-        Task.FromResult(false);
+        Task.FromResult(Teams.Any(x => x.OrganizationId == organizationId && x.Name == name && (!excludingTeamId.HasValue || x.Id != excludingTeamId.Value)));
 
     public void Add(Team team) => Teams.Add(team);
 }
