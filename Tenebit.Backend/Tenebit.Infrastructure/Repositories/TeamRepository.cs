@@ -19,5 +19,13 @@ public sealed class TeamRepository : ITeamRepository
     public Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingTeamId, CancellationToken cancellationToken) =>
         _db.Teams.AnyAsync(x => x.OrganizationId == organizationId && x.Name == name.Trim() && (!excludingTeamId.HasValue || x.Id != excludingTeamId.Value), cancellationToken);
 
+    public async Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken)
+    {
+        var usedByPeople = await _db.People.AnyAsync(x => x.OrganizationId == organizationId && x.TeamId == id, cancellationToken);
+        if (usedByPeople) return true;
+        return await _db.Assets.AnyAsync(x => x.OrganizationId == organizationId && x.TeamId == id, cancellationToken);
+    }
+
     public void Add(Team team) => _db.Teams.Add(team);
+    public void Remove(Team team) => _db.Teams.Remove(team);
 }

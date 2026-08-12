@@ -32,7 +32,7 @@ public sealed class SettingsService
             return BuiltInStatusSettings(_currentUser.Language);
         }
 
-        return saved.OrderBy(x => x.SortOrder).Select(x => new AssetStatusSettingResponse(x.StatusKey, x.Label, x.SortOrder, x.IsEnabled)).ToList();
+        return saved.OrderBy(x => x.SortOrder).Select(x => new AssetStatusSettingResponse(x.StatusKey, x.Label.Trim(), x.Color, x.BackgroundColor, x.SortOrder, x.IsEnabled)).ToList();
     }
 
     public async Task<Result<IReadOnlyList<AssetStatusSettingResponse>>> SaveAssetStatusesAsync(IReadOnlyList<SaveAssetStatusSettingRequest> request, CancellationToken cancellationToken)
@@ -49,12 +49,12 @@ public sealed class SettingsService
                 var setting = await _statusSettings.GetByKeyAsync(organizationId, item.StatusKey, cancellationToken);
                 if (setting is null)
                 {
-                    setting = new AssetStatusSetting(organizationId, item.StatusKey, item.Label, item.SortOrder, item.IsEnabled);
+                    setting = new AssetStatusSetting(organizationId, item.StatusKey, item.Label, item.Color, item.BackgroundColor, item.SortOrder, item.IsEnabled);
                     _statusSettings.Add(setting);
                 }
                 else
                 {
-                    setting.Update(item.Label, item.SortOrder, item.IsEnabled);
+                    setting.Update(item.Label, item.Color, item.BackgroundColor, item.SortOrder, item.IsEnabled);
                 }
             }
             _activity.Add(new ActivityLog(organizationId, "settings.asset_statuses.updated", "settings", organizationId, _currentUser.Subject, null, _clock.UtcNow));
@@ -71,31 +71,31 @@ public sealed class SettingsService
         {
             return
             [
-                new(nameof(AssetStatus.Draft), "Draft", 10, true),
-                new(nameof(AssetStatus.InStock), "In stock", 20, true),
-                new(nameof(AssetStatus.Reserved), "Reserved", 30, true),
-                new(nameof(AssetStatus.Assigned), "Assigned", 40, true),
-                new(nameof(AssetStatus.InTransit), "In transit", 50, true),
-                new(nameof(AssetStatus.InService), "In service", 60, true),
-                new(nameof(AssetStatus.Damaged), "Damaged", 70, true),
-                new(nameof(AssetStatus.Lost), "Lost", 80, true),
-                new(nameof(AssetStatus.Retired), "Retired", 90, true),
-                new(nameof(AssetStatus.Disposed), "Disposed", 100, true)
+                new(nameof(AssetStatus.Draft), "Draft", "#475569", "#f8fafc", 10, true),
+                new(nameof(AssetStatus.InStock), "In stock", "#047857", "#ecfdf5", 20, true),
+                new(nameof(AssetStatus.Reserved), "Reserved", "#1d4ed8", "#eff6ff", 30, true),
+                new(nameof(AssetStatus.Assigned), "Assigned", "#1d4ed8", "#eff6ff", 40, true),
+                new(nameof(AssetStatus.InTransit), "In transit", "#c2410c", "#fff7ed", 50, true),
+                new(nameof(AssetStatus.InService), "In service", "#c2410c", "#fff7ed", 60, true),
+                new(nameof(AssetStatus.Damaged), "Damaged", "#be123c", "#fff1f2", 70, true),
+                new(nameof(AssetStatus.Lost), "Lost", "#be123c", "#fff1f2", 80, true),
+                new(nameof(AssetStatus.Retired), "Retired", "#475569", "#f8fafc", 90, true),
+                new(nameof(AssetStatus.Disposed), "Disposed", "#991b1b", "#fef2f2", 100, true)
             ];
         }
 
         return
         [
-            new(nameof(AssetStatus.Draft), "Szkic", 10, true),
-            new(nameof(AssetStatus.InStock), "W magazynie", 20, true),
-            new(nameof(AssetStatus.Reserved), "Zarezerwowane", 30, true),
-            new(nameof(AssetStatus.Assigned), "Wydane", 40, true),
-            new(nameof(AssetStatus.InTransit), "W drodze", 50, true),
-            new(nameof(AssetStatus.InService), "W serwisie", 60, true),
-            new(nameof(AssetStatus.Damaged), "Uszkodzone", 70, true),
-            new(nameof(AssetStatus.Lost), "Zaginione", 80, true),
-            new(nameof(AssetStatus.Retired), "Wycofane", 90, true),
-            new(nameof(AssetStatus.Disposed), "Zutylizowane", 100, true)
+            new(nameof(AssetStatus.Draft), "Szkic", "#475569", "#f8fafc", 10, true),
+            new(nameof(AssetStatus.InStock), "W magazynie", "#047857", "#ecfdf5", 20, true),
+            new(nameof(AssetStatus.Reserved), "Zarezerwowane", "#1d4ed8", "#eff6ff", 30, true),
+            new(nameof(AssetStatus.Assigned), "Wydane", "#1d4ed8", "#eff6ff", 40, true),
+            new(nameof(AssetStatus.InTransit), "W drodze", "#c2410c", "#fff7ed", 50, true),
+            new(nameof(AssetStatus.InService), "W serwisie", "#c2410c", "#fff7ed", 60, true),
+            new(nameof(AssetStatus.Damaged), "Uszkodzone", "#be123c", "#fff1f2", 70, true),
+            new(nameof(AssetStatus.Lost), "Zaginione", "#be123c", "#fff1f2", 80, true),
+            new(nameof(AssetStatus.Retired), "Wycofane", "#475569", "#f8fafc", 90, true),
+            new(nameof(AssetStatus.Disposed), "Zutylizowane", "#991b1b", "#fef2f2", 100, true)
         ];
     }
 }

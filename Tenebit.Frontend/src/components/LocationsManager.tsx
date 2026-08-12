@@ -15,6 +15,7 @@ import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
 
 const maxTreeDepth = 8;
+const customTypesStorageKey = 'tenebit_custom_location_types';
 
 type LocationDialog =
   | { mode: 'create'; step: 'parent' | 'details'; parentId: string | null; hasParentStep: boolean }
@@ -101,7 +102,14 @@ export function LocationsManager() {
   const [deleteTarget, setDeleteTarget] = useState<LocationNode | null>(null);
   const [typeValue, setTypeValue] = useState<string>('Room');
   const [typeQuickAdd, setTypeQuickAdd] = useState(false);
-  const [sessionCustomTypes, setSessionCustomTypes] = useState<string[]>([]);
+  const [sessionCustomTypes, setSessionCustomTypes] = useState<string[]>(() => {
+    try {
+      const raw = window.sessionStorage.getItem(customTypesStorageKey);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const usedCustomTypes = useMemo(
     () => Array.from(new Set((locations.data ?? []).map(item => item.type))).filter(value => !locationTypeValues.includes(value as LocationType)),
@@ -117,7 +125,11 @@ export function LocationsManager() {
     const form = new FormData(event.currentTarget);
     const value = String(form.get('typeName') ?? '').trim();
     if (!value) return;
-    setSessionCustomTypes(current => Array.from(new Set([...current, value])));
+    setSessionCustomTypes(current => {
+      const next = Array.from(new Set([...current, value]));
+      try { window.sessionStorage.setItem(customTypesStorageKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
     setTypeValue(value);
     setTypeQuickAdd(false);
   }

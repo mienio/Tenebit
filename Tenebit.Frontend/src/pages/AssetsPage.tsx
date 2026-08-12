@@ -1,5 +1,5 @@
-import { Download, Eye, FileSpreadsheet, Pencil, Plus, Printer, QrCode, RefreshCw, Trash2, Upload, X } from 'lucide-react';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Printer, QrCode, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
@@ -12,7 +12,7 @@ import { LocationInventoryModal } from '../components/LocationInventoryModal';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
 import { PersonPreviewModal } from '../components/PersonPreviewModal';
-import { Pagination, paginate } from '../components/Pagination';
+import { Pagination } from '../components/Pagination';
 import { SlidePanel } from '../components/SlidePanel';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { StatusBadge } from '../components/StatusBadge';
@@ -20,12 +20,14 @@ import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import type { Asset, AssetCategoryType, AssetStatus, CreateAssetRequest, LocationType } from '../types/domain';
 import { formatDate, formatDateTime, formatMoney, toNullable } from '../utils/format';
-import { assetStatusValues, categoryTypeValues, locationTypeValues } from '../utils/labels';
+import { activityLabel, assetStatusValues, categoryTypeValues, locationTypeValues } from '../utils/labels';
 import { CategoryIcon } from '../utils/categoryIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
 
 const pageSize = 25;
+
+type SortKey = 'name' | 'assetTag' | 'status' | 'person' | 'location' | 'value' | 'warranty';
 
 function parseMoney(value: FormDataEntryValue | null) {
   const raw = String(value ?? '').replace(',', '.').trim();
@@ -35,17 +37,27 @@ function parseMoney(value: FormDataEntryValue | null) {
 }
 
 export function AssetsPage() {
-  const { t } = useI18n();
+  const { t, tPlural } = useI18n();
   const { celebrate } = useCelebration();
+  const statusSettings = useAsyncData(api.assetStatuses, []);
+  const statusSettingByKey = useMemo(() => {
+    const map = new Map<string, { label: string; color: string; backgroundColor: string }>();
+    for (const item of statusSettings.data ?? []) map.set(item.statusKey, { label: item.label, color: item.color, backgroundColor: item.backgroundColor });
+    return map;
+  }, [statusSettings.data]);
   const statuses: { value: AssetStatus | ''; label: string }[] = [
     { value: '', label: t('assets.allStatuses') },
-    ...assetStatusValues.map(value => ({ value, label: t(`status.${value}`) }))
+    ...(statusSettings.data?.length
+      ? [...statusSettings.data].filter(item => item.isEnabled).sort((a, b) => a.sortOrder - b.sortOrder).map(item => ({ value: item.statusKey, label: item.label }))
+      : assetStatusValues.map(value => ({ value, label: t(`status.${value}`) })))
   ];
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState<AssetStatus | ''>((searchParams.get('status') as AssetStatus | null) ?? '');
   const [location, setLocation] = useState(searchParams.get('location') ?? '');
   const [team, setTeam] = useState(searchParams.get('team') ?? '');
+  const [owner, setOwner] = useState(searchParams.get('owner') ?? '');
+  const [warranty, setWarranty] = useState(searchParams.get('warranty') ?? '');
   const [page, setPage] = useState(1);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -61,6 +73,7 @@ export function AssetsPage() {
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [formLocation, setFormLocation] = useState('');
   const [viewLocation, setViewLocation] = useState<string | null>(null);
   const [viewPersonId, setViewPersonId] = useState<string | null>(null);
   const [revealedFields, setRevealedFields] = useState<Record<string, string>>({});
@@ -68,21 +81,44 @@ export function AssetsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkModal, setBulkModal] = useState<'status' | 'location' | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [pendingBulkOverride, setPendingBulkOverride] = useState<Partial<CreateAssetRequest & { status: AssetStatus }> | null>(null);
   const [batchQr, setBatchQr] = useState<{ asset: Asset; svg: string }[] | null>(null);
   const [batchQrLoading, setBatchQrLoading] = useState(false);
+  const openedAssetRef = useRef<string | null>(null);
   const debouncedSearch = useDebouncedValue(search.trim(), 320);
 
-  const assetsLoader = useMemo(() => () => api.assets({ search: debouncedSearch, status, location }), [debouncedSearch, status, location]);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  const assetsLoader = useMemo(
+    () => () => api.assetsPaged({ search: debouncedSearch, status, location, teamId: team, owner, warranty, sort: sort?.key, desc: sort?.dir === -1, page, pageSize }),
+    [debouncedSearch, status, location, team, owner, warranty, sort, page]
+  );
   const assets = useAsyncData(assetsLoader, [assetsLoader]);
   const categories = useAsyncData(api.categories, []);
   const locations = useAsyncData(api.locations, []);
   const teams = useAsyncData(api.teams, []);
-  const teamFilteredAssets = useMemo(() => (team ? (assets.data ?? []).filter(asset => asset.teamId === team) : assets.data ?? []), [assets.data, team]);
-  const pagedAssets = useMemo(() => paginate(teamFilteredAssets, page, pageSize), [teamFilteredAssets, page]);
+  const rows = useMemo(() => assets.data?.items ?? [], [assets.data]);
+  const totalAssets = assets.data?.total ?? 0;
+
+  function toggleSort(key: SortKey) {
+    setSort(current => (current?.key === key ? (current.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 }));
+    setPage(1);
+  }
+
+  function SortableTh({ sortKey, children, align }: { sortKey: SortKey; children: React.ReactNode; align?: 'right' }) {
+    const active = sort?.key === sortKey;
+    return (
+      <th style={align === 'right' ? { textAlign: 'right' } : undefined} aria-sort={active ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}>
+        <button type="button" className={active ? 'thSort thSort--active' : 'thSort'} onClick={() => toggleSort(sortKey)}>
+          {children}
+          {active ? (sort.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null}
+        </button>
+      </th>
+    );
+  }
   const categoryTypeLabels: Record<AssetCategoryType, string> = Object.fromEntries(categoryTypeValues.map(value => [value, t(`categoryType.${value}`)])) as Record<AssetCategoryType, string>;
   const locationTypeLabels: Record<LocationType, string> = Object.fromEntries(locationTypeValues.map(value => [value, t(`locationType.${value}`)])) as Record<LocationType, string>;
-  const selectedAssets = useMemo(() => (assets.data ?? []).filter(asset => selectedIds.has(asset.id)), [assets.data, selectedIds]);
-  const allOnPageSelected = pagedAssets.items.length > 0 && pagedAssets.items.every(asset => selectedIds.has(asset.id));
+  const selectedAssets = useMemo(() => rows.filter(asset => selectedIds.has(asset.id)), [rows, selectedIds]);
+  const allOnPageSelected = rows.length > 0 && rows.every(asset => selectedIds.has(asset.id));
   const historyLoader = useMemo(
     () => () => (selected ? api.activityLog({ entityType: 'asset', entityId: selected.id, pageSize: 10 }) : Promise.resolve(null)),
     [selected?.id]
@@ -100,8 +136,8 @@ export function AssetsPage() {
   function toggleSelectAllOnPage() {
     setSelectedIds(current => {
       const next = new Set(current);
-      if (allOnPageSelected) pagedAssets.items.forEach(asset => next.delete(asset.id));
-      else pagedAssets.items.forEach(asset => next.add(asset.id));
+      if (allOnPageSelected) rows.forEach(asset => next.delete(asset.id));
+      else rows.forEach(asset => next.add(asset.id));
       return next;
     });
   }
@@ -129,31 +165,32 @@ export function AssetsPage() {
   async function applyBulkUpdate(overrides: Partial<CreateAssetRequest & { status: AssetStatus }>) {
     setBulkSaving(true);
     let success = 0;
-    let failed = 0;
+    const failedIds: string[] = [];
     for (const asset of selectedAssets) {
       try {
         await api.updateAsset(asset.id, buildUpdateBody(asset, overrides));
         success++;
       } catch {
-        failed++;
+        failedIds.push(asset.id);
       }
     }
     setBulkSaving(false);
     setBulkModal(null);
-    setMessage({ type: failed ? 'error' : 'success', text: t('assets.bulkResult', { success, failed }) });
-    setSelectedIds(new Set());
+    const failed = failedIds.length;
+    setMessage({ type: failed ? 'error' : 'success', text: t(failed ? 'assets.bulkFailedKept' : 'assets.bulkResult', { success, failed }) });
+    setSelectedIds(new Set(failedIds));
     await assets.reload();
   }
 
   function exportSelectedCsv() {
-    const header = ['Nazwa', 'Tag', 'Numer seryjny', 'Kategoria', 'Status', 'Lokalizacja', 'Przypisana osoba'];
-    const rows = selectedAssets.map(asset => [asset.name, asset.assetTag, asset.serialNumber ?? '', asset.categoryName ?? '', asset.status, asset.location ?? '', asset.assignedPersonName ?? '']);
+    const header = [t('assets.csvName'), t('assets.csvTag'), t('assets.csvSerialNumber'), t('assets.csvCategory'), t('assets.csvStatus'), t('assets.csvLocation'), t('assets.csvAssignee')];
+    const rows = selectedAssets.map(asset => [asset.name, asset.assetTag, asset.serialNumber ?? '', asset.categoryName ?? '', t(`status.${asset.status}`), asset.location ?? '', asset.assignedPersonName ?? '']);
     const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'aktywa.csv';
+    link.download = t('assets.csvFileName');
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -163,16 +200,20 @@ export function AssetsPage() {
   async function openBatchQr() {
     setBatchQrLoading(true);
     const results: { asset: Asset; svg: string }[] = [];
+    const failedTags: string[] = [];
     for (const asset of selectedAssets) {
       try {
         const svg = await api.assetQr(asset.id);
         results.push({ asset, svg });
       } catch {
-        // Skip assets whose QR failed to generate — the rest of the batch still prints.
+        failedTags.push(asset.assetTag);
       }
     }
     setBatchQr(results);
     setBatchQrLoading(false);
+    if (failedTags.length) {
+      setMessage({ type: 'error', text: t('assets.qrBatchFailed', { count: failedTags.length, tags: failedTags.join(', ') }) });
+    }
   }
 
   useEffect(() => {
@@ -181,9 +222,12 @@ export function AssetsPage() {
     if (status) params.set('status', status);
     if (location) params.set('location', location);
     if (team) params.set('team', team);
+    if (owner) params.set('owner', owner);
+    if (warranty) params.set('warranty', warranty);
     setSearchParams(params, { replace: true });
     setPage(1);
-  }, [debouncedSearch, location, team, setSearchParams, status]);
+    setSelectedIds(new Set());
+  }, [debouncedSearch, location, team, setSearchParams, status, owner, warranty]);
 
   useEffect(() => {
     if (!message) return;
@@ -192,10 +236,16 @@ export function AssetsPage() {
   }, [message]);
 
   useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page]);
+
+  useEffect(() => {
     const openAssetId = searchParams.get('openAssetId');
-    if (!openAssetId || !assets.data) return;
-    const match = assets.data.find(asset => asset.id === openAssetId);
+    if (!openAssetId || !assets.data || openedAssetRef.current === openAssetId) return;
+    openedAssetRef.current = openAssetId;
+    const match = assets.data.items.find(asset => asset.id === openAssetId);
     if (match) setSelected(match);
+    else api.getAsset(openAssetId).then(setSelected).catch(() => {});
   }, [assets.data, searchParams]);
 
   useEffect(() => {
@@ -224,6 +274,7 @@ export function AssetsPage() {
     setEditing(null);
     setSelected(null);
     setSelectedCategoryId('');
+    setFormLocation('');
     setAssetModalOpen(true);
   }
 
@@ -231,6 +282,7 @@ export function AssetsPage() {
     setEditing(asset);
     setSelected(null);
     setSelectedCategoryId(asset.categoryId);
+    setFormLocation(asset.location ?? '');
     setAssetModalOpen(true);
   }
 
@@ -244,6 +296,9 @@ export function AssetsPage() {
     const form = new FormData(event.currentTarget);
     const categoryId = String(form.get('categoryId') ?? '');
     if (!categoryId) return setMessage({ type: 'error', text: t('assets.categoryRequired') });
+
+    const rawPrice = String(form.get('purchasePrice') ?? '').trim();
+    if (rawPrice && parseMoney(rawPrice) === null) return setMessage({ type: 'error', text: t('assets.invalidPrice') });
 
     const categoryFields = categories.data?.find(category => category.id === categoryId)?.fieldDefinitions ?? [];
     const customFields: Record<string, string> = {};
@@ -307,10 +362,11 @@ export function AssetsPage() {
     if (!name) return setMessage({ type: 'error', text: t('settings.categoryNameRequired') });
     setQuickAddSaving(true);
     try {
-      await api.createCategory({ name, type: String(form.get('type') ?? 'Physical') as AssetCategoryType, icon: toNullable(quickAddIcon) });
+      const created = await api.createCategory({ name, type: String(form.get('type') ?? 'Physical') as AssetCategoryType, icon: toNullable(quickAddIcon) });
       setMessage({ type: 'success', text: t('settings.categorySaved') });
       setQuickAdd(null);
       await categories.reload();
+      setSelectedCategoryId(created.id);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('settings.categorySaveFailed') });
     } finally {
@@ -325,10 +381,11 @@ export function AssetsPage() {
     if (!name) return setMessage({ type: 'error', text: t('locations.nameRequired') });
     setQuickAddSaving(true);
     try {
-      await api.createLocation({ name, type: String(form.get('type') ?? 'Room') as LocationType });
+      const created = await api.createLocation({ name, type: String(form.get('type') ?? 'Room') as LocationType });
       setMessage({ type: 'success', text: t('locations.created') });
       setQuickAdd(null);
       await locations.reload();
+      setFormLocation(created.fullPath);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('locations.createFailed') });
     } finally {
@@ -422,6 +479,15 @@ export function AssetsPage() {
         </Card>
       )}
 
+      {(owner === 'none' || warranty === 'expiring') && (
+        <Card className="toolbarCard">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {owner === 'none' && <Button variant="secondary" icon={<X size={14} />} onClick={() => setOwner('')}>{t('assets.filterOwnerNone')}</Button>}
+            {warranty === 'expiring' && <Button variant="secondary" icon={<X size={14} />} onClick={() => setWarranty('')}>{t('assets.filterWarrantyExpiring')}</Button>}
+          </div>
+        </Card>
+      )}
+
       <Card className="toolbarCard">
         <form className="filters filters--four" onSubmit={event => event.preventDefault()}>
           <Field label={t('assets.searchLabel')}>
@@ -451,73 +517,85 @@ export function AssetsPage() {
         <div className="sectionTitle">
           <div>
             <h2>{t('assets.listTitle')}</h2>
-            <p>{t('assets.countSummary', { count: teamFilteredAssets.length, pageSize })}</p>
+            <p>{t('assets.countSummary', { count: totalAssets, pageSize, noun: tPlural('count.assets', totalAssets) })}</p>
           </div>
         </div>
 
         {assets.isLoading && <p className="muted">{t('assets.refreshing')}</p>}
 
-        {!teamFilteredAssets.length ? (
+        {!rows.length ? (
           <EmptyState
             title={t('assets.emptyTitle')}
             description={t('assets.emptyDesc')}
-            action={<Button onClick={openCreate} icon={<Plus size={16} />}>{t('assets.add')}</Button>}
+            action={(debouncedSearch || status || location || team || owner || warranty) ? (
+              <Button variant="secondary" icon={<X size={16} />} onClick={() => { setSearch(''); setStatus(''); setLocation(''); setTeam(''); setOwner(''); setWarranty(''); }}>{t('common.clearFilters')}</Button>
+            ) : (
+              <Button onClick={openCreate} icon={<Plus size={16} />}>{t('assets.add')}</Button>
+            )}
           />
         ) : (
           <>
-            <div className="tableWrap">
+            <div className="tableWrap tableWrap--cards">
               <table className="dense-table">
                 <thead>
                   <tr>
                     <th style={{ width: '32px' }}><input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} onClick={event => event.stopPropagation()} aria-label={t('assets.bulkSelectAll')} /></th>
                     <th style={{ width: '40px' }}></th>
-                    <th>{t('assets.colName')}</th>
-                    <th>{t('assets.colTag')}</th>
-                    <th>{t('assets.statusLabel')}</th>
-                    <th>{t('assets.colPerson')}</th>
-                    <th>{t('assets.colLocation')}</th>
-                    <th style={{ textAlign: 'right' }}>{t('assets.colValue')}</th>
-                    <th>{t('assets.colWarranty')}</th>
+                    <SortableTh sortKey="name">{t('assets.colName')}</SortableTh>
+                    <SortableTh sortKey="assetTag">{t('assets.colTag')}</SortableTh>
+                    <SortableTh sortKey="status">{t('assets.statusLabel')}</SortableTh>
+                    <SortableTh sortKey="person">{t('assets.colPerson')}</SortableTh>
+                    <SortableTh sortKey="location">{t('assets.colLocation')}</SortableTh>
+                    <SortableTh sortKey="value" align="right">{t('assets.colValue')}</SortableTh>
+                    <SortableTh sortKey="warranty">{t('assets.colWarranty')}</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedAssets.items.map(asset => {
+                  {rows.map(asset => {
                     const cat = categories.data?.find(c => c.id === asset.categoryId);
                     return (
-                      <tr key={asset.id} onClick={() => setSelected(asset)}>
+                      <tr
+                        key={asset.id}
+                        tabIndex={0}
+                        onClick={() => setSelected(asset)}
+                        onKeyDown={event => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(asset); }
+                        }}
+                      >
                         <td onClick={event => event.stopPropagation()}>
                           <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelected(asset.id)} aria-label={t('assets.bulkSelectOne', { name: asset.name })} />
                         </td>
-                        <td>
+                        <td className="cell-icon">
                           <div className="table-icon">
                             <CategoryIcon icon={cat?.icon} size={16} />
                           </div>
                         </td>
-                        <td>
+                        <td data-label={t('assets.colName')}>
                           <strong>{asset.name}</strong>
                           <small>{asset.categoryName}</small>
                         </td>
-                        <td>{asset.assetTag}</td>
-                        <td><StatusBadge status={asset.status} /></td>
-                        <td onClick={event => event.stopPropagation()}>
+                        <td data-label={t('assets.colTag')}>{asset.assetTag}</td>
+                        <td data-label={t('assets.statusLabel')}><StatusBadge status={asset.status} label={statusSettingByKey.get(asset.status)?.label} color={statusSettingByKey.get(asset.status)?.color} backgroundColor={statusSettingByKey.get(asset.status)?.backgroundColor} /></td>
+                        <td data-label={t('assets.colPerson')} onClick={event => event.stopPropagation()}>
                           {asset.assignedPersonId && asset.assignedPersonName ? (
                             <button type="button" className="inlineAction" onClick={() => setViewPersonId(asset.assignedPersonId ?? null)}>{asset.assignedPersonName}</button>
                           ) : <span style={{ color: 'var(--muted)' }}>{t('common.unassigned')}</span>}
                         </td>
-                        <td onClick={event => event.stopPropagation()}>
+                        <td data-label={t('assets.colLocation')} onClick={event => event.stopPropagation()}>
                           {asset.location ? (
                             <button type="button" className="inlineAction" onClick={() => setViewLocation(asset.location ?? null)}>{asset.location}</button>
                           ) : <span style={{ color: 'var(--muted)' }}>—</span>}
                         </td>
-                        <td style={{ textAlign: 'right' }}>{asset.purchasePrice ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : '—'}</td>
-                        <td>{formatDate(asset.warrantyUntil)}</td>
+                        <td data-label={t('assets.colValue')} style={{ textAlign: 'right' }}>{asset.purchasePrice != null ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : '—'}</td>
+                        <td data-label={t('assets.colWarranty')}>{formatDate(asset.warrantyUntil)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <Pagination page={pagedAssets.page} total={pagedAssets.total} pageSize={pageSize} onPageChange={setPage} />
+            <Pagination page={page} total={totalAssets} pageSize={pageSize} onPageChange={setPage} />
           </>
         )}
       </Card>
@@ -558,7 +636,7 @@ export function AssetsPage() {
             <dl className="detailGrid">
               <div>
                 <dt>{t('assets.statusLabel')}</dt>
-                <dd><StatusBadge status={selected.status} /></dd>
+                <dd><StatusBadge status={selected.status} label={statusSettingByKey.get(selected.status)?.label} color={statusSettingByKey.get(selected.status)?.color} backgroundColor={statusSettingByKey.get(selected.status)?.backgroundColor} /></dd>
               </div>
               <div>
                 <dt>{t('assets.colPerson')}</dt>
@@ -591,7 +669,7 @@ export function AssetsPage() {
               <div>
                 <dt>{t('assets.purchase')}</dt>
                 <dd>
-                  {selected.purchasePrice
+                  {selected.purchasePrice != null
                     ? `${formatMoney(selected.purchasePrice, selected.currency ?? 'PLN')} · ${formatDate(selected.purchaseDate)}`
                     : t('assets.noPurchaseData')}
                 </dd>
@@ -630,7 +708,7 @@ export function AssetsPage() {
               <div className="listRows">
                 {history.data.items.map(entry => (
                   <div className="listRow" key={entry.id}>
-                    <div><strong>{entry.action}</strong><small>{entry.actorDisplay}</small></div>
+                    <div><strong>{activityLabel(t, entry.action)}</strong><small>{entry.actorDisplay}</small></div>
                     <small>{formatDateTime(entry.createdAt)}</small>
                   </div>
                 ))}
@@ -652,7 +730,7 @@ export function AssetsPage() {
           <Field label={t('assets.tagLabel')}><TextInput name="assetTag" defaultValue={editing?.assetTag ?? ''} required /></Field>
           <Field label={t('assets.categoryLabel')}>
             <div className="fieldWithAdd">
-              <SelectInput name="categoryId" defaultValue={editing?.categoryId ?? ''} onChange={event => setSelectedCategoryId(event.target.value)} required>
+              <SelectInput name="categoryId" value={selectedCategoryId} onChange={event => setSelectedCategoryId(event.target.value)} required>
                 <option value="">{t('assets.chooseCategory')}</option>
                 {categories.data?.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
               </SelectInput>
@@ -669,7 +747,7 @@ export function AssetsPage() {
           <Field label={t('assets.serialNumberLabel')}><TextInput name="serialNumber" defaultValue={editing?.serialNumber ?? ''} /></Field>
           <Field label={t('assets.locationLabel')}>
             <div className="fieldWithAdd">
-              <SelectInput name="location" defaultValue={editing?.location ?? ''}>
+              <SelectInput name="location" value={formLocation} onChange={event => setFormLocation(event.target.value)}>
                 <option value="">{t('assets.noLocationOption')}</option>
                 {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
               </SelectInput>
@@ -766,8 +844,9 @@ export function AssetsPage() {
       <ImportModal
         open={importOpen}
         entity="assets"
-        existingKeys={(assets.data ?? []).map(item => item.assetTag.toLowerCase())}
+        existingKeys={rows.map(item => item.assetTag.toLowerCase())}
         categories={categories.data ?? []}
+        locations={locations.data ?? []}
         onClose={() => setImportOpen(false)}
         onDone={assets.reload}
       />
@@ -776,7 +855,7 @@ export function AssetsPage() {
       {viewPersonId && <PersonPreviewModal personId={viewPersonId} onClose={() => setViewPersonId(null)} />}
 
       <Modal open={bulkModal === 'status'} title={t('assets.bulkChangeStatusTitle')} onClose={() => setBulkModal(null)}>
-        <form className="formGrid" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void applyBulkUpdate({ status: String(form.get('status')) as AssetStatus }); }}>
+        <form className="formGrid" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); const overrides = { status: String(form.get('status')) as AssetStatus }; if (selectedAssets.length > 1) setPendingBulkOverride(overrides); else void applyBulkUpdate(overrides); }}>
           <Field label={t('assets.statusLabel')}>
             <SelectInput name="status" defaultValue="InStock">
               {statuses.filter(item => item.value).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
@@ -790,7 +869,7 @@ export function AssetsPage() {
       </Modal>
 
       <Modal open={bulkModal === 'location'} title={t('assets.bulkMoveTitle')} onClose={() => setBulkModal(null)}>
-        <form className="formGrid" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); void applyBulkUpdate({ location: toNullable(String(form.get('location') ?? '')) }); }}>
+        <form className="formGrid" onSubmit={event => { event.preventDefault(); const form = new FormData(event.currentTarget); const overrides = { location: toNullable(String(form.get('location') ?? '')) }; if (selectedAssets.length > 1) setPendingBulkOverride(overrides); else void applyBulkUpdate(overrides); }}>
           <Field label={t('assets.locationLabel')}>
             <SelectInput name="location" defaultValue="">
               <option value="">{t('assets.noLocationOption')}</option>
@@ -803,6 +882,15 @@ export function AssetsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!pendingBulkOverride}
+        title={t('assets.bulkConfirmTitle')}
+        description={t('assets.bulkConfirmDesc', { count: selectedAssets.length })}
+        confirmLabel={t('assets.bulkApply')}
+        onConfirm={() => { const overrides = pendingBulkOverride; setPendingBulkOverride(null); if (overrides) void applyBulkUpdate(overrides); }}
+        onClose={() => setPendingBulkOverride(null)}
+      />
 
       <Modal open={!!batchQr} title={t('assets.bulkPrintQrTitle')} onClose={() => setBatchQr(null)} width="wide">
         {batchQr && (

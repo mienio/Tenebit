@@ -1,18 +1,19 @@
 import { Check, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 
 export function PricingPage() {
   const { t } = useI18n();
+  const subscription = useAsyncData(api.subscription, []);
   const [upgrading, setUpgrading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const navigate = useNavigate();
+  const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
 
   useEffect(() => {
     if (!message) return;
@@ -26,7 +27,7 @@ export function PricingPage() {
     try {
       await api.upgradeSubscription('pro');
       setMessage({ type: 'success', text: t('pricing.upgradeSuccess') });
-      navigate('/dashboard');
+      await subscription.reload();
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
     } finally {
@@ -71,9 +72,11 @@ export function PricingPage() {
             <li><Check size={20} /><span>{t('pricing.free.f6')}</span></li>
           </ul>
 
-          <Button variant="secondary" className="pricing-cta" disabled>
-            {t('pricing.currentPlan')}
-          </Button>
+          {currentPlanKey !== 'pro' ? (
+            <Button variant="secondary" className="pricing-cta" disabled>
+              {t('pricing.currentPlan')}
+            </Button>
+          ) : null}
         </Card>
 
         <Card className="pricing-card pricing-card--featured">
@@ -102,14 +105,20 @@ export function PricingPage() {
             <li><Check size={20} /><span>{t('pricing.pro.f9')}</span></li>
           </ul>
 
-          <Button
-            onClick={() => setConfirmOpen(true)}
-            disabled={upgrading}
-            icon={<Zap size={18} />}
-            className="pricing-cta"
-          >
-            {upgrading ? t('pricing.processing') : t('pricing.upgrade')}
-          </Button>
+          {currentPlanKey === 'pro' ? (
+            <Button variant="secondary" className="pricing-cta" disabled>
+              {t('pricing.currentPlan')}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              disabled={upgrading || subscription.isLoading}
+              icon={<Zap size={18} />}
+              className="pricing-cta"
+            >
+              {upgrading ? t('pricing.processing') : t('pricing.upgrade')}
+            </Button>
+          )}
         </Card>
       </div>
 

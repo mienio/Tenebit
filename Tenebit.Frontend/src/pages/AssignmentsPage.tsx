@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, Eye, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
+import { CheckCircle2, Download, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -8,7 +8,7 @@ import { Modal } from '../components/Modal';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { PersonPreviewModal } from '../components/PersonPreviewModal';
-import { Pagination, paginate } from '../components/Pagination';
+import { Pagination } from '../components/Pagination';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAsyncData } from '../hooks/useAsyncData';
@@ -17,12 +17,15 @@ import type { Assignment, AssignmentStatus } from '../types/domain';
 import { assignmentStatusValues } from '../utils/labels';
 import { formatDate, formatDateTime, toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
+import { useCelebration } from '../celebration/CelebrationProvider';
 
 const pageSize = 10;
 
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
 export function AssignmentsPage() {
-  const { t } = useI18n();
-  const assignments = useAsyncData(api.assignments, []);
+  const { t, tPlural } = useI18n();
+  const { celebrate } = useCelebration();
   const people = useAsyncData(() => api.people(), []);
   const assets = useAsyncData(() => api.assets({ status: 'InStock' }), []);
   const procedures = useAsyncData(() => api.procedures(), []);
@@ -31,25 +34,31 @@ export function AssignmentsPage() {
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
+  const [issueConditions, setIssueConditions] = useState<Record<string, string>>({});
+  const [creating, setCreating] = useState(false);
+  const [returning, setReturning] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<AssignmentStatus | ''>('');
   const [page, setPage] = useState(1);
   const [viewPersonId, setViewPersonId] = useState<string | null>(null);
+  const [assetFilter, setAssetFilter] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim().toLowerCase(), 250);
+  const assignmentsLoader = useMemo(
+    () => () => api.assignmentsPaged({ search: debouncedSearch || undefined, status: status || undefined, page, pageSize }),
+    [debouncedSearch, status, page]
+  );
+  const assignments = useAsyncData(assignmentsLoader, [assignmentsLoader]);
+  const visibleStockAssets = useMemo(() => {
+    const query = assetFilter.trim().toLowerCase();
+    const rows = assets.data ?? [];
+    return query ? rows.filter(asset => `${asset.name} ${asset.assetTag}`.toLowerCase().includes(query)) : rows;
+  }, [assets.data, assetFilter]);
   const isLoading = assignments.isLoading || people.isLoading || assets.isLoading || procedures.isLoading || locations.isLoading;
   const error = assignments.error || people.error || assets.error || procedures.error || locations.error;
   const publishedProcedures = useMemo(() => procedures.data?.filter(item => item.status === 'Published') ?? [], [procedures.data]);
-  const filteredAssignments = useMemo(() => {
-    const rows = assignments.data ?? [];
-    return rows.filter(item => {
-      const matchesStatus = !status || item.status === status;
-      const haystack = `${item.protocolNumber} ${item.personName ?? ''} ${item.assets.map(asset => `${asset.assetName ?? ''} ${asset.assetTag ?? ''}`).join(' ')}`.toLowerCase();
-      const matchesSearch = !debouncedSearch || haystack.includes(debouncedSearch);
-      return matchesStatus && matchesSearch;
-    });
-  }, [assignments.data, debouncedSearch, status]);
-  const pagedAssignments = useMemo(() => paginate(filteredAssignments, page, pageSize), [filteredAssignments, page]);
+  const rows = assignments.data?.items ?? [];
+  const totalAssignments = assignments.data?.total ?? 0;
 
   useEffect(() => {
     if (!message) return;
@@ -70,21 +79,26 @@ export function AssignmentsPage() {
     const form = new FormData(event.currentTarget);
     const personId = String(form.get('personId') ?? '');
     if (!personId || selectedAssetIds.length === 0) return setMessage({ type: 'error', text: t('assignments.selectPersonAndAsset') });
+    setCreating(true);
     try {
       await api.createAssignment({
         personId,
-        assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: 'Sprawny przy wydaniu' })),
+        assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: t(`issueCondition.${issueConditions[assetId] ?? 'ok'}`) })),
         procedureIds: selectedProcedureIds,
         dueDate: toNullable(String(form.get('dueDate') ?? '')),
         notes: toNullable(String(form.get('notes') ?? ''))
       });
       setSelectedAssetIds([]);
       setSelectedProcedureIds([]);
+      setIssueConditions({});
       setDrawerMode(null);
       setMessage({ type: 'success', text: t('assignments.created') });
+      celebrate(t('celebration.assignmentCreated'));
       await Promise.all([assignments.reload(), assets.reload()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.createFailed') });
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -102,10 +116,15 @@ export function AssignmentsPage() {
     event.preventDefault();
     if (!selectedAssignment) return;
     const form = new FormData(event.currentTarget);
+    setReturning(true);
     try {
       await api.returnAssignment(selectedAssignment.id, {
-        returnCondition: toNullable(String(form.get('returnCondition') ?? '')),
-        destinationLocation: toNullable(String(form.get('destinationLocation') ?? ''))
+        returnCondition: null,
+        destinationLocation: toNullable(String(form.get('destinationLocation') ?? '')),
+        assets: selectedAssignment.assets.map(asset => ({
+          assetId: asset.assetId,
+          returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? ''))
+        }))
       });
       setDrawerMode(null);
       setSelectedAssignment(null);
@@ -113,6 +132,8 @@ export function AssignmentsPage() {
       await Promise.all([assignments.reload(), assets.reload()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.returnFailed') });
+    } finally {
+      setReturning(false);
     }
   }
 
@@ -150,35 +171,59 @@ export function AssignmentsPage() {
               {assignmentStatusValues.map(value => <option key={value} value={value}>{t(`status.${value}`)}</option>)}
             </SelectInput>
           </Field>
-          <span className="toolbarHint"><Search size={16} /> {filteredAssignments.length} {t('assignments.results')}</span>
+          <span className="toolbarHint"><Search size={16} /> {totalAssignments} {tPlural('count.results', totalAssignments)}</span>
         </div>
       </Card>
 
-      {!filteredAssignments.length ? <EmptyState title={t('assignments.emptyTitle')} description={t('assignments.emptyDesc')} action={<Button onClick={() => setDrawerMode('create')} icon={<Plus size={16} />}>{t('assignments.newAssignment')}</Button>} /> : (
+      {!rows.length ? <EmptyState title={t('assignments.emptyTitle')} description={t('assignments.emptyDesc')} action={(debouncedSearch || status) ? <Button variant="secondary" onClick={() => { setSearch(''); setStatus(''); }}>{t('common.clearFilters')}</Button> : <Button onClick={() => setDrawerMode('create')} icon={<Plus size={16} />}>{t('assignments.newAssignment')}</Button>} /> : (
         <Card>
-          <div className="tableWrap"><table><thead><tr><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th><th>{t('assignments.colDueDate')}</th><th></th></tr></thead><tbody>
-            {pagedAssignments.items.map(item => <tr key={item.id}><td><strong>{item.protocolNumber}</strong><small>{formatDateTime(item.issuedAt)}</small></td><td>{item.personId ? <button type="button" className="inlineAction" onClick={() => setViewPersonId(item.personId)}>{item.personName ?? t('assignments.unknownPerson')}</button> : (item.personName ?? t('assignments.unknownPerson'))}</td><td><StatusBadge status={item.status} /></td><td>{item.assets.length}</td><td>{formatDate(item.dueDate)}</td><td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? <button aria-label={t('assignments.acceptAria')} className="iconButton iconButton--success" onClick={() => acceptAssignment(item)}><CheckCircle2 size={16} /></button> : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td></tr>)}
+          <div className="tableWrap tableWrap--cards"><table><thead><tr><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th><th>{t('assignments.colDueDate')}</th><th></th></tr></thead><tbody>
+            {rows.map(item => <tr key={item.id}>
+              <td data-label={t('assignments.colProtocol')}><strong>{item.protocolNumber}</strong><small>{formatDateTime(item.issuedAt)}</small></td>
+              <td data-label={t('assignments.colPerson')}>{item.personId ? <button type="button" className="inlineAction" onClick={() => setViewPersonId(item.personId)}>{item.personName ?? t('assignments.unknownPerson')}</button> : (item.personName ?? t('assignments.unknownPerson'))}</td>
+              <td data-label={t('assets.statusLabel')}><StatusBadge status={item.status} /></td>
+              <td data-label={t('assignments.colAssets')}>{item.assets.length}</td>
+              <td data-label={t('assignments.colDueDate')}>{formatDate(item.dueDate)}</td>
+              <td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? <button aria-label={t('assignments.acceptAria')} className="iconButton iconButton--success" onClick={() => acceptAssignment(item)}><CheckCircle2 size={16} /></button> : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td>
+            </tr>)}
           </tbody></table></div>
-          <Pagination page={pagedAssignments.page} total={pagedAssignments.total} pageSize={pageSize} onPageChange={setPage} />
+          <Pagination page={page} total={totalAssignments} pageSize={pageSize} onPageChange={setPage} />
         </Card>
       )}
 
       <Modal open={drawerMode === 'create'} title={t('assignments.newAssignment')} onClose={() => setDrawerMode(null)} width="wide">
         <form className="formGrid" onSubmit={createAssignment}>
           <Field label={t('assignments.personLabel')}><SelectInput name="personId" required><option value="">{t('assignments.choosePersonOption')}</option>{people.data?.map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}</SelectInput></Field>
-          <Field label={t('assignments.dueDateLabel')}><TextInput name="dueDate" type="date" /></Field>
+          <Field label={t('assignments.dueDateLabel')}><TextInput name="dueDate" type="date" min={todayIso()} /></Field>
           <Field label={t('assignments.notesLabel')}><TextArea name="notes" /></Field>
-          <fieldset className="choiceBox"><legend>{t('assignments.assetsFromStock')}</legend>{!assets.data?.length ? <p className="muted">{t('assignments.noAssetsInStock')}</p> : assets.data.map(asset => <label key={asset.id}><input type="checkbox" checked={selectedAssetIds.includes(asset.id)} onChange={() => setSelectedAssetIds(current => toggle(current, asset.id))} /> {asset.name} · {asset.assetTag}</label>)}</fieldset>
+          <fieldset className="choiceBox"><legend>{t('assignments.assetsFromStock')}</legend>{!assets.data?.length ? <p className="muted">{t('assignments.noAssetsInStock')}</p> : <>
+          {assets.data.length > 8 && <TextInput value={assetFilter} onChange={event => setAssetFilter(event.target.value)} placeholder={t('common.filterList')} />}
+          {visibleStockAssets.map(asset => (
+            <div key={asset.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ flex: '1 1 auto' }}><input type="checkbox" checked={selectedAssetIds.includes(asset.id)} onChange={() => setSelectedAssetIds(current => toggle(current, asset.id))} /> {asset.name} · {asset.assetTag}</label>
+              {selectedAssetIds.includes(asset.id) && (
+                <SelectInput aria-label={t('issueCondition.label')} value={issueConditions[asset.id] ?? 'ok'} onChange={event => setIssueConditions(current => ({ ...current, [asset.id]: event.target.value }))} style={{ maxWidth: '220px' }}>
+                  <option value="ok">{t('issueCondition.ok')}</option>
+                  <option value="used">{t('issueCondition.used')}</option>
+                  <option value="damaged">{t('issueCondition.damaged')}</option>
+                </SelectInput>
+              )}
+            </div>
+          ))}</>}</fieldset>
           <fieldset className="choiceBox"><legend>{t('assignments.proceduresLegend')}</legend>{!publishedProcedures.length ? <p className="muted">{t('assignments.noPublishedProcedures')}</p> : publishedProcedures.map(procedure => <label key={procedure.id}><input type="checkbox" checked={selectedProcedureIds.includes(procedure.id)} onChange={() => setSelectedProcedureIds(current => toggle(current, procedure.id))} /> {procedure.title}</label>)}</fieldset>
-          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button icon={<PackageCheck size={16} />}>{t('assignments.create')}</Button></div>
+          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button disabled={creating} icon={<PackageCheck size={16} />}>{creating ? t('common.saving') : t('assignments.create')}</Button></div>
         </form>
       </Modal>
 
       <Modal open={drawerMode === 'return'} title={t('assignments.returnTitle')} description={selectedAssignment ? selectedAssignment.protocolNumber : undefined} onClose={() => setDrawerMode(null)}>
-        <form className="formGrid" onSubmit={returnAssignment}>
-          <Field label={t('assignments.returnConditionLabel')}><TextArea name="returnCondition" placeholder={t('assignments.returnConditionPlaceholder')} required /></Field>
+        <form className="formGrid" onSubmit={returnAssignment} key={selectedAssignment?.id ?? 'return'}>
+          {selectedAssignment?.assets.map(asset => (
+            <Field key={asset.assetId} label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '—' })}>
+              <TextArea name={`returnCondition__${asset.assetId}`} placeholder={t('assignments.returnConditionPlaceholder')} required rows={2} />
+            </Field>
+          ))}
           <Field label={t('assignments.destinationLocationLabel')}><SelectInput name="destinationLocation"><option value="">{t('assignments.mainWarehouseOption')}</option>{locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}</SelectInput></Field>
-          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button icon={<RotateCcw size={16} />}>{t('assignments.saveReturn')}</Button></div>
+          <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button disabled={returning} icon={<RotateCcw size={16} />}>{returning ? t('common.saving') : t('assignments.saveReturn')}</Button></div>
         </form>
       </Modal>
 
@@ -190,10 +235,28 @@ export function AssignmentsPage() {
 
 function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignment: Assignment; onDownload: (assignment: Assignment) => void; onViewPerson: (personId: string) => void }) {
   const { t } = useI18n();
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [linkCopyFailed, setLinkCopyFailed] = useState(false);
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(assignment.acceptanceLink);
+      setLinkCopyFailed(false);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2500);
+    } catch {
+      setLinkCopyFailed(true);
+      window.setTimeout(() => setLinkCopyFailed(false), 4000);
+    }
+  }
   return (
     <div className="pageStack">
+      {assignment.status === 'AwaitingAcceptance' || assignment.status === 'Overdue' ? (
+        <p className="formHint">{t('assignments.acceptanceLinkHint')}</p>
+      ) : null}
       <div className="formActions formActions--split">
-        <div />
+        {assignment.status === 'AwaitingAcceptance' || assignment.status === 'Overdue' ? (
+          <Button type="button" variant="ghost" onClick={copyLink} icon={<Link2 size={16} />}>{linkCopied ? t('assignments.linkCopied') : linkCopyFailed ? t('assignments.linkCopyFailed') : t('assignments.copyAcceptanceLink')}</Button>
+        ) : <div />}
         <Button variant="secondary" onClick={() => onDownload(assignment)} icon={<Download size={16} />}>{t('assignments.downloadProtocol')}</Button>
       </div>
       <DetailGrid>

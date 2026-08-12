@@ -1,5 +1,5 @@
 import { CheckCircle2, Download, FileText, Users } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
@@ -9,11 +9,10 @@ import { LocationInventoryModal } from '../components/LocationInventoryModal';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
-import { TwoFactorCard } from '../components/TwoFactorCard';
-import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAuth } from '../auth/AuthProvider';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { formatDate, formatDateTime } from '../utils/format';
+import { CategoryIcon } from '../utils/categoryIcons';
 import type { MyAssignment, MyProcedure } from '../types/domain';
 import { useI18n } from '../i18n/I18nProvider';
 
@@ -26,6 +25,12 @@ export function MyWorkspacePage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
   const [viewLocation, setViewLocation] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!message) return;
+    const timeout = window.setTimeout(() => setMessage(null), message.type === 'success' ? 3500 : 6500);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
 
   async function accept(assignment: MyAssignment) {
     setAccepting(assignment.id);
@@ -81,19 +86,22 @@ export function MyWorkspacePage() {
 
   if (!data.hasPersonRecord) {
     const canManagePeople = canSee(peopleNavRoles, auth.roles);
+    const description = !auth.userEmail
+      ? t('myWorkspace.noPersonDesc')
+      : canManagePeople
+        ? t('myWorkspace.noPersonDescSelfWithEmail', { email: auth.userEmail })
+        : t('myWorkspace.noPersonDescWithEmail', { email: auth.userEmail });
     return (
       <div className="pageStack pageStack--narrow">
         <PageHeader eyebrow={t('page.my.eyebrow')} title={t('nav.my')} />
-        <TwoFactorCard />
-        <AccountLinksCard />
         <Card>
           <EmptyState
             title={t('myWorkspace.noPersonTitle')}
-            description={auth.userEmail ? t('myWorkspace.noPersonDescWithEmail', { email: auth.userEmail }) : t('myWorkspace.noPersonDesc')}
+            description={description}
             action={canManagePeople ? (
-              <Link to="/people" className="button button--primary">
+              <Link to="/people?addSelf=1" className="button button--primary">
                 <span className="button__icon"><Users size={16} /></span>
-                <span>{t('myWorkspace.goToPeople')}</span>
+                <span>{t('myWorkspace.addSelf')}</span>
               </Link>
             ) : undefined}
           />
@@ -118,9 +126,6 @@ export function MyWorkspacePage() {
       <PageHeader eyebrow={t('page.my.eyebrow')} title={`${t('page.my.greeting')}, ${data.personName ?? ''}`} />
 
       {message ? <div className="toastStack" aria-live="polite"><div className={`toast toast--${message.type}`}>{message.text}</div></div> : null}
-
-      <TwoFactorCard />
-      <AccountLinksCard />
 
       {pendingAssignments.length > 0 && (
         <Card>
@@ -150,7 +155,10 @@ export function MyWorkspacePage() {
           <div className="listRows">
             {data.assets.map(asset => (
               <div className="listRow" key={asset.id}>
-                <div><strong>{asset.name}</strong><small>{asset.assetTag} · {asset.categoryName ?? t('myWorkspace.noCategory')}</small></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="table-icon"><CategoryIcon icon={asset.categoryIcon} size={16} /></div>
+                  <div><strong>{asset.name}</strong><small>{asset.assetTag} · {asset.categoryName ?? t('myWorkspace.noCategory')}</small></div>
+                </div>
                 {asset.location ? (
                   <button type="button" className="inlineAction" onClick={() => setViewLocation(asset.location ?? null)}>{asset.location}</button>
                 ) : <span>{t('common.noLocation')}</span>}

@@ -9,6 +9,7 @@ type I18nContextValue = {
   language: Language;
   setLanguage: (language: Language) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
+  tPlural: (baseKey: string, count: number) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -23,6 +24,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setLanguageProvider(() => language);
+    document.documentElement.lang = language;
   }, [language]);
 
   const value = useMemo<I18nContextValue>(() => ({
@@ -35,6 +37,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       const template = translations[language][key] ?? translations.pl[key] ?? key;
       if (!params) return template;
       return Object.entries(params).reduce((text, [name, value]) => text.split(`{${name}}`).join(String(value)), template);
+    },
+    tPlural: (baseKey, count) => {
+      const form = new Intl.PluralRules(language).select(count);
+      for (const suffix of [form, 'other', 'many']) {
+        const value = translations[language][`${baseKey}.${suffix}`] ?? translations.pl[`${baseKey}.${suffix}`];
+        if (value) return value;
+      }
+      return baseKey;
     }
   }), [language]);
 

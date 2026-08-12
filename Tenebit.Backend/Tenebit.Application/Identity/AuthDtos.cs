@@ -23,3 +23,7 @@ public sealed record TwoFactorLoginRequest(string ChallengeToken, string Code, b
 public sealed record TwoFactorSetupResponse(string Secret, string OtpAuthUri, string QrSvg);
 
 public sealed record TwoFactorCodeRequest(string Code);
+
+public sealed record TwoFactorEnableResponse(IReadOnlyList<string> RecoveryCodes);
+
+public sealed record TwoFactorRecoveryCodesResponse(IReadOnlyList<string> RecoveryCodes, int RemainingUnused);

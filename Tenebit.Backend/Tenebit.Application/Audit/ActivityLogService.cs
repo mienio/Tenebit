@@ -16,14 +16,33 @@ public sealed class ActivityLogService
         _currentUser = currentUser;
     }
 
-    public async Task<Result<PagedActivityLogResponse>> ListAsync(int page, int pageSize, string? entityType, Guid? entityId, string? search, CancellationToken cancellationToken)
+    public async Task<Result<PagedActivityLogResponse>> ListAsync(int page, int pageSize, string? entityType, Guid? entityId, string? search, DateOnly? dateFrom, DateOnly? dateTo, string? actor, string? action, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Auditor, TenebitRoles.AssetOperator, TenebitRoles.Manager, TenebitRoles.Hr);
         if (access.IsFailure) return Result<PagedActivityLogResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var (items, total) = await _activity.ListPagedAsync(organizationId, page, pageSize, entityType, entityId, search, cancellationToken);
+        var from = dateFrom.HasValue ? new DateTimeOffset(dateFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) : (DateTimeOffset?)null;
+        var to = dateTo.HasValue ? new DateTimeOffset(dateTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) : (DateTimeOffset?)null;
         var users = await _users.ListAsync(organizationId, cancellationToken);
+
+        IReadOnlyCollection<string>? actorSubjects = null;
+        if (!string.IsNullOrWhiteSpace(actor))
+        {
+            var term = actor.Trim();
+            var matchingUserIds = users
+                .Where(u => u.DisplayName.Contains(term, StringComparison.OrdinalIgnoreCase) || u.Email.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .Select(u => u.Id.ToString())
+                .ToList();
+            var literalMatches = new[] { "system", "public-link" }.Where(x => x.Contains(term, StringComparison.OrdinalIgnoreCase));
+            actorSubjects = matchingUserIds.Concat(literalMatches).ToList();
+            if (actorSubjects.Count == 0)
+            {
+                return Result<PagedActivityLogResponse>.Success(new PagedActivityLogResponse([], 0, page, pageSize));
+            }
+        }
+
+        var (items, total) = await _activity.ListPagedAsync(organizationId, page, pageSize, entityType, entityId, search, from, to, actorSubjects, action, cancellationToken);
 
         var mapped = items.Select(log => new ActivityLogEntryResponse(
             log.Id,

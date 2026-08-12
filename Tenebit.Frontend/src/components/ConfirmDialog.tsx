@@ -2,21 +2,22 @@ import { useEffect, useId, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
 import { useI18n } from '../i18n/I18nProvider';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function ConfirmDialog({ open, title, description, confirmLabel, onConfirm, onClose }: { open: boolean; title: string; description: string; confirmLabel?: string; onConfirm: () => void; onClose: () => void }) {
+export function ConfirmDialog({ open, title, description, confirmLabel, confirmDisabled, onConfirm, onClose, children }: { open: boolean; title: string; description: string; confirmLabel?: string; confirmDisabled?: boolean; onConfirm: () => void; onClose: () => void; children?: React.ReactNode }) {
   const { t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
 
     const focusTimer = window.setTimeout(() => {
       panelRef.current?.querySelector<HTMLElement>(focusableSelector)?.focus();
@@ -41,7 +42,6 @@ export function ConfirmDialog({ open, title, description, confirmLabel, onConfir
     document.addEventListener('keydown', onKeyDown);
     return () => {
       window.clearTimeout(focusTimer);
-      document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
       previousFocusRef.current?.focus();
     };
@@ -55,7 +55,8 @@ export function ConfirmDialog({ open, title, description, confirmLabel, onConfir
         <div className="confirmIcon"><AlertTriangle size={20} /></div>
         <h2 id={titleId}>{title}</h2>
         <p id={descriptionId}>{description}</p>
-        <div className="formActions formActions--split"><Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button><Button variant="danger" onClick={onConfirm}>{confirmLabel ?? t('common.confirmDelete')}</Button></div>
+        {children}
+        <div className="formActions formActions--split"><Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button><Button variant="danger" disabled={confirmDisabled} onClick={onConfirm}>{confirmLabel ?? t('common.confirmDelete')}</Button></div>
       </section>
     </div>
   );

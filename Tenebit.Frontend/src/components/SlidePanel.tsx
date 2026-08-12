@@ -1,5 +1,8 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { keepFocusInside } from './Modal';
+import { useI18n } from '../i18n/I18nProvider';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 interface SlidePanelProps {
   open: boolean;
@@ -11,28 +14,29 @@ interface SlidePanelProps {
 }
 
 export function SlidePanel({ open, onClose, title, description, children, width = 'default' }: SlidePanelProps) {
+  const { t } = useI18n();
+  const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useScrollLock(open);
 
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-      panelRef.current?.focus();
-    } else {
-      document.body.style.overflow = '';
-    }
+    if (!open) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => panelRef.current?.focus(), 0);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (panelRef.current) keepFocusInside(event, panelRef.current);
+    };
+
+    document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = '';
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocusRef.current?.focus();
     };
-  }, [open]);
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -45,18 +49,18 @@ export function SlidePanel({ open, onClose, title, description, children, width 
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="slide-panel-title"
+        aria-labelledby={titleId}
         tabIndex={-1}
       >
         <div className="slide-panel-header">
           <div>
-            <h2 id="slide-panel-title">{title}</h2>
+            <h2 id={titleId}>{title}</h2>
             {description && <p>{description}</p>}
           </div>
           <button
             onClick={onClose}
             className="slide-panel-close"
-            aria-label="Zamknij panel"
+            aria-label={t('common.close')}
           >
             <X size={20} />
           </button>

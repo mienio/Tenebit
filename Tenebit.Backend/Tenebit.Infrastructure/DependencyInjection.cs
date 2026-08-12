@@ -25,6 +25,9 @@ public static class DependencyInjection
         services.AddScoped<IAssetCategoryRepository, AssetCategoryRepository>();
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
+        services.AddScoped<IPersonRelationTypeRepository, PersonRelationTypeRepository>();
+        services.AddScoped<ILicenseRepository, LicenseRepository>();
+        services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IProcedureRepository, ProcedureRepository>();
         services.AddScoped<IAssignmentRepository, AssignmentRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
@@ -34,11 +37,14 @@ public static class DependencyInjection
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IDeviceTrustTokenRepository, DeviceTrustTokenRepository>();
+        services.AddScoped<ITwoFactorRecoveryCodeRepository, TwoFactorRecoveryCodeRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IJobProfileRepository, JobProfileRepository>();
         services.AddScoped<IAssetStatusSettingRepository, AssetStatusSettingRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<ISentAlertRepository, SentAlertRepository>();
+        services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
+        services.AddScoped<IDashboardSnapshotRepository, DashboardSnapshotRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
         services.AddSingleton<IPdfProtocolGenerator, PdfProtocolGenerator>();
@@ -46,6 +52,7 @@ public static class DependencyInjection
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
         services.AddScoped<DefaultDataSeeder>();
         services.AddHostedService<AlertBackgroundService>();
+        services.AddHostedService<DashboardSnapshotBackgroundService>();
         return services;
     }
 
@@ -134,6 +141,42 @@ public static class DependencyInjection
 
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_sent_alerts_Org_Key_Entity"
                 ON tenebit.sent_alerts ("OrganizationId", "AlertKey", "EntityId");
+
+            CREATE TABLE IF NOT EXISTS tenebit.dashboard_layouts (
+                "OrganizationUserId" uuid PRIMARY KEY,
+                "OrganizationId" uuid NOT NULL,
+                "LayoutJson" text NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS tenebit.dashboard_snapshots (
+                "Id" uuid PRIMARY KEY,
+                "OrganizationId" uuid NOT NULL,
+                "SnapshotDate" date NOT NULL,
+                "TotalAssets" integer NOT NULL,
+                "AssetsWithoutOwner" integer NOT NULL,
+                "OpenAssignments" integer NOT NULL,
+                "VisibleAssetValue" numeric(18,2) NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_dashboard_snapshots_OrganizationId_SnapshotDate"
+                ON tenebit.dashboard_snapshots ("OrganizationId", "SnapshotDate");
+
+            ALTER TABLE tenebit.asset_status_settings ADD COLUMN IF NOT EXISTS "Color" character varying(9) NOT NULL DEFAULT '#475569';
+
+            UPDATE tenebit.asset_status_settings SET "Color" = CASE "StatusKey"
+                WHEN 'InStock' THEN '#047857'
+                WHEN 'Reserved' THEN '#1d4ed8'
+                WHEN 'Assigned' THEN '#1d4ed8'
+                WHEN 'InTransit' THEN '#c2410c'
+                WHEN 'InService' THEN '#c2410c'
+                WHEN 'Damaged' THEN '#be123c'
+                WHEN 'Lost' THEN '#be123c'
+                WHEN 'Disposed' THEN '#991b1b'
+                ELSE "Color"
+            END
+            WHERE "Color" = '#475569';
             """, cancellationToken);
     }
 

@@ -81,6 +81,55 @@ CREATE TABLE IF NOT EXISTS tenebit.asset_status_settings (
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_asset_status_settings_OrganizationId_StatusKey"
     ON tenebit.asset_status_settings ("OrganizationId", "StatusKey");
 
+CREATE TABLE IF NOT EXISTS tenebit.person_relation_types (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationId" uuid NOT NULL,
+    "Name" character varying(80) NOT NULL,
+    "SortOrder" integer NOT NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_person_relation_types_OrganizationId_Name"
+    ON tenebit.person_relation_types ("OrganizationId", "Name");
+
+CREATE TABLE IF NOT EXISTS tenebit.licenses (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationId" uuid NOT NULL,
+    "Name" character varying(160) NOT NULL,
+    "Vendor" character varying(160) NULL,
+    "LicenseKey" character varying(400) NULL,
+    "SeatsTotal" integer NOT NULL,
+    "ExpiresAt" date NULL,
+    "Notes" character varying(800) NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS "IX_licenses_OrganizationId" ON tenebit.licenses ("OrganizationId");
+
+CREATE TABLE IF NOT EXISTS tenebit.license_seats (
+    "LicenseId" uuid NOT NULL,
+    "PersonId" uuid NOT NULL,
+    "AssignedAt" timestamp with time zone NOT NULL,
+    CONSTRAINT "PK_license_seats" PRIMARY KEY ("LicenseId", "PersonId")
+);
+
+CREATE TABLE IF NOT EXISTS tenebit.role_permissions (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationId" uuid NOT NULL,
+    "RoleKey" character varying(60) NOT NULL,
+    "PermissionKey" character varying(80) NOT NULL,
+    "Allowed" boolean NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_role_permissions_OrganizationId_RoleKey_PermissionKey"
+    ON tenebit.role_permissions ("OrganizationId", "RoleKey", "PermissionKey");
+
+INSERT INTO tenebit.person_relation_types ("Id", "OrganizationId", "Name", "SortOrder", "CreatedAt")
+SELECT gen_random_uuid(), o."Id", CASE WHEN o."Language" = 'pl' THEN v."NamePl" ELSE v."NameEn" END, v."SortOrder", now()
+FROM tenebit.organizations o
+CROSS JOIN (VALUES ('Pracownik', 'Employee', 10), ('Kontraktor', 'Contractor', 20), ('Dostawca', 'Vendor', 30)) AS v("NamePl", "NameEn", "SortOrder")
+WHERE NOT EXISTS (SELECT 1 FROM tenebit.person_relation_types p WHERE p."OrganizationId" = o."Id");
+
 CREATE TABLE IF NOT EXISTS tenebit.subscriptions (
     "Id" uuid PRIMARY KEY,
     "OrganizationId" uuid NOT NULL,
@@ -177,5 +226,19 @@ CREATE TABLE IF NOT EXISTS tenebit.device_trust_tokens (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_device_trust_tokens_UserId_TokenHash"
     ON tenebit.device_trust_tokens ("OrganizationUserId", "TokenHash");
+
+CREATE TABLE IF NOT EXISTS tenebit.two_factor_recovery_codes (
+    "Id" uuid PRIMARY KEY,
+    "OrganizationUserId" uuid NOT NULL,
+    "CodeHash" character varying(120) NOT NULL,
+    "UsedAt" timestamp with time zone NULL,
+    "CreatedAt" timestamp with time zone NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS "IX_two_factor_recovery_codes_OrganizationUserId"
+    ON tenebit.two_factor_recovery_codes ("OrganizationUserId");
+
+ALTER TABLE tenebit.asset_status_settings ADD COLUMN IF NOT EXISTS "Color" character varying(9) NOT NULL DEFAULT '#1d4ed8';
+ALTER TABLE tenebit.asset_status_settings ADD COLUMN IF NOT EXISTS "BackgroundColor" character varying(9) NOT NULL DEFAULT '#eff6ff';
 """;
 }

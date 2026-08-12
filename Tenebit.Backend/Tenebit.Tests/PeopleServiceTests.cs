@@ -15,7 +15,7 @@ public class PeopleServiceTests
     }
 
     private static CreatePersonRequest BuildRequest(string email) =>
-        new("Jan", "Kowalski", email, null, null, PersonRelationType.Employee, null, null, null, null, null);
+        new("Jan", "Kowalski", email, null, null, "Pracownik", null, null, null, null, null);
 
     [Fact]
     public async Task CreateAsync_RejectsUserWithoutHrOrAdminRole()
@@ -85,7 +85,7 @@ public class PeopleServiceTests
         var (service, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
 
-        var updateRequest = new UpdatePersonRequest("Jan", "Kowalski", "jan@acme.test", null, null, PersonRelationType.Employee, null, null, null, null, null, false);
+        var updateRequest = new UpdatePersonRequest("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, null, null, null, null, false);
         var result = await service.UpdateAsync(created.Value!.Id, updateRequest, CancellationToken.None);
 
         Assert.True(result.IsSuccess);

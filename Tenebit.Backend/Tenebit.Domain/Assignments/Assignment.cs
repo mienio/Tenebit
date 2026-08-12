@@ -75,7 +75,7 @@ public sealed class Assignment
         }
     }
 
-    public void Return(DateTimeOffset returnedAt, string? returnCondition)
+    public void Return(DateTimeOffset returnedAt, string? returnCondition, IReadOnlyDictionary<Guid, string?>? assetConditions = null)
     {
         // BUG FIX: Previously only blocked Returned status. Now also blocks Cancelled assignments.
         // A cancelled assignment cannot be returned — it was cancelled before completion.
@@ -88,7 +88,10 @@ public sealed class Assignment
         ReturnedAt = returnedAt;
         foreach (var item in Assets)
         {
-            item.SetReturnCondition(returnCondition);
+            var condition = assetConditions is not null && assetConditions.TryGetValue(item.AssetId, out var perAsset) && !string.IsNullOrWhiteSpace(perAsset)
+                ? perAsset
+                : returnCondition;
+            item.SetReturnCondition(condition);
         }
     }
 }

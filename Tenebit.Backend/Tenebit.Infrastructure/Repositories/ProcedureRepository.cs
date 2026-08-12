@@ -21,6 +21,24 @@ public sealed class ProcedureRepository : IProcedureRepository
         return await query.OrderBy(x => x.Title).ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<Procedure> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = _db.Procedures.Include(x => x.Documents).Where(x => x.OrganizationId == organizationId);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var phrase = search.Trim().ToLowerInvariant();
+            query = query.Where(x => x.Title.ToLower().Contains(phrase) || x.Owner.ToLower().Contains(phrase) || x.Version.ToLower().Contains(phrase));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(x => x.Title)
+            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 100))
+            .Take(Math.Clamp(pageSize, 1, 100))
+            .ToListAsync(cancellationToken);
+        return (items, total);
+    }
+
     public async Task<IReadOnlyList<Procedure>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
         await _db.Procedures.Include(x => x.Documents).Where(x => x.OrganizationId == organizationId && ids.Contains(x.Id)).ToListAsync(cancellationToken);
 

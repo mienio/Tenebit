@@ -70,7 +70,7 @@ public sealed class InMemoryActivityLogRepository : IActivityLogRepository
     public Task<IReadOnlyList<ActivityLog>> ListAsync(Guid organizationId, int limit, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<ActivityLog>>(Logs.Where(x => x.OrganizationId == organizationId).Take(limit).ToList());
 
-    public Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, CancellationToken cancellationToken) =>
+    public Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, DateTimeOffset? from, DateTimeOffset? to, IReadOnlyCollection<string>? actorSubjects, string? action, CancellationToken cancellationToken) =>
         Task.FromResult<(IReadOnlyList<ActivityLog>, int)>((Logs, Logs.Count));
 
     public void Add(ActivityLog log) => Logs.Add(log);
@@ -140,6 +140,17 @@ public sealed class InMemoryDeviceTrustTokenRepository : IDeviceTrustTokenReposi
         Task.FromResult(Tokens.FirstOrDefault(x => x.OrganizationUserId == organizationUserId && x.TokenHash == tokenHash && x.IsValid(now)));
 
     public void Add(DeviceTrustToken token) => Tokens.Add(token);
+}
+
+public sealed class InMemoryTwoFactorRecoveryCodeRepository : ITwoFactorRecoveryCodeRepository
+{
+    public List<TwoFactorRecoveryCode> Codes { get; } = [];
+
+    public Task<IReadOnlyList<TwoFactorRecoveryCode>> ListAsync(Guid organizationUserId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TwoFactorRecoveryCode>>(Codes.Where(x => x.OrganizationUserId == organizationUserId).ToList());
+
+    public void AddRange(IEnumerable<TwoFactorRecoveryCode> codes) => Codes.AddRange(codes);
+    public void RemoveAll(IEnumerable<TwoFactorRecoveryCode> codes) { foreach (var code in codes.ToList()) Codes.Remove(code); }
 }
 
 public sealed class FakeEmailSender : IEmailSender

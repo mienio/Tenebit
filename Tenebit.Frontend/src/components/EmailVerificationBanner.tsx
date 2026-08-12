@@ -1,3 +1,4 @@
+import { TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../api/apiClient';
 import { useAuth } from '../auth/AuthProvider';
@@ -5,7 +6,7 @@ import { useI18n } from '../i18n/I18nProvider';
 
 const SENT_MESSAGE_DURATION_MS = 6000;
 
-export function EmailVerificationBanner() {
+export function EmailVerificationNotice() {
   const auth = useAuth();
   const { t } = useI18n();
   const [sent, setSent] = useState(false);
@@ -30,7 +31,8 @@ export function EmailVerificationBanner() {
   }
 
   return (
-    <div className="verifyBanner">
+    <div className="settingsNotice">
+      <TriangleAlert size={16} />
       <span>{sent ? t('auth.verifyBannerSent') : t('auth.verifyBannerMessage')}</span>
       {!sent ? <button type="button" onClick={resend} disabled={sending}>{sending ? t('auth.forgotLoading') : t('auth.verifyBannerAction')}</button> : null}
     </div>

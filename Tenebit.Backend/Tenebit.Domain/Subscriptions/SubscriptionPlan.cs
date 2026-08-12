@@ -2,7 +2,10 @@ namespace Tenebit.Domain.Subscriptions;
 
 public sealed class SubscriptionPlan
 {
-    public static readonly SubscriptionPlan Free = new("free", "Free", 10, 0m, "USD");
+    // Asset limit temporarily raised well above any realistic test usage while the product is in
+    // free testing — no paywall should block testers. Lower this back down (e.g. to 10) once
+    // paid plans go live for real.
+    public static readonly SubscriptionPlan Free = new("free", "Free", 100_000, 0m, "USD");
     public static readonly SubscriptionPlan Pro = new("pro", "Pro", 1000, 10m, "USD");
 
     public static readonly IReadOnlyList<SubscriptionPlan> All = [Free, Pro];

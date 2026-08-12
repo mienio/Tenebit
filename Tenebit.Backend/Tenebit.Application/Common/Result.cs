@@ -37,3 +37,5 @@ public sealed class Result<T> : Result
     public static Result<T> Success(T value) => new(value, true, null);
     public static new Result<T> Failure(Error error) => new(default, false, error);
 }
+
+public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);

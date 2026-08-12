@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
@@ -10,17 +11,34 @@ public sealed class UserAccessService
 {
     private readonly IOrganizationUserRepository _users;
     private readonly IActivityLogRepository _activity;
+    private readonly IPasswordResetTokenRepository _passwordResetTokens;
+    private readonly IEmailSender _emailSender;
+    private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<UserAccessService> _logger;
 
-    public UserAccessService(IOrganizationUserRepository users, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public UserAccessService(
+        IOrganizationUserRepository users,
+        IActivityLogRepository activity,
+        IPasswordResetTokenRepository passwordResetTokens,
+        IEmailSender emailSender,
+        IAppLinkBuilder appLinkBuilder,
+        ICurrentUser currentUser,
+        IClock clock,
+        IUnitOfWork unitOfWork,
+        ILogger<UserAccessService> logger)
     {
         _users = users;
         _activity = activity;
+        _passwordResetTokens = passwordResetTokens;
+        _emailSender = emailSender;
+        _appLinkBuilder = appLinkBuilder;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     public IReadOnlyList<RoleResponse> Roles() => TenebitRoles.All.Select(x => new RoleResponse(x.Key, x.Label, x.Description)).ToArray();
@@ -46,6 +64,12 @@ public sealed class UserAccessService
             _users.Add(user);
             _activity.Add(new ActivityLog(organizationId, "user.created", "organization_user", user.Id, _currentUser.Subject, user.Email, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            if (request.IsActive)
+            {
+                await SendInviteEmailBestEffortAsync(user, cancellationToken);
+            }
+
             return Result<OrganizationUserResponse>.Success(Map(user));
         }
         catch (DomainException ex) { return Result<OrganizationUserResponse>.Failure(Error.Validation(ex.Message)); }
@@ -69,6 +93,29 @@ public sealed class UserAccessService
             return Result<OrganizationUserResponse>.Success(Map(user));
         }
         catch (DomainException ex) { return Result<OrganizationUserResponse>.Failure(Error.Validation(ex.Message)); }
+    }
+
+    private async Task SendInviteEmailBestEffortAsync(OrganizationUser user, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var rawToken = TokenHasher.NewRawToken();
+            var token = new PasswordResetToken(user.Id, TokenHasher.Hash(rawToken), _clock.UtcNow.AddHours(24));
+            _passwordResetTokens.Add(token);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var link = _appLinkBuilder.BuildPasswordResetLink(rawToken);
+            var html = $"""
+                <p>Dodano Cię jako użytkownika w organizacji w Tenebit.</p>
+                <p><a href="{link}">Ustaw hasło i zaloguj się</a></p>
+                <p>Link jest ważny przez 24 godziny.</p>
+                """;
+            await _emailSender.SendAsync(user.Email, "Zaproszenie do Tenebit", html, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się wysłać e-maila z zaproszeniem do {Email}", user.Email);
+        }
     }
 
     private static Result ValidateRoles(IReadOnlyList<string> roles)

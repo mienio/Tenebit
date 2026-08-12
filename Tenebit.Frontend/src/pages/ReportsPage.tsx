@@ -1,20 +1,93 @@
-import { BarChart3, ClipboardList, FileSpreadsheet, ShieldAlert } from 'lucide-react';
+import { BarChart3, ClipboardList, Download, FileSpreadsheet, Minus, ShieldAlert, TrendingDown, TrendingUp } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { SelectInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
-import { formatDate, formatMoney } from '../utils/format';
+import { formatDate, formatDateTime, formatMoney } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
 import { DonutChart } from '../components/charts/DonutChart';
 import { BarChart } from '../components/charts/BarChart';
 import { statusColor } from '../utils/statusColors';
+import type { DashboardSummary } from '../types/domain';
+
+function TrendRow({ label, current, previous, format }: { label: string; current: number; previous: number; format: (value: number) => string }) {
+  const delta = current - previous;
+  const Icon = delta > 0 ? TrendingUp : delta < 0 ? TrendingDown : Minus;
+  const tone = delta === 0 ? 'muted' : delta > 0 ? 'success' : 'error';
+  return (
+    <div className="listRow">
+      <div><strong>{format(current)}</strong><small>{label}</small></div>
+      <span className={`formMessage formMessage--${tone}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: 0, border: 'none', background: 'none' }}>
+        <Icon size={14} /> {delta > 0 ? '+' : ''}{format(delta)}
+      </span>
+    </div>
+  );
+}
+
+function csvCell(value: string | number) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function downloadReportCsv(data: DashboardSummary, t: (key: string, params?: Record<string, string | number>) => string, statusLabel: (status: string) => string) {
+  const lines: string[] = [];
+  lines.push(csvCell(t('reports.exportGeneratedAt', { date: formatDateTime(new Date().toISOString()) })));
+  lines.push('');
+
+  lines.push(csvCell(t('reports.exportSummarySection')));
+  lines.push([csvCell(t('reports.assetsWithoutOwner')), csvCell(data.assetsWithoutOwner)].join(','));
+  lines.push([csvCell(t('reports.openAssignments')), csvCell(data.openAssignments)].join(','));
+  lines.push([csvCell(t('reports.warrantyDeadlines')), csvCell(data.warrantyExpiringSoon.length)].join(','));
+  lines.push([csvCell(t('reports.visibleValue')), csvCell(formatMoney(data.visibleAssetValue))].join(','));
+  lines.push('');
+
+  lines.push(csvCell(t('reports.byStatus')));
+  for (const item of data.assetsByStatus) lines.push([csvCell(statusLabel(item.status)), csvCell(item.count)].join(','));
+  lines.push('');
+
+  lines.push(csvCell(t('dashboard.byCategory')));
+  for (const item of data.assetsByCategory) lines.push([csvCell(item.categoryName), csvCell(item.count)].join(','));
+  lines.push('');
+
+  lines.push(csvCell(t('reports.byLocation')));
+  for (const item of data.assetsByLocation) lines.push([csvCell(item.location), csvCell(item.count)].join(','));
+  lines.push('');
+
+  lines.push(csvCell(t('reports.valueByTeam')));
+  for (const item of data.assetsByTeam) lines.push([csvCell(item.teamName), csvCell(item.count), csvCell(formatMoney(item.totalValue))].join(','));
+  lines.push('');
+
+  lines.push(csvCell(t('reports.warrantyToCheck')));
+  for (const item of data.warrantyExpiringSoon) lines.push([csvCell(item.name), csvCell(item.assetTag), csvCell(formatDate(item.warrantyUntil))].join(','));
+
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `raport-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 export function ReportsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const dashboard = useAsyncData(api.dashboard, []);
+  const statusSettings = useAsyncData(api.assetStatuses, []);
+  const statusSettingByKey = useMemo(() => {
+    const map = new Map<string, { label: string; color: string }>();
+    for (const item of statusSettings.data ?? []) map.set(item.statusKey, { label: item.label, color: item.color });
+    return map;
+  }, [statusSettings.data]);
+  const [compareDays, setCompareDays] = useState(7);
+  const comparisonLoader = useMemo(() => () => api.dashboardComparison(compareDays), [compareDays]);
+  const comparison = useAsyncData(comparisonLoader, [comparisonLoader]);
 
   if (dashboard.isLoading && !dashboard.data) return <LoadingState title={t('reports.loadingTitle')} description={t('reports.loadingDesc')} />;
   if (dashboard.error || !dashboard.data) return <ErrorState message={dashboard.error ?? t('dashboard.errorFallback')} onRetry={dashboard.reload} />;
@@ -23,10 +96,39 @@ export function ReportsPage() {
 
   return (
     <div className="pageStack">
-      <PageHeader eyebrow={t('page.reports.eyebrow')} title={t('page.reports.title')} />
+      <PageHeader
+        eyebrow={t('page.reports.eyebrow')}
+        title={t('page.reports.title')}
+        actions={<Button variant="secondary" onClick={() => downloadReportCsv(data, t, status => statusSettingByKey.get(status)?.label ?? t(`status.${status}`))} icon={<Download size={16} />}>{t('reports.exportCsv')}</Button>}
+      />
+      <p className="muted" style={{ marginTop: '-12px' }}>{t('reports.asOf', { date: formatDateTime(new Date().toISOString()) })}</p>
+
+      <Card>
+        <div className="sectionTitle">
+          <div><h2>{t('reports.trendsTitle')}</h2></div>
+          <SelectInput value={compareDays} onChange={event => setCompareDays(Number(event.target.value))} style={{ maxWidth: '220px' }}>
+            <option value={7}>{t('reports.compareLast7')}</option>
+            <option value={30}>{t('reports.compareLast30')}</option>
+            <option value={90}>{t('reports.compareLast90')}</option>
+          </SelectInput>
+        </div>
+        {comparison.isLoading ? <p className="muted">{t('common.loading')}</p> : comparison.error || !comparison.data ? (
+          <p className="muted">{t('reports.notEnoughHistory')}</p>
+        ) : (
+          <>
+            <p className="muted">{t('reports.comparedToDate', { date: formatDate(comparison.data.comparedToDate) })}</p>
+            <div className="listRows">
+              <TrendRow label={t('reports.trendTotalAssets')} current={comparison.data.currentTotalAssets} previous={comparison.data.previousTotalAssets} format={value => String(value)} />
+              <TrendRow label={t('reports.assetsWithoutOwner')} current={comparison.data.currentAssetsWithoutOwner} previous={comparison.data.previousAssetsWithoutOwner} format={value => String(value)} />
+              <TrendRow label={t('reports.openAssignments')} current={comparison.data.currentOpenAssignments} previous={comparison.data.previousOpenAssignments} format={value => String(value)} />
+              <TrendRow label={t('reports.visibleValue')} current={comparison.data.currentVisibleAssetValue} previous={comparison.data.previousVisibleAssetValue} format={value => formatMoney(value)} />
+            </div>
+          </>
+        )}
+      </Card>
 
       <div className="reportGrid">
-        <Link to="/assets" className="card reportCard reportCard--action">
+        <Link to="/assets?owner=none" className="card reportCard reportCard--action">
           <ShieldAlert size={22} />
           <span className="reportMetric">{data.assetsWithoutOwner}</span>
           <h2>{t('reports.assetsWithoutOwner')}</h2>
@@ -36,7 +138,7 @@ export function ReportsPage() {
           <span className="reportMetric">{data.openAssignments}</span>
           <h2>{t('reports.openAssignments')}</h2>
         </Link>
-        <Link to="/assets" className="card reportCard reportCard--action">
+        <Link to="/assets?warranty=expiring" className="card reportCard reportCard--action">
           <BarChart3 size={22} />
           <span className="reportMetric">{data.warrantyExpiringSoon.length}</span>
           <h2>{t('reports.warrantyDeadlines')}</h2>
@@ -46,7 +148,7 @@ export function ReportsPage() {
       <div className="twoColumns">
         <Card>
           <div className="sectionTitle"><div><h2>{t('reports.byStatus')}</h2></div></div>
-          <DonutChart segments={data.assetsByStatus.map(item => ({ label: t(`status.${item.status}`), value: item.count, color: statusColor(item.status) }))} />
+          <DonutChart segments={data.assetsByStatus.map(item => ({ label: statusSettingByKey.get(item.status)?.label ?? t(`status.${item.status}`), value: item.count, color: statusSettingByKey.get(item.status)?.color ?? statusColor(item.status) }))} />
         </Card>
 
         <Card>

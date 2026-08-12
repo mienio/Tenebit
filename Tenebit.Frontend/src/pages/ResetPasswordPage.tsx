@@ -27,7 +27,7 @@ export function ResetPasswordPage() {
       await apiRequest('/api/auth/password/reset', { method: 'POST', body: JSON.stringify({ token, newPassword: String(form.get('password') ?? '') }) });
       navigate('/login', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się zresetować hasła.');
+      setError(err instanceof Error ? err.message : t('auth.resetPasswordFailed'));
     } finally {
       setSubmitting(false);
     }

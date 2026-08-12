@@ -19,16 +19,21 @@ public sealed class ActivityLogRepository : IActivityLogRepository
             .Take(Math.Clamp(limit, 1, 100))
             .ToListAsync(cancellationToken);
 
-    public async Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, CancellationToken cancellationToken)
+    public async Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, DateTimeOffset? from, DateTimeOffset? to, IReadOnlyCollection<string>? actorSubjects, string? action, CancellationToken cancellationToken)
     {
         var query = _db.ActivityLogs.AsNoTracking().Where(x => x.OrganizationId == organizationId);
 
         if (!string.IsNullOrWhiteSpace(entityType)) query = query.Where(x => x.EntityType == entityType);
         if (entityId.HasValue) query = query.Where(x => x.EntityId == entityId.Value);
+        if (from.HasValue) query = query.Where(x => x.CreatedAt >= from.Value);
+        if (to.HasValue) query = query.Where(x => x.CreatedAt < to.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
             query = query.Where(x => x.Action.Contains(search) || (x.Details != null && x.Details.Contains(search)));
         }
+
+        if (actorSubjects is not null) query = query.Where(x => actorSubjects.Contains(x.ActorSubject));
+        if (!string.IsNullOrWhiteSpace(action)) query = query.Where(x => x.Action.Contains(action));
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query

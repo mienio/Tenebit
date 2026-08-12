@@ -1,15 +1,29 @@
 const TOKEN_KEY = 'tenebit_token';
 
+// Access token lives only in memory (XSS cannot read it from storage); after a page
+// reload the session is restored via the HttpOnly refresh cookie. The localStorage
+// entry is only removed here to clean up sessions created by older builds.
+let accessToken: string | null = null;
+let legacyCleared = false;
+
+function clearLegacyStorage() {
+  if (legacyCleared) return;
+  legacyCleared = true;
+  try { window.localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
+}
+
 export function getStoredToken(): string | null {
-  return window.localStorage.getItem(TOKEN_KEY);
+  clearLegacyStorage();
+  return accessToken;
 }
 
 export function setStoredToken(token: string) {
-  window.localStorage.setItem(TOKEN_KEY, token);
+  clearLegacyStorage();
+  accessToken = token;
 }
 
 export function clearStoredToken() {
-  window.localStorage.removeItem(TOKEN_KEY);
+  accessToken = null;
 }
 
 export type TokenPayload = {

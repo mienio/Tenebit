@@ -105,7 +105,7 @@ RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 COPY package.json package-lock.json ./
 RUN pnpm import && pnpm install --frozen-lockfile --prod=false
 COPY . .
-RUN ./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build
+RUN ./node_modules/.bin/tsc -b && NODE_ENV=production ./node_modules/.bin/vite build
 
 FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
@@ -123,11 +123,11 @@ server {
     client_max_body_size 50M;
 
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri /index.html;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 
-    location /assets/ {
+    location ~* ^/assets/.+\.(js|css|svg|png|jpe?g|gif|webp|woff2?|ttf|ico)$ {
         add_header Cache-Control "public, max-age=31536000, immutable";
     }
 

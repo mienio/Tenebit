@@ -4,7 +4,7 @@ import { Button } from './Button';
 import { Field, SelectInput } from './FormFields';
 import { Modal } from './Modal';
 import { api } from '../api/endpoints';
-import type { AssetCategory, Team } from '../types/domain';
+import type { AssetCategory, LocationNode, Team } from '../types/domain';
 import { useI18n } from '../i18n/I18nProvider';
 
 type Entity = 'people' | 'assets';
@@ -12,30 +12,30 @@ type Step = 'pick' | 'preview' | 'importing' | 'result';
 
 interface FieldDef {
   key: string;
-  label: string;
+  labelKey: string;
   required?: boolean;
   synonyms: string[];
 }
 
 const PEOPLE_FIELDS: FieldDef[] = [
-  { key: 'firstName', label: 'Imię', synonyms: ['imie', 'imię', 'first name', 'firstname'] },
-  { key: 'lastName', label: 'Nazwisko', synonyms: ['nazwisko', 'last name', 'lastname'] },
-  { key: 'fullName', label: 'Imię i nazwisko', synonyms: ['imie i nazwisko', 'imię i nazwisko', 'fullname', 'full name', 'name', 'nazwa'] },
-  { key: 'email', label: 'Email', required: true, synonyms: ['email', 'e-mail', 'mail'] },
-  { key: 'phone', label: 'Telefon', synonyms: ['telefon', 'phone'] },
-  { key: 'jobTitle', label: 'Stanowisko', synonyms: ['stanowisko', 'job title', 'title'] },
-  { key: 'team', label: 'Zespół', synonyms: ['zespol', 'zespół', 'team', 'dzial', 'dział'] },
-  { key: 'employeeNumber', label: 'Numer pracownika', synonyms: ['nr pracownika', 'numer pracownika', 'employee number', 'emp id'] }
+  { key: 'firstName', labelKey: 'import.field.firstName', synonyms: ['imie', 'imię', 'first name', 'firstname'] },
+  { key: 'lastName', labelKey: 'import.field.lastName', synonyms: ['nazwisko', 'last name', 'lastname'] },
+  { key: 'fullName', labelKey: 'import.field.fullName', synonyms: ['imie i nazwisko', 'imię i nazwisko', 'fullname', 'full name', 'name', 'nazwa'] },
+  { key: 'email', labelKey: 'import.field.email', required: true, synonyms: ['email', 'e-mail', 'mail'] },
+  { key: 'phone', labelKey: 'import.field.phone', synonyms: ['telefon', 'phone'] },
+  { key: 'jobTitle', labelKey: 'import.field.jobTitle', synonyms: ['stanowisko', 'job title', 'title'] },
+  { key: 'team', labelKey: 'import.field.team', synonyms: ['zespol', 'zespół', 'team', 'dzial', 'dział'] },
+  { key: 'employeeNumber', labelKey: 'import.field.employeeNumber', synonyms: ['nr pracownika', 'numer pracownika', 'employee number', 'emp id'] }
 ];
 
 const ASSET_FIELDS: FieldDef[] = [
-  { key: 'name', label: 'Nazwa', required: true, synonyms: ['nazwa', 'name'] },
-  { key: 'assetTag', label: 'Tag', required: true, synonyms: ['tag', 'assettag', 'numer inwentarzowy', 'nr inwentarzowy'] },
-  { key: 'serialNumber', label: 'Numer seryjny', synonyms: ['numer seryjny', 'serial', 'sn'] },
-  { key: 'category', label: 'Kategoria', required: true, synonyms: ['kategoria', 'category'] },
-  { key: 'manufacturer', label: 'Producent', synonyms: ['producent', 'manufacturer'] },
-  { key: 'model', label: 'Model', synonyms: ['model'] },
-  { key: 'location', label: 'Lokalizacja', synonyms: ['lokalizacja', 'location'] }
+  { key: 'name', labelKey: 'import.field.name', required: true, synonyms: ['nazwa', 'name'] },
+  { key: 'assetTag', labelKey: 'import.field.assetTag', required: true, synonyms: ['tag', 'assettag', 'numer inwentarzowy', 'nr inwentarzowy'] },
+  { key: 'serialNumber', labelKey: 'import.field.serialNumber', synonyms: ['numer seryjny', 'serial', 'sn'] },
+  { key: 'category', labelKey: 'import.field.category', required: true, synonyms: ['kategoria', 'category'] },
+  { key: 'manufacturer', labelKey: 'import.field.manufacturer', synonyms: ['producent', 'manufacturer'] },
+  { key: 'model', labelKey: 'import.field.model', synonyms: ['model'] },
+  { key: 'location', labelKey: 'import.field.location', synonyms: ['lokalizacja', 'location'] }
 ];
 
 interface RowResult {
@@ -52,10 +52,14 @@ function normalize(value: string): string {
 }
 
 function detectDelimiter(text: string): string {
-  const sample = text.slice(0, 2000);
-  const commas = (sample.match(/,/g) ?? []).length;
-  const semicolons = (sample.match(/;/g) ?? []).length;
-  return semicolons > commas ? ';' : ',';
+  const sample = text.slice(0, 4000);
+  const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0 };
+  let inQuotes = false;
+  for (const char of sample) {
+    if (char === '"') { inQuotes = !inQuotes; continue; }
+    if (!inQuotes && char in counts) counts[char]++;
+  }
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
 }
 
 function parseCsv(text: string, delimiter: string): string[][] {
@@ -101,7 +105,7 @@ function buildTemplate(entity: Entity): string {
 }
 
 function downloadText(fileName: string, content: string, type: string) {
-  const blob = new Blob([content], { type });
+  const blob = new Blob(['﻿' + content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -118,11 +122,12 @@ interface ImportModalProps {
   existingKeys: string[];
   categories?: AssetCategory[];
   teams?: Team[];
+  locations?: LocationNode[];
   onClose: () => void;
   onDone: () => void;
 }
 
-export function ImportModal({ open, entity, existingKeys, categories, teams, onClose, onDone }: ImportModalProps) {
+export function ImportModal({ open, entity, existingKeys, categories, teams, locations, onClose, onDone }: ImportModalProps) {
   const { t } = useI18n();
   const fields = entity === 'people' ? PEOPLE_FIELDS : ASSET_FIELDS;
   const [step, setStep] = useState<Step>('pick');
@@ -145,18 +150,27 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
   }
 
   function close() {
+    if (step === 'importing') return;
     reset();
     onClose();
   }
 
   async function handleFile(file: File) {
     setParseError(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setParseError(t('import.fileTooLarge'));
+      return;
+    }
     const rawText = await file.text();
     const text = rawText.replace(/^﻿/, '');
     const delimiter = detectDelimiter(text);
     const parsed = parseCsv(text, delimiter);
     if (parsed.length < 2) {
       setParseError(t('import.emptyFile'));
+      return;
+    }
+    if (parsed.length > 5001) {
+      setParseError(t('import.tooManyRows', { max: 5000 }));
       return;
     }
     const [headerRow, ...dataRows] = parsed;
@@ -187,6 +201,9 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
         const key = values.email.toLowerCase();
         if (seenKeys.has(key)) return { index, values, status: 'duplicate', reason: t('import.duplicate', { value: values.email }) } as RowResult;
         seenKeys.add(key);
+        if (values.team && !teams?.some(team => normalize(team.name) === normalize(values.team))) {
+          return { index, values, status: 'ok', reason: t('import.teamNotFound', { name: values.team }) } as RowResult;
+        }
         return { index, values, status: 'ok' } as RowResult;
       }
 
@@ -199,9 +216,12 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
       }
       if (!values.category) return { index, values, status: 'error', reason: t('import.missingRequired', { field: 'kategoria' }) } as RowResult;
       seenKeys.add(key);
+      if (values.location && !locations?.some(location => normalize(location.fullPath) === normalize(values.location))) {
+        return { index, values, status: 'ok', reason: t('import.locationNotFound', { name: values.location }) } as RowResult;
+      }
       return { index, values, status: 'ok' } as RowResult;
     });
-  }, [rows, mapping, step, entity, existingKeys, categories, fields, t]);
+  }, [rows, mapping, step, entity, existingKeys, categories, teams, locations, fields, t]);
 
   const okCount = results.filter(item => item.status === 'ok').length;
   const errorCount = results.filter(item => item.status === 'error').length;
@@ -266,12 +286,12 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
   const title = entity === 'people' ? t('people.import') : t('assets.import');
 
   return (
-    <Modal open={open} title={title} onClose={close} width="wide">
+    <Modal open={open} title={title} onClose={close} width="wide" closeDisabled={step === 'importing'}>
       <div className="importFlow">
         {step === 'pick' && (
           <div className="formGrid">
             <p className="muted">{t('import.pickFileDesc')}</p>
-            <input key={fileInputKey} type="file" accept=".csv,text/csv" onChange={event => { const file = event.target.files?.[0]; if (file) void handleFile(file); }} />
+            <input key={fileInputKey} type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={event => { const file = event.target.files?.[0]; if (file) void handleFile(file); }} />
             {parseError && <p className="toast toast--error">{parseError}</p>}
             <Button type="button" variant="secondary" icon={<Download size={16} />} onClick={() => downloadText(`szablon-${entity}.csv`, buildTemplate(entity), 'text/csv')}>
               {t('import.downloadTemplate')}
@@ -284,7 +304,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
             <div className="sectionTitle"><div><h2>{t('import.mapColumns')}</h2></div></div>
             <div className="importMapGrid">
               {fields.map(fieldDef => (
-                <Field key={fieldDef.key} label={fieldDef.label + (fieldDef.required ? ' *' : '')}>
+                <Field key={fieldDef.key} label={t(fieldDef.labelKey) + (fieldDef.required ? ' *' : '')}>
                   <SelectInput value={mapping[fieldDef.key] ?? ''} onChange={event => updateMapping(fieldDef.key, event.target.value === '' ? null : Number(event.target.value))}>
                     <option value="">{t('import.skipColumn')}</option>
                     {headers.map((header, index) => <option key={index} value={index}>{header}</option>)}
@@ -296,7 +316,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
             <div className="sectionTitle"><div><h2>{t('import.preview')}</h2><p>{t('import.previewSummary', { ok: okCount, errors: errorCount, duplicates: duplicateCount })}</p></div></div>
             <div className="tableWrap importPreviewTable">
               <table className="dense-table">
-                <thead><tr><th></th>{fields.map(f => <th key={f.key}>{f.label}</th>)}</tr></thead>
+                <thead><tr><th></th><th>{t('import.colReason')}</th>{fields.map(f => <th key={f.key}>{t(f.labelKey)}</th>)}</tr></thead>
                 <tbody>
                   {results.map(result => (
                     <tr key={result.index}>
@@ -305,6 +325,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
                           {result.status === 'ok' ? t('import.statusOk') : result.status === 'duplicate' ? t('import.statusDuplicate') : t('import.statusError')}
                         </span>
                       </td>
+                      <td>{result.reason ?? '—'}</td>
                       {fields.map(f => <td key={f.key}>{result.values[f.key] || '—'}</td>)}
                     </tr>
                   ))}
@@ -324,8 +345,8 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, onC
         {step === 'importing' && (
           <div className="formGrid">
             <p>{t('import.progress', { done: progress.done, total: progress.total })}</p>
-            <div style={{ background: 'var(--border)', borderRadius: '999px', height: '8px', overflow: 'hidden' }}>
-              <div style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, height: '100%', background: 'linear-gradient(90deg, #111827, #d97706)', borderRadius: '999px' }} />
+            <div style={{ background: 'var(--border)', borderRadius: 'var(--radius)', height: '8px', overflow: 'hidden' }}>
+              <div style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`, height: '100%', background: 'var(--brand)', borderRadius: 'var(--radius)' }} />
             </div>
           </div>
         )}

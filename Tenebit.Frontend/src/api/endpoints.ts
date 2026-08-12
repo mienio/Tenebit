@@ -9,26 +9,34 @@ import type {
   Assignment,
   CreateAssignmentRequest,
   CreateAssetRequest,
+  DashboardComparison,
   DashboardSummary,
   JobProfile,
+  License,
   LocationInventory,
   LocationNode,
   LocationType,
   MyWorkspace,
   OnboardingStatus,
   Organization,
+  Paged,
   OrganizationUser,
   Person,
   PersonRelationType,
+  PersonRelationTypeOption,
   Procedure,
   PublicAssignment,
   RoleInfo,
+  RolePermission,
   SaveAssetFieldDefinitionRequest,
   Team
 } from '../types/domain';
 
 export const api = {
   dashboard: () => apiRequest<DashboardSummary>('/api/dashboard'),
+  dashboardComparison: (daysAgo: number) => apiRequest<DashboardComparison>(`/api/dashboard/comparison?daysAgo=${daysAgo}`),
+  dashboardLayout: () => apiRequest<{ layoutJson: string | null }>('/api/dashboard/layout'),
+  saveDashboardLayout: (layoutJson: string) => apiRequest<{ layoutJson: string | null }>('/api/dashboard/layout', { method: 'PUT', body: JSON.stringify({ layoutJson }) }),
   organization: () => apiRequest<Organization>('/api/organization'),
   updateOrganization: (body: Omit<Organization, 'id'>) => apiRequest<Organization>('/api/organization', { method: 'PUT', body: JSON.stringify(body) }),
 
@@ -58,6 +66,15 @@ export const api = {
   createUser: (body: { email: string; displayName: string; isActive: boolean; roles: string[] }) => apiRequest<OrganizationUser>('/api/organization-users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: string, body: { email: string; displayName: string; isActive: boolean; roles: string[] }) => apiRequest<OrganizationUser>(`/api/organization-users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   roles: () => apiRequest<RoleInfo[]>('/api/roles'),
+  rolePermissions: () => apiRequest<RolePermission[]>('/api/role-permissions'),
+  setRolePermission: (body: { roleKey: string; permissionKey: string; allowed: boolean }) => apiRequest<void>('/api/role-permissions', { method: 'PUT', body: JSON.stringify(body) }),
+
+  licenses: () => apiRequest<License[]>('/api/licenses'),
+  createLicense: (body: { name: string; vendor?: string | null; licenseKey?: string | null; seatsTotal: number; expiresAt?: string | null; notes?: string | null }) => apiRequest<License>('/api/licenses', { method: 'POST', body: JSON.stringify(body) }),
+  updateLicense: (id: string, body: { name: string; vendor?: string | null; licenseKey?: string | null; seatsTotal: number; expiresAt?: string | null; notes?: string | null }) => apiRequest<License>(`/api/licenses/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteLicense: (id: string) => apiRequest<void>(`/api/licenses/${id}`, { method: 'DELETE' }),
+  assignLicenseSeat: (id: string, personId: string) => apiRequest<License>(`/api/licenses/${id}/seats`, { method: 'POST', body: JSON.stringify({ personId }) }),
+  unassignLicenseSeat: (id: string, personId: string) => apiRequest<License>(`/api/licenses/${id}/seats/${personId}`, { method: 'DELETE' }),
 
   subscription: () => apiRequest<import('../types/domain').Subscription>('/api/subscription'),
   upgradeSubscription: (planKey: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/upgrade', { method: 'POST', body: JSON.stringify({ planKey }) }),
@@ -70,6 +87,20 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiRequest<Asset[]>(`/api/assets${suffix}`);
   },
+  assetsPaged: (params: { search?: string; status?: AssetStatus | ''; location?: string; teamId?: string; owner?: string; warranty?: string; sort?: string; desc?: boolean; page: number; pageSize: number }) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    if (params.status) query.set('status', params.status);
+    if (params.location) query.set('location', params.location);
+    if (params.teamId) query.set('teamId', params.teamId);
+    if (params.owner) query.set('owner', params.owner);
+    if (params.warranty) query.set('warranty', params.warranty);
+    if (params.sort) query.set('sort', params.sort);
+    if (params.desc) query.set('desc', 'true');
+    query.set('page', String(params.page));
+    query.set('pageSize', String(params.pageSize));
+    return apiRequest<Paged<Asset>>(`/api/assets?${query.toString()}`);
+  },
   createAsset: (body: CreateAssetRequest) => apiRequest<Asset>('/api/assets', { method: 'POST', body: JSON.stringify(body) }),
   updateAsset: (id: string, body: CreateAssetRequest & { status: AssetStatus }) => apiRequest<Asset>(`/api/assets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteAsset: (id: string) => apiRequest<void>(`/api/assets/${id}`, { method: 'DELETE' }),
@@ -81,8 +112,22 @@ export const api = {
 
   teams: () => apiRequest<Team[]>('/api/teams'),
   createTeam: (body: { name: string; managerId?: string | null; costCenter?: string | null }) => apiRequest<Team>('/api/teams', { method: 'POST', body: JSON.stringify(body) }),
+  updateTeam: (id: string, body: { name: string; managerId?: string | null; costCenter?: string | null }) => apiRequest<Team>(`/api/teams/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteTeam: (id: string) => apiRequest<void>(`/api/teams/${id}`, { method: 'DELETE' }),
+
+  personRelationTypes: () => apiRequest<PersonRelationTypeOption[]>('/api/person-relation-types'),
+  createPersonRelationType: (body: { name: string }) => apiRequest<PersonRelationTypeOption>('/api/person-relation-types', { method: 'POST', body: JSON.stringify(body) }),
+  updatePersonRelationType: (id: string, body: { name: string }) => apiRequest<PersonRelationTypeOption>(`/api/person-relation-types/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deletePersonRelationType: (id: string) => apiRequest<void>(`/api/person-relation-types/${id}`, { method: 'DELETE' }),
 
   people: (search?: string) => apiRequest<Person[]>(`/api/people${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  peoplePaged: (params: { search?: string; page: number; pageSize: number }) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    query.set('page', String(params.page));
+    query.set('pageSize', String(params.pageSize));
+    return apiRequest<Paged<Person>>(`/api/people?${query.toString()}`);
+  },
   createPerson: (body: {
     firstName: string;
     lastName: string;
@@ -114,6 +159,13 @@ export const api = {
   personWorkspace: (id: string) => apiRequest<MyWorkspace>(`/api/people/${id}/workspace`),
 
   procedures: (search?: string) => apiRequest<Procedure[]>(`/api/procedures${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  proceduresPaged: (params: { search?: string; page: number; pageSize: number }) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    query.set('page', String(params.page));
+    query.set('pageSize', String(params.pageSize));
+    return apiRequest<Paged<Procedure>>(`/api/procedures?${query.toString()}`);
+  },
   createProcedure: (body: {
     title: string;
     version: string;
@@ -142,24 +194,37 @@ export const api = {
   procedureAcceptances: (id: string) => apiRequest<import('../types/domain').ProcedureAcceptanceStatus[]>(`/api/procedures/${id}/acceptances`),
 
   assignments: () => apiRequest<Assignment[]>('/api/assignments'),
+  assignmentsPaged: (params: { search?: string; status?: string; page: number; pageSize: number }) => {
+    const query = new URLSearchParams();
+    if (params.search) query.set('search', params.search);
+    if (params.status) query.set('status', params.status);
+    query.set('page', String(params.page));
+    query.set('pageSize', String(params.pageSize));
+    return apiRequest<Paged<Assignment>>(`/api/assignments?${query.toString()}`);
+  },
   createAssignment: (body: CreateAssignmentRequest) => apiRequest<Assignment>('/api/assignments', { method: 'POST', body: JSON.stringify(body) }),
   acceptAssignment: (id: string) => apiRequest<Assignment>(`/api/assignments/${id}/accept`, { method: 'POST' }),
-  returnAssignment: (id: string, body: { returnCondition?: string | null; destinationLocation?: string | null }) => apiRequest<Assignment>(`/api/assignments/${id}/return`, { method: 'POST', body: JSON.stringify(body) }),
+  returnAssignment: (id: string, body: { returnCondition?: string | null; destinationLocation?: string | null; assets?: { assetId: string; returnCondition?: string | null }[] }) => apiRequest<Assignment>(`/api/assignments/${id}/return`, { method: 'POST', body: JSON.stringify(body) }),
   downloadAssignmentProtocol: (id: string) => apiBlob(`/api/assignments/${id}/protocol`),
 
   publicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}`),
   acceptPublicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}/accept`, { method: 'POST' }),
   downloadPublicAssignmentProtocol: (organizationId: string, assignmentId: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/protocol`),
+  downloadPublicProcedureDocument: (organizationId: string, assignmentId: string, procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/procedures/${procedureId}/documents/${documentId}`),
 
   myWorkspace: () => apiRequest<MyWorkspace>('/api/my/workspace'),
 
-  activityLog: (params?: { page?: number; pageSize?: number; entityType?: string; entityId?: string; search?: string }) => {
+  activityLog: (params?: { page?: number; pageSize?: number; entityType?: string; entityId?: string; search?: string; dateFrom?: string; dateTo?: string; actor?: string; action?: string }) => {
     const query = new URLSearchParams();
     if (params?.page) query.set('page', String(params.page));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     if (params?.entityType) query.set('entityType', params.entityType);
     if (params?.entityId) query.set('entityId', params.entityId);
     if (params?.search) query.set('search', params.search);
+    if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+    if (params?.dateTo) query.set('dateTo', params.dateTo);
+    if (params?.actor) query.set('actor', params.actor);
+    if (params?.action) query.set('action', params.action);
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiRequest<import('../types/domain').PagedActivityLog>(`/api/activity-log${suffix}`);
   }

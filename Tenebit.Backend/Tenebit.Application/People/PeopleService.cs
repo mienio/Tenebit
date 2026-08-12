@@ -25,15 +25,31 @@ public sealed class PeopleService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<IReadOnlyList<PersonResponse>> ListAsync(string? search, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<PersonResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
+        if (access.IsFailure) return Result<IReadOnlyList<PersonResponse>>.Failure(access.Error!);
+
         var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
         var people = await _people.ListAsync(_currentUser.OrganizationId, search, cancellationToken);
-        return people.Select(person => Map(person, teams)).ToList();
+        return Result<IReadOnlyList<PersonResponse>>.Success(people.Select(person => Map(person, teams)).ToList());
+    }
+
+    public async Task<Result<PagedResult<PersonResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
+        if (access.IsFailure) return Result<PagedResult<PersonResponse>>.Failure(access.Error!);
+
+        var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
+        var (items, total) = await _people.ListPagedAsync(_currentUser.OrganizationId, search, page, pageSize, cancellationToken);
+        return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(items.Select(person => Map(person, teams)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<PersonResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
+        if (access.IsFailure) return Result<PersonResponse>.Failure(access.Error!);
+
         var person = await _people.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
         if (person is null) return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
         var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);

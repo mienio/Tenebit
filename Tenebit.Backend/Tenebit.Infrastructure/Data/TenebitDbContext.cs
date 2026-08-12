@@ -4,8 +4,10 @@ using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
+using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.JobProfiles;
+using Tenebit.Domain.Licenses;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
@@ -23,6 +25,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<Person> People => Set<Person>();
     public DbSet<Team> Teams => Set<Team>();
+    public DbSet<PersonRelationType> PersonRelationTypes => Set<PersonRelationType>();
     public DbSet<Procedure> Procedures => Set<Procedure>();
     public DbSet<ProcedureDocument> ProcedureDocuments => Set<ProcedureDocument>();
     public DbSet<JobProfile> JobProfiles => Set<JobProfile>();
@@ -32,11 +35,16 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<DeviceTrustToken> DeviceTrustTokens => Set<DeviceTrustToken>();
+    public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes => Set<TwoFactorRecoveryCode>();
     public DbSet<AssetStatusSetting> AssetStatusSettings => Set<AssetStatusSetting>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<OrganizationSubscription> Subscriptions => Set<OrganizationSubscription>();
     public DbSet<SentAlert> SentAlerts => Set<SentAlert>();
+    public DbSet<DashboardLayout> DashboardLayouts => Set<DashboardLayout>();
+    public DbSet<DashboardSnapshot> DashboardSnapshots => Set<DashboardSnapshot>();
+    public DbSet<License> Licenses => Set<License>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +60,26 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureActivity(modelBuilder);
         ConfigureSubscriptions(modelBuilder);
         ConfigureAlerts(modelBuilder);
+        ConfigureDashboards(modelBuilder);
+        ConfigureLicenses(modelBuilder);
+    }
+
+    private static void ConfigureDashboards(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<DashboardLayout>(entity =>
+        {
+            entity.ToTable("dashboard_layouts");
+            entity.HasKey(x => x.OrganizationUserId);
+            entity.Property(x => x.LayoutJson).IsRequired();
+        });
+
+        modelBuilder.Entity<DashboardSnapshot>(entity =>
+        {
+            entity.ToTable("dashboard_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.VisibleAssetValue).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => new { x.OrganizationId, x.SnapshotDate }).IsUnique();
+        });
     }
 
     private static void ConfigureAlerts(ModelBuilder modelBuilder)
@@ -144,6 +172,14 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => new { x.OrganizationUserId, x.TokenHash }).IsUnique();
         });
+
+        modelBuilder.Entity<TwoFactorRecoveryCode>(entity =>
+        {
+            entity.ToTable("two_factor_recovery_codes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CodeHash).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => x.OrganizationUserId);
+        });
     }
 
     private static void ConfigureAssets(ModelBuilder modelBuilder)
@@ -163,6 +199,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 owned.ToTable("asset_field_definitions");
                 owned.WithOwner().HasForeignKey(x => x.CategoryId);
                 owned.HasKey(x => new { x.CategoryId, x.Id });
+                owned.Property(x => x.Id).ValueGeneratedNever();
                 owned.Property(x => x.Key).HasMaxLength(80).IsRequired();
                 owned.Property(x => x.Label).HasMaxLength(120).IsRequired();
                 owned.Property(x => x.FieldType).HasConversion<string>().HasMaxLength(40).IsRequired();
@@ -209,7 +246,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Email).HasMaxLength(240).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(40);
             entity.Property(x => x.EmployeeNumber).HasMaxLength(80);
-            entity.Property(x => x.RelationType).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.RelationType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.JobTitle).HasMaxLength(120);
             entity.Property(x => x.Location).HasMaxLength(180);
             entity.Property(x => x.CostCenter).HasMaxLength(80);
@@ -222,6 +259,14 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
             entity.Property(x => x.CostCenter).HasMaxLength(80);
+            entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<PersonRelationType>(entity =>
+        {
+            entity.ToTable("person_relation_types");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
         });
     }
@@ -285,7 +330,38 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasKey(x => x.Id);
             entity.Property(x => x.StatusKey).HasMaxLength(60).IsRequired();
             entity.Property(x => x.Label).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Color).HasMaxLength(9).IsRequired();
+            entity.Property(x => x.BackgroundColor).HasMaxLength(9).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.StatusKey }).IsUnique();
+        });
+
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.ToTable("role_permissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RoleKey).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.PermissionKey).HasMaxLength(80).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.RoleKey, x.PermissionKey }).IsUnique();
+        });
+    }
+
+    private static void ConfigureLicenses(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<License>(entity =>
+        {
+            entity.ToTable("licenses");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Vendor).HasMaxLength(160);
+            entity.Property(x => x.LicenseKey).HasMaxLength(400);
+            entity.Property(x => x.Notes).HasMaxLength(800);
+
+            entity.OwnsMany(x => x.Seats, owned =>
+            {
+                owned.ToTable("license_seats");
+                owned.WithOwner().HasForeignKey("LicenseId");
+                owned.HasKey(x => new { x.LicenseId, x.PersonId });
+            });
         });
     }
 

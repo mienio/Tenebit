@@ -10,7 +10,7 @@ public sealed record PersonResponse(
     string Email,
     string? Phone,
     string? EmployeeNumber,
-    PersonRelationType RelationType,
+    string RelationType,
     string? JobTitle,
     Guid? TeamId,
     string? TeamName,
@@ -25,7 +25,7 @@ public sealed record CreatePersonRequest(
     string Email,
     string? Phone,
     string? EmployeeNumber,
-    PersonRelationType RelationType,
+    string RelationType,
     string? JobTitle,
     Guid? TeamId,
     Guid? ManagerId,
@@ -38,7 +38,7 @@ public sealed record UpdatePersonRequest(
     string Email,
     string? Phone,
     string? EmployeeNumber,
-    PersonRelationType RelationType,
+    string RelationType,
     string? JobTitle,
     Guid? TeamId,
     Guid? ManagerId,
@@ -48,3 +48,8 @@ public sealed record UpdatePersonRequest(
 
 public sealed record TeamResponse(Guid Id, string Name, Guid? ManagerId, string? CostCenter);
 public sealed record CreateTeamRequest(string Name, Guid? ManagerId, string? CostCenter);
+public sealed record UpdateTeamRequest(string Name, Guid? ManagerId, string? CostCenter);
+
+public sealed record PersonRelationTypeResponse(Guid Id, string Name);
+public sealed record CreatePersonRelationTypeRequest(string Name);
+public sealed record UpdatePersonRelationTypeRequest(string Name);

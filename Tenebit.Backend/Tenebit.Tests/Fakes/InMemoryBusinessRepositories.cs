@@ -1,6 +1,8 @@
 using Tenebit.Application.Abstractions;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
+using Tenebit.Domain.Dashboards;
+using Tenebit.Domain.Licenses;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
 using Tenebit.Domain.Subscriptions;
@@ -13,6 +15,12 @@ public sealed class InMemoryAssetRepository : IAssetRepository
 
     public Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Assets.Where(x => x.OrganizationId == organizationId).ToList();
+        return Task.FromResult<(IReadOnlyList<Asset>, int)>((rows, rows.Count));
+    }
 
     public Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId && ids.Contains(x.Id)).ToList());
@@ -33,6 +41,12 @@ public sealed class InMemoryPersonRepository : IPersonRepository
 
     public Task<IReadOnlyList<Person>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Person>>(People.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = People.Where(x => x.OrganizationId == organizationId).ToList();
+        return Task.FromResult<(IReadOnlyList<Person>, int)>((rows, rows.Count));
+    }
 
     public Task<Person?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(People.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
@@ -55,6 +69,8 @@ public sealed class InMemoryPersonRepository : IPersonRepository
 public sealed class InMemoryTeamRepository : ITeamRepository
 {
     public List<Team> Teams { get; } = [];
+    public List<Person> People { get; } = [];
+    public List<Asset> Assets { get; } = [];
 
     public Task<IReadOnlyList<Team>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Team>>(Teams.Where(x => x.OrganizationId == organizationId).ToList());
@@ -65,7 +81,32 @@ public sealed class InMemoryTeamRepository : ITeamRepository
     public Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingTeamId, CancellationToken cancellationToken) =>
         Task.FromResult(Teams.Any(x => x.OrganizationId == organizationId && x.Name == name && (!excludingTeamId.HasValue || x.Id != excludingTeamId.Value)));
 
+    public Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(People.Any(x => x.OrganizationId == organizationId && x.TeamId == id) || Assets.Any(x => x.OrganizationId == organizationId && x.TeamId == id));
+
     public void Add(Team team) => Teams.Add(team);
+    public void Remove(Team team) => Teams.Remove(team);
+}
+
+public sealed class InMemoryPersonRelationTypeRepository : IPersonRelationTypeRepository
+{
+    public List<PersonRelationType> RelationTypes { get; } = [];
+    public List<Person> People { get; } = [];
+
+    public Task<IReadOnlyList<PersonRelationType>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PersonRelationType>>(RelationTypes.Where(x => x.OrganizationId == organizationId).OrderBy(x => x.SortOrder).ToList());
+
+    public Task<PersonRelationType?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(RelationTypes.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingId, CancellationToken cancellationToken) =>
+        Task.FromResult(RelationTypes.Any(x => x.OrganizationId == organizationId && x.Name == name.Trim() && (!excludingId.HasValue || x.Id != excludingId.Value)));
+
+    public Task<bool> IsUsedAsync(Guid organizationId, string name, CancellationToken cancellationToken) =>
+        Task.FromResult(People.Any(x => x.OrganizationId == organizationId && x.RelationType == name));
+
+    public void Add(PersonRelationType relationType) => RelationTypes.Add(relationType);
+    public void Remove(PersonRelationType relationType) => RelationTypes.Remove(relationType);
 }
 
 public sealed class InMemoryProcedureRepository : IProcedureRepository
@@ -74,6 +115,12 @@ public sealed class InMemoryProcedureRepository : IProcedureRepository
 
     public Task<IReadOnlyList<Procedure>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Procedure>>(Procedures.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<(IReadOnlyList<Procedure> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Procedures.Where(x => x.OrganizationId == organizationId).ToList();
+        return Task.FromResult<(IReadOnlyList<Procedure>, int)>((rows, rows.Count));
+    }
 
     public Task<IReadOnlyList<Procedure>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Procedure>>(Procedures.Where(x => x.OrganizationId == organizationId && ids.Contains(x.Id)).ToList());
@@ -96,6 +143,12 @@ public sealed class InMemoryAssignmentRepository : IAssignmentRepository
     public Task<IReadOnlyList<Assignment>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Assignment>>(Assignments.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Assignments.Where(x => x.OrganizationId == organizationId).ToList();
+        return Task.FromResult<(IReadOnlyList<Assignment>, int)>((rows, rows.Count));
+    }
+
     public Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Assignments.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
@@ -110,6 +163,46 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
         Task.FromResult(Subscriptions.FirstOrDefault(x => x.OrganizationId == organizationId));
 
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
+}
+
+public sealed class InMemoryDashboardLayoutRepository : IDashboardLayoutRepository
+{
+    public List<DashboardLayout> Layouts { get; } = [];
+
+    public Task<DashboardLayout?> GetAsync(Guid organizationUserId, CancellationToken cancellationToken) =>
+        Task.FromResult(Layouts.FirstOrDefault(x => x.OrganizationUserId == organizationUserId));
+
+    public void Add(DashboardLayout layout) => Layouts.Add(layout);
+}
+
+public sealed class InMemoryDashboardSnapshotRepository : IDashboardSnapshotRepository
+{
+    public List<DashboardSnapshot> Snapshots { get; } = [];
+
+    public Task<DashboardSnapshot?> GetForDateAsync(Guid organizationId, DateOnly date, CancellationToken cancellationToken) =>
+        Task.FromResult(Snapshots.FirstOrDefault(x => x.OrganizationId == organizationId && x.SnapshotDate == date));
+
+    public Task<DashboardSnapshot?> GetClosestOnOrBeforeAsync(Guid organizationId, DateOnly onOrBefore, CancellationToken cancellationToken) =>
+        Task.FromResult(Snapshots
+            .Where(x => x.OrganizationId == organizationId && x.SnapshotDate <= onOrBefore)
+            .OrderByDescending(x => x.SnapshotDate)
+            .FirstOrDefault());
+
+    public void Add(DashboardSnapshot snapshot) => Snapshots.Add(snapshot);
+}
+
+public sealed class InMemoryLicenseRepository : ILicenseRepository
+{
+    public List<License> Licenses { get; } = [];
+
+    public Task<IReadOnlyList<License>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<License>>(Licenses.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Licenses.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public void Add(License license) => Licenses.Add(license);
+    public void Remove(License license) => Licenses.Remove(license);
 }
 
 public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator

@@ -62,19 +62,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return fromToken;
   });
   const [isLoading, setIsLoading] = useState(user === null);
-  const attemptedRefresh = useRef(false);
+  const bootstrapRefresh = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
-    if (user || attemptedRefresh.current) { setIsLoading(false); return; }
-    attemptedRefresh.current = true;
-    let cancelled = false;
-    refreshAccessToken().then(token => {
-      if (cancelled) return;
-      const fromToken = token ? userFromToken(token) : null;
-      if (fromToken) setUser(fromToken);
-      setIsLoading(false);
-    });
-    return () => { cancelled = true; };
+    const onSessionExpired = () => {
+      clearStoredToken();
+      setUser(null);
+    };
+    window.addEventListener('tenebit:session-expired', onSessionExpired);
+    return () => window.removeEventListener('tenebit:session-expired', onSessionExpired);
+  }, []);
+
+  useEffect(() => {
+    if (user) { setIsLoading(false); return; }
+    // Shared via ref (not per-invocation state) so React StrictMode's dev-mode double-invoke
+    // of this effect can't race: both invocations await the same promise, and only its
+    // resolution ever calls setIsLoading(false), instead of a second invocation doing it early.
+    if (!bootstrapRefresh.current) {
+      bootstrapRefresh.current = refreshAccessToken().then(token => {
+        const fromToken = token ? userFromToken(token) : null;
+        if (fromToken) setUser(fromToken);
+        setIsLoading(false);
+      });
+    }
   }, [user]);
 
   function applySession(response: LoginResponse) {

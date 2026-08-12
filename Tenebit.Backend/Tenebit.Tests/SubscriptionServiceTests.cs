@@ -1,5 +1,6 @@
 using Tenebit.Application.Subscriptions;
 using Tenebit.Domain.Assets;
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
 namespace Tenebit.Tests;
@@ -63,7 +64,7 @@ public class SubscriptionServiceTests
     public async Task CanAddAssetAsync_ReturnsFalseAtFreePlanLimit()
     {
         var (service, user, assets, _) = CreateService();
-        for (var i = 0; i < 10; i++)
+        for (var i = 0; i < SubscriptionPlan.Free.AssetLimit; i++)
         {
             assets.Add(new Asset(user.OrganizationId, Guid.NewGuid(), $"Asset {i}", $"AT-{i:000}"));
         }

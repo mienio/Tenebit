@@ -50,7 +50,7 @@ public sealed class DefaultDataSeeder
         {
             var team = new Team(organizationId, "Engineering", null, "ENG");
             var person = new Person(organizationId, "Anna", "Nowak", "anna.nowak@example.com");
-            person.Update("Anna", "Nowak", "anna.nowak@example.com", "+48 500 100 200", "EMP-001", PersonRelationType.Employee, "Programistka", team.Id, null, "Warszawa", "ENG");
+            person.Update("Anna", "Nowak", "anna.nowak@example.com", "+48 500 100 200", "EMP-001", "Pracownik", "Programistka", team.Id, null, "Warszawa", "ENG");
             var category = laptopCategory ?? await _db.AssetCategories.FirstAsync(x => x.OrganizationId == organizationId && x.Name == "Laptopy", cancellationToken);
             var asset = new Asset(organizationId, category.Id, "Dell Latitude 7440", "TB-LAP-0001");
             asset.UpdateCore("Dell Latitude 7440", "TB-LAP-0001", "DL7440-DEMO", category.Id, "Warszawa / Magazyn", "Dell", "Latitude 7440", 6200m, "PLN", DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-6)), DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(30)), team.Id);

@@ -23,6 +23,24 @@ public sealed class PersonRepository : IPersonRepository
         return await query.OrderBy(x => x.LastName).ThenBy(x => x.FirstName).ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = _db.People.AsNoTracking().Where(x => x.OrganizationId == organizationId);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(x => x.FirstName.ToLower().Contains(term) || x.LastName.ToLower().Contains(term) || x.Email.ToLower().Contains(term));
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(x => x.LastName).ThenBy(x => x.FirstName)
+            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 100))
+            .Take(Math.Clamp(pageSize, 1, 100))
+            .ToListAsync(cancellationToken);
+        return (items, total);
+    }
+
     public Task<Person?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.People.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

@@ -11,6 +11,7 @@ using Tenebit.Application.Audit;
 using Tenebit.Application.Dashboard;
 using Tenebit.Application.Identity;
 using Tenebit.Application.JobProfiles;
+using Tenebit.Application.Licenses;
 using Tenebit.Application.Onboarding;
 using Tenebit.Application.Organizations;
 using Tenebit.Application.People;
@@ -69,6 +70,7 @@ public static class TenebitEndpoints
         MapPublicAssets(api);
         MapActivityLog(api);
         MapSubscription(api);
+        MapLicenses(api);
 
         return api;
     }
@@ -241,7 +243,7 @@ public static class TenebitEndpoints
                 }
 
                 var result = await service.EnableTwoFactorAsync(userId, request.Code, cancellationToken);
-                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało włączone." });
+                return result.ToHttpResult();
             })
             .RequireRateLimiting("auth")
             .WithTags("Auth")
@@ -256,6 +258,34 @@ public static class TenebitEndpoints
 
                 var result = await service.DisableTwoFactorAsync(userId, request.Code, cancellationToken);
                 return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone." });
+            })
+            .RequireRateLimiting("auth")
+            .WithTags("Auth")
+            .WithOpenApi();
+
+        api.MapPost("/auth/2fa/recovery-codes/regenerate", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
+            {
+                if (!Guid.TryParse(currentUser.Subject, out var userId))
+                {
+                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                }
+
+                var result = await service.RegenerateRecoveryCodesAsync(userId, request.Code, cancellationToken);
+                return result.ToHttpResult();
+            })
+            .RequireRateLimiting("auth")
+            .WithTags("Auth")
+            .WithOpenApi();
+
+        api.MapGet("/auth/2fa/recovery-codes/status", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
+            {
+                if (!Guid.TryParse(currentUser.Subject, out var userId))
+                {
+                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                }
+
+                var result = await service.GetRecoveryCodesRemainingAsync(userId, cancellationToken);
+                return result.ToHttpResult();
             })
             .RequireRateLimiting("auth")
             .WithTags("Auth")
@@ -276,12 +306,27 @@ public static class TenebitEndpoints
                 Results.Ok(await service.GetSummaryAsync(cancellationToken)))
             .WithTags("Dashboard")
             .WithOpenApi();
+
+        api.MapGet("/dashboard/layout", async (DashboardService service, CancellationToken cancellationToken) =>
+                Results.Ok(await service.GetLayoutAsync(cancellationToken)))
+            .WithTags("Dashboard")
+            .WithOpenApi();
+
+        api.MapPut("/dashboard/layout", async (SaveDashboardLayoutRequest request, DashboardService service, CancellationToken cancellationToken) =>
+                Results.Ok(await service.SaveLayoutAsync(request, cancellationToken)))
+            .WithTags("Dashboard")
+            .WithOpenApi();
+
+        api.MapGet("/dashboard/comparison", async (int? daysAgo, DashboardService service, CancellationToken cancellationToken) =>
+                (await service.GetComparisonAsync(daysAgo ?? 7, cancellationToken)).ToHttpResult())
+            .WithTags("Dashboard")
+            .WithOpenApi();
     }
 
     private static void MapActivityLog(RouteGroupBuilder api)
     {
-        api.MapGet("/activity-log", async (int? page, int? pageSize, string? entityType, Guid? entityId, string? search, ActivityLogService service, CancellationToken cancellationToken) =>
-                (await service.ListAsync(page ?? 1, pageSize ?? 25, entityType, entityId, search, cancellationToken)).ToHttpResult())
+        api.MapGet("/activity-log", async (int? page, int? pageSize, string? entityType, Guid? entityId, string? search, DateOnly? dateFrom, DateOnly? dateTo, string? actor, string? action, ActivityLogService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(page ?? 1, pageSize ?? 25, entityType, entityId, search, dateFrom, dateTo, actor, action, cancellationToken)).ToHttpResult())
             .WithTags("Audit")
             .WithOpenApi();
     }
@@ -339,8 +384,10 @@ public static class TenebitEndpoints
             .WithTags("Asset categories")
             .WithOpenApi();
 
-        api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
-                Results.Ok(await service.ListAsync(search, status, location, cancellationToken)))
+        api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, string? owner, string? warranty, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
+                page.HasValue
+                    ? (await service.ListPagedAsync(search, status, location, teamId, owner == "none", warranty == "expiring", sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
+                    : (await service.ListAsync(search, status, location, cancellationToken)).ToHttpResult())
             .WithTags("Assets")
             .WithOpenApi();
 
@@ -462,6 +509,49 @@ public static class TenebitEndpoints
         api.MapGet("/settings/roles", ListRoles)
             .WithTags("Users")
             .WithOpenApi();
+
+        api.MapGet("/role-permissions", async (RolePermissionService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Users")
+            .WithOpenApi();
+
+        api.MapPut("/role-permissions", async (SetRolePermissionRequest request, RolePermissionService service, CancellationToken cancellationToken) =>
+                (await service.SetAsync(request, cancellationToken)).ToNoContentResult())
+            .WithTags("Users")
+            .WithOpenApi();
+    }
+
+    private static void MapLicenses(RouteGroupBuilder api)
+    {
+        api.MapGet("/licenses", async (LicenseService service, CancellationToken cancellationToken) =>
+                (await service.ListAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Licenses")
+            .WithOpenApi();
+
+        api.MapPost("/licenses", async (CreateLicenseRequest request, LicenseService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/licenses/{response.Id}"))
+            .WithTags("Licenses")
+            .WithOpenApi();
+
+        api.MapPut("/licenses/{id:guid}", async (Guid id, UpdateLicenseRequest request, LicenseService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Licenses")
+            .WithOpenApi();
+
+        api.MapDelete("/licenses/{id:guid}", async (Guid id, LicenseService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
+            .WithTags("Licenses")
+            .WithOpenApi();
+
+        api.MapPost("/licenses/{id:guid}/seats", async (Guid id, AssignLicenseSeatRequest request, LicenseService service, CancellationToken cancellationToken) =>
+                (await service.AssignSeatAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Licenses")
+            .WithOpenApi();
+
+        api.MapDelete("/licenses/{id:guid}/seats/{personId:guid}", async (Guid id, Guid personId, LicenseService service, CancellationToken cancellationToken) =>
+                (await service.UnassignSeatAsync(id, personId, cancellationToken)).ToHttpResult())
+            .WithTags("Licenses")
+            .WithOpenApi();
     }
 
     private static void MapPeople(RouteGroupBuilder api)
@@ -476,8 +566,40 @@ public static class TenebitEndpoints
             .WithTags("People")
             .WithOpenApi();
 
-        api.MapGet("/people", async (PeopleService service, string? search, CancellationToken cancellationToken) =>
-                Results.Ok(await service.ListAsync(search, cancellationToken)))
+        api.MapPut("/teams/{id:guid}", async (Guid id, UpdateTeamRequest request, TeamService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("People")
+            .WithOpenApi();
+
+        api.MapDelete("/teams/{id:guid}", async (Guid id, TeamService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
+            .WithTags("People")
+            .WithOpenApi();
+
+        api.MapGet("/person-relation-types", async (PersonRelationTypeService service, CancellationToken cancellationToken) =>
+                Results.Ok(await service.ListAsync(cancellationToken)))
+            .WithTags("People")
+            .WithOpenApi();
+
+        api.MapPost("/person-relation-types", async (CreatePersonRelationTypeRequest request, PersonRelationTypeService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/person-relation-types/{response.Id}"))
+            .WithTags("People")
+            .WithOpenApi();
+
+        api.MapPut("/person-relation-types/{id:guid}", async (Guid id, UpdatePersonRelationTypeRequest request, PersonRelationTypeService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("People")
+            .WithOpenApi();
+
+        api.MapDelete("/person-relation-types/{id:guid}", async (Guid id, PersonRelationTypeService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
+            .WithTags("People")
+            .WithOpenApi();
+
+        api.MapGet("/people", async (PeopleService service, string? search, int? page, int? pageSize, CancellationToken cancellationToken) =>
+                page.HasValue
+                    ? (await service.ListPagedAsync(search, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
+                    : (await service.ListAsync(search, cancellationToken)).ToHttpResult())
             .WithTags("People")
             .WithOpenApi();
 
@@ -509,8 +631,10 @@ public static class TenebitEndpoints
 
     private static void MapProcedures(RouteGroupBuilder api)
     {
-        api.MapGet("/procedures", async (ProcedureService service, string? search, CancellationToken cancellationToken) =>
-                Results.Ok(await service.ListAsync(search, cancellationToken)))
+        api.MapGet("/procedures", async (ProcedureService service, string? search, int? page, int? pageSize, CancellationToken cancellationToken) =>
+                page.HasValue
+                    ? (await service.ListPagedAsync(search, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
+                    : (await service.ListAsync(search, cancellationToken)).ToHttpResult())
             .WithTags("Procedures")
             .WithOpenApi();
 
@@ -592,8 +716,10 @@ public static class TenebitEndpoints
 
     private static void MapAssignments(RouteGroupBuilder api)
     {
-        api.MapGet("/assignments", async (AssignmentService service, CancellationToken cancellationToken) =>
-                Results.Ok(await service.ListAsync(cancellationToken)))
+        api.MapGet("/assignments", async (AssignmentService service, string? search, Tenebit.Domain.Assignments.AssignmentStatus? status, int? page, int? pageSize, CancellationToken cancellationToken) =>
+                page.HasValue
+                    ? (await service.ListPagedAsync(search, status, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
+                    : (await service.ListAsync(cancellationToken)).ToHttpResult())
             .WithTags("Assignments")
             .WithOpenApi();
 
@@ -650,6 +776,22 @@ public static class TenebitEndpoints
             return result.IsFailure || result.Value is null
                 ? result.ToHttpResult()
                 : Results.File(result.Value, "application/pdf", $"protokol-{assignmentId}.pdf");
+        })
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public assignments")
+            .WithOpenApi();
+
+        api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}/procedures/{procedureId:guid}/documents/{documentId:guid}", async (Guid organizationId, Guid assignmentId, Guid procedureId, Guid documentId, AssignmentService service, CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetPublicProcedureDocumentAsync(organizationId, assignmentId, procedureId, documentId, cancellationToken);
+            if (result.IsFailure || result.Value is null)
+            {
+                return result.ToHttpResult();
+            }
+
+            var document = result.Value;
+            return Results.File(document.Content, document.ContentType, document.FileName);
         })
             .AllowAnonymous()
             .RequireRateLimiting("public")

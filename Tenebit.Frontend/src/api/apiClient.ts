@@ -26,7 +26,7 @@ export function setLanguageProvider(provider: LanguageProvider | null) {
   languageProvider = provider;
 }
 
-export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000').replace(/\/$/, '');
+export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 let refreshPromise: Promise<string | null> | null = null;
 
@@ -81,6 +81,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     const newToken = await refreshAccessToken();
     if (newToken) {
       response = await performFetch(path, init, newToken);
+    } else if (token) {
+      window.dispatchEvent(new Event('tenebit:session-expired'));
     }
   }
 

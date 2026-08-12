@@ -1,6 +1,6 @@
 import { ArrowLeft, LogIn, ShieldCheck } from 'lucide-react';
 import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
@@ -12,7 +12,10 @@ import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useI18n();
+  const fromState = (location.state as { from?: unknown } | null)?.from;
+  const returnTo = typeof fromState === 'string' && fromState.startsWith('/') ? fromState : '/dashboard';
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
@@ -28,9 +31,9 @@ export function LoginPage() {
         setChallengeToken(outcome.challengeToken);
         return;
       }
-      navigate('/dashboard', { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się zalogować.');
+      setError(err instanceof Error ? err.message : t('auth.loginFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -44,9 +47,9 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await auth.completeTwoFactorLogin(challengeToken, String(form.get('code') ?? ''), form.get('rememberDevice') === 'on');
-      navigate('/dashboard', { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nieprawidłowy kod.');
+      setError(err instanceof Error ? err.message : t('twoFactor.invalidCode'));
     } finally {
       setSubmitting(false);
     }
@@ -55,7 +58,10 @@ export function LoginPage() {
   if (challengeToken) {
     return (
       <main className="authShell">
-        <section className="authCard">
+        {/* Distinct key forces React to remount this subtree instead of patching the login form's
+            DOM in place — otherwise the uncontrolled "code" input reuses the "email" input's node
+            and inherits its stale value, since both branches have the same tag/position shape. */}
+        <section className="authCard" key="two-factor-challenge">
           <div className="authTop">
             <button type="button" className="authIcon" aria-label={t('common.back')} title={t('common.back')} onClick={() => { setChallengeToken(null); setError(null); }}><ArrowLeft size={24} /></button>
             <LanguageSwitcher />
@@ -63,7 +69,7 @@ export function LoginPage() {
           <h1>{t('auth.twoFactorTitle')}</h1>
           <p>{t('auth.twoFactorPrompt')}</p>
           <form className="formGrid" onSubmit={handleTwoFactorSubmit}>
-            <Field label={t('auth.twoFactorCodeLabel')}><TextInput name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoFocus /></Field>
+            <Field label={t('auth.twoFactorCodeLabel')} info={t('auth.twoFactorCodeHint')}><TextInput name="code" maxLength={11} required autoFocus autoComplete="one-time-code" /></Field>
             <label className="checkField"><input name="rememberDevice" type="checkbox" /> {t('auth.rememberDevice')}</label>
             {error ? <p className="formMessage formMessage--error">{error}</p> : null}
             <Button disabled={submitting} icon={<ShieldCheck size={16} />}>{submitting ? t('auth.loginLoading') : t('auth.twoFactorVerifyButton')}</Button>
@@ -76,13 +82,13 @@ export function LoginPage() {
 
   return (
     <main className="authShell">
-      <section className="authCard">
+      <section className="authCard" key="login-form">
         <div className="authTop">
           <BackButton to="/" />
           <LanguageSwitcher />
         </div>
         <h1>{t('auth.loginTitle')}</h1>
-        <SocialLoginButtons returnUrl="/dashboard" />
+        <SocialLoginButtons returnUrl={returnTo} />
         <form className="formGrid" onSubmit={handleSubmit}>
           <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required autoFocus /></Field>
           <Field label={t('auth.passwordLabel')}><TextInput name="password" type="password" required /></Field>

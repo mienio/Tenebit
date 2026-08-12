@@ -56,14 +56,29 @@ public sealed class ProcedureService
         return Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>.Success(rows);
     }
 
-    public async Task<IReadOnlyList<ProcedureResponse>> ListAsync(string? search, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<ProcedureResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
+        if (access.IsFailure) return Result<IReadOnlyList<ProcedureResponse>>.Failure(access.Error!);
+
         var procedures = await _procedures.ListAsync(_currentUser.OrganizationId, search, cancellationToken);
-        return procedures.Select(Map).ToList();
+        return Result<IReadOnlyList<ProcedureResponse>>.Success(procedures.Select(Map).ToList());
+    }
+
+    public async Task<Result<PagedResult<ProcedureResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
+        if (access.IsFailure) return Result<PagedResult<ProcedureResponse>>.Failure(access.Error!);
+
+        var (items, total) = await _procedures.ListPagedAsync(_currentUser.OrganizationId, search, page, pageSize, cancellationToken);
+        return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(items.Select(Map).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<ProcedureResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
+        if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+
         var procedure = await _procedures.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
         return procedure is null ? Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje.")) : Result<ProcedureResponse>.Success(Map(procedure));
     }

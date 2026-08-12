@@ -2,8 +2,10 @@ using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
+using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.JobProfiles;
+using Tenebit.Domain.Licenses;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
@@ -15,6 +17,7 @@ namespace Tenebit.Application.Abstractions;
 public interface IAssetRepository
 {
     Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken);
     Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken);
@@ -35,6 +38,7 @@ public interface IAssetCategoryRepository
 public interface IPersonRepository
 {
     Task<IReadOnlyList<Person>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken);
     Task<Person?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<Person?> FindByEmailAsync(Guid organizationId, string email, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingPersonId, CancellationToken cancellationToken);
@@ -48,12 +52,25 @@ public interface ITeamRepository
     Task<IReadOnlyList<Team>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<Team?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingTeamId, CancellationToken cancellationToken);
+    Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(Team team);
+    void Remove(Team team);
+}
+
+public interface IPersonRelationTypeRepository
+{
+    Task<IReadOnlyList<PersonRelationType>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<PersonRelationType?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingId, CancellationToken cancellationToken);
+    Task<bool> IsUsedAsync(Guid organizationId, string name, CancellationToken cancellationToken);
+    void Add(PersonRelationType relationType);
+    void Remove(PersonRelationType relationType);
 }
 
 public interface IProcedureRepository
 {
     Task<IReadOnlyList<Procedure>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Procedure> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken);
     Task<IReadOnlyList<Procedure>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<Procedure?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<ProcedureDocument?> GetDocumentAsync(Guid organizationId, Guid procedureId, Guid documentId, CancellationToken cancellationToken);
@@ -65,6 +82,7 @@ public interface IProcedureRepository
 public interface IAssignmentRepository
 {
     Task<IReadOnlyList<Assignment>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken);
     Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(Assignment assignment);
 }
@@ -79,7 +97,7 @@ public interface IOrganizationRepository
 public interface IActivityLogRepository
 {
     Task<IReadOnlyList<ActivityLog>> ListAsync(Guid organizationId, int limit, CancellationToken cancellationToken);
-    Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, DateTimeOffset? from, DateTimeOffset? to, IReadOnlyCollection<string>? actorSubjects, string? action, CancellationToken cancellationToken);
     void Add(ActivityLog log);
 }
 
@@ -127,6 +145,13 @@ public interface IDeviceTrustTokenRepository
     void Add(DeviceTrustToken token);
 }
 
+public interface ITwoFactorRecoveryCodeRepository
+{
+    Task<IReadOnlyList<TwoFactorRecoveryCode>> ListAsync(Guid organizationUserId, CancellationToken cancellationToken);
+    void AddRange(IEnumerable<TwoFactorRecoveryCode> codes);
+    void RemoveAll(IEnumerable<TwoFactorRecoveryCode> codes);
+}
+
 public interface IJobProfileRepository
 {
     Task<IReadOnlyList<JobProfile>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
@@ -153,4 +178,33 @@ public interface ISentAlertRepository
 {
     Task<bool> ExistsAsync(Guid organizationId, string alertKey, Guid entityId, CancellationToken cancellationToken);
     void Add(SentAlert alert);
+}
+
+public interface IDashboardLayoutRepository
+{
+    Task<DashboardLayout?> GetAsync(Guid organizationUserId, CancellationToken cancellationToken);
+    void Add(DashboardLayout layout);
+}
+
+public interface IDashboardSnapshotRepository
+{
+    Task<DashboardSnapshot?> GetForDateAsync(Guid organizationId, DateOnly date, CancellationToken cancellationToken);
+    Task<DashboardSnapshot?> GetClosestOnOrBeforeAsync(Guid organizationId, DateOnly onOrBefore, CancellationToken cancellationToken);
+    void Add(DashboardSnapshot snapshot);
+}
+
+public interface ILicenseRepository
+{
+    Task<IReadOnlyList<License>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    void Add(License license);
+    void Remove(License license);
+}
+
+public interface IRolePermissionRepository
+{
+    Task<IReadOnlyList<RolePermission>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<RolePermission?> FindAsync(Guid organizationId, string roleKey, string permissionKey, CancellationToken cancellationToken);
+    void Add(RolePermission permission);
+    void Remove(RolePermission permission);
 }

@@ -12,7 +12,7 @@ public sealed class Person
         OrganizationId = organizationId;
         CreatedAt = DateTimeOffset.UtcNow;
         IsActive = true;
-        Update(firstName, lastName, email, null, null, PersonRelationType.Employee, null, null, null, null, null);
+        Update(firstName, lastName, email, null, null, "Pracownik", null, null, null, null, null);
     }
 
     public Guid Id { get; private set; }
@@ -22,7 +22,7 @@ public sealed class Person
     public string Email { get; private set; } = string.Empty;
     public string? Phone { get; private set; }
     public string? EmployeeNumber { get; private set; }
-    public PersonRelationType RelationType { get; private set; }
+    public string RelationType { get; private set; } = string.Empty;
     public string? JobTitle { get; private set; }
     public Guid? TeamId { get; private set; }
     public Guid? ManagerId { get; private set; }
@@ -39,7 +39,7 @@ public sealed class Person
         string email,
         string? phone,
         string? employeeNumber,
-        PersonRelationType relationType,
+        string relationType,
         string? jobTitle,
         Guid? teamId,
         Guid? managerId,
@@ -61,7 +61,7 @@ public sealed class Person
         Email = email.Trim().ToLowerInvariant();
         Phone = Normalize(phone);
         EmployeeNumber = Normalize(employeeNumber);
-        RelationType = relationType;
+        RelationType = relationType.Trim();
         JobTitle = Normalize(jobTitle);
         TeamId = teamId;
         ManagerId = managerId;

@@ -33,12 +33,14 @@ public class AuthServiceTests
             organizations,
             users,
             new InMemoryAssetCategoryRepository(),
+            new InMemoryPersonRelationTypeRepository(),
             new InMemoryActivityLogRepository(),
             new InMemoryExternalLoginRepository(users),
             new InMemoryPasswordResetTokenRepository(),
             new InMemoryEmailVerificationTokenRepository(),
             new InMemoryRefreshTokenRepository(),
             new InMemoryDeviceTrustTokenRepository(),
+            new InMemoryTwoFactorRecoveryCodeRepository(),
             new FakeEmailSender(),
             new FakeAppLinkBuilder(),
             new FakeQrCodeGenerator(),
@@ -201,5 +203,68 @@ public class AuthServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.True(result.Value!.RequiresTwoFactor);
+    }
+
+    [Fact]
+    public async Task EnableTwoFactorAsync_ReturnsTenUniqueRecoveryCodes()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+
+        var result = await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(10, result.Value!.RecoveryCodes.Count);
+        Assert.Equal(10, result.Value!.RecoveryCodes.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task CompleteTwoFactorLoginAsync_AcceptsRecoveryCodeAndConsumesItOnUse()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        var enabled = await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        var recoveryCode = enabled.Value!.RecoveryCodes[0];
+
+        var firstUse = await service.CompleteTwoFactorLoginAsync(registered.Value!.Id, recoveryCode, CancellationToken.None);
+        Assert.True(firstUse.IsSuccess);
+
+        var secondUse = await service.CompleteTwoFactorLoginAsync(registered.Value!.Id, recoveryCode, CancellationToken.None);
+        Assert.True(secondUse.IsFailure);
+    }
+
+    [Fact]
+    public async Task RegenerateRecoveryCodesAsync_InvalidatesPreviouslyIssuedCodes()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        var enabled = await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        var oldCode = enabled.Value!.RecoveryCodes[0];
+
+        var regenerated = await service.RegenerateRecoveryCodesAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        Assert.True(regenerated.IsSuccess);
+
+        var loginWithOldCode = await service.CompleteTwoFactorLoginAsync(registered.Value!.Id, oldCode, CancellationToken.None);
+        Assert.True(loginWithOldCode.IsFailure);
+
+        var loginWithNewCode = await service.CompleteTwoFactorLoginAsync(registered.Value!.Id, regenerated.Value!.RecoveryCodes[0], CancellationToken.None);
+        Assert.True(loginWithNewCode.IsSuccess);
+    }
+
+    [Fact]
+    public async Task DisableTwoFactorAsync_RemovesRecoveryCodes()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        await service.DisableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        var remaining = await service.GetRecoveryCodesRemainingAsync(registered.Value!.Id, CancellationToken.None);
+        Assert.Equal(0, remaining.Value);
     }
 }

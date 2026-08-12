@@ -1,14 +1,16 @@
 import { BarChart3, Boxes, Check, ClipboardCheck, Headphones, Laptop, Monitor, PackageCheck, QrCode, Smartphone, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import { useI18n } from '../i18n/I18nProvider';
+import { BrandMark } from '../components/BrandMark';
 import { StatusBadge } from '../components/StatusBadge';
 
 const previewRows = [
-  { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', person: 'Anna Kowalska', value: '9 800 zł' },
-  { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', person: 'Piotr Nowak', value: '4 200 zł' },
-  { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', person: '—', value: '1 650 zł' },
-  { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', person: '—', value: '1 400 zł' }
+  { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', person: 'Anna Kowalska', value: 9800 },
+  { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', person: 'Piotr Nowak', value: 4200 },
+  { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', person: '—', value: 1650 },
+  { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', person: '—', value: 1400 }
 ];
 
 const features = [
@@ -23,13 +25,22 @@ const features = [
 const steps = ['step1', 'step2', 'step3'];
 
 export function LandingPage() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const [scrolled, setScrolled] = useState(false);
+  const formatPreviewValue = (value: number) => language === 'pl' ? `${value.toLocaleString('pl-PL')} zł` : `$${value.toLocaleString('en-US')}`;
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   return (
     <div className="landing">
-      <header className="landing__nav">
+      <header className={`landing__nav${scrolled ? ' landing__nav--scrolled' : ''}`}>
         <div className="landing__brand">
-          <div className="brand__mark"><QrCode size={20} /></div>
+          <div className="brand__mark"><BrandMark /></div>
           <strong>Tenebit</strong>
         </div>
         <nav className="landing__navLinks">
@@ -43,18 +54,29 @@ export function LandingPage() {
         </div>
       </header>
 
-      <section className="landing__hero">
-        <p className="eyebrow">{t('landing.eyebrow')}</p>
-        <h1>{t('landing.headline')}</h1>
-        <p className="landing__lead">{t('landing.lead')}</p>
-        <div className="landing__heroActions">
-          <Link to="/register" className="button button--primary">{t('landing.ctaStart')}</Link>
-          <Link to="/login" className="button button--secondary">{t('landing.ctaLogin')}</Link>
-        </div>
-      </section>
+      <div className="landing__glowWrap">
+        <div className="landing__glow landing__glow--one" aria-hidden="true" />
+        <div className="landing__glow landing__glow--two" aria-hidden="true" />
+
+        <section className="landing__hero">
+          <p className="eyebrow">{t('landing.eyebrow')}</p>
+          <h1>{t('landing.headline')}</h1>
+          <p className="landing__lead">{t('landing.lead')}</p>
+          <div className="landing__heroActions">
+            <Link to="/register" className="button button--primary">{t('landing.ctaStart')}</Link>
+            <Link to="/login" className="button button--secondary">{t('landing.ctaLogin')}</Link>
+          </div>
+          <div className="landing__trustRow">
+            <span><Check size={14} /> {t('landing.trust1')}</span>
+            <span><Check size={14} /> {t('landing.trust2')}</span>
+            <span><Check size={14} /> {t('landing.trust3')}</span>
+          </div>
+        </section>
+      </div>
 
       <section className="landing__preview">
         <div className="landing__previewFrame">
+          <span className="landing__previewBadge">{t('landing.previewBadge')}</span>
           <div className="landing__previewChrome"><span /><span /><span /></div>
           <div className="tableWrap">
             <table className="dense-table">
@@ -69,7 +91,7 @@ export function LandingPage() {
                     <td>{row.tag}</td>
                     <td><StatusBadge status={row.status} /></td>
                     <td>{row.person}</td>
-                    <td style={{ textAlign: 'right' }}>{row.value}</td>
+                    <td style={{ textAlign: 'right' }}>{formatPreviewValue(row.value)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -83,7 +105,7 @@ export function LandingPage() {
         <div className="landing__featureGrid">
           {features.map(feature => (
             <div className="landing__featureCard" key={feature.key}>
-              <feature.icon size={22} />
+              <div className="landing__featureIcon"><feature.icon size={22} /></div>
               <h3>{t(`landing.feature.${feature.key}.title`)}</h3>
               <p>{t(`landing.feature.${feature.key}.text`)}</p>
             </div>

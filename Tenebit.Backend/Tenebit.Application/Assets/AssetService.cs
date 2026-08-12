@@ -46,18 +46,46 @@ public sealed class AssetService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<AssetResponse>> ListAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<AssetResponse>>> ListAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<IReadOnlyList<AssetResponse>>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
         var assets = await _assets.ListAsync(organizationId, search, status, location, cancellationToken);
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
-        return assets.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList();
+        return Result<IReadOnlyList<AssetResponse>>.Success(assets.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList());
+    }
+
+    public async Task<Result<PagedResult<AssetResponse>>> ListPagedAsync(string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<PagedResult<AssetResponse>>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        DateOnly? warrantyFrom = null;
+        DateOnly? warrantyTo = null;
+        if (warrantyExpiring)
+        {
+            var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+            warrantyFrom = today;
+            warrantyTo = today.AddDays(90);
+        }
+
+        var (items, total) = await _assets.ListPagedAsync(organizationId, search, status, location, teamId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, cancellationToken);
+        var categories = await _categories.ListAsync(organizationId, cancellationToken);
+        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(items.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<AssetResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<AssetResponse>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
         var asset = await _assets.GetAsync(organizationId, id, cancellationToken);
         if (asset is null)

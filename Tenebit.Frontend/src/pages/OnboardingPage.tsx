@@ -19,10 +19,17 @@ export function OnboardingPage() {
   const profiles = useAsyncData(api.jobProfiles, []);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
+  const [issueConditions, setIssueConditions] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [assetFilter, setAssetFilter] = useState('');
 
   const publishedProcedures = useMemo(() => procedures.data?.filter(item => item.status === 'Published') ?? [], [procedures.data]);
+  const visibleAssets = useMemo(() => {
+    const query = assetFilter.trim().toLowerCase();
+    const rows = assets.data ?? [];
+    return query ? rows.filter(asset => `${asset.name} ${asset.assetTag}`.toLowerCase().includes(query)) : rows;
+  }, [assets.data, assetFilter]);
 
   useEffect(() => {
     if (!message) return;
@@ -39,7 +46,9 @@ export function OnboardingPage() {
   function applyProfile(profileId: string) {
     const profile = profiles.data?.find(item => item.id === profileId);
     if (!profile) return;
-    const recommendedAssets = assets.data?.filter(asset => profile.assetCategoryIds.includes(asset.categoryId)).map(asset => asset.id) ?? [];
+    const recommendedAssets = profile.assetCategoryIds
+      .map(categoryId => assets.data?.find(asset => asset.categoryId === categoryId)?.id)
+      .filter((id): id is string => Boolean(id));
     const recommendedProcedures = publishedProcedures.filter(procedure => profile.procedureIds.includes(procedure.id)).map(procedure => procedure.id);
     setSelectedAssetIds(recommendedAssets);
     setSelectedProcedureIds(recommendedProcedures);
@@ -58,7 +67,7 @@ export function OnboardingPage() {
     try {
       const response = await api.createAssignment({
         personId,
-        assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: 'Sprawny przy wydaniu' })),
+        assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: t(`issueCondition.${issueConditions[assetId] ?? 'ok'}`) })),
         procedureIds: selectedProcedureIds,
         dueDate: toNullable(String(form.get('dueDate') ?? '')),
         notes: toNullable(String(form.get('notes') ?? ''))
@@ -66,6 +75,7 @@ export function OnboardingPage() {
       formEl.reset();
       setSelectedAssetIds([]);
       setSelectedProcedureIds([]);
+      setIssueConditions({});
       setMessage({ type: 'success', text: t('onboarding.created', { protocol: response.protocolNumber }) });
       await Promise.all([assets.reload(), people.reload()]);
     } catch (error) {
@@ -117,7 +127,19 @@ export function OnboardingPage() {
             <div className="packageStep__header"><span>3</span><div><strong>{t('onboarding.step3Title')}</strong><small>{t('onboarding.step3Hint')}</small></div></div>
             {!assets.data?.length ? <EmptyState title={t('onboarding.noAssetsTitle')} description={t('onboarding.noAssetsDesc')} /> : (
               <div className="choiceList">
-                {assets.data.map(asset => <label key={asset.id} className="choiceRow"><input type="checkbox" checked={selectedAssetIds.includes(asset.id)} onChange={() => setSelectedAssetIds(current => toggle(current, asset.id))} /> <span><strong>{asset.name}</strong><small>{asset.assetTag} · {asset.location ?? t('common.noLocation')}</small></span></label>)}
+                {assets.data.length > 8 && <TextInput value={assetFilter} onChange={event => setAssetFilter(event.target.value)} placeholder={t('common.filterList')} />}
+                {visibleAssets.map(asset => (
+                  <div key={asset.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <label className="choiceRow" style={{ flex: '1 1 auto' }}><input type="checkbox" checked={selectedAssetIds.includes(asset.id)} onChange={() => setSelectedAssetIds(current => toggle(current, asset.id))} /> <span><strong>{asset.name}</strong><small>{asset.assetTag} · {asset.location ?? t('common.noLocation')}</small></span></label>
+                    {selectedAssetIds.includes(asset.id) && (
+                      <SelectInput aria-label={t('issueCondition.label')} value={issueConditions[asset.id] ?? 'ok'} onChange={event => setIssueConditions(current => ({ ...current, [asset.id]: event.target.value }))} style={{ maxWidth: '220px' }}>
+                        <option value="ok">{t('issueCondition.ok')}</option>
+                        <option value="used">{t('issueCondition.used')}</option>
+                        <option value="damaged">{t('issueCondition.damaged')}</option>
+                      </SelectInput>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </section>
@@ -133,7 +155,7 @@ export function OnboardingPage() {
 
           <section className="packageStep packageStep--compact">
             <div className="formGrid">
-              <Field label={t('onboarding.dueDateLabel')}><TextInput name="dueDate" type="date" /></Field>
+              <Field label={t('onboarding.dueDateLabel')}><TextInput name="dueDate" type="date" min={new Date().toISOString().slice(0, 10)} /></Field>
               <Field label={t('onboarding.notesLabel')}><TextArea name="notes" placeholder={t('onboarding.notesPlaceholder')} /></Field>
             </div>
           </section>

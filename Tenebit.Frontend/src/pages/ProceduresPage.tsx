@@ -3,10 +3,11 @@ import { Archive, Download, FileCheck2, Pencil, Plus, Search, Send, Trash2 } fro
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, TextArea, TextInput } from '../components/FormFields';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
-import { Pagination, paginate } from '../components/Pagination';
+import { Pagination } from '../components/Pagination';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAsyncData } from '../hooks/useAsyncData';
@@ -27,23 +28,31 @@ type ProcedureDialog =
   | { mode: 'edit'; procedure: Procedure }
   | null;
 
+type ConfirmAction =
+  | { kind: 'publish'; procedure: Procedure }
+  | { kind: 'archive'; procedure: Procedure }
+  | { kind: 'removeDoc'; documentId: string; fileName: string }
+  | null;
+
 const pageSize = 9;
 
 export function ProceduresPage() {
-  const { t } = useI18n();
+  const { t, tPlural } = useI18n();
   const { celebrate } = useCelebration();
-  const procedures = useAsyncData(() => api.procedures(), []);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const debouncedSearch = useDebouncedValue(search.trim().toLowerCase(), 250);
+  const proceduresLoader = useMemo(() => () => api.proceduresPaged({ search: debouncedSearch, page, pageSize }), [debouncedSearch, page]);
+  const procedures = useAsyncData(proceduresLoader, [proceduresLoader]);
   const [dialog, setDialog] = useState<ProcedureDialog>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const debouncedSearch = useDebouncedValue(search.trim().toLowerCase(), 250);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
   const editedProcedure = dialog?.mode === 'edit'
-    ? procedures.data?.find(item => item.id === dialog.procedure.id) ?? dialog.procedure
+    ? procedures.data?.items.find(item => item.id === dialog.procedure.id) ?? dialog.procedure
     : null;
 
   const showAcceptances = Boolean(editedProcedure && editedProcedure.status === 'Published' && editedProcedure.requiresAcceptance);
@@ -58,11 +67,8 @@ export function ProceduresPage() {
     const timeout = window.setTimeout(() => setMessage(null), message.type === 'success' ? 3500 : 6500);
     return () => window.clearTimeout(timeout);
   }, [message]);
-  const filteredProcedures = useMemo(() => (procedures.data ?? []).filter(item => {
-    const haystack = `${item.title} ${item.version} ${item.owner} ${item.appliesTo ?? ''}`.toLowerCase();
-    return !debouncedSearch || haystack.includes(debouncedSearch);
-  }), [debouncedSearch, procedures.data]);
-  const pagedProcedures = useMemo(() => paginate(filteredProcedures, page, pageSize), [filteredProcedures, page]);
+  const rows = procedures.data?.items ?? [];
+  const totalProcedures = procedures.data?.total ?? 0;
 
   async function saveProcedure(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,13 +103,18 @@ export function ProceduresPage() {
     }
   }
 
-  async function publish(item: Procedure) {
+  function requestPublish(item: Procedure) {
     if (item.status !== 'Draft') return;
     if (!item.documents.length) {
       setDialog({ mode: 'edit', procedure: item });
       setMessage({ type: 'error', text: t('procedures.needsFileToPublish') });
       return;
     }
+    setConfirmAction({ kind: 'publish', procedure: item });
+  }
+
+  async function publish(item: Procedure) {
+    if (item.status !== 'Draft') return;
     setMessage(null);
     try {
       await api.publishProcedure(item.id);
@@ -127,7 +138,7 @@ export function ProceduresPage() {
   }
 
   async function uploadFiles(files: File[]) {
-    if (!files.length || !editedProcedure) return;
+    if (!files.length || !editedProcedure || editedProcedure.status !== 'Draft') return;
     setUploading(true);
     setMessage(null);
     try {
@@ -208,28 +219,28 @@ export function ProceduresPage() {
       <Card className="toolbarCard">
         <div className="filters filters--single">
           <Field label={t('procedures.searchLabel')}><TextInput value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder={t('procedures.searchPlaceholder')} /></Field>
-          <span className="toolbarHint"><Search size={16} /> {filteredProcedures.length} {t('procedures.results')}</span>
+          <span className="toolbarHint"><Search size={16} /> {totalProcedures} {tPlural('count.results', totalProcedures)}</span>
         </div>
       </Card>
 
       <Card>
         <div className="sectionTitle"><div><h2>{t('procedures.listTitle')}</h2></div></div>
-        {!filteredProcedures.length ? <EmptyState title={t('procedures.emptyTitle')} description={t('procedures.emptyDesc')} action={<Button onClick={() => setDialog({ mode: 'create' })} icon={<Plus size={16} />}>{t('procedures.newSet')}</Button>} /> : (
+        {!rows.length ? <EmptyState title={t('procedures.emptyTitle')} description={t('procedures.emptyDesc')} action={search.trim() ? <Button variant="secondary" onClick={() => setSearch('')}>{t('common.clearFilters')}</Button> : <Button onClick={() => setDialog({ mode: 'create' })} icon={<Plus size={16} />}>{t('procedures.newSet')}</Button>} /> : (
           <>
             <div className="cardsList cardsList--grid">
-              {pagedProcedures.items.map(item => <article className="procedureCard" key={item.id}>
+              {rows.map(item => <article className="procedureCard" key={item.id}>
                 <div><strong>{item.title}</strong><StatusBadge status={item.status} /></div>
                 <span>{t('procedures.version', { version: item.version })} · {item.owner}</span>
                 <small>{item.appliesTo ?? t('procedures.noScope')} · {t('procedures.reviewDate', { date: formatDate(item.reviewDate) })}</small>
                 <small>{item.documents.length ? (item.documents.length === 1 ? t('procedures.fileCountOne') : t('procedures.fileCountMany', { count: item.documents.length })) : t('procedures.noFiles')}</small>
                 <div className="rowActions">
                   <Button variant="ghost" onClick={() => setDialog({ mode: 'edit', procedure: item })} icon={<Pencil size={16} />}>{t('procedures.openSet')}</Button>
-                  {item.status === 'Draft' ? <Button variant="secondary" onClick={() => publish(item)} icon={<Send size={16} />}>{t('procedures.publish')}</Button> : null}
-                  {item.status === 'Published' ? <Button variant="secondary" onClick={() => archive(item)} icon={<Archive size={16} />}>{t('procedures.archive')}</Button> : null}
+                  {item.status === 'Draft' ? <Button variant="secondary" onClick={() => requestPublish(item)} icon={<Send size={16} />}>{t('procedures.publish')}</Button> : null}
+                  {item.status === 'Published' ? <Button variant="secondary" onClick={() => setConfirmAction({ kind: 'archive', procedure: item })} icon={<Archive size={16} />}>{t('procedures.archive')}</Button> : null}
                 </div>
               </article>)}
             </div>
-            <Pagination page={pagedProcedures.page} total={pagedProcedures.total} pageSize={pageSize} onPageChange={setPage} />
+            <Pagination page={page} total={totalProcedures} pageSize={pageSize} onPageChange={setPage} />
           </>
         )}
       </Card>
@@ -259,24 +270,26 @@ export function ProceduresPage() {
                     <div><strong>{doc.fileName}</strong><small>{formatBytes(doc.sizeBytes)} · {formatDate(doc.uploadedAt)}</small></div>
                     <div className="rowActions">
                       <button className="iconButton" aria-label={t('procedures.downloadAria', { file: doc.fileName })} onClick={() => download(editedProcedure.id, doc.id, doc.fileName)}><Download size={16} /></button>
-                      <button className="iconButton" aria-label={t('procedures.deleteAria', { file: doc.fileName })} onClick={() => removeDocument(doc.id)}><Trash2 size={16} /></button>
+                      {editedProcedure.status === 'Draft' ? <button className="iconButton" aria-label={t('procedures.deleteAria', { file: doc.fileName })} onClick={() => setConfirmAction({ kind: 'removeDoc', documentId: doc.id, fileName: doc.fileName })}><Trash2 size={16} /></button> : null}
                     </div>
                   </div>
                 ))}
               </div>
             ) : <p className="emptyInline">{t('procedures.noFilesInSet')}</p>}
-            <div
-              className={`fileDropzone${dragActive ? ' fileDropzone--active' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <span className="fileDropzone__hint">{dragActive ? t('procedures.dropHintActive') : t('procedures.dropHint')}</span>
-              <label className="button button--secondary">
-                {uploading ? t('procedures.uploading') : t('procedures.addFiles')}
-                <input type="file" multiple style={{ display: 'none' }} disabled={uploading} onChange={uploadDocument} accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" />
-              </label>
-            </div>
+            {editedProcedure.status === 'Draft' ? (
+              <div
+                className={`fileDropzone${dragActive ? ' fileDropzone--active' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <span className="fileDropzone__hint">{dragActive ? t('procedures.dropHintActive') : t('procedures.dropHint')}</span>
+                <label className="button button--secondary">
+                  {uploading ? t('procedures.uploading') : t('procedures.addFiles')}
+                  <input type="file" multiple style={{ display: 'none' }} disabled={uploading} onChange={uploadDocument} accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" />
+                </label>
+              </div>
+            ) : <p className="muted">{t('procedures.filesLocked')}</p>}
 
             {showAcceptances && (
               <>
@@ -298,6 +311,28 @@ export function ProceduresPage() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={confirmAction?.kind === 'publish' ? t('procedures.publishConfirmTitle') : confirmAction?.kind === 'archive' ? t('procedures.archiveConfirmTitle') : t('procedures.removeFileConfirmTitle')}
+        description={confirmAction?.kind === 'publish'
+          ? t('procedures.publishConfirmDesc', { title: confirmAction.procedure.title, version: confirmAction.procedure.version })
+          : confirmAction?.kind === 'archive'
+            ? t('procedures.archiveConfirmDesc', { title: confirmAction.procedure.title, version: confirmAction.procedure.version })
+            : confirmAction?.kind === 'removeDoc'
+              ? t('procedures.removeFileConfirmDesc', { file: confirmAction.fileName })
+              : ''}
+        confirmLabel={confirmAction?.kind === 'publish' ? t('procedures.publish') : confirmAction?.kind === 'archive' ? t('procedures.archive') : t('common.delete')}
+        onConfirm={() => {
+          const action = confirmAction;
+          setConfirmAction(null);
+          if (!action) return;
+          if (action.kind === 'publish') void publish(action.procedure);
+          else if (action.kind === 'archive') void archive(action.procedure);
+          else void removeDocument(action.documentId);
+        }}
+        onClose={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

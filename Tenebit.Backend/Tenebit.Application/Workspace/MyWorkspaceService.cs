@@ -54,7 +54,11 @@ public sealed class MyWorkspaceService
         var allAssets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var myAssets = allAssets
             .Where(x => x.AssignedPersonId == person.Id)
-            .Select(x => new MyAssetResponse(x.Id, x.Name, x.AssetTag, categories.FirstOrDefault(c => c.Id == x.CategoryId)?.Name, x.Location, x.WarrantyUntil))
+            .Select(x =>
+            {
+                var category = categories.FirstOrDefault(c => c.Id == x.CategoryId);
+                return new MyAssetResponse(x.Id, x.Name, x.AssetTag, category?.Name, category?.Icon, x.Location, x.WarrantyUntil);
+            })
             .ToList();
 
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);

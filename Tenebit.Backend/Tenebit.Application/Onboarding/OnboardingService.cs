@@ -106,7 +106,7 @@ public sealed class OnboardingService
             }
 
             var person = new Person(organizationId, request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail);
-            person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, PersonRelationType.Employee, request.JobTitle, team.Id, null, request.Location, null);
+            person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, "Pracownik", request.JobTitle, team.Id, null, request.Location, null);
             _people.Add(person);
 
             var asset = new Asset(organizationId, category.Id, request.AssetName, request.AssetTag);

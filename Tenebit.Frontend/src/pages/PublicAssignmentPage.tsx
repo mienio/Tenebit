@@ -13,6 +13,7 @@ export function PublicAssignmentPage() {
   const loader = useMemo(() => () => api.publicAssignment(organizationId!, assignmentId!), [organizationId, assignmentId]);
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [accepting, setAccepting] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   async function accept() {
@@ -29,18 +30,32 @@ export function PublicAssignmentPage() {
     }
   }
 
+  function saveBlob(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function download() {
     if (!organizationId || !assignmentId) return;
     try {
       const blob = await api.downloadPublicAssignmentProtocol(organizationId, assignmentId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${data?.protocolNumber ?? 'protokol'}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, `${data?.protocolNumber ?? 'protokol'}.pdf`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
+    }
+  }
+
+  async function downloadProcedureDocument(procedureId: string, documentId: string, fileName: string) {
+    if (!organizationId || !assignmentId) return;
+    try {
+      const blob = await api.downloadPublicProcedureDocument(organizationId, assignmentId, procedureId, documentId);
+      saveBlob(blob, fileName);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
     }
@@ -72,12 +87,26 @@ export function PublicAssignmentPage() {
           ))}
         </div>
 
-        {data.procedureTitlesRequiringAcceptance.length > 0 && (
+        {data.proceduresRequiringAcceptance.length > 0 && (
           <>
             <div className="formSectionTitle">{t('publicAssignment.proceduresTitle')}</div>
-            <ul>
-              {data.procedureTitlesRequiringAcceptance.map(title => <li key={title}>{title}</li>)}
-            </ul>
+            <div className="listRows">
+              {data.proceduresRequiringAcceptance.map(procedure => (
+                <div className="listRow" key={procedure.id}>
+                  <div>
+                    <strong>{procedure.title}</strong>
+                    <small>{t('publicAssignment.procedureVersion', { version: procedure.version })}</small>
+                  </div>
+                  <div className="rowActions" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                    {procedure.documents.length ? procedure.documents.map(doc => (
+                      <button key={doc.id} type="button" className="inlineAction" onClick={() => downloadProcedureDocument(procedure.id, doc.id, doc.fileName)}>
+                        <Download size={13} /> {doc.fileName}
+                      </button>
+                    )) : <small className="muted">{t('publicAssignment.noDocuments')}</small>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         )}
 
@@ -91,12 +120,18 @@ export function PublicAssignmentPage() {
             <Button variant="secondary" onClick={download} icon={<Download size={16} />}>{t('publicAssignment.downloadProtocol')}</Button>
           </div>
         ) : canAccept ? (
-          <div className="formActions formActions--split">
-            <span />
-            <Button disabled={accepting} onClick={accept} icon={<CheckCircle2 size={16} />}>
-              {accepting ? t('publicAssignment.accepting') : t('publicAssignment.acceptButton')}
-            </Button>
-          </div>
+          <>
+            <label className="checkField">
+              <input type="checkbox" checked={consentChecked} onChange={event => setConsentChecked(event.target.checked)} />
+              {' '}{t('publicAssignment.consentLabel')}
+            </label>
+            <div className="formActions formActions--split">
+              <span />
+              <Button disabled={accepting || !consentChecked} onClick={accept} icon={<CheckCircle2 size={16} />}>
+                {accepting ? t('publicAssignment.accepting') : t('publicAssignment.acceptButton')}
+              </Button>
+            </div>
+          </>
         ) : (
           <p className="muted">{t('publicAssignment.notAcceptable')}</p>
         )}

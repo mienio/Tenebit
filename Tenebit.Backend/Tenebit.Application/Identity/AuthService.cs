@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Common;
+using Tenebit.Application.People;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Identity;
@@ -14,12 +15,14 @@ public sealed class AuthService
     private readonly IOrganizationRepository _organizations;
     private readonly IOrganizationUserRepository _users;
     private readonly IAssetCategoryRepository _categories;
+    private readonly IPersonRelationTypeRepository _relationTypes;
     private readonly IActivityLogRepository _activity;
     private readonly IExternalLoginRepository _externalLogins;
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
     private readonly IEmailVerificationTokenRepository _emailVerificationTokens;
     private readonly IRefreshTokenRepository _refreshTokens;
     private readonly IDeviceTrustTokenRepository _deviceTrustTokens;
+    private readonly ITwoFactorRecoveryCodeRepository _recoveryCodes;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly IQrCodeGenerator _qrCodeGenerator;
@@ -31,12 +34,14 @@ public sealed class AuthService
         IOrganizationRepository organizations,
         IOrganizationUserRepository users,
         IAssetCategoryRepository categories,
+        IPersonRelationTypeRepository relationTypes,
         IActivityLogRepository activity,
         IExternalLoginRepository externalLogins,
         IPasswordResetTokenRepository passwordResetTokens,
         IEmailVerificationTokenRepository emailVerificationTokens,
         IRefreshTokenRepository refreshTokens,
         IDeviceTrustTokenRepository deviceTrustTokens,
+        ITwoFactorRecoveryCodeRepository recoveryCodes,
         IEmailSender emailSender,
         IAppLinkBuilder appLinkBuilder,
         IQrCodeGenerator qrCodeGenerator,
@@ -47,12 +52,14 @@ public sealed class AuthService
         _organizations = organizations;
         _users = users;
         _categories = categories;
+        _relationTypes = relationTypes;
         _activity = activity;
         _externalLogins = externalLogins;
         _passwordResetTokens = passwordResetTokens;
         _emailVerificationTokens = emailVerificationTokens;
         _refreshTokens = refreshTokens;
         _deviceTrustTokens = deviceTrustTokens;
+        _recoveryCodes = recoveryCodes;
         _emailSender = emailSender;
         _appLinkBuilder = appLinkBuilder;
         _qrCodeGenerator = qrCodeGenerator;
@@ -88,6 +95,11 @@ public sealed class AuthService
             foreach (var category in StarterAssetCategories.Create(organization.Id))
             {
                 _categories.Add(category);
+            }
+
+            foreach (var relationType in StarterPersonRelationTypes.Create(organization.Id, language))
+            {
+                _relationTypes.Add(relationType);
             }
 
             _activity.Add(new ActivityLog(organization.Id, "organization.registered", "organization", organization.Id, user.Email, organization.Name, _clock.UtcNow));
@@ -146,7 +158,8 @@ public sealed class AuthService
             return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
         }
 
-        if (!TotpService.ValidateCode(user.TotpSecret, code))
+        var isValidTotp = TotpService.ValidateCode(user.TotpSecret, code);
+        if (!isValidTotp && !await TryConsumeRecoveryCodeAsync(userId, code, cancellationToken))
         {
             return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
         }
@@ -177,22 +190,23 @@ public sealed class AuthService
         return Result<TwoFactorSetupResponse>.Success(new TwoFactorSetupResponse(secret, otpAuthUri, qrSvg));
     }
 
-    public async Task<Result> EnableTwoFactorAsync(Guid userId, string code, CancellationToken cancellationToken)
+    public async Task<Result<TwoFactorEnableResponse>> EnableTwoFactorAsync(Guid userId, string code, CancellationToken cancellationToken)
     {
         var user = await _users.GetByIdAsync(userId, cancellationToken);
         if (user is null || string.IsNullOrEmpty(user.TotpSecret))
         {
-            return Result.Failure(Error.Validation("Najpierw wygeneruj sekret 2FA."));
+            return Result<TwoFactorEnableResponse>.Failure(Error.Validation("Najpierw wygeneruj sekret 2FA."));
         }
 
         if (!TotpService.ValidateCode(user.TotpSecret, code))
         {
-            return Result.Failure(Error.Validation("Nieprawidłowy kod. Sprawdź godzinę na urządzeniu i spróbuj ponownie."));
+            return Result<TwoFactorEnableResponse>.Failure(Error.Validation("Nieprawidłowy kod. Sprawdź godzinę na urządzeniu i spróbuj ponownie."));
         }
 
         user.EnableTwoFactor();
+        var rawCodes = await ReplaceRecoveryCodesAsync(userId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        return Result<TwoFactorEnableResponse>.Success(new TwoFactorEnableResponse(rawCodes));
     }
 
     public async Task<Result> DisableTwoFactorAsync(Guid userId, string code, CancellationToken cancellationToken)
@@ -209,8 +223,80 @@ public sealed class AuthService
         }
 
         user.DisableTwoFactor();
+        var existingCodes = await _recoveryCodes.ListAsync(userId, cancellationToken);
+        _recoveryCodes.RemoveAll(existingCodes);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    public async Task<Result<TwoFactorRecoveryCodesResponse>> RegenerateRecoveryCodesAsync(Guid userId, string code, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(userId, cancellationToken);
+        if (user is null || !user.IsTwoFactorEnabled || string.IsNullOrEmpty(user.TotpSecret))
+        {
+            return Result<TwoFactorRecoveryCodesResponse>.Failure(Error.Validation("Dwuskładnikowe uwierzytelnianie nie jest włączone."));
+        }
+
+        if (!TotpService.ValidateCode(user.TotpSecret, code))
+        {
+            return Result<TwoFactorRecoveryCodesResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
+        }
+
+        var rawCodes = await ReplaceRecoveryCodesAsync(userId, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<TwoFactorRecoveryCodesResponse>.Success(new TwoFactorRecoveryCodesResponse(rawCodes, rawCodes.Count));
+    }
+
+    public async Task<Result<int>> GetRecoveryCodesRemainingAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var existing = await _recoveryCodes.ListAsync(userId, cancellationToken);
+        return Result<int>.Success(existing.Count(x => x.IsUnused));
+    }
+
+    private async Task<IReadOnlyList<string>> ReplaceRecoveryCodesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var existing = await _recoveryCodes.ListAsync(userId, cancellationToken);
+        _recoveryCodes.RemoveAll(existing);
+
+        var rawCodes = new List<string>();
+        var entities = new List<Domain.Identity.TwoFactorRecoveryCode>();
+        for (var i = 0; i < 10; i++)
+        {
+            var raw = GenerateRecoveryCode();
+            rawCodes.Add(raw);
+            entities.Add(new Domain.Identity.TwoFactorRecoveryCode(userId, TokenHasher.Hash(raw.Replace("-", "")), _clock.UtcNow));
+        }
+
+        _recoveryCodes.AddRange(entities);
+        return rawCodes;
+    }
+
+    private async Task<bool> TryConsumeRecoveryCodeAsync(Guid userId, string code, CancellationToken cancellationToken)
+    {
+        var normalized = code.Trim().Replace(" ", "").Replace("-", "").ToUpperInvariant();
+        if (normalized.Length == 0) return false;
+
+        var hash = TokenHasher.Hash(normalized);
+        var codes = await _recoveryCodes.ListAsync(userId, cancellationToken);
+        var match = codes.FirstOrDefault(x => x.IsUnused && x.CodeHash == hash);
+        if (match is null) return false;
+
+        match.MarkUsed(_clock.UtcNow);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private static string GenerateRecoveryCode()
+    {
+        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(10);
+        var chars = new char[10];
+        for (var i = 0; i < chars.Length; i++)
+        {
+            chars[i] = alphabet[bytes[i] % alphabet.Length];
+        }
+
+        return $"{new string(chars, 0, 5)}-{new string(chars, 5, 5)}";
     }
 
     public async Task<Result<AuthUserResponse>> ExternalLoginAsync(ExternalUserInfo info, CancellationToken cancellationToken)
@@ -273,6 +359,11 @@ public sealed class AuthService
             foreach (var category in StarterAssetCategories.Create(organization.Id))
             {
                 _categories.Add(category);
+            }
+
+            foreach (var relationType in StarterPersonRelationTypes.Create(organization.Id, organization.Language))
+            {
+                _relationTypes.Add(relationType);
             }
 
             _activity.Add(new ActivityLog(organization.Id, "organization.registered_via_oauth", "organization", organization.Id, user.Email, organization.Name, _clock.UtcNow));

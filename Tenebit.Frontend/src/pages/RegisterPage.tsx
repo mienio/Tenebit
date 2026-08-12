@@ -36,7 +36,7 @@ export function RegisterPage() {
       );
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się założyć organizacji.');
+      setError(err instanceof Error ? err.message : t('auth.registerFailed'));
     } finally {
       setSubmitting(false);
     }

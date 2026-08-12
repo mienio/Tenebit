@@ -1,6 +1,40 @@
 export type AssetStatus = 'Draft' | 'InStock' | 'Reserved' | 'Assigned' | 'InTransit' | 'InService' | 'Damaged' | 'Lost' | 'Retired' | 'Disposed';
 export type AssetCategoryType = 'Physical' | 'Digital' | 'License' | 'Account' | 'Document' | 'Location' | 'Vehicle' | 'Key' | 'Consumable' | 'Other';
-export type PersonRelationType = 'Employee' | 'Contractor' | 'Vendor';
+export type PersonRelationType = string;
+
+export interface PersonRelationTypeOption {
+  id: string;
+  name: string;
+}
+
+export interface LicenseSeat {
+  personId: string;
+  personName: string;
+  assignedAt: string;
+}
+
+export interface License {
+  id: string;
+  name: string;
+  vendor?: string | null;
+  licenseKey?: string | null;
+  hasLicenseKey: boolean;
+  canViewLicenseKey: boolean;
+  seatsTotal: number;
+  seatsAssigned: number;
+  expiresAt?: string | null;
+  notes?: string | null;
+  seats: LicenseSeat[];
+}
+
+export interface RolePermission {
+  roleKey: string;
+  roleLabel: string;
+  permissionKey: string;
+  permissionLabel: string;
+  permissionDescription: string;
+  allowed: boolean;
+}
 export type ProcedureStatus = 'Draft' | 'Published' | 'Archived';
 export type AssignmentStatus = 'Draft' | 'AwaitingAcceptance' | 'Accepted' | 'Returned' | 'Cancelled' | 'Overdue';
 export type AcceptanceStatus = 'Pending' | 'Accepted' | 'Declined' | 'Overdue';
@@ -193,6 +227,7 @@ export interface Assignment {
   notes?: string | null;
   assets: AssignmentAsset[];
   procedureAcceptances: ProcedureAcceptance[];
+  acceptanceLink: string;
 }
 
 export interface PublicAssignmentAsset {
@@ -201,13 +236,44 @@ export interface PublicAssignmentAsset {
   issueCondition: string;
 }
 
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PublicAssignmentDocument {
+  id: string;
+  fileName: string;
+}
+
+export interface PublicAssignmentProcedure {
+  id: string;
+  title: string;
+  version: string;
+  documents: PublicAssignmentDocument[];
+}
+
 export interface PublicAssignment {
   organizationName: string;
   protocolNumber: string;
   status: AssignmentStatus;
   personFirstName: string;
   assets: PublicAssignmentAsset[];
-  procedureTitlesRequiringAcceptance: string[];
+  proceduresRequiringAcceptance: PublicAssignmentProcedure[];
+}
+
+export interface DashboardComparison {
+  comparedToDate: string;
+  currentTotalAssets: number;
+  previousTotalAssets: number;
+  currentAssetsWithoutOwner: number;
+  previousAssetsWithoutOwner: number;
+  currentOpenAssignments: number;
+  previousOpenAssignments: number;
+  currentVisibleAssetValue: number;
+  previousVisibleAssetValue: number;
 }
 
 export interface DashboardSummary {
@@ -220,6 +286,9 @@ export interface DashboardSummary {
   openAssignments: number;
   pendingProcedureAcceptances: number;
   visibleAssetValue: number;
+  totalLicenses: number;
+  licenseSeatsUsed: number;
+  licenseSeatsTotal: number;
   assetsByStatus: { status: AssetStatus; count: number }[];
   warrantyExpiringSoon: { assetId: string; name: string; assetTag: string; warrantyUntil: string }[];
   recentActivity: { action: string; entityType: string; entityId?: string | null; displayName?: string | null; actor: string; createdAt: string }[];
@@ -233,6 +302,7 @@ export interface MyAsset {
   name: string;
   assetTag: string;
   categoryName?: string | null;
+  categoryIcon?: string | null;
   location?: string | null;
   warrantyUntil?: string | null;
 }
@@ -306,6 +376,8 @@ export interface Organization {
 export interface AssetStatusSetting {
   statusKey: AssetStatus;
   label: string;
+  color: string;
+  backgroundColor: string;
   sortOrder: number;
   isEnabled: boolean;
 }

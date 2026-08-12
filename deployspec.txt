@@ -1,0 +1,216 @@
+TENEBIT — SPECYFIKACJA PROCESU DEPLOYU (Mikrus + Docker + domena byst.re)
+Cel: gotowy przepis do powtórzenia dla innej aplikacji na innym serwerze Mikrus.
+
+====================================================================
+1. HOSTING — MIKRUS (mikr.us)
+====================================================================
+- VPS/kontener u Mikrusa (panel: mikr.us), dostęp po SSH (root).
+- Na serwerze musi być zainstalowany Docker + wtyczka Docker Compose
+  (na wyższych planach Mikrusa zwykle jest już preinstalowany;
+  jeśli nie: install skryptem Dockera lub `apt install docker.io docker-compose-plugin`).
+- Cała aplikacja trzymana w jednym katalogu bazowym, np. /opt/<nazwa_apki>/
+  z podkatalogami: frontend/, backend/, backups/.
+
+====================================================================
+2. DOMENA — poddomena *.byst.re z panelu Mikrusa
+====================================================================
+- Mikrus daje darmową poddomenę w domenie byst.re (np. skinny-tiger4900.byst.re)
+  przypisaną do danego serwera/usługi.
+- W panelu Mikrusa (zakładka "Domeny" / "Usługi") ustawia się reverse proxy:
+  ruch na porcie 443 (HTTPS, certyfikat SSL wystawiany automatycznie przez Mikrusa)
+  jest przekierowywany na wskazany port lokalny na VPS-ie (u nas: port 80,
+  na którym nasłuchuje kontener frontendowy nginx).
+- Efekt: appka jest widoczna pod https://<subdomena>.byst.re bez własnej
+  konfiguracji certyfikatów — TLS terminuje Mikrus, do kontenera leci zwykły HTTP.
+- Do nowego projektu: w panelu Mikrusa przypisać nową poddomenę byst.re
+  (albo własną domenę, jeśli jest) do tego samego portu wystawianego przez
+  kontener frontend, i tyle — nic więcej po stronie serwera nie trzeba robić
+  dla samego SSL.
+
+====================================================================
+3. ARCHITEKTURA KONTENERÓW (docker compose)
+====================================================================
+Trzy usługi w jednym docker-compose.yml na serwerze (plik trzymany
+bezpośrednio w /opt/<apka>/docker-compose.yml, NIE w repo):
+  - db        -> postgres, wolumen na dane, nazwa kontenera <apka>-db
+  - backend   -> obraz budowany z backend/Dockerfile, nazwa <apka>-backend,
+                 nasłuchuje wewnętrznie na 8080
+  - frontend  -> obraz budowany z frontend/Dockerfile (nginx), nazwa
+                 <apka>-frontend, wystawiony na porcie 80 (do niego mapuje
+                 reverse proxy Mikrusa)
+Wszystkie usługi w jednej sieci compose, żeby frontend (nginx) mógł
+proxować /api/ do backend:8080 po nazwie usługi.
+
+Projekt: `docker compose -p <apka>` (nazwana instancja, żeby kilka appek
+na jednym serwerze się nie gryzło kontenerami).
+
+====================================================================
+4. DOCKERFILE — BACKEND (.NET)
+====================================================================
+Wzorzec (dwuetapowy build, SDK -> runtime):
+
+  FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+  WORKDIR /src
+  COPY . .
+  RUN dotnet restore <Solution>.sln
+  RUN dotnet publish <Api>/<Api>.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+  FROM mcr.microsoft.com/dotnet/aspnet:10.0
+  WORKDIR /app
+  RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+  COPY --from=build /app/publish .
+  ENV ASPNETCORE_URLS=http://+:8080
+  ENV ASPNETCORE_ENVIRONMENT=Production
+  EXPOSE 8080
+  HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+      CMD curl -f http://localhost:8080/api/health/ready || exit 1
+  ENTRYPOINT ["dotnet", "<Api>.dll"]
+
+Wymaga w appce endpointu health (np. /api/health i /api/health/ready,
+drugi sprawdzający realne połączenie z bazą) — na nim opiera się
+HEALTHCHECK i weryfikacja po deployu.
+
+Sekrety produkcyjne (connection string, klucz JWT itp.) NIE w repo —
+podawane jako zmienne środowiskowe w docker-compose.yml na serwerze
+(np. ConnectionStrings__<Db>, Auth__SigningKey).
+
+====================================================================
+5. DOCKERFILE — FRONTEND (Vite/React + nginx)
+====================================================================
+  FROM node:22-alpine AS build
+  WORKDIR /app
+  COPY package*.json ./
+  RUN npm ci
+  COPY . .
+  RUN npm run build
+
+  FROM nginx:1.31.2-alpine
+  COPY nginx.conf /etc/nginx/conf.d/default.conf
+  COPY --from=build /app/dist /usr/share/nginx/html
+  EXPOSE 80
+
+nginx.conf — SPA fallback + reverse proxy do backendu w tej samej sieci compose:
+
+  server {
+      listen 80;
+      server_name _;
+      root /usr/share/nginx/html;
+      index index.html;
+      client_max_body_size 50M;
+
+      location / {
+          try_files $uri $uri/ /index.html;
+          add_header Cache-Control "no-cache, no-store, must-revalidate";
+      }
+
+      location /assets/ {
+          add_header Cache-Control "public, max-age=31536000, immutable";
+      }
+
+      location /api/ {
+          proxy_pass http://backend:8080;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+      }
+  }
+
+Frontend woła API pod relatywną ścieżką /api/... (VITE_API_BASE_URL puste
+w buildzie), więc nie trzeba przejmować się CORS ani wpisywać domeny na sztywno —
+to nginx w tym samym kontenerze przekazuje ruch do backendu.
+
+====================================================================
+6. PROCES RELEASE — od kodu do zipów
+====================================================================
+Lokalnie (Windows, ten komputer):
+  1. Zbudować/spakować katalog backendu i frontendu do dwóch ZIP-ów:
+     <Apka>.Backend.zip  (musi zawierać plik .sln na max 4 poziomie zagnieżdżenia)
+     <Apka>.Frontend.zip (musi zawierać package.json na max 4 poziomie zagnieżdżenia)
+  2. Zipy trzymane w D:\<Projekt>\Release\ (nie w D:\ root).
+  3. Wgrać oba ZIP-y na serwer do /root/ (np. scp, WinSCP, albo panel plików Mikrusa).
+
+Na serwerze wgrany jest jeden skrypt: deploy.sh (patrz sekcja 7),
+uruchamiany ręcznie po wrzuceniu nowych zipów: `bash deploy.sh` (lub ./deploy.sh
+jeśli ma +x).
+
+====================================================================
+7. deploy.sh — CO ROBI KROK PO KROKU
+====================================================================
+Zmienne na górze: BASE=/opt/<apka>, DOMAIN=https://<subdomena>.byst.re
+(nadpisywalne zmienną środowiskową TENEBIT_DOMAIN / odpowiednik).
+
+1. Sprawdza, że /root/<Apka>.Frontend.zip i /root/<Apka>.Backend.zip istnieją
+   — jak nie, przerywa z błędem.
+2. Backup bazy: `docker exec <apka>-db pg_dump -U postgres <db> | gzip > backups/db-<timestamp>.sql.gz`
+   (nie wysypuje całego deployu jeśli się nie uda — tylko warning).
+3. BACKEND:
+   - tar.gz backup obecnego katalogu backend/ do backups/
+   - unzip nowego zipa do /tmp, znajduje katalog z .sln
+   - podmienia cały $BASE/backend/ zawartością z zipa
+   - NADPISUJE $BASE/backend/Dockerfile wersją "wzorcową" wpisaną wprost
+     w deploy.sh (heredoc) — więc Dockerfile backendu nie musi nawet być
+     w repo/w zipie, deploy.sh sam go generuje za każdym razem
+4. FRONTEND: analogicznie — backup, unzip, podmiana katalogu frontend/,
+   a deploy.sh generuje na nowo zarówno Dockerfile jak i nginx.conf
+   (heredoc w skrypcie, nie z zipa).
+5. Build obrazów: `docker compose -p <apka> build backend` i `build frontend`.
+6. Deploy: `docker compose -p <apka> up -d` (podnosi/restartuje wszystkie usługi).
+7. Weryfikacja:
+   - listing plików w kontenerze frontend (czy dist faktycznie wgrany)
+   - curl $DOMAIN/api/health -> musi zawierać "ok"
+   - curl $DOMAIN/ -> musi zawierać marker appki / DOCTYPE
+   - jeśli którykolwiek check padnie: wypisuje ostatnie logi backend+frontend
+     i kończy z exit 1 (bez rollbacku — backupy z kroku 2-4 służą do ręcznego
+     przywrócenia)
+8. SMOKE TEST end-to-end: prawdziwe wywołanie API na żywym środowisku —
+   /api/health/ready -> rejestracja testowego konta (prefiks smoketest+) ->
+   login tym kontem -> sprawdzenie że oba zwracają token. To łapie klasę
+   błędów, których sam "kontener wstał" nie wykrywa (np. appka wstaje,
+   ale realne flow rejestracji jest zepsute).
+9. Sprzątanie katalogów tymczasowych w /tmp, `docker compose ps` na koniec
+   jako potwierdzenie stanu.
+
+====================================================================
+8. SKRYPTY POMOCNICZE (releasescripts/)
+====================================================================
+- backup-db.sh   — codzienny pg_dump + gzip do backups/db/, czyszczenie
+                    backupów starszych niż N dni (domyślnie 14, zmienna
+                    TENEBIT_BACKUP_RETENTION_DAYS). Do wpięcia w cron:
+                    `0 3 * * * /opt/<apka>/backup-db.sh >> /var/log/<apka>-backup.log 2>&1`
+- restore-db.sh  — przywraca bazę z konkretnego pliku .sql.gz; wymaga
+                    potwierdzenia "tak" (albo flagi --force); zatrzymuje
+                    kontener backendu na czas przywracania, potem go wznawia.
+- smoke-test.sh  — ten sam test rejestracja+login co w kroku 7 deploy.sh,
+                    ale jako osobny, ręcznie odpalany skrypt (przydatny do
+                    sprawdzenia produkcji bez pełnego deployu).
+
+====================================================================
+9. CHECKLISTA — JAK POWTÓRZYĆ DLA NOWEJ APLIKACJI
+====================================================================
+1. Nowy serwer/kontener na Mikrusie (albo nowa usługa na tym samym, jeśli
+   plan na to pozwala) + Docker.
+2. W panelu Mikrusa przypisać nową poddomenę byst.re (albo własną domenę)
+   jako reverse proxy -> port 80 na nowym serwerze. SSL automatyczny.
+3. Na serwerze: mkdir -p /opt/<nowa_apka>/{frontend,backend,backups}.
+4. docker-compose.yml na serwerze: 3 usługi (db/backend/frontend) wg wzorca
+   z sekcji 3, nazwy kontenerów <nowa_apka>-db/-backend/-frontend, projekt
+   `docker compose -p <nowa_apka>`.
+5. Skopiować deploy.sh, backup-db.sh, restore-db.sh, smoke-test.sh i podmienić:
+   - BASE=/opt/<nowa_apka>
+   - nazwy kontenerów (<nowa_apka>-db, -backend, -frontend)
+   - DOMAIN=https://<nowa-subdomena>.byst.re
+   - endpointy smoke testu na realne endpointy nowej appki (health/ready,
+     rejestracja/login albo co tam appka ma jako "krytyczne flow")
+   - treść Dockerfile/nginx.conf generowanych w heredocu (ścieżki .csproj,
+     nazwy .sln/.dll, tech stack frontendu jeśli inny niż Vite+npm)
+6. Sekrety produkcyjne appki wpisać jako env w docker-compose.yml na
+   serwerze (nigdy w repo).
+7. Ustalić stałe miejsce na zipy release lokalnie (analogicznie do
+   D:\<Projekt>\Release\) i sposób wgrywania na serwer (scp/WinSCP/panel).
+8. Pierwszy deploy: wgrać oba zipy do /root/, odpalić deploy.sh ręcznie,
+   sprawdzić `docker compose ps` i URL w przeglądarce.
+9. Cron dla backup-db.sh.

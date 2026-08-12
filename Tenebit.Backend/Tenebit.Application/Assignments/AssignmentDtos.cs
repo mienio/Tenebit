@@ -11,7 +11,8 @@ public sealed record CreateAssignmentRequest(
     DateOnly? DueDate,
     string? Notes);
 
-public sealed record ReturnAssignmentRequest(string? ReturnCondition, string? DestinationLocation);
+public sealed record ReturnAssignmentAssetRequest(Guid AssetId, string? ReturnCondition);
+public sealed record ReturnAssignmentRequest(string? ReturnCondition, string? DestinationLocation, IReadOnlyList<ReturnAssignmentAssetRequest>? Assets = null);
 public sealed record AssignmentAssetResponse(Guid AssetId, string? AssetName, string? AssetTag, string IssueCondition, string? ReturnCondition);
 public sealed record ProcedureAcceptanceResponse(Guid Id, Guid ProcedureId, string? ProcedureTitle, AcceptanceStatus Status, DateTimeOffset SentAt, DateTimeOffset? AcceptedAt);
 
@@ -27,9 +28,14 @@ public sealed record AssignmentResponse(
     string ProtocolNumber,
     string? Notes,
     IReadOnlyList<AssignmentAssetResponse> Assets,
-    IReadOnlyList<ProcedureAcceptanceResponse> ProcedureAcceptances);
+    IReadOnlyList<ProcedureAcceptanceResponse> ProcedureAcceptances,
+    string AcceptanceLink);
 
 public sealed record PublicAssignmentAssetResponse(string Name, string AssetTag, string IssueCondition);
+
+public sealed record PublicAssignmentDocumentResponse(Guid Id, string FileName);
+
+public sealed record PublicAssignmentProcedureResponse(Guid Id, string Title, string Version, IReadOnlyList<PublicAssignmentDocumentResponse> Documents);
 
 public sealed record PublicAssignmentResponse(
     string OrganizationName,
@@ -37,4 +43,4 @@ public sealed record PublicAssignmentResponse(
     AssignmentStatus Status,
     string PersonFirstName,
     IReadOnlyList<PublicAssignmentAssetResponse> Assets,
-    IReadOnlyList<string> ProcedureTitlesRequiringAcceptance);
+    IReadOnlyList<PublicAssignmentProcedureResponse> ProceduresRequiringAcceptance);

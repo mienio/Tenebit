@@ -23,7 +23,7 @@ export function ForgotPasswordPage() {
       await apiRequest('/api/auth/password/forgot', { method: 'POST', body: JSON.stringify({ email: String(form.get('email') ?? '') }) });
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się wysłać wiadomości.');
+      setError(err instanceof Error ? err.message : t('auth.forgotPasswordFailed'));
     } finally {
       setSubmitting(false);
     }
