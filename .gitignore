@@ -4,6 +4,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 Release/*.zip
+Release*/
+*.zip
 logs/
 .vs/
 *.user
