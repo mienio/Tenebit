@@ -58,10 +58,10 @@ export const WIDGET_ICONS: Record<WidgetType, ReactNode> = {
 const DEFAULT_ENABLED: WidgetType[] = [
   'metric-assets',
   'metric-inStock',
+  'metric-licenses',
   'metric-assigned',
   'metric-people',
   'metric-openAssignments',
-  'metric-licenses',
   'chart-byStatus',
   'chart-byCategory',
   'list-activity'
