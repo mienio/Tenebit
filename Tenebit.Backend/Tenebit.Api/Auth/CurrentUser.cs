@@ -29,6 +29,21 @@ public sealed class CurrentUser : ICurrentUser
 
     public string Email => _httpContextAccessor.HttpContext?.User.FindFirstValue("email") ?? string.Empty;
 
+    // Used to stamp tamper-evident confirmation records (assignment/procedure signing) with the
+    // requester's IP — checked ahead of RemoteIpAddress so a proxied deployment (Docker/nginx) still
+    // records the real client address instead of the proxy's.
+    public string IpAddress
+    {
+        get
+        {
+            var context = _httpContextAccessor.HttpContext;
+            if (context is null) return string.Empty;
+            var forwarded = context.Request.Headers["X-Forwarded-For"].ToString();
+            if (!string.IsNullOrWhiteSpace(forwarded)) return forwarded.Split(',')[0].Trim();
+            return context.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+        }
+    }
+
     public string Language
     {
         get

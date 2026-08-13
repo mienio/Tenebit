@@ -310,6 +310,16 @@ public static class TenebitEndpoints
                 (await service.CreateStarterPackageAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}"))
             .WithTags("Onboarding")
             .WithOpenApi();
+
+        api.MapPost("/onboarding/employee-package", async (CreateEmployeePackageRequest request, OnboardingService service, CancellationToken cancellationToken) =>
+                (await service.CreateEmployeePackageAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}"))
+            .WithTags("Onboarding")
+            .WithOpenApi();
+
+        api.MapGet("/onboarding/checklist/{personId:guid}", async (Guid personId, OnboardingService service, CancellationToken cancellationToken) =>
+                (await service.GetChecklistAsync(personId, cancellationToken)).ToHttpResult())
+            .WithTags("Onboarding")
+            .WithOpenApi();
     }
 
     private static void MapAssets(RouteGroupBuilder api)

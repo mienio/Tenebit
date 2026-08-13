@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assignments;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
@@ -17,12 +18,14 @@ public sealed class OnboardingService
     private readonly IAssetRepository _assets;
     private readonly IProcedureRepository _procedures;
     private readonly IAssignmentRepository _assignments;
+    private readonly IJobProfileRepository _jobProfiles;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly AssignmentService _assignmentService;
 
-    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService)
     {
         _teams = teams;
         _people = people;
@@ -30,10 +33,12 @@ public sealed class OnboardingService
         _assets = assets;
         _procedures = procedures;
         _assignments = assignments;
+        _jobProfiles = jobProfiles;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _assignmentService = assignmentService;
     }
 
     public async Task<OnboardingStatusResponse> GetStatusAsync(CancellationToken cancellationToken)
@@ -133,6 +138,114 @@ public sealed class OnboardingService
         {
             return Result<StarterPackageResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    // Real onboarding flow: resolves the employee's JobProfile into concrete assets (one available asset per
+    // asset category still uncovered by an explicit AssetId) and procedures, then delegates the actual
+    // assignment creation (validation, email, protocol number) to AssignmentService so both flows share the
+    // exact same tamper-evident issuing path.
+    public async Task<Result<EmployeePackageResponse>> CreateEmployeePackageAsync(CreateEmployeePackageRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<EmployeePackageResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var person = await _people.GetAsync(organizationId, request.PersonId, cancellationToken);
+        if (person is null) return Result<EmployeePackageResponse>.Failure(Error.Validation("Wybrany pracownik nie istnieje."));
+
+        var assetIds = request.AssetIds.Distinct().ToList();
+        var procedureIds = request.ProcedureIds.Distinct().ToList();
+        var warnings = new List<string>();
+
+        if (request.JobProfileId is { } profileId)
+        {
+            var profile = await _jobProfiles.GetAsync(organizationId, profileId, cancellationToken);
+            if (profile is null) return Result<EmployeePackageResponse>.Failure(Error.Validation("Wybrany zestaw stanowiskowy nie istnieje."));
+
+            foreach (var procedureId in profile.Procedures.Select(x => x.ProcedureId))
+            {
+                if (!procedureIds.Contains(procedureId)) procedureIds.Add(procedureId);
+            }
+
+            var existingAssets = assetIds.Count > 0 ? await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken) : [];
+            var coveredCategories = existingAssets.Select(x => x.CategoryId).ToHashSet();
+            var available = await _assets.ListAsync(organizationId, null, AssetStatus.InStock, null, cancellationToken);
+            var categories = await _categories.ListAsync(organizationId, cancellationToken);
+
+            foreach (var categoryId in profile.AssetCategories.Select(x => x.AssetCategoryId))
+            {
+                if (coveredCategories.Contains(categoryId)) continue;
+                var candidate = available.FirstOrDefault(a => a.CategoryId == categoryId && !assetIds.Contains(a.Id));
+                if (candidate is null)
+                {
+                    var categoryName = categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "—";
+                    warnings.Add($"Brak dostępnego aktywa w kategorii \"{categoryName}\" z zestawu stanowiskowego \"{profile.Name}\".");
+                    continue;
+                }
+
+                assetIds.Add(candidate.Id);
+                coveredCategories.Add(categoryId);
+            }
+        }
+
+        if (assetIds.Count == 0) return Result<EmployeePackageResponse>.Failure(Error.Validation("Zestaw stanowiskowy nie zawiera żadnego dostępnego aktywa — dodaj aktywo ręcznie."));
+
+        var createResult = await _assignmentService.CreateAsync(
+            new CreateAssignmentRequest(person.Id, assetIds.Select(id => new AssignmentAssetRequest(id, null)).ToList(), procedureIds, request.DueDate, request.Notes),
+            cancellationToken);
+        if (createResult.IsFailure) return Result<EmployeePackageResponse>.Failure(createResult.Error!);
+
+        var assignment = createResult.Value!;
+        _activity.Add(new ActivityLog(organizationId, "onboarding.employee_package.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result<EmployeePackageResponse>.Success(new EmployeePackageResponse(assignment.Id, assignment.ProtocolNumber, assignment, warnings));
+    }
+
+    // Task checklist per employee: one row per asset/procedure across all of their assignments, with a
+    // per-item completion status — this is what makes onboarding a tracked flow instead of a one-off email.
+    public async Task<Result<OnboardingChecklistResponse>> GetChecklistAsync(Guid personId, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Manager, TenebitRoles.Employee);
+        if (access.IsFailure) return Result<OnboardingChecklistResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var person = await _people.GetAsync(organizationId, personId, cancellationToken);
+        if (person is null) return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+
+        var assignments = (await _assignments.ListAsync(organizationId, cancellationToken)).Where(x => x.PersonId == personId).ToList();
+        var assetIds = assignments.SelectMany(x => x.Assets.Select(a => a.AssetId)).Distinct().ToArray();
+        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
+        var procedureIds = assignments.SelectMany(x => x.ProcedureAcceptances.Select(a => a.ProcedureId)).Distinct().ToArray();
+        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+
+        // Status strings intentionally mirror AssignmentStatus/AcceptanceStatus enum member names so the
+        // frontend can reuse its existing StatusBadge styling/translations instead of a parallel status set.
+        var items = new List<OnboardingChecklistItemResponse>();
+        foreach (var assignment in assignments)
+        {
+            var assetStatus = assignment.Status switch
+            {
+                AssignmentStatus.Accepted => nameof(AssignmentStatus.Accepted),
+                AssignmentStatus.Returned => nameof(AssignmentStatus.Returned),
+                AssignmentStatus.Overdue => nameof(AssignmentStatus.Overdue),
+                _ => nameof(AssignmentStatus.AwaitingAcceptance)
+            };
+            foreach (var item in assignment.Assets)
+            {
+                var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
+                items.Add(new OnboardingChecklistItemResponse("asset", item.AssetId, asset?.Name ?? "—", assetStatus, assignment.AcceptedAt));
+            }
+
+            foreach (var acceptance in assignment.ProcedureAcceptances)
+            {
+                var procedure = procedures.FirstOrDefault(x => x.Id == acceptance.ProcedureId);
+                items.Add(new OnboardingChecklistItemResponse("procedure", acceptance.ProcedureId, procedure?.Title ?? "—", acceptance.Status.ToString(), acceptance.AcceptedAt));
+            }
+        }
+
+        var completed = items.Count(x => x.Status is "Accepted" or "Returned");
+        return Result<OnboardingChecklistResponse>.Success(new OnboardingChecklistResponse(personId, person.FullName, items, completed, items.Count));
     }
 
     private static string CreateProtocolNumber(DateTimeOffset now) => $"TEN-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";

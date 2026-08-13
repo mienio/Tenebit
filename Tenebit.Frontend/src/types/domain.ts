@@ -134,6 +134,8 @@ export interface ProcedureAcceptanceStatus {
   sentAt: string;
   acceptedAt?: string | null;
   protocolNumber?: string | null;
+  confirmedIp?: string | null;
+  isIntegrityVerified: boolean;
 }
 
 export interface Procedure {
@@ -178,6 +180,9 @@ export interface ProcedureAcceptance {
   status: AcceptanceStatus;
   sentAt: string;
   acceptedAt?: string | null;
+  confirmedIp?: string | null;
+  confirmationHash?: string | null;
+  isIntegrityVerified: boolean;
 }
 
 export interface Assignment {
@@ -193,6 +198,9 @@ export interface Assignment {
   notes?: string | null;
   assets: AssignmentAsset[];
   procedureAcceptances: ProcedureAcceptance[];
+  acceptedIp?: string | null;
+  acceptanceHash?: string | null;
+  isIntegrityVerified: boolean;
 }
 
 export interface PublicAssignmentAsset {
@@ -290,6 +298,38 @@ export interface StarterPackageResponse {
   assignmentId: string;
   protocolNumber: string;
   message: string;
+}
+
+export interface CreateEmployeePackageRequest {
+  personId: string;
+  jobProfileId?: string | null;
+  assetIds: string[];
+  procedureIds: string[];
+  dueDate?: string | null;
+  notes?: string | null;
+}
+
+export interface EmployeePackageResponse {
+  assignmentId: string;
+  protocolNumber: string;
+  assignment: Assignment;
+  warnings: string[];
+}
+
+export interface OnboardingChecklistItem {
+  type: 'asset' | 'procedure';
+  itemId: string;
+  label: string;
+  status: AssignmentStatus | AcceptanceStatus;
+  completedAt?: string | null;
+}
+
+export interface OnboardingChecklist {
+  personId: string;
+  personName: string;
+  items: OnboardingChecklistItem[];
+  completedCount: number;
+  totalCount: number;
 }
 
 export interface Organization {

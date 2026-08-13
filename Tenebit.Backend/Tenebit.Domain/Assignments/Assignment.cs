@@ -35,11 +35,14 @@ public sealed class Assignment
     public string? Notes { get; private set; }
     public string ProtocolNumber { get; private set; } = string.Empty;
     public string CreatedBy { get; private set; } = string.Empty;
+    public string? AcceptedIp { get; private set; }
+    public string? AcceptanceHash { get; private set; }
     public List<AssignmentAsset> Assets { get; private set; } = [];
     public List<ProcedureAcceptance> ProcedureAcceptances { get; private set; } = [];
 
     public void AddAsset(Guid assetId, string? issueCondition)
     {
+        EnsureNotSigned();
         if (Assets.Any(x => x.AssetId == assetId))
         {
             throw new DomainException("Ten asset jest już dodany do wydania.");
@@ -50,6 +53,7 @@ public sealed class Assignment
 
     public void AddProcedureAcceptance(Guid organizationId, Guid procedureId, Guid personId, DateTimeOffset sentAt)
     {
+        EnsureNotSigned();
         if (ProcedureAcceptances.Any(x => x.ProcedureId == procedureId))
         {
             return;
@@ -58,7 +62,10 @@ public sealed class Assignment
         ProcedureAcceptances.Add(new ProcedureAcceptance(organizationId, procedureId, personId, Id, sentAt));
     }
 
-    public void Accept(DateTimeOffset acceptedAt)
+    // Hardening: the accepted protocol is a legal proof-of-receipt record — capture who signed it, when, from
+    // where, and a hash of exactly what was confirmed (assets + conditions + procedures), so any later direct
+    // edit to those rows can be detected by recomputing the hash (see VerifyIntegrity).
+    public void Accept(DateTimeOffset acceptedAt, string? ipAddress)
     {
         // BUG FIX: Previously allowed accepting already-accepted or returned/cancelled assignments.
         // Now only AwaitingAcceptance and Overdue statuses can transition to Accepted.
@@ -69,10 +76,45 @@ public sealed class Assignment
 
         Status = AssignmentStatus.Accepted;
         AcceptedAt = acceptedAt;
+        AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
+        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp);
         foreach (var acceptance in ProcedureAcceptances)
         {
-            acceptance.Accept(acceptedAt);
+            acceptance.Accept(acceptedAt, ipAddress);
         }
+    }
+
+    // Recomputes the hash from the assignment's current field values — a mismatch with the stored
+    // AcceptanceHash means the protocol was altered after signing, bypassing this class.
+    public bool VerifyIntegrity()
+    {
+        if (AcceptedAt is null || AcceptanceHash is null) return true;
+        return ComputeHash(AcceptedAt.Value, AcceptedIp) == AcceptanceHash;
+    }
+
+    public void MarkOverdue()
+    {
+        if (Status == AssignmentStatus.AwaitingAcceptance)
+        {
+            Status = AssignmentStatus.Overdue;
+        }
+    }
+
+    private void EnsureNotSigned()
+    {
+        if (Status is AssignmentStatus.Accepted or AssignmentStatus.Returned or AssignmentStatus.Cancelled)
+        {
+            throw new DomainException("Nie można modyfikować wydania, które zostało już podpisane lub zamknięte.");
+        }
+    }
+
+    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress)
+    {
+        var assetsPart = string.Join(',', Assets.OrderBy(x => x.AssetId).Select(x => $"{x.AssetId}:{x.IssueCondition}"));
+        var proceduresPart = string.Join(',', ProcedureAcceptances.Select(x => x.ProcedureId).OrderBy(x => x));
+        var payload = string.Join('|', Id, OrganizationId, PersonId, ProtocolNumber, assetsPart, proceduresPart, acceptedAt.ToUniversalTime().ToString("O"), ipAddress ?? "");
+        var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 
     public void Return(DateTimeOffset returnedAt, string? returnCondition)

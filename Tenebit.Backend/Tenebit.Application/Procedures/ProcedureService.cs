@@ -48,7 +48,9 @@ public sealed class ProcedureService
                     acceptance.Status,
                     acceptance.SentAt,
                     acceptance.AcceptedAt,
-                    assignment.ProtocolNumber)))
+                    assignment.ProtocolNumber,
+                    acceptance.ConfirmedIp,
+                    acceptance.VerifyIntegrity())))
             .OrderBy(row => row.Status)
             .ThenBy(row => row.PersonName)
             .ToList();

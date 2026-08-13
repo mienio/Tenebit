@@ -7,6 +7,7 @@ import { Card } from '../components/Card';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { StatusBadge } from '../components/StatusBadge';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
@@ -17,10 +18,13 @@ export function OnboardingPage() {
   const assets = useAsyncData(() => api.assets({ status: 'InStock' }), []);
   const procedures = useAsyncData(() => api.procedures(), []);
   const profiles = useAsyncData(api.jobProfiles, []);
+  const [selectedPersonId, setSelectedPersonId] = useState('');
+  const [selectedJobProfileId, setSelectedJobProfileId] = useState('');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const checklist = useAsyncData(() => (selectedPersonId ? api.onboardingChecklist(selectedPersonId) : Promise.resolve(null)), [selectedPersonId]);
 
   const publishedProcedures = useMemo(() => procedures.data?.filter(item => item.status === 'Published') ?? [], [procedures.data]);
 
@@ -37,6 +41,7 @@ export function OnboardingPage() {
   }
 
   function applyProfile(profileId: string) {
+    setSelectedJobProfileId(profileId);
     const profile = profiles.data?.find(item => item.id === profileId);
     if (!profile) return;
     const recommendedAssets = assets.data?.filter(asset => profile.assetCategoryIds.includes(asset.categoryId)).map(asset => asset.id) ?? [];
@@ -49,16 +54,18 @@ export function OnboardingPage() {
     event.preventDefault();
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
-    const personId = String(form.get('personId') ?? '');
-    if (!personId) return setMessage({ type: 'error', text: t('onboarding.choosePersonError') });
-    if (!selectedAssetIds.length) return setMessage({ type: 'error', text: t('onboarding.chooseAssetError') });
+    if (!selectedPersonId) return setMessage({ type: 'error', text: t('onboarding.choosePersonError') });
+    if (!selectedAssetIds.length && !selectedJobProfileId) return setMessage({ type: 'error', text: t('onboarding.chooseAssetError') });
 
     setSaving(true);
     setMessage(null);
     try {
-      const response = await api.createAssignment({
-        personId,
-        assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: 'Sprawny przy wydaniu' })),
+      // Real onboarding flow: the job profile (if any) is resolved server-side into concrete assets/procedures
+      // and tracked as a checklist, instead of only pre-filling checkboxes on this page.
+      const response = await api.createEmployeePackage({
+        personId: selectedPersonId,
+        jobProfileId: selectedJobProfileId || null,
+        assetIds: selectedAssetIds,
         procedureIds: selectedProcedureIds,
         dueDate: toNullable(String(form.get('dueDate') ?? '')),
         notes: toNullable(String(form.get('notes') ?? ''))
@@ -66,8 +73,10 @@ export function OnboardingPage() {
       formEl.reset();
       setSelectedAssetIds([]);
       setSelectedProcedureIds([]);
-      setMessage({ type: 'success', text: t('onboarding.created', { protocol: response.protocolNumber }) });
-      await Promise.all([assets.reload(), people.reload()]);
+      setSelectedJobProfileId('');
+      const warningsText = response.warnings.length ? ` ${t('onboarding.warningsTitle')} ${response.warnings.join(' ')}` : '';
+      setMessage({ type: 'success', text: t('onboarding.created', { protocol: response.protocolNumber }) + warningsText });
+      await Promise.all([assets.reload(), people.reload(), checklist.reload()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('onboarding.createFailed') });
     } finally {
@@ -93,7 +102,7 @@ export function OnboardingPage() {
           <section className="packageStep">
             <div className="packageStep__header"><span>1</span><div><strong>{t('onboarding.step1Title')}</strong></div></div>
             <Field label={t('onboarding.step1Title')}>
-              <SelectInput name="personId" required>
+              <SelectInput name="personId" required value={selectedPersonId} onChange={event => setSelectedPersonId(event.target.value)}>
                 <option value="">{t('onboarding.choosePerson')}</option>
                 {people.data?.map(person => <option value={person.id} key={person.id}>{person.fullName} · {person.email}</option>)}
               </SelectInput>
@@ -104,7 +113,7 @@ export function OnboardingPage() {
           <section className="packageStep">
             <div className="packageStep__header"><span>2</span><div><strong>{t('onboarding.step2Title')}</strong><small>{t('onboarding.step2Hint')}</small></div></div>
             <Field label={t('onboarding.jobProfileLabel')}>
-              <SelectInput name="jobProfileId" disabled={profiles.isLoading || !!profiles.error || !profiles.data?.length} onChange={event => applyProfile(event.target.value)}>
+              <SelectInput name="jobProfileId" value={selectedJobProfileId} disabled={profiles.isLoading || !!profiles.error || !profiles.data?.length} onChange={event => applyProfile(event.target.value)}>
                 <option value="">{profiles.data?.length ? t('onboarding.noProfileOption') : t('onboarding.noProfilesOption')}</option>
                 {profiles.data?.map(profile => <option value={profile.id} key={profile.id}>{profile.name}</option>)}
               </SelectInput>
@@ -141,6 +150,30 @@ export function OnboardingPage() {
           <div className="formActions formActions--split"><span className="muted">{t('onboarding.selectedSummary', { assets: selectedAssetIds.length, procedures: selectedProcedureIds.length })}</span><Button disabled={saving} icon={<Rocket size={16} />}>{saving ? t('onboarding.creatingPackage') : t('onboarding.create')}</Button></div>
         </form>
       </Card>
+
+      {selectedPersonId ? (
+        <Card>
+          <div className="sectionTitle">
+            <div>
+              <h2>{t('onboarding.checklistTitle')}</h2>
+              <p>{t('onboarding.checklistDesc')}</p>
+            </div>
+            {checklist.data ? <span className="muted">{t('onboarding.checklistProgress', { completed: checklist.data.completedCount, total: checklist.data.totalCount })}</span> : null}
+          </div>
+          {checklist.error ? <p className="formMessage formMessage--error">{t('onboarding.checklistLoadFailed')}</p> : !checklist.data?.items.length ? (
+            <p className="emptyInline">{t('onboarding.checklistEmpty')}</p>
+          ) : (
+            <div className="listRows">
+              {checklist.data.items.map(item => (
+                <div className="listRow" key={`${item.type}-${item.itemId}`}>
+                  <div><strong>{item.label}</strong><small>{t(`onboarding.checklistType.${item.type}`)}</small></div>
+                  <StatusBadge status={item.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : null}
     </div>
   );
 }

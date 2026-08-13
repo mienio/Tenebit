@@ -206,6 +206,19 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
       </DetailGrid>
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '—'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><StatusBadge status={item.status} /></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
+      <Card className="card--flat">
+        <div className="sectionTitle"><div><h2>{t('assignments.proofTitle')}</h2></div></div>
+        {assignment.acceptedAt ? (
+          <DetailGrid>
+            <DetailItem label={t('assignments.issuedLabel')} value={formatDateTime(assignment.acceptedAt)} />
+            <DetailItem label={t('assignments.proofIp')} value={assignment.acceptedIp ?? '—'} />
+            <DetailItem label={t('assignments.proofHash')} value={<code style={{ wordBreak: 'break-all', fontSize: '0.75em' }}>{assignment.acceptanceHash ?? '—'}</code>} />
+            <DetailItem label={t('assignments.proofVerified')} value={assignment.isIntegrityVerified ? '✓' : t('assignments.proofTampered')} />
+          </DetailGrid>
+        ) : (
+          <p className="muted">{t('assignments.proofNotSigned')}</p>
+        )}
+      </Card>
     </div>
   );
 }

@@ -7,6 +7,7 @@ public interface ICurrentUser
     string Subject { get; }
     string Email { get; }
     string Language { get; }
+    string IpAddress { get; }
     IReadOnlyCollection<string> Roles { get; }
 
     bool HasAnyRole(params string[] roles) => roles.Any(role => Roles.Contains(role, StringComparer.OrdinalIgnoreCase));
