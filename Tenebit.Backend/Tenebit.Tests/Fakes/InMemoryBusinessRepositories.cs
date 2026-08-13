@@ -217,5 +217,6 @@ public sealed class FakeCurrentUser : ICurrentUser
     public string Subject { get; set; } = Guid.NewGuid().ToString();
     public string Email { get; set; } = "tester@acme.test";
     public string Language { get; set; } = "pl";
+    public string IpAddress { get; set; } = "127.0.0.1";
     public IReadOnlyCollection<string> Roles { get; set; } = ["owner"];
 }

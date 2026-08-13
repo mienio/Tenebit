@@ -300,7 +300,10 @@ export function ProceduresPage() {
                   <div className="listRows">
                     {acceptances.data.map(item => (
                       <div className="listRow" key={`${item.personId}-${item.protocolNumber}`}>
-                        <div><strong>{item.personName}</strong><small>{item.protocolNumber ?? '—'}</small></div>
+                        <div>
+                          <strong>{item.personName}</strong>
+                          <small>{item.protocolNumber ?? '—'}{item.confirmedIp ? ` · ${t('assignments.proofIp')}: ${item.confirmedIp}` : ''}{item.status === 'Accepted' && !item.isIntegrityVerified ? ` · ${t('assignments.proofTampered')}` : ''}</small>
+                        </div>
                         <StatusBadge status={item.status} />
                       </div>
                     ))}

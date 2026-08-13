@@ -29,6 +29,7 @@ public sealed class AlertBackgroundService : BackgroundService
 
         var intervalHours = _configuration.GetValue("Alerts:IntervalHours", 24);
         var interval = TimeSpan.FromHours(Math.Max(1, intervalHours));
+        var onboardingDeadlineDays = _configuration.GetValue("Onboarding:AcceptanceDeadlineDays", 3);
 
         using var timer = new PeriodicTimer(interval);
         do
@@ -37,7 +38,7 @@ public sealed class AlertBackgroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var alertCheckService = scope.ServiceProvider.GetRequiredService<AlertCheckService>();
-                await alertCheckService.RunAsync(stoppingToken);
+                await alertCheckService.RunAsync(onboardingDeadlineDays, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

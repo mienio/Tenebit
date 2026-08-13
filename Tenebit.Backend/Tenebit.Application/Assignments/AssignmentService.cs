@@ -163,7 +163,7 @@ public sealed class AssignmentService
             var organizationId = _currentUser.OrganizationId;
             var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
             if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
-            assignment.Accept(_clock.UtcNow);
+            assignment.Accept(_clock.UtcNow, _currentUser.IpAddress);
             _activity.Add(new ActivityLog(organizationId, "assignment.accepted", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await BuildResponseAsync(id, cancellationToken);
@@ -221,7 +221,7 @@ public sealed class AssignmentService
 
         try
         {
-            assignment.Accept(_clock.UtcNow);
+            assignment.Accept(_clock.UtcNow, _currentUser.IpAddress);
             _activity.Add(new ActivityLog(organizationId, "assignment.accepted", "assignment", assignment.Id, "public-link", assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(organizationId, assignment, cancellationToken));
@@ -332,11 +332,11 @@ public sealed class AssignmentService
         var acceptances = assignment.ProcedureAcceptances.Select(acceptance =>
         {
             var procedure = procedures.FirstOrDefault(x => x.Id == acceptance.ProcedureId);
-            return new ProcedureAcceptanceResponse(acceptance.Id, acceptance.ProcedureId, procedure?.Title, acceptance.Status, acceptance.SentAt, acceptance.AcceptedAt);
+            return new ProcedureAcceptanceResponse(acceptance.Id, acceptance.ProcedureId, procedure?.Title, acceptance.Status, acceptance.SentAt, acceptance.AcceptedAt, acceptance.ConfirmedIp, acceptance.ConfirmationHash, acceptance.VerifyIntegrity());
         }).ToList();
 
         var acceptanceLink = _linkBuilder.BuildAssignmentAcceptanceLink(organizationId, assignment.Id);
-        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, acceptanceLink);
+        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, acceptanceLink, assignment.AcceptedIp, assignment.AcceptanceHash, assignment.VerifyIntegrity());
     }
 
     private static string CreateProtocolNumber(DateTimeOffset now) => $"TEN-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";

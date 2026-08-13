@@ -28,5 +28,8 @@ public sealed record StarterPackageResponse(
     string ProtocolNumber,
     string Message);
 
-public sealed record CreateEmployeePackageRequest(Guid PersonId, Guid? JobProfileId, IReadOnlyList<Guid> AssetIds, IReadOnlyList<Guid> ProcedureIds, DateOnly? DueDate, string? Notes);
+public sealed record CreateEmployeePackageRequest(Guid PersonId, Guid? JobProfileId, IReadOnlyList<Guid> AssetIds, IReadOnlyList<Guid> ProcedureIds, DateOnly? DueDate, string? Notes, IReadOnlyDictionary<string, string>? AssetConditions = null);
 public sealed record EmployeePackageResponse(Guid AssignmentId, string ProtocolNumber, AssignmentResponse Assignment, IReadOnlyList<string> Warnings);
+
+public sealed record OnboardingChecklistItemResponse(string Type, Guid ItemId, string Label, string Status, DateTimeOffset? CompletedAt);
+public sealed record OnboardingChecklistResponse(Guid PersonId, string PersonName, IReadOnlyList<OnboardingChecklistItemResponse> Items, int CompletedCount, int TotalCount);

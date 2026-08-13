@@ -3,7 +3,7 @@ using Tenebit.Domain.Procedures;
 
 namespace Tenebit.Application.Procedures;
 
-public sealed record ProcedureAcceptanceStatusResponse(Guid PersonId, string PersonName, AcceptanceStatus Status, DateTimeOffset SentAt, DateTimeOffset? AcceptedAt, string? ProtocolNumber);
+public sealed record ProcedureAcceptanceStatusResponse(Guid PersonId, string PersonName, AcceptanceStatus Status, DateTimeOffset SentAt, DateTimeOffset? AcceptedAt, string? ProtocolNumber, string? ConfirmedIp, bool IsIntegrityVerified);
 
 public sealed record ProcedureResponse(
     Guid Id,

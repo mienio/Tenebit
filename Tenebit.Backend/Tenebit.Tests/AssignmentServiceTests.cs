@@ -1,6 +1,7 @@
 using Tenebit.Application.Assignments;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
+using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
 using Tenebit.Tests.Fakes;
@@ -135,5 +136,48 @@ public class AssignmentServiceTests
         var result = await service.AcceptAsync(created.Value!.Id, CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_StampsTamperEvidentIpAndHash()
+    {
+        var (service, user, assets, people, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets);
+
+        var created = await service.CreateAsync(new CreateAssignmentRequest(person.Id, [new AssignmentAssetRequest(asset.Id, "ok")], [], null, null), CancellationToken.None);
+        var accepted = await service.AcceptAsync(created.Value!.Id, CancellationToken.None);
+
+        Assert.True(accepted.IsSuccess);
+        Assert.Equal(user.IpAddress, accepted.Value!.AcceptedIp);
+        Assert.False(string.IsNullOrWhiteSpace(accepted.Value!.AcceptanceHash));
+        Assert.True(accepted.Value!.IsIntegrityVerified);
+    }
+
+    [Fact]
+    public void Assignment_CannotBeAcceptedTwice()
+    {
+        var organizationId = Guid.NewGuid();
+        var assignment = new Assignment(organizationId, Guid.NewGuid(), "TEN-TEST-1", DateTimeOffset.UtcNow, null, null, "tester");
+        assignment.AddAsset(Guid.NewGuid(), "ok");
+        assignment.Accept(DateTimeOffset.UtcNow, "1.2.3.4");
+
+        Assert.Throws<DomainException>(() => assignment.Accept(DateTimeOffset.UtcNow, "5.6.7.8"));
+    }
+
+    [Fact]
+    public void Assignment_VerifyIntegrity_DetectsTamperingAfterAcceptance()
+    {
+        var organizationId = Guid.NewGuid();
+        var assignment = new Assignment(organizationId, Guid.NewGuid(), "TEN-TEST-2", DateTimeOffset.UtcNow, null, null, "tester");
+        assignment.AddAsset(Guid.NewGuid(), "ok");
+        assignment.Accept(DateTimeOffset.UtcNow, "1.2.3.4");
+
+        Assert.True(assignment.VerifyIntegrity());
+
+        var tamperedHashField = typeof(Assignment).GetProperty(nameof(Assignment.AcceptanceHash))!;
+        tamperedHashField.SetValue(assignment, "tampered-hash");
+
+        Assert.False(assignment.VerifyIntegrity());
     }
 }

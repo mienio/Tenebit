@@ -1,3 +1,5 @@
+using Tenebit.Domain.Common;
+
 namespace Tenebit.Domain.Assignments;
 
 public sealed class ProcedureAcceptance
@@ -23,11 +25,23 @@ public sealed class ProcedureAcceptance
     public AcceptanceStatus Status { get; private set; }
     public DateTimeOffset SentAt { get; private set; }
     public DateTimeOffset? AcceptedAt { get; private set; }
+    public string? ConfirmedIp { get; private set; }
+    public string? ConfirmationHash { get; private set; }
 
-    public void Accept(DateTimeOffset acceptedAt)
+    // Hardening: a confirmed acceptance is a legal proof-of-receipt record — once signed it must never be
+    // overwritten (re-signed, re-timestamped, re-IP-stamped). The hash is computed only from fields owned by
+    // this record, so any direct DB tampering after signing can be detected by recomputing it (VerifyIntegrity).
+    public void Accept(DateTimeOffset acceptedAt, string? ipAddress)
     {
+        if (Status is AcceptanceStatus.Accepted or AcceptanceStatus.Declined)
+        {
+            throw new DomainException("Ta akceptacja procedury została już zarejestrowana i nie może zostać zmieniona.");
+        }
+
         Status = AcceptanceStatus.Accepted;
         AcceptedAt = acceptedAt;
+        ConfirmedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
+        ConfirmationHash = ComputeHash(acceptedAt, ConfirmedIp);
     }
 
     public void MarkOverdue()
@@ -36,5 +50,20 @@ public sealed class ProcedureAcceptance
         {
             Status = AcceptanceStatus.Overdue;
         }
+    }
+
+    // Recomputes the hash from the record's current field values — a mismatch with the stored
+    // ConfirmationHash means the record was altered after signing, bypassing this class.
+    public bool VerifyIntegrity()
+    {
+        if (AcceptedAt is null || ConfirmationHash is null) return true;
+        return ComputeHash(AcceptedAt.Value, ConfirmedIp) == ConfirmationHash;
+    }
+
+    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress)
+    {
+        var payload = string.Join('|', Id, OrganizationId, ProcedureId, PersonId, AssignmentId, SentAt.ToUniversalTime().ToString("O"), acceptedAt.ToUniversalTime().ToString("O"), ipAddress ?? "");
+        var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 }
