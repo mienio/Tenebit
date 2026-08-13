@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddSingleton<IPdfProtocolGenerator, PdfProtocolGenerator>();
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
+        services.AddSingleton<IPaymentGateway, StripePaymentGateway>();
         services.AddScoped<DefaultDataSeeder>();
         services.AddHostedService<AlertBackgroundService>();
         services.AddHostedService<DashboardSnapshotBackgroundService>();

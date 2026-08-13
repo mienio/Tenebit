@@ -2,10 +2,10 @@ namespace Tenebit.Domain.Subscriptions;
 
 public sealed class SubscriptionPlan
 {
-    // Asset limit temporarily raised well above any realistic test usage while the product is in
-    // free testing — no paywall should block testers. Lower this back down (e.g. to 10) once
-    // paid plans go live for real.
-    public static readonly SubscriptionPlan Free = new("free", "Free", 100_000, 0m, "USD");
+    // Real free-tier limit (not a temporary testing bump) — in line with competitors' free tiers
+    // and with what the pricing page already advertises ("Up to 10 assets"). Paid plans are now
+    // live via Stripe, so the earlier testing-only bump no longer applies.
+    public static readonly SubscriptionPlan Free = new("free", "Free", 10, 0m, "USD");
     public static readonly SubscriptionPlan Pro = new("pro", "Pro", 1000, 10m, "USD");
 
     public static readonly IReadOnlyList<SubscriptionPlan> All = [Free, Pro];

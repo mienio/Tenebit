@@ -418,7 +418,10 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PlanKey).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.StripeCustomerId).HasMaxLength(80);
+            entity.Property(x => x.StripeSubscriptionId).HasMaxLength(80);
             entity.HasIndex(x => x.OrganizationId).IsUnique();
+            entity.HasIndex(x => x.StripeCustomerId);
         });
     }
 }

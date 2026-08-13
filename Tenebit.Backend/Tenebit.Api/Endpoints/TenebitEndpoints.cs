@@ -837,7 +837,31 @@ public static class TenebitEndpoints
                 (await service.UpgradeAsync(request.PlanKey, cancellationToken)).ToHttpResult())
             .WithTags("Subscription")
             .WithOpenApi();
+
+        api.MapPost("/subscription/checkout", async (CheckoutSessionRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.CreateCheckoutSessionAsync(request.SuccessUrl, request.CancelUrl, cancellationToken)).ToHttpResult())
+            .WithTags("Subscription")
+            .WithOpenApi();
+
+        api.MapPost("/subscription/billing-portal", async (BillingPortalRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.CreateBillingPortalSessionAsync(request.ReturnUrl, cancellationToken)).ToHttpResult())
+            .WithTags("Subscription")
+            .WithOpenApi();
+
+        api.MapPost("/subscription/webhook", async (HttpRequest httpRequest, SubscriptionService service, CancellationToken cancellationToken) =>
+            {
+                using var reader = new StreamReader(httpRequest.Body);
+                var payload = await reader.ReadToEndAsync(cancellationToken);
+                var signature = httpRequest.Headers["Stripe-Signature"].ToString();
+                return (await service.HandleWebhookAsync(payload, signature, cancellationToken)).ToNoContentResult();
+            })
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Subscription")
+            .WithOpenApi();
     }
 
     private record UpgradeRequest(string PlanKey);
+    private record CheckoutSessionRequest(string SuccessUrl, string CancelUrl);
+    private record BillingPortalRequest(string ReturnUrl);
 }

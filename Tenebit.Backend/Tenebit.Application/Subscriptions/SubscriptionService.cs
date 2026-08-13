@@ -14,6 +14,7 @@ public sealed class SubscriptionService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPaymentGateway _paymentGateway;
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
@@ -21,7 +22,8 @@ public sealed class SubscriptionService
         IActivityLogRepository activity,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IPaymentGateway paymentGateway)
     {
         _subscriptions = subscriptions;
         _assets = assets;
@@ -29,6 +31,7 @@ public sealed class SubscriptionService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _paymentGateway = paymentGateway;
     }
 
     public async Task<Result<SubscriptionResponse>> GetCurrentAsync(CancellationToken cancellationToken)
@@ -59,6 +62,12 @@ public sealed class SubscriptionService
         ));
     }
 
+    /// <summary>
+    /// Direct, no-billing plan switch. Only the Free plan can be reached this way — moving to a paid
+    /// plan requires real payment via <see cref="CreateCheckoutSessionAsync"/>. Downgrading away from an
+    /// active Stripe subscription must go through the Stripe billing portal so cancellation actually
+    /// stops the charges instead of just editing our own record.
+    /// </summary>
     public async Task<Result<SubscriptionResponse>> UpgradeAsync(string planKey, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
@@ -68,6 +77,11 @@ public sealed class SubscriptionService
         if (newPlan is null)
         {
             return Result<SubscriptionResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
+        }
+
+        if (newPlan.Key != SubscriptionPlan.Free.Key)
+        {
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Aby przejść na plan Pro, użyj płatności Stripe (checkout)."));
         }
 
         try
@@ -81,6 +95,11 @@ public sealed class SubscriptionService
             }
             else
             {
+                if (subscription.HasActiveStripeSubscription)
+                {
+                    return Result<SubscriptionResponse>.Failure(Error.Validation("Ta organizacja ma aktywną płatną subskrypcję. Zarządzaj nią (w tym anulowaniem) w portalu rozliczeń Stripe."));
+                }
+
                 subscription.Upgrade(planKey);
             }
 
@@ -113,6 +132,99 @@ public sealed class SubscriptionService
         {
             return Result<SubscriptionResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    /// <summary>Starts a real Stripe Checkout flow for the Pro plan and returns the hosted checkout URL to redirect to.</summary>
+    public async Task<Result<string>> CreateCheckoutSessionAsync(string successUrl, string cancelUrl, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+
+        if (!_paymentGateway.IsConfigured)
+        {
+            return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane."));
+        }
+
+        var organizationId = _currentUser.OrganizationId;
+        var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+        if (subscription is null)
+        {
+            subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+            _subscriptions.Add(subscription);
+        }
+
+        if (subscription.HasActiveStripeSubscription)
+        {
+            return Result<string>.Failure(Error.Validation("Organizacja ma już aktywną płatną subskrypcję."));
+        }
+
+        if (string.IsNullOrWhiteSpace(subscription.StripeCustomerId))
+        {
+            var customerId = await _paymentGateway.CreateCustomerAsync(_currentUser.Email, organizationId, cancellationToken);
+            subscription.AttachStripeCustomer(customerId);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var checkoutUrl = await _paymentGateway.CreateCheckoutSessionAsync(subscription.StripeCustomerId!, organizationId, successUrl, cancelUrl, cancellationToken);
+        return Result<string>.Success(checkoutUrl);
+    }
+
+    /// <summary>Opens the Stripe Billing Portal so the owner can manage payment method, invoices, or cancel.</summary>
+    public async Task<Result<string>> CreateBillingPortalSessionAsync(string returnUrl, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+
+        if (!_paymentGateway.IsConfigured)
+        {
+            return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane."));
+        }
+
+        var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(subscription?.StripeCustomerId))
+        {
+            return Result<string>.Failure(Error.Validation("Organizacja nie ma jeszcze konta rozliczeniowego Stripe."));
+        }
+
+        var url = await _paymentGateway.CreateBillingPortalSessionAsync(subscription.StripeCustomerId, returnUrl, cancellationToken);
+        return Result<string>.Success(url);
+    }
+
+    /// <summary>Handles Stripe's customer.subscription.created/updated/deleted webhooks and syncs our own record.</summary>
+    public async Task<Result> HandleWebhookAsync(string payload, string signatureHeader, CancellationToken cancellationToken)
+    {
+        PaymentWebhookEvent? webhookEvent;
+        try
+        {
+            webhookEvent = _paymentGateway.ParseWebhookEvent(payload, signatureHeader);
+        }
+        catch (Exception)
+        {
+            return Result.Failure(Error.Validation("Nieprawidłowy podpis webhooka Stripe."));
+        }
+
+        if (webhookEvent is null) return Result.Success();
+
+        var subscription = webhookEvent.OrganizationId.HasValue
+            ? await _subscriptions.GetByOrganizationAsync(webhookEvent.OrganizationId.Value, cancellationToken)
+            : await _subscriptions.GetByStripeCustomerAsync(webhookEvent.CustomerId, cancellationToken);
+
+        if (subscription is null) return Result.Success();
+
+        subscription.SyncFromStripe(webhookEvent.PlanKey, webhookEvent.Status, webhookEvent.CurrentPeriodStart, webhookEvent.CurrentPeriodEnd, webhookEvent.SubscriptionId, webhookEvent.CustomerId);
+
+        _activity.Add(new ActivityLog(
+            subscription.OrganizationId,
+            "subscription.stripe_synced",
+            "subscription",
+            subscription.Id,
+            "stripe-webhook",
+            $"{webhookEvent.EventType}: {subscription.PlanKey}/{subscription.Status}",
+            _clock.UtcNow));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result<bool>> CanAddAssetAsync(CancellationToken cancellationToken)

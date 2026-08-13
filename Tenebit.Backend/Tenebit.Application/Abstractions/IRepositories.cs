@@ -171,6 +171,7 @@ public interface IAssetStatusSettingRepository
 public interface ISubscriptionRepository
 {
     Task<OrganizationSubscription?> GetByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken);
     void Add(OrganizationSubscription subscription);
 }
 

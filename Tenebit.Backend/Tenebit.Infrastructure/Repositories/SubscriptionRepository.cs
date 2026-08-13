@@ -21,6 +21,13 @@ internal sealed class SubscriptionRepository : ISubscriptionRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken)
+    {
+        return await _context.Subscriptions
+            .Where(s => s.StripeCustomerId == stripeCustomerId)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public void Add(OrganizationSubscription subscription)
     {
         _context.Subscriptions.Add(subscription);

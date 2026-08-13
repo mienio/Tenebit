@@ -25,12 +25,11 @@ export function PricingPage() {
     setConfirmOpen(false);
     setUpgrading(true);
     try {
-      await api.upgradeSubscription('pro');
-      setMessage({ type: 'success', text: t('pricing.upgradeSuccess') });
-      await subscription.reload();
+      const returnBase = window.location.origin;
+      const checkoutUrl = await api.createCheckoutSession(`${returnBase}/dashboard?checkout=success`, `${returnBase}/pricing?checkout=cancelled`);
+      window.location.assign(checkoutUrl);
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
-    } finally {
       setUpgrading(false);
     }
   }
