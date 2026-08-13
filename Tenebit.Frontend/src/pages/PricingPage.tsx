@@ -1,6 +1,5 @@
 import { Check, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -12,7 +11,6 @@ export function PricingPage() {
   const [upgrading, setUpgrading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!message) return;
@@ -24,12 +22,11 @@ export function PricingPage() {
     setConfirmOpen(false);
     setUpgrading(true);
     try {
-      await api.upgradeSubscription('pro');
-      setMessage({ type: 'success', text: t('pricing.upgradeSuccess') });
-      navigate('/dashboard');
+      const returnBase = window.location.origin;
+      const checkoutUrl = await api.createCheckoutSession(`${returnBase}/dashboard?checkout=success`, `${returnBase}/pricing?checkout=cancelled`);
+      window.location.assign(checkoutUrl);
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
-    } finally {
       setUpgrading(false);
     }
   }

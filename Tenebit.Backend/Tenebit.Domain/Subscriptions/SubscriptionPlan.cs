@@ -2,6 +2,8 @@ namespace Tenebit.Domain.Subscriptions;
 
 public sealed class SubscriptionPlan
 {
+    // Real free-tier limit (not a temporary testing bump) — in line with competitors' free tiers
+    // and with what the pricing page already advertises ("Up to 10 assets").
     public static readonly SubscriptionPlan Free = new("free", "Free", 10, 0m, "USD");
     public static readonly SubscriptionPlan Pro = new("pro", "Pro", 1000, 10m, "USD");
 

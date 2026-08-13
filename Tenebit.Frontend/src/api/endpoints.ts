@@ -61,6 +61,8 @@ export const api = {
 
   subscription: () => apiRequest<import('../types/domain').Subscription>('/api/subscription'),
   upgradeSubscription: (planKey: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/upgrade', { method: 'POST', body: JSON.stringify({ planKey }) }),
+  createCheckoutSession: (successUrl: string, cancelUrl: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ successUrl, cancelUrl }) }),
+  createBillingPortalSession: (returnUrl: string) => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST', body: JSON.stringify({ returnUrl }) }),
 
   assets: (params?: { search?: string; status?: AssetStatus | ''; location?: string | '' }) => {
     const query = new URLSearchParams();

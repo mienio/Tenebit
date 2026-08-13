@@ -109,7 +109,35 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
     public Task<OrganizationSubscription?> GetByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult(Subscriptions.FirstOrDefault(x => x.OrganizationId == organizationId));
 
+    public Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken) =>
+        Task.FromResult(Subscriptions.FirstOrDefault(x => x.StripeCustomerId == stripeCustomerId));
+
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
+}
+
+public sealed class FakePaymentGateway : IPaymentGateway
+{
+    public bool IsConfigured { get; set; } = true;
+    public string NextCustomerId { get; set; } = "cus_fake";
+    public string NextCheckoutUrl { get; set; } = "https://checkout.stripe.com/fake-session";
+    public string NextPortalUrl { get; set; } = "https://billing.stripe.com/fake-portal";
+    public PaymentWebhookEvent? NextWebhookEvent { get; set; }
+    public bool ThrowOnParseWebhookEvent { get; set; }
+
+    public Task<string> CreateCustomerAsync(string email, Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(NextCustomerId);
+
+    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, CancellationToken cancellationToken) =>
+        Task.FromResult(NextCheckoutUrl);
+
+    public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken) =>
+        Task.FromResult(NextPortalUrl);
+
+    public PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader)
+    {
+        if (ThrowOnParseWebhookEvent) throw new InvalidOperationException("Invalid Stripe webhook signature.");
+        return NextWebhookEvent;
+    }
 }
 
 public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator

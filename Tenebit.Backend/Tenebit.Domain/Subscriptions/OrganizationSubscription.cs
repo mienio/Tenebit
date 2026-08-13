@@ -27,6 +27,12 @@ public sealed class OrganizationSubscription
     public DateTimeOffset? CancelledAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
+    public string? StripeCustomerId { get; private set; }
+    public string? StripeSubscriptionId { get; private set; }
+
+    /// <summary>True while Stripe still considers there to be a live (billable) subscription behind this plan.</summary>
+    public bool HasActiveStripeSubscription =>
+        !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status is SubscriptionStatus.Active or SubscriptionStatus.PastDue;
 
     public void Upgrade(string newPlanKey)
     {
@@ -58,5 +64,39 @@ public sealed class OrganizationSubscription
     {
         var plan = SubscriptionPlan.FromKey(PlanKey);
         return plan?.AssetLimit ?? SubscriptionPlan.Free.AssetLimit;
+    }
+
+    public void AttachStripeCustomer(string stripeCustomerId)
+    {
+        StripeCustomerId = stripeCustomerId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Applies the state of a Stripe subscription (from checkout completion or a webhook) to this record.
+    /// A Cancelled status always reverts the organization to the Free plan, regardless of what plan the
+    /// caller passed in — an org can never keep paid-plan benefits once Stripe says the subscription is gone.
+    /// </summary>
+    public void SyncFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? stripeSubscriptionId, string stripeCustomerId)
+    {
+        StripeCustomerId = stripeCustomerId;
+        StripeSubscriptionId = stripeSubscriptionId;
+        Status = status;
+
+        if (status == SubscriptionStatus.Cancelled)
+        {
+            PlanKey = SubscriptionPlan.Free.Key;
+            CancelledAt ??= DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            var plan = SubscriptionPlan.FromKey(planKey);
+            if (plan is not null) PlanKey = plan.Key;
+            CancelledAt = null;
+        }
+
+        CurrentPeriodStart = currentPeriodStart;
+        CurrentPeriodEnd = currentPeriodEnd;
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

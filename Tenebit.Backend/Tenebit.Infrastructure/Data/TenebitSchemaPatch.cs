@@ -177,5 +177,11 @@ CREATE TABLE IF NOT EXISTS tenebit.device_trust_tokens (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_device_trust_tokens_UserId_TokenHash"
     ON tenebit.device_trust_tokens ("OrganizationUserId", "TokenHash");
+
+ALTER TABLE tenebit.subscriptions ADD COLUMN IF NOT EXISTS "StripeCustomerId" character varying(80) NULL;
+ALTER TABLE tenebit.subscriptions ADD COLUMN IF NOT EXISTS "StripeSubscriptionId" character varying(80) NULL;
+
+CREATE INDEX IF NOT EXISTS "IX_subscriptions_StripeCustomerId"
+    ON tenebit.subscriptions ("StripeCustomerId");
 """;
 }
