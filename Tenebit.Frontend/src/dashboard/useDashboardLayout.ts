@@ -99,7 +99,11 @@ export function useDashboardLayout() {
     setWidgets(current => (current ?? []).filter(item => item.i !== type));
   }, []);
 
+  const resetToDefault = useCallback(() => {
+    setWidgets(buildDefaultLayout());
+  }, []);
+
   const availableToAdd = widgets ? WIDGET_CATALOG.filter(def => !widgets.some(item => item.i === def.type)) : [];
 
-  return { widgets, setWidgets, editing, saving, saveError, startEdit, cancelEdit, finishEdit, addWidget, removeWidget, availableToAdd };
+  return { widgets, setWidgets, editing, saving, saveError, startEdit, cancelEdit, finishEdit, addWidget, removeWidget, resetToDefault, availableToAdd };
 }

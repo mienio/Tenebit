@@ -1,4 +1,4 @@
-import { AlertCircle, Check, ChevronDown, ChevronUp, GripVertical, Plus, SlidersHorizontal, X, Zap } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, GripVertical, Plus, RotateCcw, SlidersHorizontal, X, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import GridLayout, { WidthProvider } from 'react-grid-layout';
@@ -7,6 +7,7 @@ import 'react-resizable/css/styles.css';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorState, LoadingState } from '../components/StateViews';
@@ -48,6 +49,7 @@ export function DashboardPage() {
   const layout = useDashboardLayout();
   const [stepsExpanded, setStepsExpanded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => window.localStorage.getItem(onboardingDismissKey) === '1');
 
   function dismissOnboarding() {
@@ -73,6 +75,7 @@ export function DashboardPage() {
           layout.editing ? (
             <>
               <Button variant="secondary" icon={<Plus size={16} />} onClick={() => setPickerOpen(true)}>{t('dashboard.addWidget')}</Button>
+              <Button variant="ghost" icon={<RotateCcw size={16} />} onClick={() => setResetConfirmOpen(true)}>{t('dashboard.resetLayout')}</Button>
               <Button variant="ghost" onClick={layout.cancelEdit}>{t('common.cancel')}</Button>
               <Button disabled={layout.saving} icon={<Check size={16} />} onClick={layout.finishEdit}>{layout.saving ? t('common.saving') : t('dashboard.doneEditing')}</Button>
             </>
@@ -213,6 +216,15 @@ export function DashboardPage() {
           <Button type="button" variant="ghost" onClick={() => setPickerOpen(false)}>{t('common.close')}</Button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={resetConfirmOpen}
+        title={t('dashboard.resetConfirmTitle')}
+        description={t('dashboard.resetConfirmDesc')}
+        confirmLabel={t('dashboard.resetLayout')}
+        onConfirm={() => { layout.resetToDefault(); setResetConfirmOpen(false); }}
+        onClose={() => setResetConfirmOpen(false)}
+      />
     </div>
   );
 }
