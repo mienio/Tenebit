@@ -12,6 +12,24 @@ function withCatalogSizing(layout: Layout[]): Layout[] {
     });
 }
 
+// Widgets added to the default set after users could already have a saved
+// layout: backfill them once so they don't stay permanently invisible.
+// Deliberately NOT re-added if a user removes them afterwards.
+const LEGACY_BACKFILL_WIDGETS: WidgetType[] = ['metric-licenses'];
+
+function withLegacyBackfill(layout: Layout[]): Layout[] {
+  const missing = LEGACY_BACKFILL_WIDGETS.filter(type => !layout.some(item => item.i === type));
+  if (missing.length === 0) return layout;
+  let maxY = layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+  const added = missing.map(type => {
+    const def = WIDGET_CATALOG_MAP[type];
+    const item = { i: type, x: 0, y: maxY, ...def.defaultSize, minW: def.minW, minH: def.minH };
+    maxY += def.defaultSize.h;
+    return item;
+  });
+  return [...layout, ...added];
+}
+
 export function useDashboardLayout() {
   const [widgets, setWidgets] = useState<Layout[] | null>(null);
   const [editing, setEditing] = useState(false);
@@ -31,7 +49,7 @@ export function useDashboardLayout() {
         try {
           const parsed = JSON.parse(res.layoutJson) as Layout[];
           const cleaned = withCatalogSizing(parsed);
-          setWidgets(cleaned.length > 0 ? cleaned : buildDefaultLayout());
+          setWidgets(cleaned.length > 0 ? withLegacyBackfill(cleaned) : buildDefaultLayout());
         } catch {
           setWidgets(buildDefaultLayout());
         }
