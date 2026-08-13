@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Download, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, Download, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -235,6 +236,7 @@ export function AssignmentsPage() {
 
 function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignment: Assignment; onDownload: (assignment: Assignment) => void; onViewPerson: (personId: string) => void }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkCopyFailed, setLinkCopyFailed] = useState(false);
   async function copyLink() {
@@ -268,7 +270,7 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
         <DetailItem label={t('assignments.notesFieldLabel')} value={assignment.notes ?? t('assignments.notesFallback')} />
       </DetailGrid>
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '—'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
-      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><StatusBadge status={item.status} /></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
+      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><div className="rowActions"><StatusBadge status={item.status} /><button type="button" className="iconButton" aria-label={t('assignments.openProcedureAria')} onClick={() => navigate(`/procedures?open=${item.procedureId}`)}><ExternalLink size={16} /></button></div></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
       <Card className="card--flat">
         <div className="sectionTitle"><div><h2>{t('assignments.proofTitle')}</h2></div></div>
         {assignment.acceptedAt ? (

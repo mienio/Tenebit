@@ -1,5 +1,6 @@
 import { ChangeEvent, DragEvent, FormEvent, useEffect, useMemo, useState } from 'react';
-import { Archive, Download, FileCheck2, Pencil, Plus, Search, Send, Trash2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Archive, Download, Eye, FileCheck2, Pencil, Plus, Search, Send, Trash2 } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -39,6 +40,7 @@ const pageSize = 9;
 export function ProceduresPage() {
   const { t, tPlural } = useI18n();
   const { celebrate } = useCelebration();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search.trim().toLowerCase(), 250);
@@ -67,6 +69,25 @@ export function ProceduresPage() {
     const timeout = window.setTimeout(() => setMessage(null), message.type === 'success' ? 3500 : 6500);
     return () => window.clearTimeout(timeout);
   }, [message]);
+
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId) return;
+    let cancelled = false;
+    // Deep link from elsewhere (e.g. an assignment's procedure list): the
+    // target procedure may not be on the currently loaded page/search, so
+    // resolve it against the full unpaged list instead.
+    api.procedures().then(all => {
+      if (cancelled) return;
+      const match = all.find(item => item.id === openId);
+      if (match) setDialog({ mode: 'edit', procedure: match });
+      setSearchParams(params => { params.delete('open'); return params; }, { replace: true });
+    }).catch(() => {
+      setSearchParams(params => { params.delete('open'); return params; }, { replace: true });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('open')]);
   const rows = procedures.data?.items ?? [];
   const totalProcedures = procedures.data?.total ?? 0;
 
@@ -204,6 +225,19 @@ export function ProceduresPage() {
     }
   }
 
+  async function preview(procedureId: string, documentId: string) {
+    try {
+      const blob = await api.downloadProcedureDocument(procedureId, documentId);
+      const url = URL.createObjectURL(blob);
+      // Deliberately no <a download>: opening the blob URL directly lets the
+      // browser render it inline (PDF viewer etc.) instead of forcing a save-as.
+      window.open(url, '_blank', 'noopener');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('procedures.downloadFailed') });
+    }
+  }
+
   if (procedures.isLoading && !procedures.data) return <LoadingState title={t('procedures.loadingTitle')} description={t('procedures.loadingDesc')} />;
   if (procedures.error) return <ErrorState message={procedures.error} onRetry={procedures.reload} />;
 
@@ -269,6 +303,7 @@ export function ProceduresPage() {
                   <div className="listRow" key={doc.id}>
                     <div><strong>{doc.fileName}</strong><small>{formatBytes(doc.sizeBytes)} · {formatDate(doc.uploadedAt)}</small></div>
                     <div className="rowActions">
+                      <button className="iconButton" aria-label={t('procedures.previewAria', { file: doc.fileName })} onClick={() => preview(editedProcedure.id, doc.id)}><Eye size={16} /></button>
                       <button className="iconButton" aria-label={t('procedures.downloadAria', { file: doc.fileName })} onClick={() => download(editedProcedure.id, doc.id, doc.fileName)}><Download size={16} /></button>
                       {editedProcedure.status === 'Draft' ? <button className="iconButton" aria-label={t('procedures.deleteAria', { file: doc.fileName })} onClick={() => setConfirmAction({ kind: 'removeDoc', documentId: doc.id, fileName: doc.fileName })}><Trash2 size={16} /></button> : null}
                     </div>

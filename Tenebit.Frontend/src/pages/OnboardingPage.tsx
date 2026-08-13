@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Plus, Rocket } from 'lucide-react';
+import { ExternalLink, Plus, Rocket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
@@ -190,7 +190,16 @@ export function OnboardingPage() {
               {checklist.data.items.map(item => (
                 <div className="listRow" key={`${item.type}-${item.itemId}`}>
                   <div><strong>{item.label}</strong><small>{t(`onboarding.checklistType.${item.type}`)}</small></div>
-                  <StatusBadge status={item.status} />
+                  <div className="rowActions">
+                    <StatusBadge status={item.status} />
+                    <Link
+                      className="iconButton"
+                      aria-label={t('onboarding.openItemAria')}
+                      to={item.type === 'asset' ? `/assets?openAssetId=${item.itemId}` : `/procedures?open=${item.itemId}`}
+                    >
+                      <ExternalLink size={16} />
+                    </Link>
+                  </div>
                 </div>
               ))}
             </div>
