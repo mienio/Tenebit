@@ -63,11 +63,8 @@ public static class DependencyInjection
         var db = scope.ServiceProvider.GetRequiredService<TenebitDbContext>();
         if (configuration.GetValue("Database:AutoCreate", true))
         {
-            await db.Database.EnsureCreatedAsync(cancellationToken);
+            await db.Database.MigrateAsync(cancellationToken);
         }
-
-        await TenebitSchemaPatch.ApplyAsync(db, cancellationToken);
-        await EnsureRuntimeSchemaAsync(db, cancellationToken);
 
         if (configuration.GetValue("Seed:Enabled", true))
         {
@@ -75,109 +72,4 @@ public static class DependencyInjection
             await seeder.SeedAsync(cancellationToken);
         }
     }
-
-    private static async Task EnsureRuntimeSchemaAsync(TenebitDbContext db, CancellationToken cancellationToken)
-    {
-        await db.Database.ExecuteSqlRawAsync("""
-            CREATE SCHEMA IF NOT EXISTS tenebit;
-
-            CREATE TABLE IF NOT EXISTS tenebit.asset_locations (
-                "Id" uuid PRIMARY KEY,
-                "OrganizationId" uuid NOT NULL,
-                "Name" character varying(120) NOT NULL,
-                "Type" character varying(40) NOT NULL,
-                "ParentId" uuid NULL,
-                "IsActive" boolean NOT NULL DEFAULT TRUE,
-                "CreatedAt" timestamp with time zone NOT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS "IX_asset_locations_OrganizationId_ParentId"
-                ON tenebit.asset_locations ("OrganizationId", "ParentId");
-
-            ALTER TABLE tenebit.procedures ADD COLUMN IF NOT EXISTS "ContentUrl" character varying(600) NULL;
-            ALTER TABLE tenebit.procedures ADD COLUMN IF NOT EXISTS "AppliesTo" character varying(240) NULL;
-            ALTER TABLE tenebit.procedures ADD COLUMN IF NOT EXISTS "ReviewDate" date NULL;
-            ALTER TABLE tenebit.procedures ADD COLUMN IF NOT EXISTS "PublishedAt" timestamp with time zone NULL;
-
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "Location" character varying(180) NULL;
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "Manufacturer" character varying(120) NULL;
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "Model" character varying(120) NULL;
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "PurchasePrice" numeric(18,2) NULL;
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "Currency" character varying(8) NULL;
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "PurchaseDate" date NULL;
-            ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "WarrantyUntil" date NULL;
-
-            ALTER TABLE tenebit.people ADD COLUMN IF NOT EXISTS "ManagerId" uuid NULL;
-            ALTER TABLE tenebit.people ADD COLUMN IF NOT EXISTS "Location" character varying(180) NULL;
-            ALTER TABLE tenebit.people ADD COLUMN IF NOT EXISTS "CostCenter" character varying(80) NULL;
-            ALTER TABLE tenebit.people ADD COLUMN IF NOT EXISTS "IsActive" boolean NOT NULL DEFAULT TRUE;
-
-            CREATE TABLE IF NOT EXISTS tenebit.asset_field_definitions (
-                "CategoryId" uuid NOT NULL,
-                "Id" uuid NOT NULL,
-                "Key" character varying(80) NOT NULL,
-                "Label" character varying(120) NOT NULL,
-                "FieldType" character varying(40) NOT NULL,
-                "Options" character varying(1000) NULL,
-                "Required" boolean NOT NULL DEFAULT FALSE,
-                "SortOrder" integer NOT NULL DEFAULT 0,
-                PRIMARY KEY ("CategoryId", "Id")
-            );
-
-            CREATE TABLE IF NOT EXISTS tenebit.asset_field_values (
-                "AssetId" uuid NOT NULL,
-                "FieldKey" character varying(80) NOT NULL,
-                "Value" character varying(2000) NOT NULL,
-                PRIMARY KEY ("AssetId", "FieldKey")
-            );
-
-            CREATE TABLE IF NOT EXISTS tenebit.sent_alerts (
-                "Id" uuid PRIMARY KEY,
-                "OrganizationId" uuid NOT NULL,
-                "AlertKey" character varying(60) NOT NULL,
-                "EntityId" uuid NOT NULL,
-                "SentAt" timestamp with time zone NOT NULL
-            );
-
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_sent_alerts_Org_Key_Entity"
-                ON tenebit.sent_alerts ("OrganizationId", "AlertKey", "EntityId");
-
-            CREATE TABLE IF NOT EXISTS tenebit.dashboard_layouts (
-                "OrganizationUserId" uuid PRIMARY KEY,
-                "OrganizationId" uuid NOT NULL,
-                "LayoutJson" text NOT NULL,
-                "UpdatedAt" timestamp with time zone NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS tenebit.dashboard_snapshots (
-                "Id" uuid PRIMARY KEY,
-                "OrganizationId" uuid NOT NULL,
-                "SnapshotDate" date NOT NULL,
-                "TotalAssets" integer NOT NULL,
-                "AssetsWithoutOwner" integer NOT NULL,
-                "OpenAssignments" integer NOT NULL,
-                "VisibleAssetValue" numeric(18,2) NOT NULL,
-                "CreatedAt" timestamp with time zone NOT NULL
-            );
-
-            CREATE UNIQUE INDEX IF NOT EXISTS "IX_dashboard_snapshots_OrganizationId_SnapshotDate"
-                ON tenebit.dashboard_snapshots ("OrganizationId", "SnapshotDate");
-
-            ALTER TABLE tenebit.asset_status_settings ADD COLUMN IF NOT EXISTS "Color" character varying(9) NOT NULL DEFAULT '#475569';
-
-            UPDATE tenebit.asset_status_settings SET "Color" = CASE "StatusKey"
-                WHEN 'InStock' THEN '#047857'
-                WHEN 'Reserved' THEN '#1d4ed8'
-                WHEN 'Assigned' THEN '#1d4ed8'
-                WHEN 'InTransit' THEN '#c2410c'
-                WHEN 'InService' THEN '#c2410c'
-                WHEN 'Damaged' THEN '#be123c'
-                WHEN 'Lost' THEN '#be123c'
-                WHEN 'Disposed' THEN '#991b1b'
-                ELSE "Color"
-            END
-            WHERE "Color" = '#475569';
-            """, cancellationToken);
-    }
-
 }
