@@ -25,7 +25,8 @@ export function DonutChart({ segments, size = 160, emptyLabel }: { segments: Don
 
   return (
     <div className="donutChart">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <div className="donutChart__figure" style={{ maxWidth: size }}>
+        <svg viewBox={`0 0 ${size} ${size}`}>
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--border)" strokeWidth={16} />
         {segments.map(segment => {
           const length = (segment.value / total) * circumference;
@@ -50,7 +51,8 @@ export function DonutChart({ segments, size = 160, emptyLabel }: { segments: Don
         <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="middle" fontSize={22} fontWeight={700} fill="var(--brand)">
           {total}
         </text>
-      </svg>
+        </svg>
+      </div>
       <ul className="donutChart__legend">
         {segments.map(segment => (
           <li key={segment.label}>

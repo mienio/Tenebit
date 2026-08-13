@@ -68,15 +68,18 @@ const DEFAULT_ENABLED: WidgetType[] = [
 ];
 
 export function buildDefaultLayout(): Layout[] {
-  const metricXs = [0, 4, 8, 12, 16];
   const layout: Layout[] = [];
   const metrics = DEFAULT_ENABLED.filter(type => type.startsWith('metric-'));
+  // Fit metrics into as few full rows as possible instead of a fixed 5-per-row
+  // grid, which stranded a lone card in its own row once a 6th metric existed.
+  const perRow = Math.max(1, Math.min(metrics.length, Math.floor(GRID_COLS / Math.max(3, Math.floor(GRID_COLS / metrics.length)))));
+  const colWidth = Math.floor(GRID_COLS / perRow);
   metrics.forEach((type, index) => {
-    const row = Math.floor(index / metricXs.length);
-    const col = index % metricXs.length;
-    layout.push({ i: type, x: metricXs[col], y: row * 3, ...WIDGET_CATALOG_MAP[type].defaultSize });
+    const row = Math.floor(index / perRow);
+    const col = index % perRow;
+    layout.push({ i: type, x: col * colWidth, y: row * 3, w: colWidth, h: WIDGET_CATALOG_MAP[type].defaultSize.h, minW: WIDGET_CATALOG_MAP[type].minW, minH: WIDGET_CATALOG_MAP[type].minH });
   });
-  const chartsY = Math.ceil(metrics.length / metricXs.length) * 3;
+  const chartsY = Math.ceil(metrics.length / perRow) * 3;
   layout.push({ i: 'chart-byStatus', x: 0, y: chartsY, ...WIDGET_CATALOG_MAP['chart-byStatus'].defaultSize });
   layout.push({ i: 'chart-byCategory', x: 10, y: chartsY, ...WIDGET_CATALOG_MAP['chart-byCategory'].defaultSize });
   layout.push({ i: 'list-activity', x: 0, y: chartsY + 5, ...WIDGET_CATALOG_MAP['list-activity'].defaultSize });
