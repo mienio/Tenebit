@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { api } from '../api/endpoints';
 import { Card } from '../components/Card';
@@ -10,11 +11,11 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatDateTime } from '../utils/format';
-import { activityLabel, translateOr } from '../utils/labels';
+import { activityActionLabel, auditEntityLabel, auditEntityRoutes } from '../utils/labels';
 import { useI18n } from '../i18n/I18nProvider';
 
 const pageSize = 25;
-const entityTypes = ['asset', 'person', 'assignment', 'procedure', 'category', 'location', 'team', 'organization', 'jobProfile', 'organizationUser'];
+const entityTypes = ['asset', 'asset_category', 'person', 'team', 'assignment', 'procedure', 'job_profile', 'organization', 'organization_user', 'settings'];
 
 export function AuditLogPage() {
   const { t, tPlural } = useI18n();
@@ -89,8 +90,12 @@ export function AuditLogPage() {
                   <tr key={entry.id}>
                     <td data-label={t('audit.colDate')}><small>{formatDateTime(entry.createdAt)}</small></td>
                     <td data-label={t('audit.colActor')}>{entry.actorDisplay}</td>
-                    <td data-label={t('audit.colAction')}>{activityLabel(t, entry.action)}</td>
-                    <td data-label={t('audit.colEntity')}>{translateOr(t, `audit.entityType.${entry.entityType}`, entry.entityType)}</td>
+                    <td data-label={t('audit.colAction')}>{activityActionLabel(t, entry.action)}</td>
+                    <td data-label={t('audit.colEntity')}>
+                      {auditEntityRoutes[entry.entityType]
+                        ? <Link className="status" to={auditEntityRoutes[entry.entityType]}>{auditEntityLabel(t, entry.entityType)}</Link>
+                        : <span className="status">{auditEntityLabel(t, entry.entityType)}</span>}
+                    </td>
                     <td data-label={t('audit.colDetails')}>{entry.details ?? '—'}</td>
                   </tr>
                 ))}

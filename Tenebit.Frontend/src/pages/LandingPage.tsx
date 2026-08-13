@@ -14,10 +14,10 @@ const previewRows = [
 ];
 
 const features = [
-  { icon: Boxes, key: 'assets' },
-  { icon: Users, key: 'people' },
   { icon: PackageCheck, key: 'assignments' },
   { icon: ClipboardCheck, key: 'procedures' },
+  { icon: Boxes, key: 'assets' },
+  { icon: Users, key: 'people' },
   { icon: QrCode, key: 'qr' },
   { icon: BarChart3, key: 'reports' }
 ];

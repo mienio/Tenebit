@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, Download, FileSpreadsheet, Minus, ShieldAlert, TrendingDown, TrendingUp } from 'lucide-react';
+import { BarChart3, ClipboardList, Download, FileSpreadsheet, Minus, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
@@ -9,6 +9,7 @@ import { PageHeader } from '../components/PageHeader';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { formatDate, formatDateTime, formatMoney } from '../utils/format';
+import { activityActionLabel, auditEntityLabel } from '../utils/labels';
 import { useI18n } from '../i18n/I18nProvider';
 import { DonutChart } from '../components/charts/DonutChart';
 import { BarChart } from '../components/charts/BarChart';
@@ -143,6 +144,25 @@ export function ReportsPage() {
           <span className="reportMetric">{data.warrantyExpiringSoon.length}</span>
           <h2>{t('reports.warrantyDeadlines')}</h2>
         </Link>
+      </div>
+
+      <div className="twoColumns">
+        <Card>
+          <div className="sectionTitle"><div><h2>{t('reports.pendingAcceptances')}</h2></div></div>
+          <div className="reportValue"><ShieldCheck size={24} /><strong>{data.pendingProcedureAcceptances}</strong><span>{t('reports.pendingAcceptancesDesc')}</span></div>
+        </Card>
+
+        <Card>
+          <div className="sectionTitle"><div><h2>{t('reports.recentActivity')}</h2></div><Link className="inlineAction" to="/audit">{t('reports.viewAuditLog')}</Link></div>
+          <div className="listRows">
+            {!data.recentActivity.length ? <p className="muted">{t('reports.noActivity')}</p> : data.recentActivity.slice(0, 6).map((item, index) => (
+              <div className="listRow" key={`${item.action}-${index}`}>
+                <div><strong>{activityActionLabel(t, item.action)}</strong><small>{item.displayName ?? auditEntityLabel(t, item.entityType)}</small></div>
+                <span>{formatDateTime(item.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
 
       <div className="twoColumns">
