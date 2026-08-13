@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Card } from '../components/Card';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
@@ -9,10 +10,11 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatDateTime } from '../utils/format';
+import { activityActionLabel, auditEntityLabel, auditEntityRoutes } from '../utils/labels';
 import { useI18n } from '../i18n/I18nProvider';
 
 const pageSize = 25;
-const entityTypes = ['asset', 'person', 'assignment', 'procedure', 'category', 'location', 'team', 'organization', 'jobProfile', 'organizationUser'];
+const entityTypes = ['asset', 'asset_category', 'person', 'team', 'assignment', 'procedure', 'job_profile', 'organization', 'organization_user', 'settings'];
 
 export function AuditLogPage() {
   const { t } = useI18n();
@@ -61,8 +63,12 @@ export function AuditLogPage() {
                   <tr key={entry.id}>
                     <td><small>{formatDateTime(entry.createdAt)}</small></td>
                     <td>{entry.actorDisplay}</td>
-                    <td>{entry.action}</td>
-                    <td>{entry.entityType}</td>
+                    <td>{activityActionLabel(t, entry.action)}</td>
+                    <td>
+                      {auditEntityRoutes[entry.entityType]
+                        ? <Link className="status" to={auditEntityRoutes[entry.entityType]}>{auditEntityLabel(t, entry.entityType)}</Link>
+                        : <span className="status">{auditEntityLabel(t, entry.entityType)}</span>}
+                    </td>
                     <td>{entry.details ?? '—'}</td>
                   </tr>
                 ))}
