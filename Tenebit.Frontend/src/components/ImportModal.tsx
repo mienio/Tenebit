@@ -281,7 +281,10 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
             purchasePrice: null,
             currency: null,
             purchaseDate: null,
-            warrantyUntil: null
+            warrantyUntil: null,
+            isReservable: false,
+            maxReservationDays: null,
+            reservationInstructions: null
           });
         }
         created++;

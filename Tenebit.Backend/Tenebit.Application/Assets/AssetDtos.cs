@@ -32,7 +32,10 @@ public sealed record AssetResponse(
     IReadOnlyDictionary<string, string> CustomFields,
     IReadOnlyList<AssetFieldDefinitionResponse> CategoryFieldDefinitions,
     Guid? TeamId,
-    string? TeamName);
+    string? TeamName,
+    bool IsReservable,
+    int? MaxReservationDays,
+    string? ReservationInstructions);
 
 public sealed record CreateAssetRequest(
     string Name,
@@ -47,6 +50,9 @@ public sealed record CreateAssetRequest(
     DateOnly? PurchaseDate,
     DateOnly? WarrantyUntil,
     Guid? TeamId,
+    bool IsReservable,
+    int? MaxReservationDays,
+    string? ReservationInstructions,
     IReadOnlyDictionary<string, string>? CustomFields);
 
 public sealed record PublicAssetScanResponse(string OrganizationName);
@@ -66,4 +72,7 @@ public sealed record UpdateAssetRequest(
     DateOnly? PurchaseDate,
     DateOnly? WarrantyUntil,
     Guid? TeamId,
+    bool IsReservable,
+    int? MaxReservationDays,
+    string? ReservationInstructions,
     IReadOnlyDictionary<string, string>? CustomFields);

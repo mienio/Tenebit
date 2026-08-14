@@ -123,6 +123,9 @@ export interface Asset {
   categoryFieldDefinitions: AssetFieldDefinition[];
   teamId?: string | null;
   teamName?: string | null;
+  isReservable: boolean;
+  maxReservationDays?: number | null;
+  reservationInstructions?: string | null;
 }
 
 export interface CreateAssetRequest {
@@ -138,6 +141,9 @@ export interface CreateAssetRequest {
   purchaseDate?: string | null;
   warrantyUntil?: string | null;
   teamId?: string | null;
+  isReservable: boolean;
+  maxReservationDays?: number | null;
+  reservationInstructions?: string | null;
   customFields?: Record<string, string> | null;
 }
 

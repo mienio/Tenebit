@@ -136,9 +136,13 @@ public sealed class AssetService
             var customFieldsResult = ValidateCustomFields(category, request.CustomFields);
             if (customFieldsResult.IsFailure) return Result<AssetResponse>.Failure(customFieldsResult.Error!);
 
+            if (request.ReservationInstructions is { Length: > ReservationInstructionsMaxLength })
+                return Result<AssetResponse>.Failure(Error.Validation($"Instrukcje dla rezerwującego nie mogą przekraczać {ReservationInstructionsMaxLength} znaków."));
+
             var asset = new Asset(organizationId, request.CategoryId, request.Name, request.AssetTag);
             asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, request.Location, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
             asset.SetFieldValues(customFieldsResult.Value!);
+            asset.SetReservationSettings(request.IsReservable, request.ReservationInstructions, request.MaxReservationDays);
 
             _assets.Add(asset);
             _activity.Add(new ActivityLog(organizationId, "asset.created", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
@@ -176,9 +180,13 @@ public sealed class AssetService
             var customFieldsResult = ValidateCustomFields(category, mergedFields);
             if (customFieldsResult.IsFailure) return Result<AssetResponse>.Failure(customFieldsResult.Error!);
 
+            if (request.ReservationInstructions is { Length: > ReservationInstructionsMaxLength })
+                return Result<AssetResponse>.Failure(Error.Validation($"Instrukcje dla rezerwującego nie mogą przekraczać {ReservationInstructionsMaxLength} znaków."));
+
             asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, request.Location, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
             asset.ChangeStatus(request.Status);
             asset.SetFieldValues(customFieldsResult.Value!);
+            asset.SetReservationSettings(request.IsReservable, request.ReservationInstructions, request.MaxReservationDays);
             _activity.Add(new ActivityLog(organizationId, "asset.updated", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await GetAsync(asset.Id, cancellationToken);
@@ -305,10 +313,11 @@ public sealed class AssetService
             .OrderBy(x => x.SortOrder)
             .Select(x => new AssetFieldDefinitionResponse(x.Id, x.Key, x.Label, x.FieldType, x.OptionList, x.Required))
             .ToList() ?? [];
-        return new AssetResponse(asset.Id, asset.Name, asset.AssetTag, asset.SerialNumber, asset.CategoryId, categoryName, asset.Status, asset.AssignedPersonId, assigned?.FullName, asset.Location, asset.Manufacturer, asset.Model, asset.PurchasePrice, asset.Currency, asset.PurchaseDate, asset.WarrantyUntil, asset.QrCodePayload, asset.UpdatedAt, customFields, fieldDefinitions, asset.TeamId, team?.Name);
+        return new AssetResponse(asset.Id, asset.Name, asset.AssetTag, asset.SerialNumber, asset.CategoryId, categoryName, asset.Status, asset.AssignedPersonId, assigned?.FullName, asset.Location, asset.Manufacturer, asset.Model, asset.PurchasePrice, asset.Currency, asset.PurchaseDate, asset.WarrantyUntil, asset.QrCodePayload, asset.UpdatedAt, customFields, fieldDefinitions, asset.TeamId, team?.Name, asset.IsReservable, asset.MaxReservationDays, asset.ReservationInstructions);
     }
 
     private const string SensitiveMask = "••••••••";
+    private const int ReservationInstructionsMaxLength = 2000;
 
     public async Task<Result<string>> RevealSensitiveFieldAsync(Guid id, string fieldKey, CancellationToken cancellationToken)
     {
