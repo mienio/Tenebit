@@ -2,11 +2,14 @@ using Tenebit.Application.Alerts;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
+using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audits;
 using Tenebit.Domain.Identity;
+using Tenebit.Domain.Licenses;
 using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Procedures;
 using Tenebit.Domain.Reservations;
 using Tenebit.Tests.Fakes;
 
@@ -25,6 +28,9 @@ public class AlertCheckServiceTests
         InMemoryAssetAuditCampaignRepository Campaigns,
         InMemoryAssetAuditParticipantRepository Participants,
         InMemoryEquipmentReservationRepository Reservations,
+        InMemoryLicenseRepository Licenses,
+        InMemoryAssignmentRepository Assignments,
+        InMemoryProcedureRepository Procedures,
         InMemoryPersonRepository People,
         FakeEmailSender EmailSender,
         FakeClock Clock);
@@ -43,6 +49,7 @@ public class AlertCheckServiceTests
         var assets = new InMemoryAssetRepository();
         var assignments = new InMemoryAssignmentRepository();
         var procedures = new InMemoryProcedureRepository();
+        var licenses = new InMemoryLicenseRepository();
         var people = new InMemoryPersonRepository();
         var sentAlerts = new InMemorySentAlertRepository();
         var rules = new InMemoryAlertRuleRepository();
@@ -60,6 +67,7 @@ public class AlertCheckServiceTests
             assets,
             assignments,
             procedures,
+            licenses,
             people,
             sentAlerts,
             rules,
@@ -72,13 +80,13 @@ public class AlertCheckServiceTests
             clock,
             new FakeUnitOfWork());
 
-        return new TestContext(service, organization, assets, sentAlerts, rules, digestSettings, offboarding, campaigns, participants, reservations, people, emailSender, clock);
+        return new TestContext(service, organization, assets, sentAlerts, rules, digestSettings, offboarding, campaigns, participants, reservations, licenses, assignments, procedures, people, emailSender, clock);
     }
 
-    private static AlertRule CreateRule(Guid organizationId, AlertType type, int[] thresholds, AlertDeliveryMode deliveryMode = AlertDeliveryMode.Immediate, AlertRecipientMode recipientMode = AlertRecipientMode.OwnersAndAdmins, bool enabled = true)
+    private static AlertRule CreateRule(Guid organizationId, AlertType type, int[] thresholds, AlertDeliveryMode deliveryMode = AlertDeliveryMode.Immediate, AlertRecipientMode recipientMode = AlertRecipientMode.OwnersAndAdmins, bool enabled = true, int cooldownDays = 1)
     {
         var rule = new AlertRule(organizationId, type, DateTimeOffset.UtcNow, "test");
-        rule.UpdateSettings(enabled, thresholds.ToList(), deliveryMode, recipientMode, null, 1, "test", DateTimeOffset.UtcNow);
+        rule.UpdateSettings(enabled, thresholds.ToList(), deliveryMode, recipientMode, null, cooldownDays, "test", DateTimeOffset.UtcNow);
         return rule;
     }
 
@@ -363,8 +371,9 @@ public class AlertCheckServiceTests
 
         await ctx.Service.RunAsync(3, CancellationToken.None);
 
-        Assert.Single(ctx.EmailSender.Sent);
-        var record = Assert.Single(ctx.SentAlerts.Alerts);
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "admin@acme.test");
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "jan@acme.test");
+        var record = ctx.SentAlerts.Alerts.First();
         Assert.Equal(SentAlertStatus.Sent, record.Status);
         Assert.StartsWith("OffboardingReturnDue:", record.AlertKey);
     }
@@ -385,8 +394,8 @@ public class AlertCheckServiceTests
 
         await ctx.Service.RunAsync(3, CancellationToken.None);
 
-        Assert.Single(ctx.EmailSender.Sent);
-        Assert.StartsWith("AssetAuditNoResponse:", Assert.Single(ctx.SentAlerts.Alerts).AlertKey);
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "admin@acme.test");
+        Assert.StartsWith("AssetAuditNoResponse:", ctx.SentAlerts.Alerts.First().AlertKey);
     }
 
     [Fact]
@@ -404,8 +413,8 @@ public class AlertCheckServiceTests
 
         await ctx.Service.RunAsync(3, CancellationToken.None);
 
-        Assert.Single(ctx.EmailSender.Sent);
-        Assert.StartsWith("ReservationAwaitingApproval:", Assert.Single(ctx.SentAlerts.Alerts).AlertKey);
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "admin@acme.test");
+        Assert.StartsWith("ReservationAwaitingApproval:", ctx.SentAlerts.Alerts.First().AlertKey);
     }
 
     [Fact]
@@ -424,8 +433,8 @@ public class AlertCheckServiceTests
 
         await ctx.Service.RunAsync(3, CancellationToken.None);
 
-        Assert.Single(ctx.EmailSender.Sent);
-        Assert.StartsWith("ReservationPickupUpcoming:", Assert.Single(ctx.SentAlerts.Alerts).AlertKey);
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "admin@acme.test");
+        Assert.StartsWith("ReservationPickupUpcoming:", ctx.SentAlerts.Alerts.First().AlertKey);
     }
 
     [Fact]
@@ -446,8 +455,8 @@ public class AlertCheckServiceTests
 
         await ctx.Service.RunAsync(3, CancellationToken.None);
 
-        Assert.Single(ctx.EmailSender.Sent);
-        Assert.StartsWith("ReservationOverdue:", Assert.Single(ctx.SentAlerts.Alerts).AlertKey);
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "admin@acme.test");
+        Assert.StartsWith("ReservationOverdue:", ctx.SentAlerts.Alerts.First().AlertKey);
     }
 
     // Service-level: digest
@@ -514,5 +523,148 @@ public class AlertCheckServiceTests
 
         Assert.Empty(ctx.EmailSender.Sent);
         Assert.NotNull(digest.LastGeneratedAt);
+    }
+
+    // ---------- Poprawka 1: domyślne reguły ----------
+
+    [Fact]
+    public void StarterAlertRules_Create_EnablesLegacyTypesAndDisablesNew()
+    {
+        var rules = StarterAlertRules.Create(Guid.NewGuid(), DateTimeOffset.UtcNow, "system");
+
+        Assert.Equal(10, rules.Count);
+        Assert.True(rules.Single(r => r.Type == AlertType.AssetWarrantyExpiring).IsEnabled);
+        Assert.True(rules.Single(r => r.Type == AlertType.AssignmentReturnDue).IsEnabled);
+        Assert.True(rules.Single(r => r.Type == AlertType.AssignmentNotConfirmed).IsEnabled);
+
+        Assert.False(rules.Single(r => r.Type == AlertType.LicenseExpiring).IsEnabled);
+        Assert.False(rules.Single(r => r.Type == AlertType.ProcedureReviewDue).IsEnabled);
+        Assert.False(rules.Single(r => r.Type == AlertType.OffboardingReturnDue).IsEnabled);
+        Assert.False(rules.Single(r => r.Type == AlertType.AssetAuditNoResponse).IsEnabled);
+        Assert.False(rules.Single(r => r.Type == AlertType.ReservationAwaitingApproval).IsEnabled);
+        Assert.False(rules.Single(r => r.Type == AlertType.ReservationPickupUpcoming).IsEnabled);
+        Assert.False(rules.Single(r => r.Type == AlertType.ReservationOverdue).IsEnabled);
+
+        Assert.Equal(new[] { 30, 7 }, rules.Single(r => r.Type == AlertType.AssetWarrantyExpiring).ThresholdDays);
+    }
+
+    // ---------- Poprawka 2: OwnersAndAdmins + odpowiedzialna osoba ----------
+
+    [Fact]
+    public async Task RunAsync_OwnersAndAdmins_AlsoNotifiesResponsiblePerson()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.AssignmentReturnDue, [0]));
+        var person = AddPerson(ctx, "person@acme.test");
+        ctx.Assignments.Add(new Assignment(ctx.Organization.Id, person.Id, "P-001",
+            ctx.Clock.UtcNow.AddDays(-10), DateOnly.FromDateTime(ctx.Clock.UtcNow.UtcDateTime).AddDays(-2), null, "test"));
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "admin@acme.test");
+        Assert.Contains(ctx.EmailSender.Sent, e => e.To == "person@acme.test");
+    }
+
+    // ---------- Poprawka 3: brak duplikatów dla przeterminowanych ----------
+
+    [Fact]
+    public async Task RunAsync_OverdueAssignment_WithMultipleThresholds_SendsSingleAlert()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.AssignmentReturnDue, [7, 3, 1]));
+        var person = AddPerson(ctx);
+        ctx.Assignments.Add(new Assignment(ctx.Organization.Id, person.Id, "P-001",
+            ctx.Clock.UtcNow.AddDays(-20), DateOnly.FromDateTime(ctx.Clock.UtcNow.UtcDateTime).AddDays(-10), null, "test"));
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+
+        // przeterminowane o 10 dni → dokładnie jeden alert (dla 2 odbiorców), a nie 3 progi × 2 odbiorców
+        Assert.Equal(2, ctx.EmailSender.Sent.Count);
+        Assert.Equal(2, ctx.SentAlerts.Alerts.Count);
+    }
+
+    // ---------- Poprawka 4: MarkOverdue ----------
+
+    [Fact]
+    public async Task RunAsync_NotConfirmed_MarksAssignmentOverdue()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.AssignmentNotConfirmed, [0]));
+        var person = AddPerson(ctx);
+        var assignment = new Assignment(ctx.Organization.Id, person.Id, "P-001", ctx.Clock.UtcNow.AddDays(-10), null, null, "test");
+        ctx.Assignments.Add(assignment);
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+
+        Assert.Equal(AssignmentStatus.Overdue, assignment.Status);
+    }
+
+    // ---------- Poprawka 5: BusinessDays ----------
+
+    [Fact]
+    public async Task RunAsync_Digest_RespectsBusinessDays()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.AssetWarrantyExpiring, [30], AlertDeliveryMode.Digest));
+
+        ctx.Clock.UtcNow = new DateTimeOffset(2026, 1, 3, 12, 0, 0, TimeSpan.Zero); // sobota
+        var digest = new AlertDigestSettings(ctx.Organization.Id);
+        digest.Update(AlertDigestFrequency.Daily, null, new TimeOnly(8, 0), null, null, AlertDigestBusinessDays.Weekdays, null, false, null);
+        ctx.DigestSettings.Add(digest);
+        AddWarrantyAsset(ctx.Organization, ctx.Assets, DateOnly.FromDateTime(ctx.Clock.UtcNow.UtcDateTime).AddDays(29));
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+        Assert.Empty(ctx.EmailSender.Sent); // sobota nie jest dniem roboczym
+
+        ctx.Clock.UtcNow = new DateTimeOffset(2026, 1, 5, 12, 0, 0, TimeSpan.Zero); // poniedziałek
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+        Assert.Single(ctx.EmailSender.Sent);
+    }
+
+    // ---------- Poprawka 6: CooldownDays ----------
+
+    [Fact]
+    public async Task RunAsync_Cooldown_SuppressesSecondAlertForSameEntity()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.AssetWarrantyExpiring, [30, 7], cooldownDays: 5));
+        AddWarrantyAsset(ctx.Organization, ctx.Assets, DateOnly.FromDateTime(ctx.Clock.UtcNow.UtcDateTime).AddDays(5));
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+
+        // aktywo z gwarancją za 5 dni trafia w progi 30 i 7, ale cooldown tłumi drugi alert → 1 wysyłka
+        Assert.Single(ctx.EmailSender.Sent);
+        Assert.Single(ctx.SentAlerts.Alerts);
+    }
+
+    // ---------- Poprawka 7: LicenseExpiring / ProcedureReviewDue ----------
+
+    [Fact]
+    public async Task RunAsync_LicenseExpiring_SendsAlertWithoutRevealingKey()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.LicenseExpiring, [30]));
+        ctx.Licenses.Add(new License(ctx.Organization.Id, "Adobe Creative", "Adobe", "SUPER-SECRET-KEY", 10,
+            DateOnly.FromDateTime(ctx.Clock.UtcNow.UtcDateTime).AddDays(10), null));
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+
+        var sent = Assert.Single(ctx.EmailSender.Sent);
+        Assert.Equal("admin@acme.test", sent.To);
+        Assert.DoesNotContain("SUPER-SECRET-KEY", ctx.EmailSender.Bodies.Single());
+    }
+
+    [Fact]
+    public async Task RunAsync_ProcedureReviewDue_SendsAlert()
+    {
+        var ctx = CreateService();
+        ctx.Rules.Add(CreateRule(ctx.Organization.Id, AlertType.ProcedureReviewDue, [30]));
+        var procedure = new Procedure(ctx.Organization.Id, "Regulamin", "1.0", "HR", true);
+        procedure.Update("Regulamin", "1.0", "HR", null, DateOnly.FromDateTime(ctx.Clock.UtcNow.UtcDateTime).AddDays(10), true);
+        ctx.Procedures.Add(procedure);
+
+        await ctx.Service.RunAsync(3, CancellationToken.None);
+
+        Assert.Single(ctx.EmailSender.Sent);
     }
 }

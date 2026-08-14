@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Common;
 using Tenebit.Application.People;
@@ -16,6 +17,7 @@ public sealed class AuthService
     private readonly IOrganizationUserRepository _users;
     private readonly IAssetCategoryRepository _categories;
     private readonly IPersonRelationTypeRepository _relationTypes;
+    private readonly IAlertRuleRepository _rules;
     private readonly IActivityLogRepository _activity;
     private readonly IExternalLoginRepository _externalLogins;
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
@@ -35,6 +37,7 @@ public sealed class AuthService
         IOrganizationUserRepository users,
         IAssetCategoryRepository categories,
         IPersonRelationTypeRepository relationTypes,
+        IAlertRuleRepository rules,
         IActivityLogRepository activity,
         IExternalLoginRepository externalLogins,
         IPasswordResetTokenRepository passwordResetTokens,
@@ -53,6 +56,7 @@ public sealed class AuthService
         _users = users;
         _categories = categories;
         _relationTypes = relationTypes;
+        _rules = rules;
         _activity = activity;
         _externalLogins = externalLogins;
         _passwordResetTokens = passwordResetTokens;
@@ -100,6 +104,11 @@ public sealed class AuthService
             foreach (var relationType in StarterPersonRelationTypes.Create(organization.Id, language))
             {
                 _relationTypes.Add(relationType);
+            }
+
+            foreach (var rule in StarterAlertRules.Create(organization.Id, _clock.UtcNow, user.Email))
+            {
+                _rules.Add(rule);
             }
 
             _activity.Add(new ActivityLog(organization.Id, "organization.registered", "organization", organization.Id, user.Email, organization.Name, _clock.UtcNow));
@@ -364,6 +373,11 @@ public sealed class AuthService
             foreach (var relationType in StarterPersonRelationTypes.Create(organization.Id, organization.Language))
             {
                 _relationTypes.Add(relationType);
+            }
+
+            foreach (var rule in StarterAlertRules.Create(organization.Id, _clock.UtcNow, user.Email))
+            {
+                _rules.Add(rule);
             }
 
             _activity.Add(new ActivityLog(organization.Id, "organization.registered_via_oauth", "organization", organization.Id, user.Email, organization.Name, _clock.UtcNow));

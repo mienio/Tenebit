@@ -190,6 +190,7 @@ public interface ISubscriptionRepository
 public interface ISentAlertRepository
 {
     Task<SentAlert?> GetAsync(Guid organizationId, string alertKey, Guid entityId, string recipientEmail, CancellationToken cancellationToken);
+    Task<SentAlert?> GetLatestAsync(Guid organizationId, Guid entityId, string alertKeyPrefix, CancellationToken cancellationToken);
     void Add(SentAlert alert);
     Task<(IReadOnlyList<SentAlert> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken);
 }

@@ -22,6 +22,7 @@ public sealed class AlertCheckService
     private readonly IAssetRepository _assets;
     private readonly IAssignmentRepository _assignments;
     private readonly IProcedureRepository _procedures;
+    private readonly ILicenseRepository _licenses;
     private readonly IPersonRepository _people;
     private readonly ISentAlertRepository _sentAlerts;
     private readonly IAlertRuleRepository _rules;
@@ -40,6 +41,7 @@ public sealed class AlertCheckService
         IAssetRepository assets,
         IAssignmentRepository assignments,
         IProcedureRepository procedures,
+        ILicenseRepository licenses,
         IPersonRepository people,
         ISentAlertRepository sentAlerts,
         IAlertRuleRepository rules,
@@ -57,6 +59,7 @@ public sealed class AlertCheckService
         _assets = assets;
         _assignments = assignments;
         _procedures = procedures;
+        _licenses = licenses;
         _people = people;
         _sentAlerts = sentAlerts;
         _rules = rules;
@@ -85,6 +88,8 @@ public sealed class AlertCheckService
             var hasChanges = false;
 
             hasChanges |= await CheckWarrantyAlertsAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+            hasChanges |= await CheckLicenseExpiringAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+            hasChanges |= await CheckProcedureReviewDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
             hasChanges |= await CheckAssignmentReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
             hasChanges |= await CheckAssignmentNotConfirmedAsync(organization, onboardingDeadlineDays, rules, isQuietHours, digestItems, cancellationToken);
             hasChanges |= await CheckOffboardingReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
@@ -126,6 +131,54 @@ public sealed class AlertCheckService
         return await EmitAsync(organization, rule, AlertType.AssetWarrantyExpiring, events, isQuietHours, digestItems, cancellationToken);
     }
 
+    private async Task<bool> CheckLicenseExpiringAsync(Organization organization, IReadOnlyList<AlertRule> rules, bool isQuietHours, List<DigestItem> digestItems, CancellationToken cancellationToken)
+    {
+        var rule = FindEnabledRule(rules, AlertType.LicenseExpiring);
+        if (rule is null) return false;
+
+        var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+        var licenses = await _licenses.ListAsync(organization.Id, cancellationToken);
+        var events = new List<AlertEvent>();
+
+        foreach (var thresholdDays in NormalizeThresholds(rule))
+        {
+            var targetDate = today.AddDays(thresholdDays);
+            foreach (var license in licenses.Where(l => l.ExpiresAt.HasValue && l.ExpiresAt.Value >= today && l.ExpiresAt.Value <= targetDate))
+            {
+                // Spec 7.9: alert o licencji NIE ujawnia klucza licencyjnego — tylko nazwa, dostawca i data.
+                var vendorPart = license.Vendor is null ? string.Empty : $" (dostawca: {Encode(license.Vendor)})";
+                var subject = $"Licencja wygasa za {thresholdDays} dni — {license.Name}";
+                var html = $"<p>Licencja <strong>{Encode(license.Name)}</strong>{vendorPart} wygasa <strong>{license.ExpiresAt:yyyy-MM-dd}</strong> ({thresholdDays} dni).</p>";
+                events.Add(new AlertEvent(license.Id, thresholdDays, license.ExpiresAt, subject, html, []));
+            }
+        }
+
+        return await EmitAsync(organization, rule, AlertType.LicenseExpiring, events, isQuietHours, digestItems, cancellationToken);
+    }
+
+    private async Task<bool> CheckProcedureReviewDueAsync(Organization organization, IReadOnlyList<AlertRule> rules, bool isQuietHours, List<DigestItem> digestItems, CancellationToken cancellationToken)
+    {
+        var rule = FindEnabledRule(rules, AlertType.ProcedureReviewDue);
+        if (rule is null) return false;
+
+        var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+        var procedures = await _procedures.ListAsync(organization.Id, null, cancellationToken);
+        var events = new List<AlertEvent>();
+
+        foreach (var thresholdDays in NormalizeThresholds(rule))
+        {
+            var targetDate = today.AddDays(thresholdDays);
+            foreach (var procedure in procedures.Where(p => p.ReviewDate.HasValue && p.ReviewDate.Value >= today && p.ReviewDate.Value <= targetDate))
+            {
+                var subject = $"Termin przeglądu procedury — {procedure.Title}";
+                var html = $"<p>Procedura <strong>{Encode(procedure.Title)}</strong> (wersja {Encode(procedure.Version)}) wymaga przeglądu do <strong>{procedure.ReviewDate:yyyy-MM-dd}</strong> ({thresholdDays} dni).</p>";
+                events.Add(new AlertEvent(procedure.Id, thresholdDays, procedure.ReviewDate, subject, html, []));
+            }
+        }
+
+        return await EmitAsync(organization, rule, AlertType.ProcedureReviewDue, events, isQuietHours, digestItems, cancellationToken);
+    }
+
     private async Task<bool> CheckAssignmentReturnDueAsync(Organization organization, IReadOnlyList<AlertRule> rules, bool isQuietHours, List<DigestItem> digestItems, CancellationToken cancellationToken)
     {
         var rule = FindEnabledRule(rules, AlertType.AssignmentReturnDue);
@@ -135,15 +188,18 @@ public sealed class AlertCheckService
         var assignments = await _assignments.ListAsync(organization.Id, cancellationToken);
         var events = new List<AlertEvent>();
 
-        foreach (var thresholdDays in NormalizeThresholds(rule))
+        foreach (var assignment in assignments.Where(a => a.DueDate.HasValue && a.Status is AssignmentStatus.AwaitingAcceptance or AssignmentStatus.Accepted))
         {
-            var targetDate = today.AddDays(thresholdDays);
-            foreach (var assignment in assignments.Where(a => a.DueDate.HasValue && a.DueDate.Value <= targetDate && a.Status is AssignmentStatus.AwaitingAcceptance or AssignmentStatus.Accepted))
+            var due = assignment.DueDate.Value;
+            var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
+            foreach (var (thresholdDays, _) in DueDateThresholds(rule, today, due))
             {
-                var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
-                var subject = $"Termin zwrotu wydania — protokół {assignment.ProtocolNumber}";
-                var html = $"<p>Termin zwrotu sprzętu z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{assignment.DueDate:yyyy-MM-dd}</strong>.</p>";
-                events.Add(new AlertEvent(assignment.Id, thresholdDays, assignment.DueDate, subject, html, PersonEmail(person)));
+                var (subject, html) = thresholdDays == 0
+                    ? ($"Zwrot sprzętu po terminie — protokół {assignment.ProtocolNumber}",
+                       $"<p>Termin zwrotu sprzętu z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> minął ({due:yyyy-MM-dd}).</p>")
+                    : ($"Termin zwrotu wydania za {thresholdDays} dni — protokół {assignment.ProtocolNumber}",
+                       $"<p>Termin zwrotu sprzętu z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{due:yyyy-MM-dd}</strong>.</p>");
+                events.Add(new AlertEvent(assignment.Id, thresholdDays, due, subject, html, PersonEmail(person)));
             }
         }
 
@@ -159,9 +215,19 @@ public sealed class AlertCheckService
         var deadline = _clock.UtcNow.AddDays(-deadlineDays);
         var assignments = await _assignments.ListAsync(organization.Id, cancellationToken);
         var events = new List<AlertEvent>();
+        var hasChanges = false;
 
         foreach (var assignment in assignments.Where(a => a.Status == AssignmentStatus.AwaitingAcceptance && a.IssuedAt <= deadline))
         {
+            // ListAsync zwraca encje AsNoTracking — MarkOverdue na nich nie zapisałby statusu. Pobieramy
+            // śledzoną kopię i dopiero na niej oznaczamy Overdue (Poprawka 4), żeby dashboard to widział.
+            var tracked = await _assignments.GetAsync(organization.Id, assignment.Id, cancellationToken);
+            if (tracked is not null && tracked.Status == AssignmentStatus.AwaitingAcceptance)
+            {
+                tracked.MarkOverdue();
+                hasChanges = true;
+            }
+
             var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
             var subject = $"Sprzęt nieodebrany — protokół {assignment.ProtocolNumber}";
             var html = $"<p>Sprzęt z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> nie został odebrany w ciągu {deadlineDays} dni od wysłania.</p>";
@@ -179,6 +245,14 @@ public sealed class AlertCheckService
 
             foreach (var (assignment, acceptance) in pendingAcceptances)
             {
+                var trackedAssignment = await _assignments.GetAsync(organization.Id, assignment.Id, cancellationToken);
+                var trackedAcceptance = trackedAssignment?.ProcedureAcceptances.FirstOrDefault(p => p.Id == acceptance.Id);
+                if (trackedAcceptance is not null && trackedAcceptance.Status == AcceptanceStatus.Pending)
+                {
+                    trackedAcceptance.MarkOverdue();
+                    hasChanges = true;
+                }
+
                 var person = await _people.GetAsync(organization.Id, acceptance.PersonId, cancellationToken);
                 var procedure = procedures.FirstOrDefault(x => x.Id == acceptance.ProcedureId);
                 var (subject, html) = EmailTemplates.ProcedureUnsignedAlert(organization.Language, procedure?.Title, assignment.ProtocolNumber, person?.FullName, deadlineDays);
@@ -186,7 +260,8 @@ public sealed class AlertCheckService
             }
         }
 
-        return await EmitAsync(organization, rule, AlertType.AssignmentNotConfirmed, events, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await EmitAsync(organization, rule, AlertType.AssignmentNotConfirmed, events, isQuietHours, digestItems, cancellationToken);
+        return hasChanges;
     }
 
     private async Task<bool> CheckOffboardingReturnDueAsync(Organization organization, IReadOnlyList<AlertRule> rules, bool isQuietHours, List<DigestItem> digestItems, CancellationToken cancellationToken)
@@ -198,15 +273,18 @@ public sealed class AlertCheckService
         var cases = await _offboarding.ListOpenAsync(organization.Id, cancellationToken);
         var events = new List<AlertEvent>();
 
-        foreach (var thresholdDays in NormalizeThresholds(rule))
+        foreach (var offboardingCase in cases)
         {
-            var targetDate = today.AddDays(thresholdDays);
-            foreach (var offboardingCase in cases.Where(c => DateOnly.FromDateTime(c.ReturnDueDate.UtcDateTime) <= targetDate))
+            var due = DateOnly.FromDateTime(offboardingCase.ReturnDueDate.UtcDateTime);
+            var person = await _people.GetAsync(organization.Id, offboardingCase.PersonId, cancellationToken);
+            foreach (var (thresholdDays, _) in DueDateThresholds(rule, today, due))
             {
-                var person = await _people.GetAsync(organization.Id, offboardingCase.PersonId, cancellationToken);
-                var subject = $"Termin zwrotu w offboardingu — {person?.FullName ?? "—"}";
-                var html = $"<p>Termin zwrotu sprzętu w sprawie offboardingowej osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{offboardingCase.ReturnDueDate:yyyy-MM-dd}</strong>.</p>";
-                events.Add(new AlertEvent(offboardingCase.Id, thresholdDays, DateOnly.FromDateTime(offboardingCase.ReturnDueDate.UtcDateTime), subject, html, PersonEmail(person)));
+                var (subject, html) = thresholdDays == 0
+                    ? ($"Termin zwrotu w offboardingu minął — {person?.FullName ?? "—"}",
+                       $"<p>Termin zwrotu sprzętu w sprawie offboardingowej osoby <strong>{Encode(person?.FullName)}</strong> minął ({offboardingCase.ReturnDueDate:yyyy-MM-dd}).</p>")
+                    : ($"Termin zwrotu w offboardingu za {thresholdDays} dni — {person?.FullName ?? "—"}",
+                       $"<p>Termin zwrotu sprzętu w sprawie offboardingowej osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{offboardingCase.ReturnDueDate:yyyy-MM-dd}</strong>.</p>");
+                events.Add(new AlertEvent(offboardingCase.Id, thresholdDays, due, subject, html, PersonEmail(person)));
             }
         }
 
@@ -356,6 +434,11 @@ public sealed class AlertCheckService
         if (localNow.TimeOfDay < digest.LocalTime.ToTimeSpan()) return false;
 
         var todayLocal = DateOnly.FromDateTime(localNow.DateTime);
+
+        // BusinessDays (spec 7.3 flags) — digest wychodzi tylko w skonfigurowane dni. HolidayCalendarCountryCode
+        // jest celowo jeszcze nieużywane: honorowanie świąt wymagałoby zewnętrznego źródła kalendarza (osobne zadanie).
+        if (!digest.BusinessDays.HasFlag(ToBusinessDayFlag(todayLocal.DayOfWeek))) return false;
+
         DateOnly? lastLocal = digest.LastGeneratedAt is null
             ? null
             : DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(digest.LastGeneratedAt.Value, timeZone).DateTime);
@@ -420,8 +503,17 @@ public sealed class AlertCheckService
 
             if (sendImmediate)
             {
-                var recipients = await ResolveRecipientsAsync(organization, rule, alertEvent.ResponsibleEmails, cancellationToken);
                 var alertKey = BuildAlertKey(type, alertEvent.ThresholdDays, alertEvent.DueDate);
+
+                // CooldownDays (spec 7.4): ten sam byt nie dostaje kolejnego alertu częściej niż raz na
+                // CooldownDays — nawet gdy trafi go inny próg/termin (inny klucz dedup). Retry/dedup tego
+                // samego klucza obsługuje DeliverAsync, więc cooldown go nie tłumi.
+                if (await IsWithinCooldownAsync(organization.Id, rule, type, alertEvent.EntityId, alertKey, cancellationToken))
+                {
+                    continue;
+                }
+
+                var recipients = await ResolveRecipientsAsync(organization, rule, alertEvent.ResponsibleEmails, cancellationToken);
                 if (await DeliverAsync(organization.Id, alertKey, alertEvent.EntityId, recipients, alertEvent.Subject, alertEvent.Html, isQuietHours, cancellationToken))
                 {
                     hasChanges = true;
@@ -439,7 +531,12 @@ public sealed class AlertCheckService
             AlertRecipientMode.Custom => ParseCustomEmails(rule.CustomEmails),
             AlertRecipientMode.ResponsiblePerson => responsibleEmails.Count > 0 ? responsibleEmails : await GetAdminEmailsAsync(organization.Id, cancellationToken),
             AlertRecipientMode.ResponsibleRoles => await GetResponsibleRoleEmailsAsync(organization.Id, cancellationToken),
-            _ => await GetAdminEmailsAsync(organization.Id, cancellationToken)
+            // Domyślny tryb „właściciele+adminowie" musi obejmować też odpowiedzialną osobę, jeśli istnieje —
+            // przed #23 alerty zwrotu/niepotwierdzenia zawsze dorzucały email osoby powiązanej z wydaniem.
+            _ => (await GetAdminEmailsAsync(organization.Id, cancellationToken))
+                .Concat(responsibleEmails)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
         };
     }
 
@@ -503,6 +600,47 @@ public sealed class AlertCheckService
 
     private static IEnumerable<int> NormalizeThresholds(AlertRule rule) =>
         rule.ThresholdDays.Distinct().Where(d => d >= 0 && d <= AlertRule.MaxThresholdDays);
+
+    // Terminowe typy (zwrot wydania/offboardingu): „przypomnienie N dni przed terminem" dla każdego progu
+    // N > 0 (okno jak gwarancja) OSOBNO od stanu „już po terminie" (jeden alert, próg 0, bez powtórek per próg).
+    private static IEnumerable<(int Threshold, DateOnly DueDate)> DueDateThresholds(AlertRule rule, DateOnly today, DateOnly dueDate)
+    {
+        if (dueDate <= today)
+        {
+            yield return (0, dueDate);
+            yield break;
+        }
+
+        foreach (var threshold in NormalizeThresholds(rule).Where(t => t > 0))
+        {
+            if (dueDate <= today.AddDays(threshold))
+            {
+                yield return (threshold, dueDate);
+            }
+        }
+    }
+
+    private static AlertDigestBusinessDays ToBusinessDayFlag(DayOfWeek dayOfWeek) => dayOfWeek switch
+    {
+        DayOfWeek.Monday => AlertDigestBusinessDays.Monday,
+        DayOfWeek.Tuesday => AlertDigestBusinessDays.Tuesday,
+        DayOfWeek.Wednesday => AlertDigestBusinessDays.Wednesday,
+        DayOfWeek.Thursday => AlertDigestBusinessDays.Thursday,
+        DayOfWeek.Friday => AlertDigestBusinessDays.Friday,
+        DayOfWeek.Saturday => AlertDigestBusinessDays.Saturday,
+        DayOfWeek.Sunday => AlertDigestBusinessDays.Sunday,
+        _ => AlertDigestBusinessDays.None
+    };
+
+    private async Task<bool> IsWithinCooldownAsync(Guid organizationId, AlertRule rule, AlertType type, Guid entityId, string currentKey, CancellationToken cancellationToken)
+    {
+        if (rule.CooldownDays <= 0) return false;
+        var latest = await _sentAlerts.GetLatestAsync(organizationId, entityId, $"{type}:", cancellationToken);
+        if (latest is null) return false;
+        // Ten sam klucz = retry/dedup tego samego alertu — tym zajmuje się DeliverAsync, nie cooldown.
+        if (latest.AlertKey == currentKey) return false;
+        return latest.CreatedAt >= _clock.UtcNow.AddDays(-rule.CooldownDays);
+    }
 
     // Format klucza dedup: `typ:próg:termin(yyyy-MM-dd)`. OrganizationId/EntityId/RecipientEmail są już
     // osobnymi kolumnami SentAlert, więc AlertKey koduje tylko to, co się zmienia przy zmianie progu/terminu.

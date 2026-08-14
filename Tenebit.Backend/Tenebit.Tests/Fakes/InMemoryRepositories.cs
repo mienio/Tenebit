@@ -257,6 +257,12 @@ public sealed class InMemorySentAlertRepository : ISentAlertRepository
 
     public void Add(SentAlert alert) => Alerts.Add(alert);
 
+    public Task<SentAlert?> GetLatestAsync(Guid organizationId, Guid entityId, string alertKeyPrefix, CancellationToken cancellationToken) =>
+        Task.FromResult(Alerts
+            .Where(x => x.OrganizationId == organizationId && x.EntityId == entityId && x.AlertKey.StartsWith(alertKeyPrefix))
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault());
+
     public Task<(IReadOnlyList<SentAlert> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken)
     {
         var query = Alerts.Where(x => x.OrganizationId == organizationId).OrderByDescending(x => x.CreatedAt);

@@ -34,6 +34,7 @@ public class AuthServiceTests
             users,
             new InMemoryAssetCategoryRepository(),
             new InMemoryPersonRelationTypeRepository(),
+            new InMemoryAlertRuleRepository(),
             new InMemoryActivityLogRepository(),
             new InMemoryExternalLoginRepository(users),
             new InMemoryPasswordResetTokenRepository(),

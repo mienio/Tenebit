@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
+using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Organizations;
@@ -33,6 +35,7 @@ public sealed class DefaultDataSeeder
         }
 
         await SeedStarterCategoriesForAllOrganizationsAsync(cancellationToken);
+        await SeedDefaultAlertRulesForAllOrganizationsAsync(cancellationToken);
 
         // BUG FIX: The second check below previously used GetValue("Seed:DemoData", true) — a different
         // default than the guard above (false). Since we already checked the flag above, the second
@@ -86,6 +89,31 @@ public sealed class DefaultDataSeeder
             var existingNames = existingNamesByOrganization.GetValueOrDefault(organizationId) ?? [];
             var missing = StarterAssetCategories.Create(organizationId).Where(x => !existingNames.Contains(x.Name));
             _db.AssetCategories.AddRange(missing);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    // Idempotentne uzupełnianie domyślnych reguł alertów (po org+type). Pokrywa też organizację demo, której
+    // nie obejmuje jednorazowa migracja seed ani hook w AuthService — dzięki temu żadna organizacja nie zostaje
+    // bez reguł, a typy, które działały przed #23, pozostają włączone.
+    private async Task SeedDefaultAlertRulesForAllOrganizationsAsync(CancellationToken cancellationToken)
+    {
+        var organizationIds = await _db.Organizations.Select(x => x.Id).ToListAsync(cancellationToken);
+        if (organizationIds.Count == 0) return;
+
+        var existingTypesByOrganization = (await _db.AlertRules
+                .Select(x => new { x.OrganizationId, x.Type })
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.OrganizationId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Type).ToHashSet());
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var organizationId in organizationIds)
+        {
+            var existing = existingTypesByOrganization.GetValueOrDefault(organizationId) ?? [];
+            var missing = StarterAlertRules.Create(organizationId, now, "system").Where(x => !existing.Contains(x.Type));
+            _db.AlertRules.AddRange(missing);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

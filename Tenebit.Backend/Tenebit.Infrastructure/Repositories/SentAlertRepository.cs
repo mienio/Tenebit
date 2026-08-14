@@ -19,6 +19,13 @@ public sealed class SentAlertRepository : ISentAlertRepository
             cancellationToken);
     }
 
+    public Task<SentAlert?> GetLatestAsync(Guid organizationId, Guid entityId, string alertKeyPrefix, CancellationToken cancellationToken) =>
+        _db.SentAlerts
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.EntityId == entityId && x.AlertKey.StartsWith(alertKeyPrefix))
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public void Add(SentAlert alert) => _db.SentAlerts.Add(alert);
 
     public async Task<(IReadOnlyList<SentAlert> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken)
