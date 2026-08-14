@@ -347,4 +347,113 @@ public sealed class PdfProtocolGenerator : IPdfProtocolGenerator
 
         return document.GeneratePdf();
     }
+
+    public byte[] GenerateAssetAuditReport(AssetAuditReportPdfModel model)
+    {
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(36);
+                page.DefaultTextStyle(style => style.FontSize(10));
+
+                page.Header().Column(column =>
+                {
+                    column.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text(model.OrganizationName).FontSize(16).Bold();
+                        row.ConstantItem(220).AlignRight().Column(header =>
+                        {
+                            header.Item().Text("Raport kampanii potwierdzenia aktywów").FontSize(11).Bold();
+                            header.Item().Text(model.CampaignName).FontColor(Colors.Grey.Darken1);
+                        });
+                    });
+                    column.Item().PaddingTop(10).LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+                });
+
+                page.Content().PaddingVertical(15).Column(column =>
+                {
+                    column.Spacing(14);
+
+                    column.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text($"Status: {model.Status}");
+                        row.RelativeItem().Text($"Termin: {model.DueDate:yyyy-MM-dd}");
+                    });
+
+                    column.Item().Column(summary =>
+                    {
+                        summary.Item().Text("Podsumowanie").Bold();
+                        summary.Item().Text($"Potwierdzone: {model.ConfirmedCount}");
+                        summary.Item().Text($"Brakujące: {model.MissingCount}");
+                        summary.Item().Text($"Uszkodzone: {model.DamagedCount}");
+                        summary.Item().Text($"Błędny właściciel: {model.WrongOwnerCount}");
+                        summary.Item().Text($"Bez odpowiedzi: {model.NonRespondingParticipantCount}");
+                    });
+
+                    if (model.Exceptions.Count > 0)
+                    {
+                        column.Item().Column(exceptionsSection =>
+                        {
+                            exceptionsSection.Item().Text("Wyjątki").Bold();
+                            exceptionsSection.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(columns =>
+                                {
+                                    columns.RelativeColumn(3);
+                                    columns.RelativeColumn(2);
+                                    columns.RelativeColumn(2);
+                                    columns.RelativeColumn(2);
+                                    columns.RelativeColumn(3);
+                                    columns.RelativeColumn(2);
+                                });
+
+                                table.Header(header =>
+                                {
+                                    header.Cell().Element(HeaderCell).Text("Aktywo");
+                                    header.Cell().Element(HeaderCell).Text("Uczestnik");
+                                    header.Cell().Element(HeaderCell).Text("Odpowiedź");
+                                    header.Cell().Element(HeaderCell).Text("Rozstrzygnięcie");
+                                    header.Cell().Element(HeaderCell).Text("Notatki");
+                                    header.Cell().Element(HeaderCell).Text("Rozstrzygnął");
+
+                                    static IContainer HeaderCell(IContainer container) => container
+                                        .DefaultTextStyle(style => style.Bold())
+                                        .PaddingBottom(4)
+                                        .BorderBottom(1)
+                                        .BorderColor(Colors.Grey.Darken1);
+                                });
+
+                                foreach (var exception in model.Exceptions)
+                                {
+                                    table.Cell().Element(BodyCell).Text($"{exception.AssetName} ({exception.AssetTag})");
+                                    table.Cell().Element(BodyCell).Text(exception.ParticipantName);
+                                    table.Cell().Element(BodyCell).Text(exception.Response);
+                                    table.Cell().Element(BodyCell).Text(exception.Resolution);
+                                    table.Cell().Element(BodyCell).Text(exception.ResolutionNotes ?? "—");
+                                    table.Cell().Element(BodyCell).Text(exception.ResolvedBy is null
+                                        ? "—"
+                                        : $"{exception.ResolvedBy} ({exception.ResolvedAt:yyyy-MM-dd})");
+                                }
+
+                                static IContainer BodyCell(IContainer container) => container
+                                    .PaddingVertical(4)
+                                    .BorderBottom(1)
+                                    .BorderColor(Colors.Grey.Lighten2);
+                            });
+                        });
+                    }
+                });
+
+                page.Footer().AlignCenter().Text(text =>
+                {
+                    text.Span("Wygenerowano automatycznie przez Tenebit — ").FontColor(Colors.Grey.Darken1);
+                    text.Span(model.CampaignName).FontColor(Colors.Grey.Darken1);
+                });
+            });
+        });
+
+        return document.GeneratePdf();
+    }
 }

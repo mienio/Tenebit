@@ -328,6 +328,13 @@ public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator
 {
     public byte[] GenerateHandoverProtocol(ProtocolPdfModel model) => [1, 2, 3];
     public byte[] GenerateOffboardingProtocol(OffboardingProtocolPdfModel model) => [1, 2, 3];
+    public AssetAuditReportPdfModel? LastAssetAuditReportModel { get; private set; }
+
+    public byte[] GenerateAssetAuditReport(AssetAuditReportPdfModel model)
+    {
+        LastAssetAuditReportModel = model;
+        return [1, 2, 3];
+    }
 }
 
 public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository

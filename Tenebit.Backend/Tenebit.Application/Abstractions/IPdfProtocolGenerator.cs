@@ -42,8 +42,23 @@ public sealed record OffboardingProtocolPdfModel(
     string FinalOutcome,
     string? Notes);
 
+public sealed record AssetAuditReportExceptionRow(string AssetName, string AssetTag, string ParticipantName, string Response, string Resolution, string? ResolutionNotes, string? ResolvedBy, DateTimeOffset? ResolvedAt);
+
+public sealed record AssetAuditReportPdfModel(
+    string OrganizationName,
+    string CampaignName,
+    DateTimeOffset DueDate,
+    string Status,
+    int ConfirmedCount,
+    int MissingCount,
+    int DamagedCount,
+    int WrongOwnerCount,
+    int NonRespondingParticipantCount,
+    IReadOnlyList<AssetAuditReportExceptionRow> Exceptions);
+
 public interface IPdfProtocolGenerator
 {
     byte[] GenerateHandoverProtocol(ProtocolPdfModel model);
     byte[] GenerateOffboardingProtocol(OffboardingProtocolPdfModel model);
+    byte[] GenerateAssetAuditReport(AssetAuditReportPdfModel model);
 }

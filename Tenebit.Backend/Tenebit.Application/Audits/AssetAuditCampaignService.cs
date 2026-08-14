@@ -31,12 +31,13 @@ public sealed class AssetAuditCampaignService
     private readonly IOrganizationRepository _organizations;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _linkBuilder;
+    private readonly IPdfProtocolGenerator _pdfGenerator;
 
     public AssetAuditCampaignService(IAssetAuditCampaignRepository campaigns, IAssetAuditParticipantRepository participants,
         IAssetAuditItemRepository items, IPersonRepository people, IAssetRepository assets, IAssetEvidenceRepository evidence,
         AssetEvidenceService evidenceService, IActivityLogRepository activity,
         ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IOrganizationRepository organizations,
-        IEmailSender emailSender, IAppLinkBuilder linkBuilder)
+        IEmailSender emailSender, IAppLinkBuilder linkBuilder, IPdfProtocolGenerator pdfGenerator)
     {
         _campaigns = campaigns;
         _participants = participants;
@@ -52,6 +53,7 @@ public sealed class AssetAuditCampaignService
         _organizations = organizations;
         _emailSender = emailSender;
         _linkBuilder = linkBuilder;
+        _pdfGenerator = pdfGenerator;
     }
 
     public async Task<Result<PagedResult<AssetAuditCampaignResponse>>> ListPagedAsync(AssetAuditCampaignStatus? status, int page, int pageSize, CancellationToken cancellationToken)
@@ -595,6 +597,118 @@ public sealed class AssetAuditCampaignService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<bool>.Success(true);
+    }
+
+    public async Task<Result<string>> ExportCsvAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
+        if (campaign is null) return Result<string>.Failure(Error.NotFound("Kampania nie istnieje."));
+
+        var (participants, items, personNames, assetLookup) = await LoadCampaignDataAsync(organizationId, campaign, cancellationToken);
+        var participantsById = participants.ToDictionary(p => p.Id);
+
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine(string.Join(',', new[]
+        {
+            "Uczestnik", "E-mail", "Status uczestnika", "Aktywo", "Tag", "Oczekiwany właściciel", "Oczekiwana lokalizacja",
+            "Odpowiedź", "Komentarz", "Rozstrzygnięcie", "Notatki rozstrzygnięcia", "Data odpowiedzi"
+        }.Select(CsvField)));
+
+        foreach (var item in items)
+        {
+            var participant = participantsById.GetValueOrDefault(item.ParticipantId);
+            var asset = assetLookup.GetValueOrDefault(item.AssetId);
+
+            var row = new[]
+            {
+                participant is null ? "—" : personNames.GetValueOrDefault(participant.PersonId, "—"),
+                participant?.Email ?? "—",
+                participant?.Status.ToString() ?? "—",
+                asset?.Name ?? "—",
+                asset?.AssetTag ?? "—",
+                personNames.GetValueOrDefault(item.ExpectedPersonId, "—"),
+                item.ExpectedLocation ?? "—",
+                item.Response.ToString(),
+                item.Comment ?? "",
+                item.Resolution.ToString(),
+                item.ResolutionNotes ?? "",
+                item.RespondedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""
+            };
+
+            csv.AppendLine(string.Join(',', row.Select(CsvField)));
+        }
+
+        return Result<string>.Success(csv.ToString());
+    }
+
+    /// <summary>Escapuje pole wg RFC4180 — cudzysłów wokół pola zawierającego przecinek, cudzysłów lub nową linię,
+    /// z podwojeniem wewnętrznych cudzysłowów.</summary>
+    private static string CsvField(string value)
+    {
+        if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
+    }
+
+    public async Task<Result<byte[]>> GetReportPdfAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
+        if (access.IsFailure) return Result<byte[]>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
+        if (campaign is null) return Result<byte[]>.Failure(Error.NotFound("Kampania nie istnieje."));
+
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        var (participants, items, personNames, assetLookup) = await LoadCampaignDataAsync(organizationId, campaign, cancellationToken);
+
+        var confirmed = items.Count(x => x.Response == AssetAuditResponse.Confirmed);
+        var missing = items.Count(x => x.Response == AssetAuditResponse.Missing);
+        var damaged = items.Count(x => x.Response == AssetAuditResponse.Damaged);
+        var wrongOwner = items.Count(x => x.Response == AssetAuditResponse.WrongOwner);
+        var nonResponding = participants.Count(p => p.Status is AssetAuditParticipantStatus.Pending or AssetAuditParticipantStatus.InProgress);
+
+        var exceptionResponses = new[] { AssetAuditResponse.Missing, AssetAuditResponse.Damaged, AssetAuditResponse.WrongOwner };
+        var participantsById = participants.ToDictionary(p => p.Id);
+        var exceptions = items
+            .Where(x => exceptionResponses.Contains(x.Response))
+            .Select(x =>
+            {
+                var participant = participantsById.GetValueOrDefault(x.ParticipantId);
+                var asset = assetLookup.GetValueOrDefault(x.AssetId);
+                return new AssetAuditReportExceptionRow(
+                    asset?.Name ?? "—", asset?.AssetTag ?? "—",
+                    participant is null ? "—" : personNames.GetValueOrDefault(participant.PersonId, "—"),
+                    x.Response.ToString(), x.Resolution.ToString(), x.ResolutionNotes, x.ResolvedBy, x.ResolvedAt);
+            })
+            .ToList();
+
+        var model = new AssetAuditReportPdfModel(organization?.Name ?? "Tenebit", campaign.Name, campaign.DueDate, campaign.Status.ToString(),
+            confirmed, missing, damaged, wrongOwner, nonResponding, exceptions);
+
+        return Result<byte[]>.Success(_pdfGenerator.GenerateAssetAuditReport(model));
+    }
+
+    /// <summary>Raport/eksport są migawką historyczną: dane pochodzą wyłącznie z AssetAuditItem/Participant
+    /// zapisanych w bazie, a Asset/Person są odpytywane tylko po nazwę do wyświetlenia — jeśli aktywo w
+    /// międzyczasie zmieniło przypisanie, zapisany w AssetAuditItem stan (Response/Resolution/ExpectedPersonId)
+    /// pozostaje niezmieniony (spec 5.11).</summary>
+    private async Task<(IReadOnlyList<AssetAuditParticipant> Participants, IReadOnlyList<AssetAuditItem> Items,
+        Dictionary<Guid, string> PersonNames, Dictionary<Guid, Asset> AssetLookup)> LoadCampaignDataAsync(
+        Guid organizationId, AssetAuditCampaign campaign, CancellationToken cancellationToken)
+    {
+        var participants = await _participants.ListByCampaignAsync(organizationId, campaign.Id, cancellationToken);
+        var items = await _items.ListByCampaignAsync(organizationId, campaign.Id, cancellationToken);
+        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var personNames = people.ToDictionary(x => x.Id, x => x.FullName);
+        var assetIds = items.Select(x => x.AssetId).Distinct().ToList();
+        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
+        var assetLookup = assets.ToDictionary(x => x.Id);
+
+        return (participants, items, personNames, assetLookup);
     }
 }
 

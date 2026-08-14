@@ -1026,6 +1026,26 @@ public static class TenebitEndpoints
                 (await service.CancelAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Asset audits")
             .WithOpenApi();
+
+        api.MapGet("/asset-audits/{id:guid}/export.csv", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+        {
+            var result = await service.ExportCsvAsync(id, cancellationToken);
+            return result.IsFailure || result.Value is null
+                ? result.ToHttpResult()
+                : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "text/csv", $"audyt-{id}.csv");
+        })
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapGet("/asset-audits/{id:guid}/report.pdf", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetReportPdfAsync(id, cancellationToken);
+            return result.IsFailure || result.Value is null
+                ? result.ToHttpResult()
+                : Results.File(result.Value, "application/pdf", $"raport-audytu-{id}.pdf");
+        })
+            .WithTags("Asset audits")
+            .WithOpenApi();
     }
 
     private static void MapPublicAssignments(RouteGroupBuilder api)
