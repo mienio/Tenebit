@@ -1,5 +1,8 @@
 import { apiBlob, apiRequest } from './apiClient';
 import type {
+  AlertDigestSettings,
+  AlertRule,
+  AlertType,
   Asset,
   AssetCategory,
   AssetCategoryType,
@@ -45,6 +48,9 @@ import type {
   PublicOffboardingAnswer,
   RoleInfo,
   RolePermission,
+  SaveAlertDigestSettingsRequest,
+  SaveAlertRuleRequest,
+  SentAlertHistoryItem,
   OffboardingCaseDetails,
   OffboardingCaseStatus,
   OffboardingCaseSummary,
@@ -121,6 +127,13 @@ export const api = {
   roles: () => apiRequest<RoleInfo[]>('/api/roles'),
   rolePermissions: () => apiRequest<RolePermission[]>('/api/role-permissions'),
   setRolePermission: (body: { roleKey: string; permissionKey: string; allowed: boolean }) => apiRequest<void>('/api/role-permissions', { method: 'PUT', body: JSON.stringify(body) }),
+
+  alertRules: () => apiRequest<AlertRule[]>('/api/settings/alerts'),
+  saveAlertRule: (type: AlertType, body: SaveAlertRuleRequest) => apiRequest<AlertRule>(`/api/settings/alerts/${type}`, { method: 'PUT', body: JSON.stringify(body) }),
+  alertDigest: () => apiRequest<AlertDigestSettings>('/api/settings/alert-digest'),
+  saveAlertDigest: (body: SaveAlertDigestSettingsRequest) => apiRequest<AlertDigestSettings>('/api/settings/alert-digest', { method: 'PUT', body: JSON.stringify(body) }),
+  sendTestAlert: (alertType?: AlertType) => apiRequest<void>('/api/settings/alerts/test', { method: 'POST', body: JSON.stringify(alertType ? { alertType } : {}) }),
+  alertHistory: (page: number, pageSize: number) => apiRequest<Paged<SentAlertHistoryItem>>(`/api/alerts/history?page=${page}&pageSize=${pageSize}`),
 
   licenses: () => apiRequest<License[]>('/api/licenses'),
   createLicense: (body: { name: string; vendor?: string | null; licenseKey?: string | null; seatsTotal: number; expiresAt?: string | null; notes?: string | null }) => apiRequest<License>('/api/licenses', { method: 'POST', body: JSON.stringify(body) }),

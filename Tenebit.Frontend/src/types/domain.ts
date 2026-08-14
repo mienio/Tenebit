@@ -283,6 +283,75 @@ export interface AssetEvidence {
   redactedAt?: string | null;
 }
 
+export type AlertType =
+  | 'AssetWarrantyExpiring'
+  | 'LicenseExpiring'
+  | 'ProcedureReviewDue'
+  | 'AssignmentReturnDue'
+  | 'AssignmentNotConfirmed'
+  | 'OffboardingReturnDue'
+  | 'AssetAuditNoResponse'
+  | 'ReservationAwaitingApproval'
+  | 'ReservationPickupUpcoming'
+  | 'ReservationOverdue';
+
+export type AlertDeliveryMode = 'Immediate' | 'Digest' | 'Both';
+export type AlertRecipientMode = 'OwnersAndAdmins' | 'ResponsibleRoles' | 'ResponsiblePerson' | 'Custom';
+export type AlertDigestFrequency = 'Off' | 'Daily' | 'Weekly';
+export type SentAlertStatus = 'Pending' | 'Sent' | 'Failed' | 'IncludedInDigest';
+
+export interface AlertRule {
+  type: AlertType;
+  isEnabled: boolean;
+  thresholdDays: number[];
+  deliveryMode: AlertDeliveryMode;
+  recipientMode: AlertRecipientMode;
+  customEmails: string | null;
+  cooldownDays: number;
+}
+
+export interface AlertDigestSettings {
+  frequency: AlertDigestFrequency;
+  dayOfWeek: string | null;
+  localTime: string;
+  quietHoursStart: string | null;
+  quietHoursEnd: string | null;
+  businessDays: string | number;
+  holidayCalendarCountryCode: string | null;
+  includeEmptyDigest: boolean;
+}
+
+export interface SentAlertHistoryItem {
+  id: string;
+  type: AlertType;
+  entityId: string;
+  recipientEmail: string;
+  status: SentAlertStatus;
+  createdAt: string;
+  sentAt: string | null;
+  lastError: string | null;
+}
+
+export interface SaveAlertRuleRequest {
+  isEnabled: boolean;
+  thresholdDays: number[];
+  deliveryMode: AlertDeliveryMode;
+  recipientMode: AlertRecipientMode;
+  customEmails: string | null;
+  cooldownDays: number;
+}
+
+export interface SaveAlertDigestSettingsRequest {
+  frequency: AlertDigestFrequency;
+  dayOfWeek: string | null;
+  localTime: string;
+  quietHoursStart: string | null;
+  quietHoursEnd: string | null;
+  businessDays: number;
+  holidayCalendarCountryCode: string | null;
+  includeEmptyDigest: boolean;
+}
+
 export interface Paged<T> {
   items: T[];
   total: number;

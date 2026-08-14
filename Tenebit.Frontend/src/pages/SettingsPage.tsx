@@ -8,6 +8,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Modal } from '../components/Modal';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { IconPicker } from '../components/IconPicker';
+import { AlertsSettings } from '../components/AlertsSettings';
 import { LocationsManager } from '../components/LocationsManager';
 import { PageHeader } from '../components/PageHeader';
 import { Pagination, paginate } from '../components/Pagination';
@@ -25,12 +26,12 @@ import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 
-type Tab = 'account' | 'company' | 'locations' | 'customFields' | 'profiles' | 'users' | 'permissions';
+type Tab = 'account' | 'company' | 'locations' | 'customFields' | 'profiles' | 'users' | 'permissions' | 'alerts';
 type SettingsMessage = { type: 'success' | 'error'; text: string } | null;
 type DeleteTarget = { kind: 'category'; item: AssetCategory } | { kind: 'profile'; item: JobProfile } | { kind: 'relationType'; item: PersonRelationTypeOption } | { kind: 'team'; item: Team } | null;
 const pageSize = 20;
-const validTabs: Tab[] = ['account', 'company', 'locations', 'customFields', 'profiles', 'users', 'permissions'];
-const organizationOnlyTabs: Tab[] = ['company', 'locations', 'customFields', 'profiles', 'users', 'permissions'];
+const validTabs: Tab[] = ['account', 'company', 'locations', 'customFields', 'profiles', 'users', 'permissions', 'alerts'];
+const organizationOnlyTabs: Tab[] = ['company', 'locations', 'customFields', 'profiles', 'users', 'permissions', 'alerts'];
 
 export function SettingsPage() {
   const { t } = useI18n();
@@ -146,7 +147,8 @@ export function SettingsPage() {
       ['customFields', t('settings.customFields')],
       ['profiles', t('settings.profiles')],
       ['users', t('settings.users')],
-      ['permissions', t('settings.rolePermissions')]
+      ['permissions', t('settings.rolePermissions')],
+      ['alerts', t('settings.alerts')]
     ] as [Tab, string][] : [])
   ];
 
@@ -605,6 +607,8 @@ export function SettingsPage() {
           </>
         )}
       </Card></div> : null}
+
+      {tab === 'alerts' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-alerts" aria-labelledby="settings-tab-alerts"><AlertsSettings /></div> : null}
 
       {tab === 'permissions' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-permissions" aria-labelledby="settings-tab-permissions"><Card>
         <div className="sectionTitle"><div><h2>{t('settings.rolePermissions')}</h2></div></div>
