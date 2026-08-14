@@ -9,6 +9,7 @@ using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.Licenses;
+using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
@@ -48,6 +49,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<License> Licenses => Set<License>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<AssetEvidence> AssetEvidence => Set<AssetEvidence>();
+    public DbSet<OffboardingCase> OffboardingCases => Set<OffboardingCase>();
+    public DbSet<OffboardingItem> OffboardingItems => Set<OffboardingItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +69,48 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureDashboards(modelBuilder);
         ConfigureLicenses(modelBuilder);
         ConfigureAssetEvidence(modelBuilder);
+        ConfigureOffboarding(modelBuilder);
+    }
+
+    private static void ConfigureOffboarding(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<OffboardingCase>(entity =>
+        {
+            entity.ToTable("offboarding_cases");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DefaultReturnLocation).HasMaxLength(240);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.PublicTokenHash).HasMaxLength(128);
+            entity.Property(x => x.CreatedBy).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.CompletedBy).HasMaxLength(240);
+            entity.Property(x => x.CancellationReason).HasMaxLength(1000);
+            entity.Property(x => x.FinalProtocolNumber).HasMaxLength(80);
+            // Tylko jedna niezakończona sprawa offboardingowa na osobę w organizacji (sekcja 4.3, 4.12).
+            entity.HasIndex(x => new { x.OrganizationId, x.PersonId })
+                .IsUnique()
+                .HasFilter("\"Status\" NOT IN ('Completed', 'Cancelled')")
+                .HasDatabaseName("IX_offboarding_cases_OrganizationId_PersonId_Open");
+        });
+
+        modelBuilder.Entity<OffboardingItem>(entity =>
+        {
+            entity.ToTable("offboarding_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.AutomationMode).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Label).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.EmployeeResponse).HasMaxLength(60);
+            entity.Property(x => x.EmployeeComment).HasMaxLength(1000);
+            entity.Property(x => x.AutomationError).HasMaxLength(1000);
+            entity.Property(x => x.ReceivedBy).HasMaxLength(240);
+            entity.Property(x => x.InspectionCompletedBy).HasMaxLength(240);
+            entity.Property(x => x.ResolutionNotes).HasMaxLength(1000);
+            entity.Property(x => x.CompletedBy).HasMaxLength(240);
+            entity.HasIndex(x => new { x.OrganizationId, x.OffboardingCaseId });
+            entity.HasOne<OffboardingCase>().WithMany().HasForeignKey(x => x.OffboardingCaseId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     private static void ConfigureAssetEvidence(ModelBuilder modelBuilder)
