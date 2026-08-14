@@ -1,4 +1,4 @@
-import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Trash2, User, UserCheck, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
+import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Trash2, User, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
@@ -505,6 +505,12 @@ export function PeoplePage() {
                   >
                     <span className="button__icon"><KeyRound size={16} /></span>
                     <span>{t('people.createLoginAccount')}</span>
+                  </Link>
+                )}
+                {selected.employmentStatus === 'Active' && (
+                  <Link to={`/offboarding?new=1&personId=${selected.id}`} className="button button--secondary">
+                    <span className="button__icon"><UserRoundX size={16} /></span>
+                    <span>{t('people.startOffboarding')}</span>
                   </Link>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, ClipboardCheck, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, Users, X } from 'lucide-react';
+import { BarChart3, Boxes, ClipboardCheck, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from './BrandMark';
@@ -16,6 +16,7 @@ export const nav = [
   { to: '/assignments', labelKey: 'nav.assignments', icon: PackageCheck, roles: ['owner', 'admin', 'asset_operator', 'hr', 'manager'] },
   { to: '/procedures', labelKey: 'nav.procedures', icon: ClipboardCheck, roles: ['owner', 'admin', 'hr', 'manager', 'asset_operator', 'auditor', 'procedure_manager'] },
   { to: '/onboarding', labelKey: 'nav.onboarding', icon: FileText, roles: ['owner', 'admin', 'hr', 'asset_operator'] },
+  { to: '/offboarding', labelKey: 'nav.offboarding', icon: UserRoundX, roles: ['owner', 'admin', 'hr', 'asset_operator'] },
   { to: '/reports', labelKey: 'nav.reports', icon: BarChart3, roles: ['owner', 'admin', 'manager', 'finance', 'auditor', 'asset_operator'] },
   { to: '/audit', labelKey: 'nav.audit', icon: History, roles: ['owner', 'admin', 'auditor'] },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: [] }

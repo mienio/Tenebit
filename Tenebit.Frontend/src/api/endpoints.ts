@@ -7,6 +7,7 @@ import type {
   AssetStatus,
   AssetStatusSetting,
   Assignment,
+  CreateOffboardingCaseRequest,
   CreateAssignmentRequest,
   CreateAssetRequest,
   CreateEmployeePackageRequest,
@@ -29,8 +30,13 @@ import type {
   PersonRelationTypeOption,
   Procedure,
   PublicAssignment,
+  PublicOffboarding,
+  PublicOffboardingAnswer,
   RoleInfo,
   RolePermission,
+  OffboardingCaseDetails,
+  OffboardingCaseStatus,
+  OffboardingCaseSummary,
   SaveAssetFieldDefinitionRequest,
   Team
 } from '../types/domain';
@@ -215,6 +221,38 @@ export const api = {
   acceptAssignment: (id: string) => apiRequest<Assignment>(`/api/assignments/${id}/accept`, { method: 'POST' }),
   returnAssignment: (id: string, body: { returnCondition?: string | null; destinationLocation?: string | null; assets?: { assetId: string; returnCondition?: string | null }[] }) => apiRequest<Assignment>(`/api/assignments/${id}/return`, { method: 'POST', body: JSON.stringify(body) }),
   downloadAssignmentProtocol: (id: string) => apiBlob(`/api/assignments/${id}/protocol`),
+
+  offboardingPaged: (params: { status?: OffboardingCaseStatus | ''; page: number; pageSize: number }) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    query.set('page', String(params.page));
+    query.set('pageSize', String(params.pageSize));
+    return apiRequest<Paged<OffboardingCaseSummary>>(`/api/offboarding?${query.toString()}`);
+  },
+  offboarding: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}`),
+  createOffboarding: (body: CreateOffboardingCaseRequest) => apiRequest<OffboardingCaseDetails>('/api/offboarding', { method: 'POST', body: JSON.stringify(body) }),
+  updateOffboarding: (id: string, body: Omit<CreateOffboardingCaseRequest, 'personId'>) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  startOffboarding: (id: string, body: { notifyEmployee: boolean }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/start`, { method: 'POST', body: JSON.stringify(body) }),
+  resendOffboarding: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/resend`, { method: 'POST' }),
+  regenerateOffboardingLink: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/regenerate-link`, { method: 'POST' }),
+  executeOffboardingScheduledActions: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/execute-scheduled-actions`, { method: 'POST' }),
+  confirmOffboardingItemReturn: (id: string, itemId: string, body: { returnCondition?: string | null; returnLocation?: string | null; notes?: string | null }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/confirm-return`, { method: 'POST', body: JSON.stringify(body) }),
+  completeOffboardingInspection: (id: string, itemId: string, body: { outcome: string; serialNumberMatched: boolean; accessoriesComplete: boolean; dataWiped: boolean; functionalTestPassed: boolean; damageAssessmentNotes?: string | null; notes?: string | null }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/complete-inspection`, { method: 'POST', body: JSON.stringify(body) }),
+  releaseOffboardingLicense: (id: string, itemId: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/release-license`, { method: 'POST' }),
+  resolveOffboardingItem: (id: string, itemId: string, body: { status: string; notes: string }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/resolve`, { method: 'POST', body: JSON.stringify(body) }),
+  waiveOffboardingItem: (id: string, itemId: string, body: { reason: string }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/waive`, { method: 'POST', body: JSON.stringify(body) }),
+  completeOffboarding: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/complete`, { method: 'POST' }),
+  cancelOffboarding: (id: string, body: { reason: string }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
+  restoreOffboardingEmployment: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/restore-employment`, { method: 'POST' }),
+  downloadOffboardingProtocol: (id: string) => apiBlob(`/api/offboarding/${id}/protocol`),
+
+  publicOffboarding: (token: string) => apiRequest<PublicOffboarding>(`/api/public/offboarding/${token}`),
+  submitPublicOffboardingResponse: (token: string, body: { answers: PublicOffboardingAnswer[] }) => apiRequest<PublicOffboarding>(`/api/public/offboarding/${token}/response`, { method: 'POST', body: JSON.stringify(body) }),
+  uploadPublicOffboardingEvidence: (token: string, itemId: string, file: File) => {
+    const body = new FormData();
+    body.set('file', file);
+    return apiRequest<unknown>(`/api/public/offboarding/${token}/items/${itemId}/evidence`, { method: 'POST', body });
+  },
 
   publicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}`),
   acceptPublicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}/accept`, { method: 'POST' }),

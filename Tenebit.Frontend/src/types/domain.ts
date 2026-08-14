@@ -2,6 +2,11 @@ export type AssetStatus = 'Draft' | 'InStock' | 'Reserved' | 'Assigned' | 'Pendi
 export type AssetCategoryType = 'Physical' | 'Digital' | 'License' | 'Account' | 'Document' | 'Location' | 'Vehicle' | 'Key' | 'Consumable' | 'Other';
 export type PersonRelationType = string;
 export type EmploymentStatus = 'Active' | 'Offboarding' | 'Inactive';
+export type OffboardingCaseStatus = 'Draft' | 'Active' | 'WaitingForReturn' | 'ReadyToClose' | 'Completed' | 'Cancelled';
+export type OffboardingItemType = 'AssetReturn' | 'LicenseRelease' | 'ManualTask';
+export type OffboardingItemStatus = 'Pending' | 'EmployeeAcknowledged' | 'Received' | 'Inspecting' | 'Returned' | 'Released' | 'Missing' | 'Damaged' | 'Retained' | 'Waived';
+export type OffboardingItemAutomationMode = 'Manual' | 'AtEmploymentEnd';
+export type InspectionOutcome = 'ReadyForReuse' | 'Damaged' | 'Retired' | 'Disposed';
 
 export function getEmploymentStatusPresentation(status: EmploymentStatus) {
   switch (status) {
@@ -285,6 +290,107 @@ export interface PublicAssignment {
   proceduresRequiringAcceptance: PublicAssignmentProcedure[];
 }
 
+export interface PublicOffboardingItem {
+  id: string;
+  label: string;
+  assetTag?: string | null;
+  status: OffboardingItemStatus;
+  employeeResponse?: string | null;
+  employeeComment?: string | null;
+  issuePhotoEvidenceId?: string | null;
+}
+
+export interface PublicOffboarding {
+  organizationName: string;
+  returnDueDate: string;
+  defaultReturnLocation?: string | null;
+  notes?: string | null;
+  items: PublicOffboardingItem[];
+}
+
+export interface PublicOffboardingAnswer {
+  itemId: string;
+  response: string;
+  comment?: string | null;
+}
+
+export interface CreateOffboardingCaseRequest {
+  personId: string;
+  employmentEndsAt: string;
+  returnDueDate: string;
+  defaultReturnLocation?: string | null;
+  notes?: string | null;
+  processOwnerId?: string | null;
+  blockNewReservations: boolean;
+  cancelFutureReservations: boolean;
+  autoReleaseLicenses: boolean;
+}
+
+export interface UpdateOffboardingCaseRequest {
+  employmentEndsAt: string;
+  returnDueDate: string;
+  defaultReturnLocation?: string | null;
+  notes?: string | null;
+  processOwnerId?: string | null;
+  blockNewReservations: boolean;
+  cancelFutureReservations: boolean;
+  autoReleaseLicenses: boolean;
+}
+
+export interface OffboardingCaseSummary {
+  id: string;
+  personId: string;
+  personName?: string | null;
+  status: OffboardingCaseStatus;
+  employmentEndsAt: string;
+  returnDueDate: string;
+  defaultReturnLocation?: string | null;
+  notes?: string | null;
+  processOwnerId?: string | null;
+  blockNewReservations: boolean;
+  cancelFutureReservations: boolean;
+  autoReleaseLicenses: boolean;
+  personDeactivatedAt?: string | null;
+  scheduledActionsCompletedAt?: string | null;
+  createdAt: string;
+  createdBy: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  finalProtocolNumber?: string | null;
+}
+
+export interface OffboardingItem {
+  id: string;
+  type: OffboardingItemType;
+  assetId?: string | null;
+  assignmentId?: string | null;
+  licenseId?: string | null;
+  label: string;
+  required: boolean;
+  status: OffboardingItemStatus;
+  employeeResponse?: string | null;
+  employeeComment?: string | null;
+  automationMode: OffboardingItemAutomationMode;
+  automationLastAttemptAt?: string | null;
+  automationError?: string | null;
+  receivedAt?: string | null;
+  receivedBy?: string | null;
+  inspectionCompletedAt?: string | null;
+  inspectionCompletedBy?: string | null;
+  resolutionNotes?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  sortOrder: number;
+}
+
+export interface OffboardingCaseDetails {
+  case: OffboardingCaseSummary;
+  items: OffboardingItem[];
+}
+
 export interface DashboardComparison {
   comparedToDate: string;
   currentTotalAssets: number;
@@ -316,6 +422,7 @@ export interface DashboardSummary {
   assetsByCategory: { categoryId: string; categoryName: string; count: number }[];
   assetsByLocation: { location: string; count: number }[];
   assetsByTeam: { teamId: string | null; teamName: string; count: number; totalValue: number }[];
+  offboardingRequiringAttentionCount?: number;
 }
 
 export interface MyAsset {

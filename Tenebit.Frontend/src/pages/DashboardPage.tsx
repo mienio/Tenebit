@@ -102,6 +102,18 @@ export function DashboardPage() {
         </Card>
       )}
 
+      {(data.offboardingRequiringAttentionCount ?? 0) > 0 && (
+        <Card>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <div>
+              <strong>{t('dashboard.offboardingAttentionTitle')}</strong>
+              <p className="muted">{t('dashboard.offboardingAttentionDesc', { count: data.offboardingRequiringAttentionCount ?? 0 })}</p>
+            </div>
+            <Link className="inlineAction" to="/offboarding">{t('dashboard.offboardingAttentionLink')}</Link>
+          </div>
+        </Card>
+      )}
+
       {subscription.error && <Card><ErrorState message={subscription.error} onRetry={subscription.reload} /></Card>}
 
       {subData && isNearLimit && (

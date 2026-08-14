@@ -14,6 +14,7 @@ const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then(m => ({ default: m.VerifyEmailPage })));
 const PublicAssignmentPage = lazy(() => import('./pages/PublicAssignmentPage').then(m => ({ default: m.PublicAssignmentPage })));
+const PublicOffboardingPage = lazy(() => import('./pages/PublicOffboardingPage').then(m => ({ default: m.PublicOffboardingPage })));
 const PublicAssetScanPage = lazy(() => import('./pages/PublicAssetScanPage').then(m => ({ default: m.PublicAssetScanPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const MyWorkspacePage = lazy(() => import('./pages/MyWorkspacePage').then(m => ({ default: m.MyWorkspacePage })));
@@ -22,6 +23,7 @@ const PeoplePage = lazy(() => import('./pages/PeoplePage').then(m => ({ default:
 const AssignmentsPage = lazy(() => import('./pages/AssignmentsPage').then(m => ({ default: m.AssignmentsPage })));
 const ProceduresPage = lazy(() => import('./pages/ProceduresPage').then(m => ({ default: m.ProceduresPage })));
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
+const OffboardingPage = lazy(() => import('./pages/OffboardingPage').then(m => ({ default: m.OffboardingPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
@@ -52,6 +54,7 @@ export function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/accept/:organizationId/:assignmentId" element={<PublicAssignmentPage />} />
+        <Route path="/exit/:token" element={<PublicOffboardingPage />} />
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<DashboardPage />} />
@@ -61,6 +64,8 @@ export function App() {
           <Route path="assignments" element={<RequireRoles path="/assignments"><AssignmentsPage /></RequireRoles>} />
           <Route path="procedures" element={<RequireRoles path="/procedures"><ProceduresPage /></RequireRoles>} />
           <Route path="onboarding" element={<RequireRoles path="/onboarding"><OnboardingPage /></RequireRoles>} />
+          <Route path="offboarding" element={<RequireRoles path="/offboarding"><OffboardingPage /></RequireRoles>} />
+          <Route path="offboarding/:id" element={<RequireRoles path="/offboarding"><OffboardingPage /></RequireRoles>} />
           <Route path="reports" element={<RequireRoles path="/reports"><ReportsPage /></RequireRoles>} />
           <Route path="licenses" element={<RequireRoles path="/licenses"><LicensesPage /></RequireRoles>} />
           <Route path="audit" element={<RequireRoles path="/audit"><AuditLogPage /></RequireRoles>} />

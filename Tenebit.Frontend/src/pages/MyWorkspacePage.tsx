@@ -83,6 +83,7 @@ export function MyWorkspacePage() {
   if (workspace.error || !workspace.data) return <ErrorState message={workspace.error ?? t('myWorkspace.noData')} onRetry={workspace.reload} />;
 
   const data = workspace.data;
+  // No GET /api/offboarding personId filter exists in the backend route/DTO contract, so this page does not load per-person offboarding cards.
 
   if (!data.hasPersonRecord) {
     const canManagePeople = canSee(peopleNavRoles, auth.roles);
