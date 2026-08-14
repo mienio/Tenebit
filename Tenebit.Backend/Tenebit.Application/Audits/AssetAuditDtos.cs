@@ -55,3 +55,7 @@ public sealed record PublicAssetAuditItemResponse(Guid Id, string AssetName, str
 public sealed record PublicAssetAuditResponse(string OrganizationName, string CampaignName, DateTimeOffset DueDate, bool ReadOnly, IReadOnlyList<PublicAssetAuditItemResponse> Items);
 
 public sealed record SubmitPublicAssetAuditItemRequest(AssetAuditResponse Response, string? Comment);
+
+public sealed record ResolveAssetAuditItemRequest(AssetAuditResolution Resolution, string? Notes, Guid? NewOwnerPersonId);
+
+public sealed record RemindParticipantsResponse(int RemindedCount);

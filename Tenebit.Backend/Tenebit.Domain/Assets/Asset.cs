@@ -147,6 +147,21 @@ public sealed class Asset
 
     public void ReturnToStock(string? location) => ReleaseAssignment(AssetStatus.InStock, location);
 
+    /// <summary>Korekta błędu ewidencji (spec 5.7 rozstrzygnięcie OwnershipCorrected) — w przeciwieństwie do
+    /// <see cref="AssignTo"/> celowo NIE sprawdza obecnego statusu (aktywo może być już Assigned do kogoś innego,
+    /// to właśnie ten błąd naprawiamy), poza odrzuceniem zutylizowanego aktywa.</summary>
+    public void CorrectOwner(Guid newPersonId)
+    {
+        if (Status == AssetStatus.Disposed)
+        {
+            throw new DomainException("Zutylizowanego aktywa nie można przypisać.");
+        }
+
+        AssignedPersonId = newPersonId;
+        Status = AssetStatus.Assigned;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     public void ReleaseAssignment(AssetStatus status, string? location = null)
     {
         if (Status == AssetStatus.Disposed && status != AssetStatus.Disposed)

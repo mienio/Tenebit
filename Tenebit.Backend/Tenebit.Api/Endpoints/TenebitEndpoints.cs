@@ -1001,6 +1001,31 @@ public static class TenebitEndpoints
                 (await service.StartAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Asset audits")
             .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/remind", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.RemindParticipantsAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/participants/{participantId:guid}/reopen", async (Guid id, Guid participantId, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.ReopenParticipantAsync(id, participantId, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/items/{itemId:guid}/resolve", async (Guid id, Guid itemId, ResolveAssetAuditItemRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.ResolveItemAsync(id, itemId, request, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/complete", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.CompleteAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/cancel", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.CancelAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
     }
 
     private static void MapPublicAssignments(RouteGroupBuilder api)

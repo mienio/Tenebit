@@ -403,5 +403,198 @@ public sealed class AssetAuditCampaignService
 
         return Result<Guid>.Success(uploadResult.Value!.Id);
     }
+
+    // --- Rozstrzyganie wyjątków / administracja kampanią (spec 5.7) ---
+
+    /// <summary>Wysyła ponowny e-mail do uczestników, którzy jeszcze nie odpowiedzieli (Pending/InProgress) —
+    /// Submitted/Reviewed pomijamy, bo już odpowiedzieli. Jeden zbiorczy wpis w ActivityLog, nie per-osoba,
+    /// żeby nie zaspamować dziennika przy dużych kampaniach.</summary>
+    public async Task<Result<RemindParticipantsResponse>> RemindParticipantsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        if (access.IsFailure) return Result<RemindParticipantsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
+        if (campaign is null) return Result<RemindParticipantsResponse>.Failure(Error.NotFound("Kampania nie istnieje."));
+
+        var now = _clock.UtcNow;
+        var participants = await _participants.ListByCampaignAsync(organizationId, id, cancellationToken);
+        var pending = participants.Where(p => p.Status is AssetAuditParticipantStatus.Pending or AssetAuditParticipantStatus.InProgress).ToList();
+
+        var remindedCount = 0;
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+
+        foreach (var participant in pending)
+        {
+            if (string.IsNullOrWhiteSpace(participant.Email)) continue;
+
+            var person = await _people.GetAsync(organizationId, participant.PersonId, cancellationToken);
+            if (person is null) continue;
+
+            // PublicTokenService przechowuje wyłącznie hash — poprzedni surowy token nie jest odtwarzalny,
+            // więc przypomnienie (jak resend w offboardingu) wystawia nowy token o tym samym terminie ważności
+            // i unieważnia poprzedni, dając ten sam efekt końcowy: działający link w treści e-maila.
+            try
+            {
+                var generated = PublicTokenService.Generate();
+                participant.SetToken(generated.TokenHash, participant.TokenExpiresAt ?? campaign.DueDate.AddDays(14));
+                var link = _linkBuilder.BuildAssetAuditLink(generated.RawToken);
+                var (subject, html) = EmailTemplates.AssetAuditLink(organization?.Language, person.FirstName, campaign.DueDate, link);
+                await _emailSender.SendAsync(participant.Email, subject, html, cancellationToken);
+                participant.MarkReminded(now);
+                remindedCount++;
+            }
+            catch (Exception)
+            {
+                // Pojedynczy błąd wysyłki nie powinien przerywać przypominania reszty uczestników.
+            }
+        }
+
+        _activity.Add(new ActivityLog(organizationId, "asset_audit.reminder_sent", "asset_audit_campaign", campaign.Id, _currentUser.Subject, remindedCount.ToString(), now));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<RemindParticipantsResponse>.Success(new RemindParticipantsResponse(remindedCount));
+    }
+
+    /// <summary>Ponowne otwarcie odpowiedzi jest świadomą decyzją administracyjną (spec 5.5) — celowo węższe
+    /// uprawnienia niż reszta zarządzania kampanią (tylko Owner/Admin, bez AssetOperator).</summary>
+    public async Task<Result<bool>> ReopenParticipantAsync(Guid id, Guid participantId, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var participant = await _participants.GetAsync(organizationId, id, participantId, cancellationToken);
+        if (participant is null) return Result<bool>.Failure(Error.NotFound("Uczestnik nie istnieje."));
+
+        var now = _clock.UtcNow;
+        try
+        {
+            participant.Reopen(now);
+        }
+        catch (DomainException ex)
+        {
+            return Result<bool>.Failure(Error.Validation(ex.Message));
+        }
+
+        _activity.Add(new ActivityLog(organizationId, "asset_audit.participant_reopened", "asset_audit_participant", participant.Id, _currentUser.Subject, participant.Email, now));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
+
+    /// <summary>Rozstrzygnięcie zgłoszonego wyjątku — poza samą decyzją domenową na pozycji, stosuje odpowiedni
+    /// efekt na aktywie (spec 5.7). Auditor nie ma dostępu do tej operacji (tylko odczyt/eksport).</summary>
+    public async Task<Result<bool>> ResolveItemAsync(Guid id, Guid itemId, ResolveAssetAuditItemRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var campaignItems = await _items.ListByCampaignAsync(organizationId, id, cancellationToken);
+        var item = campaignItems.FirstOrDefault(x => x.Id == itemId);
+        if (item is null) return Result<bool>.Failure(Error.NotFound("Pozycja nie istnieje."));
+
+        if (request.Resolution == AssetAuditResolution.OwnershipCorrected && !request.NewOwnerPersonId.HasValue)
+        {
+            return Result<bool>.Failure(Error.Validation("Nowy właściciel jest wymagany dla tego rozstrzygnięcia."));
+        }
+
+        var asset = await _assets.GetAsync(organizationId, item.AssetId, cancellationToken);
+        if (asset is null) return Result<bool>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+        var now = _clock.UtcNow;
+        try
+        {
+            item.Resolve(request.Resolution, request.Notes, _currentUser.Subject, now);
+
+            switch (request.Resolution)
+            {
+                case AssetAuditResolution.AssetMarkedLost:
+                    asset.ReleaseAssignment(AssetStatus.Lost);
+                    break;
+                case AssetAuditResolution.AssetMarkedDamaged:
+                    // Zgłoszenie audytowe uszkodzenia nie jest fizycznym zwrotem — aktywo zostaje przy osobie
+                    // do czasu naprawy/wymiany w osobnym procesie, dlatego zmieniamy TYLKO status.
+                    asset.ChangeStatus(AssetStatus.Damaged);
+                    break;
+                case AssetAuditResolution.OwnershipCorrected:
+                    asset.CorrectOwner(request.NewOwnerPersonId!.Value);
+                    break;
+                case AssetAuditResolution.Dismissed:
+                case AssetAuditResolution.Accepted:
+                    // Bez zmiany statusu aktywa — administrator uznaje ewidencję za poprawną albo odrzuca zgłoszenie.
+                    break;
+            }
+        }
+        catch (DomainException ex)
+        {
+            return Result<bool>.Failure(Error.Validation(ex.Message));
+        }
+
+        _activity.Add(new ActivityLog(organizationId, "asset_audit.exception_resolved", "asset_audit_item", item.Id, _currentUser.Subject, request.Resolution.ToString(), now));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
+
+    /// <summary>Idempotentny (no-op gdy już Completed) — dozwolony z Active albo Reviewing, administrator może
+    /// jawnie zakończyć kampanię z nieudzielonymi odpowiedziami (spec 5.7).</summary>
+    public async Task<Result<bool>> CompleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
+        if (campaign is null) return Result<bool>.Failure(Error.NotFound("Kampania nie istnieje."));
+
+        var wasAlreadyCompleted = campaign.Status == AssetAuditCampaignStatus.Completed;
+        var now = _clock.UtcNow;
+
+        try
+        {
+            campaign.Complete(now, _currentUser.Subject);
+        }
+        catch (DomainException ex)
+        {
+            return Result<bool>.Failure(Error.Validation(ex.Message));
+        }
+
+        // Idempotencja: drugie wywołanie na już zakończonej kampanii nie może dopisać drugiego wpisu do ActivityLog.
+        if (!wasAlreadyCompleted)
+        {
+            _activity.Add(new ActivityLog(organizationId, "asset_audit.completed", "asset_audit_campaign", campaign.Id, _currentUser.Subject, campaign.Name, now));
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
+
+    public async Task<Result<bool>> CancelAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
+        if (campaign is null) return Result<bool>.Failure(Error.NotFound("Kampania nie istnieje."));
+
+        var now = _clock.UtcNow;
+        try
+        {
+            campaign.Cancel(now);
+        }
+        catch (DomainException ex)
+        {
+            return Result<bool>.Failure(Error.Validation(ex.Message));
+        }
+
+        _activity.Add(new ActivityLog(organizationId, "asset_audit.cancelled", "asset_audit_campaign", campaign.Id, _currentUser.Subject, campaign.Name, now));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
 }
 

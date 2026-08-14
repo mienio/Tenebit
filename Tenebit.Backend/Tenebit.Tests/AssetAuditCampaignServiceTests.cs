@@ -271,6 +271,163 @@ public class AssetAuditCampaignServiceTests
         Assert.Equal("NOT_FOUND", result.Error!.Code);
     }
 
+    [Fact]
+    public async Task ResolveItemAsync_AssetMarkedLost_ChangesStatusAndClearsOwner()
+    {
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets, person.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var item = items.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value!.Campaign.Id, item.Id,
+            new ResolveAssetAuditItemRequest(AssetAuditResolution.AssetMarkedLost, "Zgubione w podróży", null), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var updated = assets.Assets.Single(x => x.Id == asset.Id);
+        Assert.Equal(AssetStatus.Lost, updated.Status);
+        Assert.Null(updated.AssignedPersonId);
+    }
+
+    [Fact]
+    public async Task ResolveItemAsync_AssetMarkedDamaged_ChangesStatus_ButKeepsOwner()
+    {
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets, person.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var item = items.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value!.Campaign.Id, item.Id,
+            new ResolveAssetAuditItemRequest(AssetAuditResolution.AssetMarkedDamaged, "Pęknięta obudowa", null), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var updated = assets.Assets.Single(x => x.Id == asset.Id);
+        Assert.Equal(AssetStatus.Damaged, updated.Status);
+        Assert.Equal(person.Id, updated.AssignedPersonId);
+    }
+
+    [Fact]
+    public async Task ResolveItemAsync_OwnershipCorrected_MovesAssetToNewOwner_EvenIfPreviouslyAssignedToSomeoneElse()
+    {
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
+        var oldOwner = AddPerson(user, people, "old@acme.test");
+        var newOwner = AddPerson(user, people, "new@acme.test");
+        var asset = AddAsset(user, assets, oldOwner.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var item = items.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value!.Campaign.Id, item.Id,
+            new ResolveAssetAuditItemRequest(AssetAuditResolution.OwnershipCorrected, "Błąd ewidencji", newOwner.Id), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var updated = assets.Assets.Single(x => x.Id == asset.Id);
+        Assert.Equal(AssetStatus.Assigned, updated.Status);
+        Assert.Equal(newOwner.Id, updated.AssignedPersonId);
+    }
+
+    [Theory]
+    [InlineData(AssetAuditResolution.AssetMarkedLost)]
+    [InlineData(AssetAuditResolution.AssetMarkedDamaged)]
+    public async Task ResolveItemAsync_WithoutNotes_ReturnsValidationError(AssetAuditResolution resolution)
+    {
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var item = items.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value!.Campaign.Id, item.Id,
+            new ResolveAssetAuditItemRequest(resolution, null, null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task ResolveItemAsync_OwnershipCorrected_WithoutNewOwner_ReturnsValidationError()
+    {
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var item = items.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value!.Campaign.Id, item.Id,
+            new ResolveAssetAuditItemRequest(AssetAuditResolution.OwnershipCorrected, "Notatka", null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task ReopenParticipantAsync_OnlyWorksFromSubmitted()
+    {
+        var (service, user, _, participants, _, people, assets, _, emailSender) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var participant = participants.Participants.Single();
+
+        var beforeSubmit = await service.ReopenParticipantAsync(created.Value!.Campaign.Id, participant.Id, CancellationToken.None);
+        Assert.True(beforeSubmit.IsFailure);
+        Assert.Equal("VALIDATION_ERROR", beforeSubmit.Error!.Code);
+
+        var token = ExtractRawTokenFromEmail(emailSender, person.Email);
+        await service.SubmitAsync(token, CancellationToken.None);
+
+        var afterSubmit = await service.ReopenParticipantAsync(created.Value!.Campaign.Id, participant.Id, CancellationToken.None);
+        Assert.True(afterSubmit.IsSuccess);
+        Assert.Equal(AssetAuditParticipantStatus.InProgress, participants.Participants.Single().Status);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_IsIdempotent()
+    {
+        var (service, user, campaigns, _, _, people, assets, activity, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        var first = await service.CompleteAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var second = await service.CompleteAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(AssetAuditCampaignStatus.Completed, campaigns.Campaigns.Single().Status);
+        Assert.Single(activity.Logs.Where(x => x.Action == "asset_audit.completed"));
+    }
+
+    [Fact]
+    public async Task RemindParticipantsAsync_OnlyRemindsPendingOrInProgress()
+    {
+        var (service, user, _, participants, _, people, assets, activity, emailSender) = CreateService();
+        var personA = AddPerson(user, people, "a@acme.test");
+        var personB = AddPerson(user, people, "b@acme.test");
+        AddAsset(user, assets, personA.Id);
+        AddAsset(user, assets, personB.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        var tokenA = ExtractRawTokenFromEmail(emailSender, personA.Email);
+        await service.SubmitAsync(tokenA, CancellationToken.None); // A already submitted, should be skipped
+
+        var remind = await service.RemindParticipantsAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        Assert.True(remind.IsSuccess);
+        Assert.Equal(1, remind.Value!.RemindedCount);
+        Assert.NotNull(participants.Participants.Single(x => x.PersonId == personB.Id).LastReminderAt);
+        Assert.Null(participants.Participants.Single(x => x.PersonId == personA.Id).LastReminderAt);
+        Assert.Contains(activity.Logs, x => x.Action == "asset_audit.reminder_sent");
+    }
+
     private static string ExtractRawTokenFromEmail(FakeEmailSender emailSender, string recipient)
     {
         var index = emailSender.Sent.FindLastIndex(x => x.To == recipient);
