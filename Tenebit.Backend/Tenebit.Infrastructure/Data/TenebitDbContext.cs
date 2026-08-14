@@ -4,6 +4,7 @@ using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
+using Tenebit.Domain.Audits;
 using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
@@ -51,6 +52,9 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<AssetEvidence> AssetEvidence => Set<AssetEvidence>();
     public DbSet<OffboardingCase> OffboardingCases => Set<OffboardingCase>();
     public DbSet<OffboardingItem> OffboardingItems => Set<OffboardingItem>();
+    public DbSet<AssetAuditCampaign> AssetAuditCampaigns => Set<AssetAuditCampaign>();
+    public DbSet<AssetAuditParticipant> AssetAuditParticipants => Set<AssetAuditParticipant>();
+    public DbSet<AssetAuditItem> AssetAuditItems => Set<AssetAuditItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,6 +74,49 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureLicenses(modelBuilder);
         ConfigureAssetEvidence(modelBuilder);
         ConfigureOffboarding(modelBuilder);
+        ConfigureAudits(modelBuilder);
+    }
+
+    private static void ConfigureAudits(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AssetAuditCampaign>(entity =>
+        {
+            entity.ToTable("asset_audit_campaigns");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.CreatedBy).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.CompletedBy).HasMaxLength(240);
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+
+        modelBuilder.Entity<AssetAuditParticipant>(entity =>
+        {
+            entity.ToTable("asset_audit_participants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.TokenHash).HasMaxLength(128);
+            entity.HasIndex(x => new { x.OrganizationId, x.CampaignId, x.PersonId }).IsUnique();
+            entity.HasOne<AssetAuditCampaign>().WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AssetAuditItem>(entity =>
+        {
+            entity.ToTable("asset_audit_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Response).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Resolution).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ExpectedLocation).HasMaxLength(240);
+            entity.Property(x => x.Comment).HasMaxLength(1000);
+            entity.Property(x => x.ResolutionNotes).HasMaxLength(1000);
+            entity.Property(x => x.ResolvedBy).HasMaxLength(240);
+            entity.HasIndex(x => new { x.OrganizationId, x.CampaignId });
+            entity.HasIndex(x => new { x.OrganizationId, x.ParticipantId });
+            entity.HasOne<AssetAuditCampaign>().WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<AssetAuditParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     private static void ConfigureOffboarding(ModelBuilder modelBuilder)
