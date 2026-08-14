@@ -127,9 +127,22 @@ export function AssignmentsPage() {
     const destinationLocation = toNullable(String(form.get('destinationLocation') ?? ''));
     setReturning(true);
     try {
-      const hasPhotos = selectedAssignment.assets.some(asset => (returnEvidence[asset.assetId] ?? []).length > 0);
-      if (hasPhotos) {
-        for (const asset of selectedAssignment.assets) {
+      const assetsWithoutPhotos = selectedAssignment.assets.filter(asset => (returnEvidence[asset.assetId] ?? []).length === 0);
+      const assetsWithPhotos = selectedAssignment.assets.filter(asset => (returnEvidence[asset.assetId] ?? []).length > 0);
+
+      if (assetsWithoutPhotos.length > 0) {
+        await api.returnAssignment(selectedAssignment.id, {
+          returnCondition: null,
+          destinationLocation,
+          assets: assetsWithoutPhotos.map(asset => ({
+            assetId: asset.assetId,
+            returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? ''))
+          }))
+        });
+      }
+
+      for (const asset of assetsWithPhotos) {
+        try {
           await api.returnAssetWithEvidence(
             selectedAssignment.id,
             asset.assetId,
@@ -141,17 +154,11 @@ export function AssignmentsPage() {
             },
             returnEvidence[asset.assetId] ?? []
           );
+        } catch (error) {
+          throw new Error(`Zwrot aktywu ${asset.assetId} się nie powiódł: ${error instanceof Error ? error.message : t('assignments.returnFailed')}`);
         }
-      } else {
-        await api.returnAssignment(selectedAssignment.id, {
-          returnCondition: null,
-          destinationLocation,
-          assets: selectedAssignment.assets.map(asset => ({
-            assetId: asset.assetId,
-            returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? ''))
-          }))
-        });
       }
+
       setDrawerMode(null);
       setSelectedAssignment(null);
       setReturnEvidence({});
