@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { EvidenceGallery } from '../components/Evidence';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { IconPicker } from '../components/IconPicker';
@@ -124,6 +125,11 @@ export function AssetsPage() {
     [selected?.id]
   );
   const history = useAsyncData(historyLoader, [historyLoader]);
+  const evidenceLoader = useMemo(
+    () => () => (selected ? api.assetEvidence(selected.id) : Promise.resolve(null)),
+    [selected?.id]
+  );
+  const evidence = useAsyncData(evidenceLoader, [evidenceLoader]);
 
   function toggleSelected(id: string) {
     setSelectedIds(current => {
@@ -700,6 +706,24 @@ export function AssetsPage() {
                 </div>
               ))}
             </dl>
+
+            <div className="formSectionTitle">{t('evidence.photos')}</div>
+            {evidence.isLoading ? <p className="muted">{t('common.loading')}</p> : !evidence.data?.length ? (
+              <p className="muted">{t('evidence.noPhotos')}</p>
+            ) : (
+              <div className="pageStack">
+                {(['Issue', 'Return', 'Audit', 'Offboarding'] as const).map(phase => {
+                  const ids = evidence.data!.filter(item => item.phase === phase).map(item => item.id);
+                  if (!ids.length) return null;
+                  return (
+                    <div key={phase}>
+                      <strong>{t(`evidence.phase.${phase}`)}</strong>
+                      <EvidenceGallery ids={ids} getBlob={api.evidenceBlob} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="formSectionTitle">{t('assets.historyTitle')}</div>
             {history.isLoading ? <p className="muted">{t('common.loading')}</p> : !history.data?.items.length ? (

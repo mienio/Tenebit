@@ -655,3 +655,12 @@ button.authIcon:hover { filter: brightness(0.94); }
 .toggleSwitch__thumb { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.3); pointer-events: none; }
 .toggleSwitch input:checked ~ .toggleSwitch__thumb { transform: translateX(18px); }
 .toggleSwitch input:disabled ~ .toggleSwitch__track { opacity: .55; }
+
+.evidencePicker { display: grid; gap: 10px; }
+.evidencePicker__notice { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0; }
+.evidenceThumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.evidenceThumb { position: relative; width: 84px; height: 84px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface-strong); }
+.evidenceThumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.evidenceThumb__placeholder { width: 100%; height: 100%; }
+.evidenceThumb__remove { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; cursor: pointer; }
+.evidenceThumb__remove:hover { background: rgba(0, 0, 0, .75); }

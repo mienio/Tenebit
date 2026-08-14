@@ -1388,7 +1388,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'myWorkspace.reservationPickup': 'Odbiór',
     'myWorkspace.reservationCancel': 'Anuluj',
     'myWorkspace.reservationCancelled': 'Wniosek anulowany.',
-    'myWorkspace.reservationCancelFailed': 'Nie udało się anulować wniosku.'
+    'myWorkspace.reservationCancelFailed': 'Nie udało się anulować wniosku.',
+    'evidence.privacyInstruction': 'Fotografuj wyłącznie sprzęt. Nie fotografuj osób, dokumentów, identyfikatorów ani treści widocznej na ekranie.',
+    'evidence.addPhoto': 'Dodaj zdjęcie',
+    'evidence.removePhoto': 'Usuń zdjęcie',
+    'evidence.noPhotos': 'Brak zdjęć',
+    'evidence.photos': 'Zdjęcia',
+    'evidence.phase.Issue': 'Wydanie',
+    'evidence.phase.Return': 'Zwrot',
+    'evidence.phase.Audit': 'Audyt',
+    'evidence.phase.Offboarding': 'Offboarding'
   },
   en: {
     'nav.dashboard': 'Dashboard',
@@ -2915,7 +2924,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'myWorkspace.reservationPickup': 'Pickup',
     'myWorkspace.reservationCancel': 'Cancel',
     'myWorkspace.reservationCancelled': 'Request cancelled.',
-    'myWorkspace.reservationCancelFailed': 'Failed to cancel the request.'
+    'myWorkspace.reservationCancelFailed': 'Failed to cancel the request.',
+    'evidence.privacyInstruction': 'Photograph equipment only. Do not photograph people, documents, ID badges, or anything visible on a screen.',
+    'evidence.addPhoto': 'Add photo',
+    'evidence.removePhoto': 'Remove photo',
+    'evidence.noPhotos': 'No photos',
+    'evidence.photos': 'Photos',
+    'evidence.phase.Issue': 'Issue',
+    'evidence.phase.Return': 'Return',
+    'evidence.phase.Audit': 'Audit',
+    'evidence.phase.Offboarding': 'Offboarding'
   },
   es: {
     'nav.dashboard': 'Panel',
@@ -4403,7 +4421,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'myWorkspace.reservationPickup': 'Recogida',
     'myWorkspace.reservationCancel': 'Cancelar',
     'myWorkspace.reservationCancelled': 'Solicitud cancelada.',
-    'myWorkspace.reservationCancelFailed': 'No se pudo cancelar la solicitud.'
+    'myWorkspace.reservationCancelFailed': 'No se pudo cancelar la solicitud.',
+    'evidence.privacyInstruction': 'Fotografía únicamente el equipo. No fotografíes personas, documentos, identificaciones ni el contenido visible en pantalla.',
+    'evidence.addPhoto': 'Añadir foto',
+    'evidence.removePhoto': 'Quitar foto',
+    'evidence.noPhotos': 'Sin fotos',
+    'evidence.photos': 'Fotos',
+    'evidence.phase.Issue': 'Entrega',
+    'evidence.phase.Return': 'Devolución',
+    'evidence.phase.Audit': 'Auditoría',
+    'evidence.phase.Offboarding': 'Offboarding'
   },
   de: {
     'nav.dashboard': 'Übersicht',
@@ -5892,6 +5919,15 @@ export const translations: Record<Language, Record<string, string>> = {
     'myWorkspace.reservationPickup': 'Abholung',
     'myWorkspace.reservationCancel': 'Abbrechen',
     'myWorkspace.reservationCancelled': 'Anfrage abgebrochen.',
-    'myWorkspace.reservationCancelFailed': 'Anfrage konnte nicht abgebrochen werden.'
+    'myWorkspace.reservationCancelFailed': 'Anfrage konnte nicht abgebrochen werden.',
+    'evidence.privacyInstruction': 'Fotografiere ausschließlich die Hardware. Fotografiere keine Personen, Dokumente, Ausweise oder auf Bildschirmen sichtbare Inhalte.',
+    'evidence.addPhoto': 'Foto hinzufügen',
+    'evidence.removePhoto': 'Foto entfernen',
+    'evidence.noPhotos': 'Keine Fotos',
+    'evidence.photos': 'Fotos',
+    'evidence.phase.Issue': 'Ausgabe',
+    'evidence.phase.Return': 'Rückgabe',
+    'evidence.phase.Audit': 'Audit',
+    'evidence.phase.Offboarding': 'Offboarding'
   }
 };

@@ -41,7 +41,7 @@ public sealed record AssignmentResponse(
     string? AcceptanceHash,
     bool IsIntegrityVerified);
 
-public sealed record PublicAssignmentAssetResponse(string Name, string AssetTag, string IssueCondition);
+public sealed record PublicAssignmentAssetResponse(string Name, string AssetTag, string IssueCondition, Guid AssetId, IReadOnlyList<Guid> EvidenceIds);
 
 public sealed record PublicAssignmentDocumentResponse(Guid Id, string FileName);
 

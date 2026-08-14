@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Plus, Rocket } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { api } from '../api/endpoints';
+import { api, type EvidencePhoto } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { EvidencePhotoPicker } from '../components/Evidence';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
@@ -23,6 +24,7 @@ export function OnboardingPage() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
   const [issueConditions, setIssueConditions] = useState<Record<string, string>>({});
+  const [issueEvidence, setIssueEvidence] = useState<Record<string, File[]>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [assetFilter, setAssetFilter] = useState('');
@@ -71,7 +73,7 @@ export function OnboardingPage() {
     try {
       // Real onboarding flow: the job profile (if any) is resolved server-side into concrete assets/procedures
       // and tracked as a checklist, instead of only pre-filling checkboxes on this page.
-      const response = await api.createEmployeePackage({
+      const body = {
         personId: selectedPersonId,
         jobProfileId: selectedJobProfileId || null,
         assetIds: selectedAssetIds,
@@ -79,11 +81,14 @@ export function OnboardingPage() {
         dueDate: toNullable(String(form.get('dueDate') ?? '')),
         notes: toNullable(String(form.get('notes') ?? '')),
         assetConditions: Object.fromEntries(selectedAssetIds.map(assetId => [assetId, t(`issueCondition.${issueConditions[assetId] ?? 'ok'}`)]))
-      });
+      };
+      const photos: EvidencePhoto[] = selectedAssetIds.flatMap(assetId => (issueEvidence[assetId] ?? []).map(file => ({ assetId, caption: null, file })));
+      const response = photos.length ? await api.createEmployeePackageWithEvidence(body, photos) : await api.createEmployeePackage(body);
       formEl.reset();
       setSelectedAssetIds([]);
       setSelectedProcedureIds([]);
       setIssueConditions({});
+      setIssueEvidence({});
       setSelectedJobProfileId('');
       const warningsText = response.warnings.length ? ` ${t('onboarding.warningsTitle')} ${response.warnings.join(' ')}` : '';
       setMessage({ type: 'success', text: t('onboarding.created', { protocol: response.protocolNumber }) + warningsText });
@@ -147,6 +152,11 @@ export function OnboardingPage() {
                         <option value="used">{t('issueCondition.used')}</option>
                         <option value="damaged">{t('issueCondition.damaged')}</option>
                       </SelectInput>
+                    )}
+                    {selectedAssetIds.includes(asset.id) && (
+                      <div style={{ flexBasis: '100%' }}>
+                        <EvidencePhotoPicker files={issueEvidence[asset.id] ?? []} onChange={files => setIssueEvidence(current => ({ ...current, [asset.id]: files }))} />
+                      </div>
                     )}
                   </div>
                 ))}

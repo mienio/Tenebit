@@ -260,6 +260,27 @@ export interface PublicAssignmentAsset {
   name: string;
   assetTag: string;
   issueCondition: string;
+  assetId: string;
+  evidenceIds: string[];
+}
+
+export type EvidencePhase = 'Issue' | 'Return' | 'Audit' | 'Offboarding';
+
+export interface AssetEvidence {
+  id: string;
+  assetId: string;
+  assignmentId?: string | null;
+  phase: EvidencePhase;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  caption?: string | null;
+  uploadedAt: string;
+  uploadedBy: string;
+  lockedAt?: string | null;
+  legalHold: boolean;
+  redactedAt?: string | null;
 }
 
 export interface Paged<T> {

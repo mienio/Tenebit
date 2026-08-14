@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Download, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
-import { api } from '../api/endpoints';
+import { api, type EvidencePhoto } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { DetailGrid, DetailItem } from '../components/DetailGrid';
+import { EvidenceGallery, EvidencePhotoPicker } from '../components/Evidence';
 import { Modal } from '../components/Modal';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
@@ -14,7 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { Assignment, AssignmentStatus } from '../types/domain';
+import type { AssetEvidence, Assignment, AssignmentStatus } from '../types/domain';
 import { assignmentStatusValues } from '../utils/labels';
 import { formatDate, formatDateTime, toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
@@ -36,6 +37,8 @@ export function AssignmentsPage() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [selectedProcedureIds, setSelectedProcedureIds] = useState<string[]>([]);
   const [issueConditions, setIssueConditions] = useState<Record<string, string>>({});
+  const [issueEvidence, setIssueEvidence] = useState<Record<string, File[]>>({});
+  const [returnEvidence, setReturnEvidence] = useState<Record<string, File[]>>({});
   const [creating, setCreating] = useState(false);
   const [returning, setReturning] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -82,16 +85,20 @@ export function AssignmentsPage() {
     if (!personId || selectedAssetIds.length === 0) return setMessage({ type: 'error', text: t('assignments.selectPersonAndAsset') });
     setCreating(true);
     try {
-      await api.createAssignment({
+      const body = {
         personId,
         assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: t(`issueCondition.${issueConditions[assetId] ?? 'ok'}`) })),
         procedureIds: selectedProcedureIds,
         dueDate: toNullable(String(form.get('dueDate') ?? '')),
         notes: toNullable(String(form.get('notes') ?? ''))
-      });
+      };
+      const photos: EvidencePhoto[] = selectedAssetIds.flatMap(assetId => (issueEvidence[assetId] ?? []).map(file => ({ assetId, caption: null, file })));
+      if (photos.length) await api.createAssignmentWithEvidence(body, photos);
+      else await api.createAssignment(body);
       setSelectedAssetIds([]);
       setSelectedProcedureIds([]);
       setIssueConditions({});
+      setIssueEvidence({});
       setDrawerMode(null);
       setMessage({ type: 'success', text: t('assignments.created') });
       celebrate(t('celebration.assignmentCreated'));
@@ -117,18 +124,37 @@ export function AssignmentsPage() {
     event.preventDefault();
     if (!selectedAssignment) return;
     const form = new FormData(event.currentTarget);
+    const destinationLocation = toNullable(String(form.get('destinationLocation') ?? ''));
     setReturning(true);
     try {
-      await api.returnAssignment(selectedAssignment.id, {
-        returnCondition: null,
-        destinationLocation: toNullable(String(form.get('destinationLocation') ?? '')),
-        assets: selectedAssignment.assets.map(asset => ({
-          assetId: asset.assetId,
-          returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? ''))
-        }))
-      });
+      const hasPhotos = selectedAssignment.assets.some(asset => (returnEvidence[asset.assetId] ?? []).length > 0);
+      if (hasPhotos) {
+        for (const asset of selectedAssignment.assets) {
+          await api.returnAssetWithEvidence(
+            selectedAssignment.id,
+            asset.assetId,
+            {
+              resolution: 'Returned',
+              returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? '')),
+              returnLocation: destinationLocation,
+              notes: null
+            },
+            returnEvidence[asset.assetId] ?? []
+          );
+        }
+      } else {
+        await api.returnAssignment(selectedAssignment.id, {
+          returnCondition: null,
+          destinationLocation,
+          assets: selectedAssignment.assets.map(asset => ({
+            assetId: asset.assetId,
+            returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? ''))
+          }))
+        });
+      }
       setDrawerMode(null);
       setSelectedAssignment(null);
+      setReturnEvidence({});
       setMessage({ type: 'success', text: t('assignments.returned') });
       await Promise.all([assignments.reload(), assets.reload()]);
     } catch (error) {
@@ -185,7 +211,7 @@ export function AssignmentsPage() {
               <td data-label={t('assets.statusLabel')}><StatusBadge status={item.status} /></td>
               <td data-label={t('assignments.colAssets')}>{item.assets.length}</td>
               <td data-label={t('assignments.colDueDate')}>{formatDate(item.dueDate)}</td>
-              <td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? <button aria-label={t('assignments.acceptAria')} className="iconButton iconButton--success" onClick={() => acceptAssignment(item)}><CheckCircle2 size={16} /></button> : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td>
+              <td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? <button aria-label={t('assignments.acceptAria')} className="iconButton iconButton--success" onClick={() => acceptAssignment(item)}><CheckCircle2 size={16} /></button> : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setReturnEvidence({}); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td>
             </tr>)}
           </tbody></table></div>
           <Pagination page={page} total={totalAssignments} pageSize={pageSize} onPageChange={setPage} />
@@ -209,6 +235,11 @@ export function AssignmentsPage() {
                   <option value="damaged">{t('issueCondition.damaged')}</option>
                 </SelectInput>
               )}
+              {selectedAssetIds.includes(asset.id) && (
+                <div style={{ flexBasis: '100%' }}>
+                  <EvidencePhotoPicker files={issueEvidence[asset.id] ?? []} onChange={files => setIssueEvidence(current => ({ ...current, [asset.id]: files }))} />
+                </div>
+              )}
             </div>
           ))}</>}</fieldset>
           <fieldset className="choiceBox"><legend>{t('assignments.proceduresLegend')}</legend>{!publishedProcedures.length ? <p className="muted">{t('assignments.noPublishedProcedures')}</p> : publishedProcedures.map(procedure => <label key={procedure.id}><input type="checkbox" checked={selectedProcedureIds.includes(procedure.id)} onChange={() => setSelectedProcedureIds(current => toggle(current, procedure.id))} /> {procedure.title}</label>)}</fieldset>
@@ -219,9 +250,12 @@ export function AssignmentsPage() {
       <Modal open={drawerMode === 'return'} title={t('assignments.returnTitle')} description={selectedAssignment ? selectedAssignment.protocolNumber : undefined} onClose={() => setDrawerMode(null)}>
         <form className="formGrid" onSubmit={returnAssignment} key={selectedAssignment?.id ?? 'return'}>
           {selectedAssignment?.assets.map(asset => (
-            <Field key={asset.assetId} label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '—' })}>
-              <TextArea name={`returnCondition__${asset.assetId}`} placeholder={t('assignments.returnConditionPlaceholder')} required rows={2} />
-            </Field>
+            <div key={asset.assetId} style={{ gridColumn: '1 / -1', display: 'grid', gap: '8px' }}>
+              <Field label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '—' })}>
+                <TextArea name={`returnCondition__${asset.assetId}`} placeholder={t('assignments.returnConditionPlaceholder')} required rows={2} />
+              </Field>
+              <EvidencePhotoPicker files={returnEvidence[asset.assetId] ?? []} onChange={files => setReturnEvidence(current => ({ ...current, [asset.assetId]: files }))} />
+            </div>
           ))}
           <Field label={t('assignments.destinationLocationLabel')}><SelectInput name="destinationLocation"><option value="">{t('assignments.mainWarehouseOption')}</option>{locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}</SelectInput></Field>
           <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDrawerMode(null)}>{t('common.cancel')}</Button><Button disabled={returning} icon={<RotateCcw size={16} />}>{returning ? t('common.saving') : t('assignments.saveReturn')}</Button></div>
@@ -270,6 +304,7 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
         <DetailItem label={t('assignments.notesFieldLabel')} value={assignment.notes ?? t('assignments.notesFallback')} />
       </DetailGrid>
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '—'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
+      <AssignmentEvidence assignment={assignment} />
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><div className="rowActions"><StatusBadge status={item.status} /><button type="button" className="iconButton" aria-label={t('assignments.openProcedureAria')} onClick={() => navigate(`/procedures?open=${item.procedureId}`)}><ExternalLink size={16} /></button></div></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
       <Card className="card--flat">
         <div className="sectionTitle"><div><h2>{t('assignments.proofTitle')}</h2></div></div>
@@ -285,5 +320,62 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
         )}
       </Card>
     </div>
+  );
+}
+
+function AssignmentEvidence({ assignment }: { assignment: Assignment }) {
+  const { t } = useI18n();
+  const [byAsset, setByAsset] = useState<Record<string, AssetEvidence[]>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all(assignment.assets.map(asset =>
+      api.assetEvidence(asset.assetId)
+        .then(items => items.filter(item => item.assignmentId === assignment.id))
+        .catch(() => [] as AssetEvidence[])
+        .then(items => ({ assetId: asset.assetId, items }))
+    )).then(results => {
+      if (cancelled) return;
+      setByAsset(Object.fromEntries(results.map(r => [r.assetId, r.items])));
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [assignment.id, assignment.assets]);
+
+  const phases: { key: 'Issue' | 'Return'; label: string }[] = [
+    { key: 'Issue', label: t('evidence.phase.Issue') },
+    { key: 'Return', label: t('evidence.phase.Return') }
+  ];
+  const hasAny = assignment.assets.some(asset => (byAsset[asset.assetId] ?? []).length > 0);
+
+  return (
+    <Card className="card--flat">
+      <div className="sectionTitle"><div><h2>{t('evidence.photos')}</h2></div></div>
+      {loading ? <p className="muted">{t('common.loading')}</p> : !hasAny ? <p className="muted">{t('evidence.noPhotos')}</p> : (
+        <div className="pageStack">
+          {assignment.assets.map(asset => {
+            const items = byAsset[asset.assetId] ?? [];
+            if (!items.length) return null;
+            return (
+              <div key={asset.assetId}>
+                <strong>{asset.assetName ?? asset.assetTag ?? '—'}</strong>
+                {phases.map(phase => {
+                  const ids = items.filter(item => item.phase === phase.key).map(item => item.id);
+                  if (!ids.length) return null;
+                  return (
+                    <div key={phase.key} style={{ marginTop: '6px' }}>
+                      <small className="muted">{phase.label}</small>
+                      <EvidenceGallery ids={ids} getBlob={api.evidenceBlob} />
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }

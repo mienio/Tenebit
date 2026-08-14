@@ -3,6 +3,7 @@ import type {
   Asset,
   AssetCategory,
   AssetCategoryType,
+  AssetEvidence,
   AssetFieldDefinition,
   AssetStatus,
   AssetStatusSetting,
@@ -59,6 +60,28 @@ import type {
   ReservationCalendarItem
 } from '../types/domain';
 
+export interface EvidencePhoto {
+  assetId: string;
+  caption?: string | null;
+  file: File;
+}
+
+// Buduje multipart dla endpointów "with-evidence": część `request` (JSON), `evidenceManifest`
+// (JSON mapujący nazwę pliku → { assetId, caption }) i pliki. Nazwy części plików są generowane
+// (`photo_0`, `photo_1`, ...) i muszą pokrywać się z kluczami manifestu.
+function buildEvidenceForm(request: unknown, photos: EvidencePhoto[]): FormData {
+  const form = new FormData();
+  form.set('request', JSON.stringify(request));
+  const manifest: Record<string, { assetId: string; caption?: string | null }> = {};
+  photos.forEach((photo, index) => {
+    const name = `photo_${index}`;
+    manifest[name] = { assetId: photo.assetId, caption: photo.caption ?? null };
+    form.append(name, photo.file);
+  });
+  form.set('evidenceManifest', JSON.stringify(manifest));
+  return form;
+}
+
 export const api = {
   dashboard: () => apiRequest<DashboardSummary>('/api/dashboard'),
   dashboardComparison: (daysAgo: number) => apiRequest<DashboardComparison>(`/api/dashboard/comparison?daysAgo=${daysAgo}`),
@@ -69,6 +92,7 @@ export const api = {
 
   onboardingStatus: () => apiRequest<OnboardingStatus>('/api/onboarding/status'),
   createEmployeePackage: (body: CreateEmployeePackageRequest) => apiRequest<EmployeePackageResponse>('/api/onboarding/employee-package', { method: 'POST', body: JSON.stringify(body) }),
+  createEmployeePackageWithEvidence: (body: CreateEmployeePackageRequest, photos: EvidencePhoto[]) => apiRequest<EmployeePackageResponse>('/api/onboarding/employee-package/with-evidence', { method: 'POST', body: buildEvidenceForm(body, photos) }),
   onboardingChecklist: (personId: string) => apiRequest<OnboardingChecklist>(`/api/onboarding/checklist/${personId}`),
 
   locations: () => apiRequest<LocationNode[]>('/api/locations'),
@@ -138,6 +162,8 @@ export const api = {
   getAsset: (id: string) => apiRequest<Asset>(`/api/assets/${id}`),
   assetQr: (id: string) => apiRequest<string>(`/api/assets/${id}/qr`),
   revealAssetField: (id: string, fieldKey: string) => apiRequest<string>(`/api/assets/${id}/fields/${encodeURIComponent(fieldKey)}/reveal`, { method: 'POST' }),
+  assetEvidence: (assetId: string) => apiRequest<AssetEvidence[]>(`/api/assets/${assetId}/evidence`),
+  evidenceBlob: (id: string) => apiBlob(`/api/evidence/${id}`),
   publicAssetScan: (organizationId: string, assetId: string) => apiRequest<{ organizationName: string }>(`/api/public/assets/${organizationId}/${assetId}`),
   reportAssetIssue: (organizationId: string, assetId: string, message: string) => apiRequest<void>(`/api/public/assets/${organizationId}/${assetId}/report`, { method: 'POST', body: JSON.stringify({ message }) }),
 
@@ -236,8 +262,15 @@ export const api = {
     return apiRequest<Paged<Assignment>>(`/api/assignments?${query.toString()}`);
   },
   createAssignment: (body: CreateAssignmentRequest) => apiRequest<Assignment>('/api/assignments', { method: 'POST', body: JSON.stringify(body) }),
+  createAssignmentWithEvidence: (body: CreateAssignmentRequest, photos: EvidencePhoto[]) => apiRequest<Assignment>('/api/assignments/with-evidence', { method: 'POST', body: buildEvidenceForm(body, photos) }),
   acceptAssignment: (id: string) => apiRequest<Assignment>(`/api/assignments/${id}/accept`, { method: 'POST' }),
   returnAssignment: (id: string, body: { returnCondition?: string | null; destinationLocation?: string | null; assets?: { assetId: string; returnCondition?: string | null }[] }) => apiRequest<Assignment>(`/api/assignments/${id}/return`, { method: 'POST', body: JSON.stringify(body) }),
+  returnAssetWithEvidence: (assignmentId: string, assetId: string, body: { resolution: string; returnCondition?: string | null; returnLocation?: string | null; notes?: string | null }, photos: File[]) => {
+    const form = new FormData();
+    form.set('request', JSON.stringify(body));
+    photos.forEach((file, index) => form.append(`photo_${index}`, file));
+    return apiRequest<Assignment>(`/api/assignments/${assignmentId}/assets/${assetId}/return-with-evidence`, { method: 'POST', body: form });
+  },
   downloadAssignmentProtocol: (id: string) => apiBlob(`/api/assignments/${id}/protocol`),
 
   offboardingPaged: (params: { status?: OffboardingCaseStatus | ''; page: number; pageSize: number }) => {
@@ -305,6 +338,7 @@ export const api = {
   acceptPublicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}/accept`, { method: 'POST' }),
   downloadPublicAssignmentProtocol: (organizationId: string, assignmentId: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/protocol`),
   downloadPublicProcedureDocument: (organizationId: string, assignmentId: string, procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/procedures/${procedureId}/documents/${documentId}`),
+  publicAssignmentEvidence: (organizationId: string, assignmentId: string, id: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/evidence/${id}`),
 
   myWorkspace: () => apiRequest<MyWorkspace>('/api/my/workspace'),
 

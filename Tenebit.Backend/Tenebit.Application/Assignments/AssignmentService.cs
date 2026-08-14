@@ -496,10 +496,18 @@ public sealed class AssignmentService
         var procedureIds = assignment.ProcedureAcceptances.Select(x => x.ProcedureId).ToArray();
         var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
 
+        // Zdjęcia wydania są pokazywane pracownikowi przed potwierdzeniem (spec 6.2/6.7) — wyłącznie faza Issue.
+        var evidence = await _evidence.ListByAssignmentAsync(organizationId, assignment.Id, cancellationToken);
+        var issueEvidenceByAsset = evidence
+            .Where(x => x.Phase == EvidencePhase.Issue)
+            .GroupBy(x => x.AssetId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).Select(x => x.Id).ToList());
+
         var assetRows = assignment.Assets.Select(item =>
         {
             var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-            return new PublicAssignmentAssetResponse(asset?.Name ?? "—", asset?.AssetTag ?? "—", item.IssueCondition);
+            var evidenceIds = issueEvidenceByAsset.TryGetValue(item.AssetId, out var ids) ? ids : [];
+            return new PublicAssignmentAssetResponse(asset?.Name ?? "—", asset?.AssetTag ?? "—", item.IssueCondition, item.AssetId, evidenceIds);
         }).ToList();
         var procedureRows = procedures
             .Where(x => x.RequiresAcceptance)

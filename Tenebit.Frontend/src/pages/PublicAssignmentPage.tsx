@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
+import { EvidenceGallery } from '../components/Evidence';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
@@ -86,6 +87,18 @@ export function PublicAssignmentPage() {
             </div>
           ))}
         </div>
+
+        {data.assets.some(asset => asset.evidenceIds.length > 0) && (
+          <>
+            <div className="formSectionTitle">{t('evidence.photos')}</div>
+            {data.assets.filter(asset => asset.evidenceIds.length > 0).map(asset => (
+              <div key={asset.assetId} style={{ marginBottom: '12px' }}>
+                <strong>{asset.name}</strong>
+                <EvidenceGallery ids={asset.evidenceIds} getBlob={id => api.publicAssignmentEvidence(organizationId!, assignmentId!, id)} />
+              </div>
+            ))}
+          </>
+        )}
 
         {data.proceduresRequiringAcceptance.length > 0 && (
           <>
