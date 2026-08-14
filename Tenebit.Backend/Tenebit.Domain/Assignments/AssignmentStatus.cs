@@ -7,5 +7,6 @@ public enum AssignmentStatus
     Accepted = 2,
     Returned = 3,
     Cancelled = 4,
-    Overdue = 5
+    Overdue = 5,
+    PartiallyReturned = 6
 }

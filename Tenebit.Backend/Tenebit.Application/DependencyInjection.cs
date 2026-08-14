@@ -4,6 +4,7 @@ using Tenebit.Application.Assets;
 using Tenebit.Application.Audit;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Dashboard;
+using Tenebit.Application.Evidence;
 using Tenebit.Application.Onboarding;
 using Tenebit.Application.JobProfiles;
 using Tenebit.Application.Identity;
@@ -23,7 +24,9 @@ public static class DependencyInjection
     {
         services.AddScoped<AssetService>();
         services.AddScoped<AssetCategoryService>();
+        services.AddScoped<AssetInspectionService>();
         services.AddScoped<PeopleService>();
+        services.AddScoped<PersonOffboardingSchedulerService>();
         services.AddScoped<TeamService>();
         services.AddScoped<PersonRelationTypeService>();
         services.AddScoped<LicenseService>();
@@ -42,6 +45,8 @@ public static class DependencyInjection
         services.AddScoped<MyWorkspaceService>();
         services.AddScoped<AlertCheckService>();
         services.AddScoped<ActivityLogService>();
+        services.AddScoped<AssetEvidenceService>();
+        services.AddScoped<EvidenceRetentionService>();
         return services;
     }
 }

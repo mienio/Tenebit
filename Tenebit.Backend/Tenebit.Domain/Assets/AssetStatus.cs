@@ -11,5 +11,6 @@ public enum AssetStatus
     Damaged = 6,
     Lost = 7,
     Retired = 8,
-    Disposed = 9
+    Disposed = 9,
+    PendingReturn = 10
 }

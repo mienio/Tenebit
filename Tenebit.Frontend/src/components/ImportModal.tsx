@@ -6,6 +6,7 @@ import { Modal } from './Modal';
 import { api } from '../api/endpoints';
 import type { AssetCategory, LocationNode, Team } from '../types/domain';
 import { useI18n } from '../i18n/I18nProvider';
+import type { Language } from '../i18n/translations';
 
 type Entity = 'people' | 'assets';
 type Step = 'pick' | 'preview' | 'importing' | 'result';
@@ -98,10 +99,26 @@ function autoMap(headers: string[], fields: FieldDef[]): Record<string, number |
   return mapping;
 }
 
-function buildTemplate(entity: Entity): string {
-  return entity === 'people'
-    ? 'imie,nazwisko,email,telefon,stanowisko,zespol\nJan,Kowalski,jan.kowalski@firma.pl,600100200,Programista,IT'
-    : 'nazwa,tag,numer seryjny,kategoria,producent,model,lokalizacja\nLaptop Dell,LAP-001,SN12345,Laptopy,Dell,Latitude 5440,Biuro Warszawa';
+function buildTemplate(entity: Entity, language: Language): string {
+  const templates: Record<Language, Record<Entity, string>> = {
+    pl: {
+      people: 'imie,nazwisko,email,telefon,stanowisko,zespol\nJan,Kowalski,jan.kowalski@firma.pl,600100200,Programista,IT',
+      assets: 'nazwa,tag,numer seryjny,kategoria,producent,model,lokalizacja\nLaptop Dell,LAP-001,SN12345,Laptopy,Dell,Latitude 5440,Biuro Warszawa'
+    },
+    en: {
+      people: 'firstname,lastname,email,phone,job title,team\nJohn,Smith,john.smith@company.com,600100200,Developer,IT',
+      assets: 'name,tag,serial,category,manufacturer,model,location\nDell Laptop,LAP-001,SN12345,Laptops,Dell,Latitude 5440,New York Office'
+    },
+    es: {
+      people: 'nombre,apellido,email,telefono,puesto,equipo\nJuan,Garcia,juan.garcia@empresa.com,600100200,Desarrollador,TI',
+      assets: 'nombre,tag,numero de serie,categoria,fabricante,modelo,ubicacion\nPortatil Dell,LAP-001,SN12345,Portatiles,Dell,Latitude 5440,Oficina Madrid'
+    },
+    de: {
+      people: 'vorname,nachname,email,telefon,position,team\nMax,Mueller,max.mueller@firma.de,600100200,Entwickler,IT',
+      assets: 'name,tag,seriennummer,kategorie,hersteller,modell,standort\nDell Laptop,LAP-001,SN12345,Laptops,Dell,Latitude 5440,Buero Berlin'
+    }
+  };
+  return templates[language][entity];
 }
 
 function downloadText(fileName: string, content: string, type: string) {
@@ -128,7 +145,7 @@ interface ImportModalProps {
 }
 
 export function ImportModal({ open, entity, existingKeys, categories, teams, locations, onClose, onDone }: ImportModalProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const fields = entity === 'people' ? PEOPLE_FIELDS : ASSET_FIELDS;
   const [step, setStep] = useState<Step>('pick');
   const [headers, setHeaders] = useState<string[]>([]);
@@ -196,8 +213,8 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
           values.firstName = parts[0] ?? '';
           values.lastName = parts.slice(1).join(' ');
         }
-        if (!values.email) return { index, values, status: 'error', reason: t('import.missingRequired', { field: 'email' }) } as RowResult;
-        if (!values.firstName || !values.lastName) return { index, values, status: 'error', reason: t('import.missingRequired', { field: 'imię/nazwisko' }) } as RowResult;
+        if (!values.email) return { index, values, status: 'error', reason: t('import.missingRequired', { field: t('import.field.email') }) } as RowResult;
+        if (!values.firstName || !values.lastName) return { index, values, status: 'error', reason: t('import.missingRequired', { field: `${t('import.field.firstName')}/${t('import.field.lastName')}` }) } as RowResult;
         const key = values.email.toLowerCase();
         if (seenKeys.has(key)) return { index, values, status: 'duplicate', reason: t('import.duplicate', { value: values.email }) } as RowResult;
         seenKeys.add(key);
@@ -207,14 +224,14 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
         return { index, values, status: 'ok' } as RowResult;
       }
 
-      if (!values.name) return { index, values, status: 'error', reason: t('import.missingRequired', { field: 'nazwa' }) } as RowResult;
-      if (!values.assetTag) return { index, values, status: 'error', reason: t('import.missingRequired', { field: 'tag' }) } as RowResult;
+      if (!values.name) return { index, values, status: 'error', reason: t('import.missingRequired', { field: t('import.field.name') }) } as RowResult;
+      if (!values.assetTag) return { index, values, status: 'error', reason: t('import.missingRequired', { field: t('import.field.assetTag') }) } as RowResult;
       const key = values.assetTag.toLowerCase();
       if (seenKeys.has(key)) return { index, values, status: 'duplicate', reason: t('import.duplicate', { value: values.assetTag }) } as RowResult;
       if (values.category && !categories?.some(category => normalize(category.name) === normalize(values.category))) {
         return { index, values, status: 'error', reason: t('import.categoryNotFound', { name: values.category }) } as RowResult;
       }
-      if (!values.category) return { index, values, status: 'error', reason: t('import.missingRequired', { field: 'kategoria' }) } as RowResult;
+      if (!values.category) return { index, values, status: 'error', reason: t('import.missingRequired', { field: t('import.field.category') }) } as RowResult;
       seenKeys.add(key);
       if (values.location && !locations?.some(location => normalize(location.fullPath) === normalize(values.location))) {
         return { index, values, status: 'ok', reason: t('import.locationNotFound', { name: values.location }) } as RowResult;
@@ -293,7 +310,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
             <p className="muted">{t('import.pickFileDesc')}</p>
             <input key={fileInputKey} type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={event => { const file = event.target.files?.[0]; if (file) void handleFile(file); }} />
             {parseError && <p className="toast toast--error">{parseError}</p>}
-            <Button type="button" variant="secondary" icon={<Download size={16} />} onClick={() => downloadText(`szablon-${entity}.csv`, buildTemplate(entity), 'text/csv')}>
+            <Button type="button" variant="secondary" icon={<Download size={16} />} onClick={() => downloadText(`${language === 'pl' ? 'szablon' : 'template'}-${entity}.csv`, buildTemplate(entity, language), 'text/csv')}>
               {t('import.downloadTemplate')}
             </Button>
           </div>

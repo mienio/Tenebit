@@ -14,9 +14,18 @@ type I18nContextValue = {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+const FALLBACK_LANGUAGE: Language = 'en';
+
 function detectInitialLanguage(): Language {
   const stored = window.localStorage.getItem(STORAGE_KEY) as Language | null;
-  return stored && supportedLanguages.includes(stored) ? stored : 'pl';
+  if (stored && supportedLanguages.includes(stored)) return stored;
+
+  const browserLanguages = window.navigator.languages ?? [window.navigator.language];
+  for (const browserLanguage of browserLanguages) {
+    const code = browserLanguage.slice(0, 2).toLowerCase() as Language;
+    if (supportedLanguages.includes(code)) return code;
+  }
+  return FALLBACK_LANGUAGE;
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -34,14 +43,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLanguageState(next);
     },
     t: (key, params) => {
-      const template = translations[language][key] ?? translations.pl[key] ?? key;
+      const template = translations[language][key] ?? translations[FALLBACK_LANGUAGE][key] ?? key;
       if (!params) return template;
       return Object.entries(params).reduce((text, [name, value]) => text.split(`{${name}}`).join(String(value)), template);
     },
     tPlural: (baseKey, count) => {
       const form = new Intl.PluralRules(language).select(count);
       for (const suffix of [form, 'other', 'many']) {
-        const value = translations[language][`${baseKey}.${suffix}`] ?? translations.pl[`${baseKey}.${suffix}`];
+        const value = translations[language][`${baseKey}.${suffix}`] ?? translations[FALLBACK_LANGUAGE][`${baseKey}.${suffix}`];
         if (value) return value;
       }
       return baseKey;

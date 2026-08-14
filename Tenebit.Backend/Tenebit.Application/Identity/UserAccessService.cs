@@ -10,6 +10,7 @@ namespace Tenebit.Application.Identity;
 public sealed class UserAccessService
 {
     private readonly IOrganizationUserRepository _users;
+    private readonly IOrganizationRepository _organizations;
     private readonly IActivityLogRepository _activity;
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
     private readonly IEmailSender _emailSender;
@@ -21,6 +22,7 @@ public sealed class UserAccessService
 
     public UserAccessService(
         IOrganizationUserRepository users,
+        IOrganizationRepository organizations,
         IActivityLogRepository activity,
         IPasswordResetTokenRepository passwordResetTokens,
         IEmailSender emailSender,
@@ -31,6 +33,7 @@ public sealed class UserAccessService
         ILogger<UserAccessService> logger)
     {
         _users = users;
+        _organizations = organizations;
         _activity = activity;
         _passwordResetTokens = passwordResetTokens;
         _emailSender = emailSender;
@@ -105,12 +108,9 @@ public sealed class UserAccessService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var link = _appLinkBuilder.BuildPasswordResetLink(rawToken);
-            var html = $"""
-                <p>Dodano Cię jako użytkownika w organizacji w Tenebit.</p>
-                <p><a href="{link}">Ustaw hasło i zaloguj się</a></p>
-                <p>Link jest ważny przez 24 godziny.</p>
-                """;
-            await _emailSender.SendAsync(user.Email, "Zaproszenie do Tenebit", html, cancellationToken);
+            var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+            var (subject, html) = EmailTemplates.OrganizationInvitation(organization?.Language, link);
+            await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
         }
         catch (Exception ex)
         {

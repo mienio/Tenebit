@@ -1,5 +1,6 @@
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
+using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
@@ -10,15 +11,17 @@ public sealed class PeopleService
 {
     private readonly IPersonRepository _people;
     private readonly ITeamRepository _teams;
+    private readonly IAssetRepository _assets;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public PeopleService(IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _people = people;
         _teams = teams;
+        _assets = assets;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -71,6 +74,7 @@ public sealed class PeopleService
 
             var person = new Person(organizationId, request.FirstName, request.LastName, request.Email);
             person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, request.Location, request.CostCenter);
+            person.SetPreferredLanguage(request.PreferredLanguage);
             _people.Add(person);
             _activity.Add(new ActivityLog(organizationId, "person.created", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -99,7 +103,15 @@ public sealed class PeopleService
             }
 
             person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, request.Location, request.CostCenter);
-            if (request.IsActive) person.Activate(); else person.Deactivate();
+            person.SetPreferredLanguage(request.PreferredLanguage);
+            if (!request.IsActive)
+            {
+                person.Deactivate(_clock.UtcNow);
+            }
+            else if (person.EmploymentStatus == EmploymentStatus.Inactive)
+            {
+                person.Activate();
+            }
 
             _activity.Add(new ActivityLog(organizationId, "person.updated", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -132,9 +144,38 @@ public sealed class PeopleService
         return Result.Success();
     }
 
+    public async Task<Result<PersonResponse>> StartOffboardingAsync(Guid id, StartOffboardingRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        if (access.IsFailure) return Result<PersonResponse>.Failure(access.Error!);
+
+        try
+        {
+            var organizationId = _currentUser.OrganizationId;
+            var person = await _people.GetAsync(organizationId, id, cancellationToken);
+            if (person is null) return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+
+            person.StartOffboarding(request.EmploymentEndsAt);
+
+            var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
+            foreach (var asset in assets.Where(a => a.AssignedPersonId == person.Id && a.Status == AssetStatus.Assigned))
+            {
+                asset.MarkPendingReturn();
+            }
+
+            _activity.Add(new ActivityLog(organizationId, "person.offboarding_started", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await GetAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<PersonResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
     private static PersonResponse Map(Person person, IReadOnlyList<Team> teams)
     {
         var team = person.TeamId.HasValue ? teams.FirstOrDefault(x => x.Id == person.TeamId.Value) : null;
-        return new PersonResponse(person.Id, person.FirstName, person.LastName, person.FullName, person.Email, person.Phone, person.EmployeeNumber, person.RelationType, person.JobTitle, person.TeamId, team?.Name, person.ManagerId, person.Location, person.CostCenter, person.IsActive);
+        return new PersonResponse(person.Id, person.FirstName, person.LastName, person.FullName, person.Email, person.Phone, person.EmployeeNumber, person.RelationType, person.JobTitle, person.TeamId, team?.Name, person.ManagerId, person.Location, person.CostCenter, person.IsActive, person.EmploymentStatus, person.EmploymentEndsAt, person.DeactivatedAt, person.PreferredLanguage);
     }
 }

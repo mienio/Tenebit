@@ -17,9 +17,10 @@ import { StatusBadge } from '../components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { Person } from '../types/domain';
-import { toNullable } from '../utils/format';
+import { getEmploymentStatusPresentation, type Person } from '../types/domain';
+import { formatDateTime, toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
+import { languages } from '../i18n/translations';
 import { useCelebration } from '../celebration/CelebrationProvider';
 import { useAuth } from '../auth/AuthProvider';
 
@@ -143,6 +144,7 @@ export function PeoplePage() {
       managerId: toNullable(String(form.get('managerId') ?? '')),
       location: toNullable(String(form.get('location') ?? '')),
       costCenter: toNullable(String(form.get('costCenter') ?? '')),
+      preferredLanguage: toNullable(String(form.get('preferredLanguage') ?? '')),
       isActive: editing ? editing.isActive : true
     };
 
@@ -181,6 +183,7 @@ export function PeoplePage() {
         managerId: person.managerId,
         location: person.location,
         costCenter: person.costCenter,
+        preferredLanguage: person.preferredLanguage,
         isActive: !person.isActive
       });
       setMessage({ type: 'success', text: person.isActive ? t('people.deactivated') : t('people.activated') });
@@ -242,6 +245,7 @@ export function PeoplePage() {
           managerId: person.managerId,
           location: person.location,
           costCenter: person.costCenter,
+          preferredLanguage: person.preferredLanguage,
           isActive: person.isActive
         });
         success++;
@@ -259,7 +263,7 @@ export function PeoplePage() {
 
   function exportSelectedCsv() {
     const header = [t('people.csvFirstName'), t('people.csvLastName'), t('people.csvEmail'), t('people.csvPhone'), t('people.csvJobTitle'), t('people.csvTeam'), t('people.csvStatus')];
-    const rows = selectedPeople.map(person => [person.firstName, person.lastName, person.email, person.phone ?? '', person.jobTitle ?? '', person.teamName ?? '', person.isActive ? t('settings.active') : t('settings.inactive')]);
+    const rows = selectedPeople.map(person => [person.firstName, person.lastName, person.email, person.phone ?? '', person.jobTitle ?? '', person.teamName ?? '', t(getEmploymentStatusPresentation(person.employmentStatus).labelKey)]);
     const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -450,8 +454,8 @@ export function PeoplePage() {
                       </td>
                       <td data-label={t('people.colTeam')}>{person.teamName ?? <span style={{ color: 'var(--muted)' }}>—</span>}</td>
                       <td data-label={t('people.colStatus')}>
-                        <span className={`status ${person.isActive ? 'status--InStock' : 'status--Draft'}`}>
-                          {person.isActive ? t('people.active') : t('people.inactive')}
+                        <span className={`status ${getEmploymentStatusPresentation(person.employmentStatus).badgeClass}`}>
+                          {t(getEmploymentStatusPresentation(person.employmentStatus).labelKey)}
                         </span>
                       </td>
                     </tr>
@@ -481,8 +485,8 @@ export function PeoplePage() {
                 <Button variant="secondary" onClick={() => openEdit(selected)} icon={<Pencil size={16} />}>
                   {t('common.edit')}
                 </Button>
-                <Button variant="secondary" onClick={() => selected.isActive ? setDeactivateTarget(selected) : toggleActive(selected)} icon={selected.isActive ? <UserX size={16} /> : <UserCheck size={16} />}>
-                  {selected.isActive ? t('people.deactivate') : t('people.activate')}
+                <Button variant="secondary" onClick={() => getEmploymentStatusPresentation(selected.employmentStatus).action === 'deactivate' ? setDeactivateTarget(selected) : toggleActive(selected)} icon={getEmploymentStatusPresentation(selected.employmentStatus).action === 'deactivate' ? <UserX size={16} /> : <UserCheck size={16} />}>
+                  {getEmploymentStatusPresentation(selected.employmentStatus).action === 'deactivate' ? t('people.deactivate') : t('people.activate')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -558,11 +562,23 @@ export function PeoplePage() {
               <div>
                 <dt>{t('people.colStatus')}</dt>
                 <dd>
-                  <span className={`status ${selected.isActive ? 'status--InStock' : 'status--Draft'}`}>
-                    {selected.isActive ? t('people.active') : t('people.inactive')}
+                  <span className={`status ${getEmploymentStatusPresentation(selected.employmentStatus).badgeClass}`}>
+                    {t(getEmploymentStatusPresentation(selected.employmentStatus).labelKey)}
                   </span>
                 </dd>
               </div>
+              <div>
+                <dt>{t('people.preferredLanguage')}</dt>
+                <dd>{languages.find(language => language.value === selected.preferredLanguage)?.label ?? t('people.preferredLanguageFallback')}</dd>
+              </div>
+              {selected.employmentEndsAt && <div>
+                <dt>{t('people.employmentEndsAt')}</dt>
+                <dd>{formatDateTime(selected.employmentEndsAt)}</dd>
+              </div>}
+              {selected.deactivatedAt && <div>
+                <dt>{t('people.deactivatedAt')}</dt>
+                <dd>{formatDateTime(selected.deactivatedAt)}</dd>
+              </div>}
             </dl>
 
             <div className="formSectionTitle">{t('people.assignedAssetsTitle')}</div>
@@ -648,6 +664,12 @@ export function PeoplePage() {
             </SelectInput>
           </Field>
           <Field label={t('people.costCenter')}><TextInput name="costCenter" defaultValue={editing?.costCenter ?? ''} /></Field>
+          <Field label={t('people.preferredLanguage')}>
+            <SelectInput name="preferredLanguage" defaultValue={editing?.preferredLanguage ?? ''}>
+              <option value="">{t('people.preferredLanguageFallback')}</option>
+              {languages.map(language => <option key={language.value} value={language.value}>{language.label}</option>)}
+            </SelectInput>
+          </Field>
 
           <div className="formActions formActions--split">
             <Button type="button" variant="ghost" onClick={closePersonModal}>{t('common.cancel')}</Button>

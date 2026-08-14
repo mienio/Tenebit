@@ -60,13 +60,16 @@ public static class StarterAssetCategories
         ("Materiały eksploatacyjne", AssetCategoryType.Consumable, "Tonery, baterie i materiały zużywalne.", "box")
     ];
 
+    private static readonly HashSet<string> InspectionRequiredNames = ["Laptopy", "Telefony", "Pojazdy"];
+
     public static IReadOnlyList<AssetCategory> Create(Guid organizationId)
     {
         var categories = new List<AssetCategory>(Definitions.Length);
         for (var i = 0; i < Definitions.Length; i++)
         {
             var (name, type, description, icon) = Definitions[i];
-            categories.Add(new AssetCategory(organizationId, name, type, description, icon, isSystem: true, sortOrder: i + 1));
+            var returnHandlingMode = InspectionRequiredNames.Contains(name) ? ReturnHandlingMode.InspectionRequired : ReturnHandlingMode.DirectToStock;
+            categories.Add(new AssetCategory(organizationId, name, type, description, icon, isSystem: true, sortOrder: i + 1, returnHandlingMode: returnHandlingMode, postReturnDisposition: PostReturnDisposition.Reuse));
         }
         return categories;
     }

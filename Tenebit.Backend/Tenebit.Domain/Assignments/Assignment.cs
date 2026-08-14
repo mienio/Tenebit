@@ -102,7 +102,7 @@ public sealed class Assignment
 
     private void EnsureNotSigned()
     {
-        if (Status is AssignmentStatus.Accepted or AssignmentStatus.Returned or AssignmentStatus.Cancelled)
+        if (Status is AssignmentStatus.Accepted or AssignmentStatus.Returned or AssignmentStatus.Cancelled or AssignmentStatus.PartiallyReturned)
         {
             throw new DomainException("Nie można modyfikować wydania, które zostało już podpisane lub zamknięte.");
         }
@@ -117,23 +117,34 @@ public sealed class Assignment
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 
-    public void Return(DateTimeOffset returnedAt, string? returnCondition, IReadOnlyDictionary<Guid, string?>? assetConditions = null)
+    public void ReturnAsset(Guid assetId, ReturnResolution resolution, DateTimeOffset returnedAt, string? returnCondition, string? returnLocation, string? returnedBy, string? notes)
     {
-        // BUG FIX: Previously only blocked Returned status. Now also blocks Cancelled assignments.
-        // A cancelled assignment cannot be returned — it was cancelled before completion.
-        if (Status is AssignmentStatus.Returned or AssignmentStatus.Cancelled)
+        if (Status == AssignmentStatus.Cancelled)
         {
-            throw new DomainException("Nie można zwrócić wydania, które zostało już zamknięte lub anulowane.");
+            throw new DomainException("Nie można zwrócić aktywa dla anulowanego wydania.");
         }
 
-        Status = AssignmentStatus.Returned;
-        ReturnedAt = returnedAt;
-        foreach (var item in Assets)
+        var item = Assets.FirstOrDefault(x => x.AssetId == assetId);
+        if (item is null)
         {
-            var condition = assetConditions is not null && assetConditions.TryGetValue(item.AssetId, out var perAsset) && !string.IsNullOrWhiteSpace(perAsset)
-                ? perAsset
-                : returnCondition;
-            item.SetReturnCondition(condition);
+            throw new DomainException("To aktywo nie należy do tego wydania.");
+        }
+
+        if (item.ReturnResolution is not null)
+        {
+            return;
+        }
+
+        item.Resolve(resolution, returnedAt, returnCondition, returnLocation, returnedBy, notes);
+
+        if (Assets.All(x => x.ReturnResolution is not null))
+        {
+            Status = AssignmentStatus.Returned;
+            ReturnedAt = returnedAt;
+        }
+        else
+        {
+            Status = AssignmentStatus.PartiallyReturned;
         }
     }
 }

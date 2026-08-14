@@ -1,4 +1,5 @@
 import { setStoredToken } from '../auth/authConfig';
+import { translations, type Language } from '../i18n/translations';
 
 export class ApiError extends Error {
   status: number;
@@ -24,6 +25,11 @@ export function setAccessTokenProvider(provider: TokenProvider | null) {
 
 export function setLanguageProvider(provider: LanguageProvider | null) {
   languageProvider = provider;
+}
+
+function tApi(key: string): string {
+  const language = (languageProvider ? languageProvider() : 'en') as Language;
+  return translations[language]?.[key] ?? translations.en[key] ?? key;
 }
 
 export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -69,7 +75,7 @@ async function performFetch(path: string, init: RequestInit, token: string | nul
   try {
     return await fetch(`${apiBaseUrl}${path}`, { ...init, headers, credentials: 'include' });
   } catch {
-    throw new ApiError('Nie można połączyć się z backendem. Sprawdź VITE_API_BASE_URL i działanie API.');
+    throw new ApiError(tApi('api.networkError'));
   }
 }
 
@@ -97,7 +103,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (!response.ok) {
     const message = typeof data === 'object' && data && 'message' in data
       ? String((data as { message: unknown }).message)
-      : 'Operacja zakończyła się błędem.';
+      : tApi('api.genericError');
     const code = typeof data === 'object' && data && 'code' in data
       ? String((data as { code: unknown }).code)
       : 'HTTP_ERROR';
@@ -116,8 +122,8 @@ export async function apiBlob(path: string): Promise<Blob> {
   try {
     response = await fetch(`${apiBaseUrl}${path}`, { headers, credentials: 'include' });
   } catch {
-    throw new ApiError('Nie można połączyć się z backendem.');
+    throw new ApiError(tApi('api.networkError'));
   }
-  if (!response.ok) throw new ApiError('Nie udało się pobrać pliku.', response.status, 'HTTP_ERROR');
+  if (!response.ok) throw new ApiError(tApi('api.downloadFailed'), response.status, 'HTTP_ERROR');
   return response.blob();
 }

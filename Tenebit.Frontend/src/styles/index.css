@@ -175,7 +175,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .status { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 9px; border-radius: var(--radius); border: 1px solid currentColor; background: var(--surface); color: var(--accent); font-family: var(--font-mono); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
 .status::before { content: ''; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
 .status--InStock, .status--Published, .status--Accepted { color: var(--success); }
-.status--Assigned, .status--AwaitingAcceptance, .status--Pending, .status--Reserved, .status--InService, .status--InTransit { color: var(--accent); }
+.status--Assigned, .status--AwaitingAcceptance, .status--Pending, .status--Reserved, .status--InService, .status--InTransit, .status--PendingReturn { color: var(--accent); }
 .status--Damaged, .status--Lost, .status--Overdue, .status--Declined, .status--Disposed, .status--Cancelled { color: var(--danger); }
 .status--Returned, .status--Retired, .status--Archived, .status--Draft { color: var(--muted); }
 

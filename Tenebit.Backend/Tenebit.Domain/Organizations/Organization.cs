@@ -29,6 +29,67 @@ public sealed class Organization
     public string TimeZone { get; private set; } = "Europe/Warsaw";
     public string? LogoUrl { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+    public TimeOnly? QuietHoursStart { get; private set; }
+    public TimeOnly? QuietHoursEnd { get; private set; }
+    public PublicIpCaptureMode CapturePublicIp { get; private set; } = PublicIpCaptureMode.Off;
+    public int? PublicIpRetentionDays { get; private set; }
+    public int? DefaultEvidenceRetentionMonths { get; private set; }
+    public string? PrivacyNoticeUrl { get; private set; }
+    public string? PrivacyContactEmail { get; private set; }
+
+    public void UpdatePrivacySettings(PublicIpCaptureMode capturePublicIp, int? publicIpRetentionDays, int? defaultEvidenceRetentionMonths, string? privacyNoticeUrl, string? privacyContactEmail)
+    {
+        if (capturePublicIp != PublicIpCaptureMode.Off && (!publicIpRetentionDays.HasValue || publicIpRetentionDays.Value <= 0))
+        {
+            throw new DomainException("Okres przechowywania adresu IP jest wymagany, gdy przechwytywanie adresu IP jest włączone.");
+        }
+
+        if (defaultEvidenceRetentionMonths.HasValue && defaultEvidenceRetentionMonths.Value <= 0)
+        {
+            throw new DomainException("Okres przechowywania materiału dowodowego musi być większy od zera.");
+        }
+
+        CapturePublicIp = capturePublicIp;
+        PublicIpRetentionDays = capturePublicIp == PublicIpCaptureMode.Off ? null : publicIpRetentionDays;
+        DefaultEvidenceRetentionMonths = defaultEvidenceRetentionMonths;
+        PrivacyNoticeUrl = string.IsNullOrWhiteSpace(privacyNoticeUrl) ? null : privacyNoticeUrl.Trim();
+        PrivacyContactEmail = string.IsNullOrWhiteSpace(privacyContactEmail) ? null : privacyContactEmail.Trim();
+    }
+
+    public void SetQuietHours(TimeOnly? start, TimeOnly? end)
+    {
+        if (start.HasValue != end.HasValue)
+        {
+            throw new DomainException("Godziny ciszy wymagają obu wartości: początku i końca.");
+        }
+
+        QuietHoursStart = start;
+        QuietHoursEnd = end;
+    }
+
+    public bool IsWithinQuietHours(DateTimeOffset utcNow)
+    {
+        if (QuietHoursStart is null || QuietHoursEnd is null || QuietHoursStart == QuietHoursEnd) return false;
+
+        TimeZoneInfo timeZone;
+        try
+        {
+            timeZone = TimeZoneInfo.FindSystemTimeZoneById(TimeZone);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return false;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return false;
+        }
+
+        var localTime = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(utcNow, timeZone).DateTime);
+        var start = QuietHoursStart.Value;
+        var end = QuietHoursEnd.Value;
+        return start < end ? (localTime >= start && localTime < end) : (localTime >= start || localTime < end);
+    }
 
     public void UpdateProfile(string name, string country, string language, string currency, string timeZone, string? logoUrl)
     {

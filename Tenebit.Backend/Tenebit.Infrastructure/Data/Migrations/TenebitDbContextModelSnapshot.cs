@@ -34,18 +34,44 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
 
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DigestId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("EntityId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTimeOffset>("SentAt")
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<DateTimeOffset?>("SentAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId", "AlertKey", "EntityId")
+                    b.HasIndex("OrganizationId", "AlertKey", "EntityId", "RecipientEmail")
                         .IsUnique();
 
                     b.ToTable("sent_alerts", "tenebit");
@@ -163,6 +189,30 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PhotoOnIssue")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PhotoOnReturn")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PostReturnDisposition")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ReturnChecklistTemplate")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ReturnHandlingMode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
@@ -177,6 +227,66 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("asset_categories", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Assets.AssetInspection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool?>("AccessoriesComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CompletedBy")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<string>("DamageAssessmentNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool?>("DataWiped")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("FunctionalTestPassed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool?>("SerialNumberMatched")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "AssetId", "Outcome");
+
+                    b.ToTable("asset_inspections", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Assignments.Assignment", b =>
@@ -331,6 +441,91 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("dashboard_snapshots", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Evidence.AssetEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetAuditItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<bool>("LegalHold")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("OffboardingItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("RedactedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<string>("UploadedVia")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("AssignmentId");
+
+                    b.HasIndex("OrganizationId", "AssetId", "Phase");
+
+                    b.ToTable("asset_evidence", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.DeviceTrustToken", b =>
@@ -645,6 +840,11 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CapturePublicIp")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("Country")
                         .IsRequired()
                         .HasMaxLength(8)
@@ -657,6 +857,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
+
+                    b.Property<int?>("DefaultEvidenceRetentionMonths")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Language")
                         .IsRequired()
@@ -671,6 +874,23 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)");
+
+                    b.Property<string>("PrivacyContactEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("PrivacyNoticeUrl")
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<int?>("PublicIpRetentionDays")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly?>("QuietHoursEnd")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<TimeOnly?>("QuietHoursStart")
+                        .HasColumnType("time without time zone");
 
                     b.Property<string>("TimeZone")
                         .IsRequired()
@@ -695,6 +915,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(240)
@@ -703,6 +926,14 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<string>("EmployeeNumber")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset?>("EmploymentEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmploymentStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
@@ -735,6 +966,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<string>("PreferredLanguage")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<string>("RelationType")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -748,7 +983,14 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.HasIndex("OrganizationId", "Email")
                         .IsUnique();
 
-                    b.ToTable("people", "tenebit");
+                    b.HasIndex("OrganizationId", "EmploymentEndsAt");
+
+                    b.HasIndex("OrganizationId", "EmploymentStatus");
+
+                    b.ToTable("people", "tenebit", t =>
+                        {
+                            t.HasCheckConstraint("CK_people_employment_status_active", "(\"EmploymentStatus\" IN ('Active', 'Offboarding') AND \"IsActive\") OR (\"EmploymentStatus\" = 'Inactive' AND NOT \"IsActive\")");
+                        });
                 });
 
             modelBuilder.Entity("Tenebit.Domain.People.PersonRelationType", b =>
@@ -1127,6 +1369,25 @@ namespace Tenebit.Infrastructure.Data.Migrations
                                 .HasMaxLength(400)
                                 .HasColumnType("character varying(400)");
 
+                            b1.Property<string>("ReturnLocation")
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)");
+
+                            b1.Property<string>("ReturnNotes")
+                                .HasMaxLength(800)
+                                .HasColumnType("character varying(800)");
+
+                            b1.Property<string>("ReturnResolution")
+                                .HasMaxLength(40)
+                                .HasColumnType("character varying(40)");
+
+                            b1.Property<DateTimeOffset?>("ReturnedAt")
+                                .HasColumnType("timestamp with time zone");
+
+                            b1.Property<string>("ReturnedBy")
+                                .HasMaxLength(240)
+                                .HasColumnType("character varying(240)");
+
                             b1.HasKey("AssignmentId", "AssetId");
 
                             b1.ToTable("assignment_assets", "tenebit");
@@ -1183,6 +1444,20 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Navigation("Assets");
 
                     b.Navigation("ProcedureAcceptances");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Evidence.AssetEvidence", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Tenebit.Domain.Assignments.Assignment", null)
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.OrganizationUser", b =>

@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<TenebitDbContext>());
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<IAssetCategoryRepository, AssetCategoryRepository>();
+        services.AddScoped<IAssetInspectionRepository, AssetInspectionRepository>();
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IPersonRelationTypeRepository, PersonRelationTypeRepository>();
@@ -45,15 +46,19 @@ public static class DependencyInjection
         services.AddScoped<ISentAlertRepository, SentAlertRepository>();
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<IDashboardSnapshotRepository, DashboardSnapshotRepository>();
+        services.AddScoped<IAssetEvidenceRepository, AssetEvidenceRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
         services.AddSingleton<IPdfProtocolGenerator, PdfProtocolGenerator>();
+        services.AddSingleton<IImageSanitizer, ImageSanitizer>();
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
         services.AddSingleton<IPaymentGateway, StripePaymentGateway>();
         services.AddScoped<DefaultDataSeeder>();
         services.AddHostedService<AlertBackgroundService>();
         services.AddHostedService<DashboardSnapshotBackgroundService>();
+        services.AddHostedService<OffboardingBackgroundService>();
+        services.AddHostedService<EvidenceRetentionBackgroundService>();
         return services;
     }
 

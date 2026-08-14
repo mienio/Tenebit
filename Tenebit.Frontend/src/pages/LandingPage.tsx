@@ -7,8 +7,8 @@ import { BrandMark } from '../components/BrandMark';
 import { StatusBadge } from '../components/StatusBadge';
 
 const previewRows = [
-  { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', person: 'Anna Kowalska', value: 9800 },
-  { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', person: 'Piotr Nowak', value: 4200 },
+  { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', person: 'Alex Morgan', value: 9800 },
+  { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', person: 'Jamie Lee', value: 4200 },
   { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', person: '—', value: 1650 },
   { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', person: '—', value: 1400 }
 ];
@@ -27,7 +27,16 @@ const steps = ['step1', 'step2', 'step3'];
 export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
-  const formatPreviewValue = (value: number) => language === 'pl' ? `${value.toLocaleString('pl-PL')} zł` : `$${value.toLocaleString('en-US')}`;
+  const currencyByLanguage: Record<typeof language, { locale: string; currency: string }> = {
+    pl: { locale: 'pl-PL', currency: 'PLN' },
+    en: { locale: 'en-US', currency: 'USD' },
+    es: { locale: 'es-ES', currency: 'EUR' },
+    de: { locale: 'de-DE', currency: 'EUR' }
+  };
+  const formatPreviewValue = (value: number) => {
+    const { locale, currency } = currencyByLanguage[language];
+    return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);

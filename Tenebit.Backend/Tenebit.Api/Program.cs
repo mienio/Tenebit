@@ -96,6 +96,8 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+Tenebit.Api.Http.RequestLanguageAccessor.Configure(app.Services.GetRequiredService<IHttpContextAccessor>());
+
 if (app.Environment.IsProduction())
 {
     var signingKey = builder.Configuration["Auth:SigningKey"];

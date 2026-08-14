@@ -112,6 +112,7 @@ public sealed class OnboardingService
 
             var person = new Person(organizationId, request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail);
             person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, "Pracownik", request.JobTitle, team.Id, null, request.Location, null);
+            if (!person.CanReceiveNewObligations) return Result<StarterPackageResponse>.Failure(Error.Validation("Pakiet onboardingowy można utworzyć tylko dla aktywnej osoby."));
             _people.Add(person);
 
             var asset = new Asset(organizationId, category.Id, request.AssetName, request.AssetTag);
@@ -152,6 +153,7 @@ public sealed class OnboardingService
         var organizationId = _currentUser.OrganizationId;
         var person = await _people.GetAsync(organizationId, request.PersonId, cancellationToken);
         if (person is null) return Result<EmployeePackageResponse>.Failure(Error.Validation("Wybrany pracownik nie istnieje."));
+        if (!person.CanReceiveNewObligations) return Result<EmployeePackageResponse>.Failure(Error.Validation("Pakiet onboardingowy można utworzyć tylko dla aktywnej osoby."));
 
         var assetIds = request.AssetIds.Distinct().ToList();
         var procedureIds = request.ProcedureIds.Distinct().ToList();

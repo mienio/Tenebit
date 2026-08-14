@@ -1,10 +1,14 @@
+using System.Security.Cryptography;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Dashboards;
+using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Licenses;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Settings;
 using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Tests.Fakes;
@@ -236,6 +240,54 @@ public sealed class FakePaymentGateway : IPaymentGateway
 public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator
 {
     public byte[] GenerateHandoverProtocol(ProtocolPdfModel model) => [1, 2, 3];
+}
+
+public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository
+{
+    public List<AssetEvidence> Items { get; } = [];
+
+    public Task<IReadOnlyList<AssetEvidence>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId && x.AssetId == assetId).ToList());
+
+    public Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<int> CountAsync(Guid organizationId, Guid assetId, EvidencePhase phase, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.Count(x => x.OrganizationId == organizationId && x.AssetId == assetId && x.Phase == phase));
+
+    public void Add(AssetEvidence evidence) => Items.Add(evidence);
+    public void Remove(AssetEvidence evidence) => Items.Remove(evidence);
+}
+
+public sealed class InMemoryAssetStatusSettingRepository : IAssetStatusSettingRepository
+{
+    public List<AssetStatusSetting> Items { get; } = [];
+
+    public Task<IReadOnlyList<AssetStatusSetting>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetStatusSetting>>(Items.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<AssetStatusSetting?> GetByKeyAsync(Guid organizationId, string statusKey, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.StatusKey == statusKey));
+
+    public void Add(AssetStatusSetting setting) => Items.Add(setting);
+}
+
+public sealed class FakeImageSanitizer : IImageSanitizer
+{
+    public SanitizedImage StripMetadata(DetectedImageFormat format, byte[] content)
+    {
+        var contentType = format switch
+        {
+            DetectedImageFormat.Png => "image/png",
+            DetectedImageFormat.Webp => "image/webp",
+            _ => "image/jpeg",
+        };
+        var sha256 = Convert.ToHexStringLower(SHA256.HashData(content));
+        return new SanitizedImage(content, contentType, content.LongLength, sha256);
+    }
 }
 
 public sealed class FakeCurrentUser : ICurrentUser

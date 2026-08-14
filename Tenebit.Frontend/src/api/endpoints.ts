@@ -147,6 +147,7 @@ export const api = {
     managerId?: string | null;
     location?: string | null;
     costCenter?: string | null;
+    preferredLanguage?: string | null;
   }) => apiRequest<Person>('/api/people', { method: 'POST', body: JSON.stringify(body) }),
   updatePerson: (id: string, body: {
     firstName: string;
@@ -161,6 +162,7 @@ export const api = {
     location?: string | null;
     costCenter?: string | null;
     isActive: boolean;
+    preferredLanguage?: string | null;
   }) => apiRequest<Person>(`/api/people/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deletePerson: (id: string) => apiRequest<void>(`/api/people/${id}`, { method: 'DELETE' }),
   personWorkspace: (id: string) => apiRequest<MyWorkspace>(`/api/people/${id}/workspace`),

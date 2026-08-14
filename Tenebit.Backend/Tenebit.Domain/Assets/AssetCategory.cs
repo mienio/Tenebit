@@ -6,7 +6,7 @@ public sealed class AssetCategory
 {
     private AssetCategory() { }
 
-    public AssetCategory(Guid organizationId, string name, AssetCategoryType type, string? description, string? icon = null, bool isSystem = false, int sortOrder = 1000)
+    public AssetCategory(Guid organizationId, string name, AssetCategoryType type, string? description, string? icon = null, bool isSystem = false, int sortOrder = 1000, ReturnHandlingMode returnHandlingMode = ReturnHandlingMode.DirectToStock, PostReturnDisposition postReturnDisposition = PostReturnDisposition.Reuse, string? returnChecklistTemplate = null, PhotoRequirement photoOnIssue = PhotoRequirement.Disabled, PhotoRequirement photoOnReturn = PhotoRequirement.Disabled)
     {
         Id = Guid.NewGuid();
         OrganizationId = organizationId;
@@ -14,6 +14,7 @@ public sealed class AssetCategory
         SortOrder = sortOrder;
         CreatedAt = DateTimeOffset.UtcNow;
         Update(name, type, description, icon);
+        UpdateReturnPolicy(returnHandlingMode, postReturnDisposition, returnChecklistTemplate, photoOnIssue, photoOnReturn);
     }
 
     public Guid Id { get; private set; }
@@ -26,6 +27,11 @@ public sealed class AssetCategory
     public int SortOrder { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public List<AssetFieldDefinition> FieldDefinitions { get; private set; } = [];
+    public ReturnHandlingMode ReturnHandlingMode { get; private set; } = ReturnHandlingMode.DirectToStock;
+    public PostReturnDisposition PostReturnDisposition { get; private set; } = PostReturnDisposition.Reuse;
+    public string? ReturnChecklistTemplate { get; private set; }
+    public PhotoRequirement PhotoOnIssue { get; private set; } = PhotoRequirement.Disabled;
+    public PhotoRequirement PhotoOnReturn { get; private set; } = PhotoRequirement.Disabled;
 
     public void Update(string name, AssetCategoryType type, string? description, string? icon)
     {
@@ -38,6 +44,15 @@ public sealed class AssetCategory
         Type = type;
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         Icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+    }
+
+    public void UpdateReturnPolicy(ReturnHandlingMode returnHandlingMode, PostReturnDisposition postReturnDisposition, string? returnChecklistTemplate, PhotoRequirement photoOnIssue, PhotoRequirement photoOnReturn)
+    {
+        ReturnHandlingMode = returnHandlingMode;
+        PostReturnDisposition = postReturnDisposition;
+        ReturnChecklistTemplate = string.IsNullOrWhiteSpace(returnChecklistTemplate) ? null : returnChecklistTemplate.Trim();
+        PhotoOnIssue = photoOnIssue;
+        PhotoOnReturn = photoOnReturn;
     }
 
     public void ReplaceFieldDefinitions(IEnumerable<(string Key, string Label, AssetFieldType FieldType, string? Options, bool Required)> definitions)

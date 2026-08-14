@@ -392,13 +392,10 @@ public sealed class AuthService
 
         try
         {
+            var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
             var link = _appLinkBuilder.BuildPasswordResetLink(rawToken);
-            var html = $"""
-                <p>Otrzymaliśmy prośbę o zresetowanie hasła do konta Tenebit.</p>
-                <p><a href="{link}">Ustaw nowe hasło</a></p>
-                <p>Link jest ważny przez 1 godzinę. Jeśli to nie Ty wysłałeś/aś tę prośbę, zignoruj tę wiadomość.</p>
-                """;
-            await _emailSender.SendAsync(user.Email, "Reset hasła — Tenebit", html, cancellationToken);
+            var (subject, html) = EmailTemplates.PasswordReset(organization?.Language, link);
+            await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -477,13 +474,10 @@ public sealed class AuthService
             var token = new EmailVerificationToken(user.Id, TokenHasher.Hash(rawToken), _clock.UtcNow.AddHours(48));
             _emailVerificationTokens.Add(token);
 
+            var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
             var link = _appLinkBuilder.BuildEmailVerificationLink(rawToken);
-            var html = $"""
-                <p>Dziękujemy za założenie konta w Tenebit.</p>
-                <p><a href="{link}">Potwierdź adres e-mail</a></p>
-                <p>Link jest ważny przez 48 godzin.</p>
-                """;
-            await _emailSender.SendAsync(user.Email, "Potwierdź e-mail — Tenebit", html, cancellationToken);
+            var (subject, html) = EmailTemplates.EmailVerification(organization?.Language, link);
+            await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
         }
         catch (Exception ex)
         {

@@ -9,6 +9,7 @@ using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Audit;
 using Tenebit.Application.Dashboard;
+using Tenebit.Application.Evidence;
 using Tenebit.Application.Identity;
 using Tenebit.Application.JobProfiles;
 using Tenebit.Application.Licenses;
@@ -20,6 +21,7 @@ using Tenebit.Application.Settings;
 using Tenebit.Application.Subscriptions;
 using Tenebit.Application.Workspace;
 using Tenebit.Domain.Assets;
+using Tenebit.Domain.Evidence;
 using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Api.Endpoints;
@@ -61,6 +63,7 @@ public static class TenebitEndpoints
         MapOrganization(api);
         MapOnboarding(api);
         MapAssets(api);
+        MapAssetEvidence(api);
         api.MapLocationEndpoints();
         MapSettings(api);
         MapPeople(api);
@@ -394,6 +397,11 @@ public static class TenebitEndpoints
             .WithTags("Asset categories")
             .WithOpenApi();
 
+        api.MapPut("/asset-categories/{id:guid}/return-policy", async (Guid id, UpdateAssetCategoryReturnPolicyRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
+                (await service.UpdateReturnPolicyAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Asset categories")
+            .WithOpenApi();
+
         api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, string? owner, string? warranty, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
                 page.HasValue
                     ? (await service.ListPagedAsync(search, status, location, teamId, owner == "none", warranty == "expiring", sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
@@ -436,8 +444,85 @@ public static class TenebitEndpoints
                 (await service.RevealSensitiveFieldAsync(id, fieldKey, cancellationToken)).ToHttpResult())
             .WithTags("Assets")
             .WithOpenApi();
+
+        api.MapGet("/assets/{id:guid}/inspection", async (Guid id, AssetInspectionService service, CancellationToken cancellationToken) =>
+                (await service.GetPendingForAssetAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Assets")
+            .WithOpenApi();
+
+        api.MapPost("/assets/inspections/{id:guid}/complete", async (Guid id, CompleteAssetInspectionRequest request, AssetInspectionService service, CancellationToken cancellationToken) =>
+                (await service.CompleteAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Assets")
+            .WithOpenApi();
     }
 
+    private static void MapAssetEvidence(RouteGroupBuilder api)
+    {
+        api.MapGet("/assets/{assetId:guid}/evidence", async (Guid assetId, AssetEvidenceService service, CancellationToken cancellationToken) =>
+                (await service.ListByAssetAsync(assetId, cancellationToken)).ToHttpResult())
+            .WithTags("Asset evidence")
+            .WithOpenApi();
+
+        api.MapPost("/assets/{assetId:guid}/evidence", async (Guid assetId, HttpRequest request, AssetEvidenceService service, CancellationToken cancellationToken) =>
+        {
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
+            }
+
+            var form = await request.ReadFormAsync(cancellationToken);
+            var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+            {
+                return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
+            }
+
+            if (!Enum.TryParse<EvidencePhase>(form["phase"], true, out var phase))
+            {
+                return Results.BadRequest(new { message = "Nieprawidłowy etap materiału dowodowego.", code = "VALIDATION_ERROR" });
+            }
+
+            Guid? assignmentId = Guid.TryParse(form["assignmentId"], out var aid) ? aid : null;
+            var caption = form["caption"].ToString();
+
+            await using var stream = file.OpenReadStream();
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, cancellationToken);
+
+            var uploadRequest = new UploadAssetEvidenceRequest(phase, assignmentId, string.IsNullOrWhiteSpace(caption) ? null : caption);
+            return (await service.UploadAsync(assetId, uploadRequest, file.FileName, file.ContentType, memory.ToArray(), cancellationToken)).ToHttpResult();
+        })
+            .DisableAntiforgery()
+            .WithTags("Asset evidence");
+
+        api.MapGet("/evidence/{id:guid}", async (Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetAsync(id, cancellationToken);
+            if (result.IsFailure || result.Value is null)
+            {
+                return result.ToHttpResult();
+            }
+
+            var evidence = result.Value;
+            return Results.File(evidence.Content, evidence.ContentType, evidence.FileName);
+        })
+            .WithTags("Asset evidence");
+
+        api.MapPost("/evidence/{id:guid}/lock", async (Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
+                (await service.LockAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset evidence")
+            .WithOpenApi();
+
+        api.MapPut("/evidence/{id:guid}/legal-hold", async (Guid id, SetEvidenceLegalHoldRequest request, AssetEvidenceService service, CancellationToken cancellationToken) =>
+                (await service.SetLegalHoldAsync(id, request.Enabled, cancellationToken)).ToHttpResult())
+            .WithTags("Asset evidence")
+            .WithOpenApi();
+
+        api.MapDelete("/evidence/{id:guid}", async (Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
+            .WithTags("Asset evidence")
+            .WithOpenApi();
+    }
 
     private static void MapSettings(RouteGroupBuilder api)
     {
@@ -460,6 +545,16 @@ public static class TenebitEndpoints
             .WithOpenApi();
 
         api.MapPut("/settings/asset-statuses", SaveAssetStatuses)
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapGet("/settings/evidence-privacy", async (SettingsService service, CancellationToken cancellationToken) =>
+                (await service.GetEvidencePrivacyAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapPut("/settings/evidence-privacy", async (SaveEvidencePrivacySettingsRequest request, SettingsService service, CancellationToken cancellationToken) =>
+                (await service.SaveEvidencePrivacyAsync(request, cancellationToken)).ToHttpResult())
             .WithTags("Settings")
             .WithOpenApi();
 
@@ -633,6 +728,11 @@ public static class TenebitEndpoints
             .WithTags("People")
             .WithOpenApi();
 
+        api.MapPost("/people/{id:guid}/offboarding", async (Guid id, StartOffboardingRequest request, PeopleService service, CancellationToken cancellationToken) =>
+                (await service.StartOffboardingAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("People")
+            .WithOpenApi();
+
         api.MapGet("/people/{id:guid}/workspace", async (Guid id, MyWorkspaceService service, CancellationToken cancellationToken) =>
                 (await service.GetForPersonAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("People")
@@ -750,6 +850,11 @@ public static class TenebitEndpoints
 
         api.MapPost("/assignments/{id:guid}/return", async (Guid id, ReturnAssignmentRequest request, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.ReturnAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Assignments")
+            .WithOpenApi();
+
+        api.MapPost("/assignments/{assignmentId:guid}/assets/{assetId:guid}/return", async (Guid assignmentId, Guid assetId, ReturnAssignmentAssetItemRequest request, AssignmentService service, CancellationToken cancellationToken) =>
+                (await service.ReturnAssetAsync(assignmentId, assetId, request, cancellationToken)).ToHttpResult())
             .WithTags("Assignments")
             .WithOpenApi();
 

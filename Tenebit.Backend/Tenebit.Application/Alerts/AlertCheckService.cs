@@ -9,6 +9,8 @@ namespace Tenebit.Application.Alerts;
 public sealed class AlertCheckService
 {
     private static readonly int[] WarrantyThresholdDays = [30, 7];
+    private const int MaxSendAttempts = 5;
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromHours(1);
 
     private readonly IOrganizationRepository _organizations;
     private readonly IOrganizationUserRepository _users;
@@ -42,13 +44,14 @@ public sealed class AlertCheckService
         var organizations = await _organizations.ListAllAsync(cancellationToken);
         foreach (var organization in organizations)
         {
-            await CheckWarrantyAlertsAsync(organization, cancellationToken);
-            await CheckOverdueAssignmentsAsync(organization, cancellationToken);
-            await CheckOnboardingDeadlinesAsync(organization, onboardingDeadlineDays, cancellationToken);
+            var isQuietHours = organization.IsWithinQuietHours(_clock.UtcNow);
+            await CheckWarrantyAlertsAsync(organization, isQuietHours, cancellationToken);
+            await CheckOverdueAssignmentsAsync(organization, isQuietHours, cancellationToken);
+            await CheckOnboardingDeadlinesAsync(organization, onboardingDeadlineDays, isQuietHours, cancellationToken);
         }
     }
 
-    private async Task CheckWarrantyAlertsAsync(Organization organization, CancellationToken cancellationToken)
+    private async Task CheckWarrantyAlertsAsync(Organization organization, bool isQuietHours, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
         var assets = await _assets.ListAsync(organization.Id, null, null, null, cancellationToken);
@@ -63,20 +66,15 @@ public sealed class AlertCheckService
             foreach (var asset in assets.Where(a => a.WarrantyUntil.HasValue && a.WarrantyUntil.Value <= targetDate && a.WarrantyUntil.Value >= today))
             {
                 var alertKey = $"warranty_{thresholdDays}d";
-                if (await _sentAlerts.ExistsAsync(organization.Id, alertKey, asset.Id, cancellationToken)) continue;
-
                 var subject = $"Gwarancja wygasa za {thresholdDays} dni — {asset.Name} ({asset.AssetTag})";
                 var html = $"""
                     <p>Gwarancja na aktywo <strong>{System.Net.WebUtility.HtmlEncode(asset.Name)}</strong> (tag: {System.Net.WebUtility.HtmlEncode(asset.AssetTag)}) wygasa <strong>{asset.WarrantyUntil:yyyy-MM-dd}</strong> ({thresholdDays} dni).</p>
                     """;
 
-                foreach (var email in adminEmails)
+                if (await DeliverAsync(organization.Id, alertKey, asset.Id, adminEmails, subject, html, isQuietHours, cancellationToken))
                 {
-                    await SendSafeAsync(email, subject, html, cancellationToken);
+                    hasChanges = true;
                 }
-
-                _sentAlerts.Add(new SentAlert(organization.Id, alertKey, asset.Id, _clock.UtcNow));
-                hasChanges = true;
             }
         }
 
@@ -86,7 +84,7 @@ public sealed class AlertCheckService
         }
     }
 
-    private async Task CheckOverdueAssignmentsAsync(Organization organization, CancellationToken cancellationToken)
+    private async Task CheckOverdueAssignmentsAsync(Organization organization, bool isQuietHours, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
         var assignments = await _assignments.ListAsync(organization.Id, cancellationToken);
@@ -99,8 +97,6 @@ public sealed class AlertCheckService
         foreach (var assignment in overdue)
         {
             var alertKey = "assignment_overdue";
-            if (await _sentAlerts.ExistsAsync(organization.Id, alertKey, assignment.Id, cancellationToken)) continue;
-
             var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
             var subject = $"Zwrot sprzętu po terminie — protokół {assignment.ProtocolNumber}";
             var html = $"""
@@ -110,13 +106,10 @@ public sealed class AlertCheckService
             var recipients = adminEmails.ToList();
             if (person is not null && !string.IsNullOrWhiteSpace(person.Email)) recipients.Add(person.Email);
 
-            foreach (var email in recipients.Distinct(StringComparer.OrdinalIgnoreCase))
+            if (await DeliverAsync(organization.Id, alertKey, assignment.Id, recipients, subject, html, isQuietHours, cancellationToken))
             {
-                await SendSafeAsync(email, subject, html, cancellationToken);
+                hasChanges = true;
             }
-
-            _sentAlerts.Add(new SentAlert(organization.Id, alertKey, assignment.Id, _clock.UtcNow));
-            hasChanges = true;
         }
 
         if (hasChanges)
@@ -128,7 +121,7 @@ public sealed class AlertCheckService
     // Onboarding deadlines: an asset not collected (assignment still AwaitingAcceptance) or a procedure not
     // signed (acceptance still Pending) within a configurable number of days is flagged Overdue and triggers
     // one reminder email each (deduped via sent_alerts, same pattern as the other alert checks above).
-    private async Task CheckOnboardingDeadlinesAsync(Organization organization, int deadlineDays, CancellationToken cancellationToken)
+    private async Task CheckOnboardingDeadlinesAsync(Organization organization, int deadlineDays, bool isQuietHours, CancellationToken cancellationToken)
     {
         deadlineDays = Math.Max(1, deadlineDays);
         var deadline = _clock.UtcNow.AddDays(-deadlineDays);
@@ -142,8 +135,6 @@ public sealed class AlertCheckService
             hasChanges = true;
 
             var alertKey = "assignment_pickup_overdue";
-            if (await _sentAlerts.ExistsAsync(organization.Id, alertKey, assignment.Id, cancellationToken)) continue;
-
             var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
             var subject = $"Sprzęt nieodebrany — protokół {assignment.ProtocolNumber}";
             var html = $"""
@@ -152,12 +143,10 @@ public sealed class AlertCheckService
 
             var recipients = adminEmails.ToList();
             if (person is not null && !string.IsNullOrWhiteSpace(person.Email)) recipients.Add(person.Email);
-            foreach (var email in recipients.Distinct(StringComparer.OrdinalIgnoreCase))
+            if (await DeliverAsync(organization.Id, alertKey, assignment.Id, recipients, subject, html, isQuietHours, cancellationToken))
             {
-                await SendSafeAsync(email, subject, html, cancellationToken);
+                hasChanges = true;
             }
-
-            _sentAlerts.Add(new SentAlert(organization.Id, alertKey, assignment.Id, _clock.UtcNow));
         }
 
         var pendingAcceptances = assignments
@@ -175,23 +164,16 @@ public sealed class AlertCheckService
                 hasChanges = true;
 
                 var alertKey = "procedure_signature_overdue";
-                if (await _sentAlerts.ExistsAsync(organization.Id, alertKey, acceptance.Id, cancellationToken)) continue;
-
                 var person = await _people.GetAsync(organization.Id, acceptance.PersonId, cancellationToken);
                 var procedure = procedures.FirstOrDefault(x => x.Id == acceptance.ProcedureId);
-                var subject = $"Procedura niepodpisana — {procedure?.Title ?? "procedura"}";
-                var html = $"""
-                    <p>Procedura <strong>{System.Net.WebUtility.HtmlEncode(procedure?.Title ?? "—")}</strong> (protokół {System.Net.WebUtility.HtmlEncode(assignment.ProtocolNumber)}) dla osoby <strong>{System.Net.WebUtility.HtmlEncode(person?.FullName ?? "—")}</strong> nie została podpisana w ciągu {deadlineDays} dni od wysłania.</p>
-                    """;
+                var (subject, html) = EmailTemplates.ProcedureUnsignedAlert(organization.Language, procedure?.Title, assignment.ProtocolNumber, person?.FullName, deadlineDays);
 
                 var recipients = adminEmails.ToList();
                 if (person is not null && !string.IsNullOrWhiteSpace(person.Email)) recipients.Add(person.Email);
-                foreach (var email in recipients.Distinct(StringComparer.OrdinalIgnoreCase))
+                if (await DeliverAsync(organization.Id, alertKey, acceptance.Id, recipients, subject, html, isQuietHours, cancellationToken))
                 {
-                    await SendSafeAsync(email, subject, html, cancellationToken);
+                    hasChanges = true;
                 }
-
-                _sentAlerts.Add(new SentAlert(organization.Id, alertKey, acceptance.Id, _clock.UtcNow));
             }
         }
 
@@ -211,15 +193,38 @@ public sealed class AlertCheckService
             .ToList();
     }
 
-    private async Task SendSafeAsync(string email, string subject, string html, CancellationToken cancellationToken)
+    private async Task<bool> DeliverAsync(Guid organizationId, string alertKey, Guid entityId, IEnumerable<string> recipients, string subject, string html, bool isQuietHours, CancellationToken cancellationToken)
     {
-        try
+        var hasChanges = false;
+        var now = _clock.UtcNow;
+
+        foreach (var email in recipients.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            await _emailSender.SendAsync(email, subject, html, cancellationToken);
+            var record = await _sentAlerts.GetAsync(organizationId, alertKey, entityId, email, cancellationToken);
+            if (record is null)
+            {
+                record = new SentAlert(organizationId, alertKey, entityId, email, now);
+                _sentAlerts.Add(record);
+                hasChanges = true;
+            }
+
+            if (record.Status == SentAlertStatus.Sent) continue;
+            if (record.Status == SentAlertStatus.Failed && !record.CanRetry(MaxSendAttempts, now)) continue;
+            if (isQuietHours) continue;
+
+            try
+            {
+                await _emailSender.SendAsync(email, subject, html, cancellationToken);
+                record.MarkSent(now);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                record.MarkFailed(now, ex.Message, RetryDelay);
+            }
+
+            hasChanges = true;
         }
-        catch
-        {
-            // Alert email failures must never break the periodic check for other organizations/assets.
-        }
+
+        return hasChanges;
     }
 }

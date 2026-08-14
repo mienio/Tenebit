@@ -78,6 +78,23 @@ public sealed class AssetCategoryService
         return Result.Success();
     }
 
+    public async Task<Result<AssetCategoryResponse>> UpdateReturnPolicyAsync(Guid id, UpdateAssetCategoryReturnPolicyRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        if (access.IsFailure) return Result<AssetCategoryResponse>.Failure(access.Error!);
+        try
+        {
+            var organizationId = _currentUser.OrganizationId;
+            var category = await _categories.GetAsync(organizationId, id, cancellationToken);
+            if (category is null) return Result<AssetCategoryResponse>.Failure(Error.NotFound("Kategoria nie istnieje."));
+            category.UpdateReturnPolicy(request.ReturnHandlingMode, request.PostReturnDisposition, request.ReturnChecklistTemplate, request.PhotoOnIssue, request.PhotoOnReturn);
+            _activity.Add(new ActivityLog(organizationId, "asset_category.return_policy_updated", "asset_category", category.Id, _currentUser.Subject, category.Name, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result<AssetCategoryResponse>.Success(Map(category, _currentUser.Language));
+        }
+        catch (DomainException ex) { return Result<AssetCategoryResponse>.Failure(Error.Validation(ex.Message)); }
+    }
+
     public async Task<Result<IReadOnlyList<AssetFieldDefinitionResponse>>> SaveFieldDefinitionsAsync(Guid categoryId, IReadOnlyList<SaveAssetFieldDefinitionRequest> request, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
@@ -106,10 +123,8 @@ public sealed class AssetCategoryService
     private static AssetCategoryResponse Map(AssetCategory category, string language)
     {
         var name = StarterAssetCategoryTranslations.TranslateName(category.IsSystem, language, category.Name);
-        var description = category.IsSystem && language != "pl" && StarterAssetCategoryTranslations.EnglishByPolishName.TryGetValue(category.Name, out var translation)
-            ? translation.Description
-            : category.Description;
-        return new(category.Id, name, category.Type, description, category.Icon, category.IsSystem, MapFieldDefinitions(category));
+        var description = StarterAssetCategoryTranslations.TranslateDescription(category.IsSystem, language, category.Name, category.Description);
+        return new(category.Id, name, category.Type, description, category.Icon, category.IsSystem, MapFieldDefinitions(category), category.ReturnHandlingMode, category.PostReturnDisposition, category.ReturnChecklistTemplate, category.PhotoOnIssue, category.PhotoOnReturn);
     }
 
     private static IReadOnlyList<AssetFieldDefinitionResponse> MapFieldDefinitions(AssetCategory category) => category.FieldDefinitions

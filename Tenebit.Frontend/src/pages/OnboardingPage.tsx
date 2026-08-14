@@ -115,10 +115,10 @@ export function OnboardingPage() {
             <Field label={t('onboarding.step1Title')}>
               <SelectInput name="personId" required value={selectedPersonId} onChange={event => setSelectedPersonId(event.target.value)}>
                 <option value="">{t('onboarding.choosePerson')}</option>
-                {people.data?.map(person => <option value={person.id} key={person.id}>{person.fullName} · {person.email}</option>)}
+                {people.data?.filter(person => person.employmentStatus === 'Active').map(person => <option value={person.id} key={person.id}>{person.fullName} · {person.email}</option>)}
               </SelectInput>
             </Field>
-            {!people.data?.length ? <p className="emptyInline">{t('onboarding.noPeople')}</p> : null}
+            {!people.data?.some(person => person.employmentStatus === 'Active') ? <p className="emptyInline">{t('onboarding.noPeople')}</p> : null}
           </section>
 
           <section className="packageStep">

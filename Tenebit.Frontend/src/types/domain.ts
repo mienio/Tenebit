@@ -1,6 +1,15 @@
-export type AssetStatus = 'Draft' | 'InStock' | 'Reserved' | 'Assigned' | 'InTransit' | 'InService' | 'Damaged' | 'Lost' | 'Retired' | 'Disposed';
+export type AssetStatus = 'Draft' | 'InStock' | 'Reserved' | 'Assigned' | 'PendingReturn' | 'InTransit' | 'InService' | 'Damaged' | 'Lost' | 'Retired' | 'Disposed';
 export type AssetCategoryType = 'Physical' | 'Digital' | 'License' | 'Account' | 'Document' | 'Location' | 'Vehicle' | 'Key' | 'Consumable' | 'Other';
 export type PersonRelationType = string;
+export type EmploymentStatus = 'Active' | 'Offboarding' | 'Inactive';
+
+export function getEmploymentStatusPresentation(status: EmploymentStatus) {
+  switch (status) {
+    case 'Active': return { labelKey: 'people.active', badgeClass: 'status--InStock', action: 'deactivate' } as const;
+    case 'Offboarding': return { labelKey: 'people.offboarding', badgeClass: 'status--AwaitingAcceptance', action: 'deactivate' } as const;
+    case 'Inactive': return { labelKey: 'people.inactive', badgeClass: 'status--Draft', action: 'activate' } as const;
+  }
+}
 
 export interface PersonRelationTypeOption {
   id: string;
@@ -143,6 +152,10 @@ export interface Person {
   location?: string | null;
   costCenter?: string | null;
   isActive: boolean;
+  employmentStatus: EmploymentStatus;
+  employmentEndsAt?: string | null;
+  deactivatedAt?: string | null;
+  preferredLanguage?: string | null;
 }
 
 export interface Team {

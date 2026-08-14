@@ -3,6 +3,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Dashboards;
+using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.Licenses;
@@ -33,6 +34,13 @@ public interface IAssetCategoryRepository
     Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(AssetCategory category);
     void Remove(AssetCategory category);
+}
+
+public interface IAssetInspectionRepository
+{
+    Task<AssetInspection?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<AssetInspection?> GetPendingByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken);
+    void Add(AssetInspection inspection);
 }
 
 public interface IPersonRepository
@@ -177,7 +185,7 @@ public interface ISubscriptionRepository
 
 public interface ISentAlertRepository
 {
-    Task<bool> ExistsAsync(Guid organizationId, string alertKey, Guid entityId, CancellationToken cancellationToken);
+    Task<SentAlert?> GetAsync(Guid organizationId, string alertKey, Guid entityId, string recipientEmail, CancellationToken cancellationToken);
     void Add(SentAlert alert);
 }
 
@@ -200,6 +208,16 @@ public interface ILicenseRepository
     Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(License license);
     void Remove(License license);
+}
+
+public interface IAssetEvidenceRepository
+{
+    Task<IReadOnlyList<AssetEvidence>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<int> CountAsync(Guid organizationId, Guid assetId, EvidencePhase phase, CancellationToken cancellationToken);
+    void Add(AssetEvidence evidence);
+    void Remove(AssetEvidence evidence);
 }
 
 public interface IRolePermissionRepository

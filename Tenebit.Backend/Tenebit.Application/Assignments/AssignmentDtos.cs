@@ -13,7 +13,8 @@ public sealed record CreateAssignmentRequest(
 
 public sealed record ReturnAssignmentAssetRequest(Guid AssetId, string? ReturnCondition);
 public sealed record ReturnAssignmentRequest(string? ReturnCondition, string? DestinationLocation, IReadOnlyList<ReturnAssignmentAssetRequest>? Assets = null);
-public sealed record AssignmentAssetResponse(Guid AssetId, string? AssetName, string? AssetTag, string IssueCondition, string? ReturnCondition);
+public sealed record ReturnAssignmentAssetItemRequest(ReturnResolution Resolution, string? ReturnCondition, string? ReturnLocation, string? Notes);
+public sealed record AssignmentAssetResponse(Guid AssetId, string? AssetName, string? AssetTag, string IssueCondition, string? ReturnCondition, DateTimeOffset? ReturnedAt, string? ReturnLocation, string? ReturnedBy, ReturnResolution? ReturnResolution, string? ReturnNotes);
 public sealed record ProcedureAcceptanceResponse(Guid Id, Guid ProcedureId, string? ProcedureTitle, AcceptanceStatus Status, DateTimeOffset SentAt, DateTimeOffset? AcceptedAt, string? ConfirmedIp, string? ConfirmationHash, bool IsIntegrityVerified);
 
 public sealed record AssignmentResponse(

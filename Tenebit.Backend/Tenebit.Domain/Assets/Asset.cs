@@ -112,7 +112,7 @@ public sealed class Asset
 
     public void AssignTo(Guid personId)
     {
-        if (Status is AssetStatus.Assigned or AssetStatus.Disposed or AssetStatus.Lost)
+        if (Status is AssetStatus.Assigned or AssetStatus.Disposed or AssetStatus.Lost or AssetStatus.PendingReturn)
         {
             throw new DomainException("Aktywo nie jest dostępne do wydania.");
         }
@@ -122,11 +122,30 @@ public sealed class Asset
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    public void ReturnToStock(string? location)
+    public void MarkPendingReturn()
     {
+        if (Status == AssetStatus.PendingReturn) return;
+        if (Status != AssetStatus.Assigned)
+        {
+            throw new DomainException("Tylko wydane aktywo można oznaczyć jako oczekujące na zwrot.");
+        }
+
+        Status = AssetStatus.PendingReturn;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ReturnToStock(string? location) => ReleaseAssignment(AssetStatus.InStock, location);
+
+    public void ReleaseAssignment(AssetStatus status, string? location = null)
+    {
+        if (Status == AssetStatus.Disposed && status != AssetStatus.Disposed)
+        {
+            throw new DomainException("Zutylizowane aktywo nie może wrócić do obiegu.");
+        }
+
         AssignedPersonId = null;
-        Location = Normalize(location) ?? Location;
-        Status = AssetStatus.InStock;
+        if (location is not null) Location = Normalize(location) ?? Location;
+        Status = status;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

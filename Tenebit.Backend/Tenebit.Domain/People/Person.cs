@@ -11,6 +11,7 @@ public sealed class Person
         Id = Guid.NewGuid();
         OrganizationId = organizationId;
         CreatedAt = DateTimeOffset.UtcNow;
+        EmploymentStatus = EmploymentStatus.Active;
         IsActive = true;
         Update(firstName, lastName, email, null, null, "Pracownik", null, null, null, null, null);
     }
@@ -28,6 +29,10 @@ public sealed class Person
     public Guid? ManagerId { get; private set; }
     public string? Location { get; private set; }
     public string? CostCenter { get; private set; }
+    public EmploymentStatus EmploymentStatus { get; private set; } = EmploymentStatus.Active;
+    public DateTimeOffset? EmploymentEndsAt { get; private set; }
+    public DateTimeOffset? DeactivatedAt { get; private set; }
+    public string? PreferredLanguage { get; private set; }
     public bool IsActive { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -69,8 +74,52 @@ public sealed class Person
         CostCenter = Normalize(costCenter);
     }
 
-    public void Deactivate() => IsActive = false;
-    public void Activate() => IsActive = true;
+    public bool CanReceiveNewObligations => EmploymentStatus == EmploymentStatus.Active;
+
+    public void SetPreferredLanguage(string? preferredLanguage)
+    {
+        var language = Normalize(preferredLanguage)?.ToLowerInvariant();
+        if (language is not null && language is not ("pl" or "en" or "es" or "de"))
+        {
+            throw new DomainException("Nieobsługiwany preferowany język.");
+        }
+
+        PreferredLanguage = language;
+    }
+
+    public void StartOffboarding(DateTimeOffset employmentEndsAt)
+    {
+        if (EmploymentStatus != EmploymentStatus.Active)
+        {
+            throw new DomainException("Offboarding można rozpocząć tylko dla aktywnej osoby.");
+        }
+
+        EmploymentStatus = EmploymentStatus.Offboarding;
+        EmploymentEndsAt = employmentEndsAt.ToUniversalTime();
+        DeactivatedAt = null;
+        IsActive = true;
+    }
+
+    public void Deactivate(DateTimeOffset deactivatedAt)
+    {
+        if (EmploymentStatus == EmploymentStatus.Inactive)
+        {
+            IsActive = false;
+            return;
+        }
+
+        EmploymentStatus = EmploymentStatus.Inactive;
+        DeactivatedAt = deactivatedAt.ToUniversalTime();
+        IsActive = false;
+    }
+
+    public void Activate()
+    {
+        EmploymentStatus = EmploymentStatus.Active;
+        EmploymentEndsAt = null;
+        DeactivatedAt = null;
+        IsActive = true;
+    }
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

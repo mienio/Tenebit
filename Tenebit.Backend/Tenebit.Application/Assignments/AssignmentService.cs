@@ -12,6 +12,8 @@ public sealed class AssignmentService
 {
     private readonly IAssignmentRepository _assignments;
     private readonly IAssetRepository _assets;
+    private readonly IAssetCategoryRepository _categories;
+    private readonly IAssetInspectionRepository _inspections;
     private readonly IPersonRepository _people;
     private readonly IProcedureRepository _procedures;
     private readonly ITeamRepository _teams;
@@ -24,10 +26,12 @@ public sealed class AssignmentService
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _linkBuilder;
 
-    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder)
+    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder)
     {
         _assignments = assignments;
         _assets = assets;
+        _categories = categories;
+        _inspections = inspections;
         _people = people;
         _procedures = procedures;
         _teams = teams;
@@ -100,13 +104,14 @@ public sealed class AssignmentService
             var organizationId = _currentUser.OrganizationId;
             var person = await _people.GetAsync(organizationId, request.PersonId, cancellationToken);
             if (person is null) return Result<AssignmentResponse>.Failure(Error.Validation("Wybrany pracownik nie istnieje."));
+            if (!person.CanReceiveNewObligations) return Result<AssignmentResponse>.Failure(Error.Validation("Nowe wydanie można utworzyć tylko dla aktywnej osoby."));
 
             var uniqueAssetIds = request.Assets.Select(x => x.AssetId).Distinct().ToArray();
             if (uniqueAssetIds.Length != request.Assets.Count) return Result<AssignmentResponse>.Failure(Error.Validation("To samo aktywo nie może wystąpić dwa razy w jednym wydaniu."));
 
             var assets = await _assets.GetByIdsAsync(organizationId, uniqueAssetIds, cancellationToken);
             if (assets.Count != uniqueAssetIds.Length) return Result<AssignmentResponse>.Failure(Error.Validation("Niektóre aktywa nie istnieją."));
-            if (assets.Any(x => x.Status is AssetStatus.Assigned or AssetStatus.Disposed or AssetStatus.Lost))
+            if (assets.Any(x => x.Status is AssetStatus.Assigned or AssetStatus.Disposed or AssetStatus.Lost or AssetStatus.PendingReturn))
             {
                 return Result<AssignmentResponse>.Failure(Error.Conflict("Co najmniej jedno aktywo nie jest dostępne do wydania."));
             }
@@ -136,8 +141,9 @@ public sealed class AssignmentService
                 var acceptedAssets = assets.Where(x => request.Assets.Any(item => item.AssetId == x.Id)).ToList();
                 var requiredProcedures = procedures.Where(x => x.RequiresAcceptance && x.Status == ProcedureStatus.Published).Select(x => x.Title).ToList();
                 var link = _linkBuilder.BuildAssignmentAcceptanceLink(organizationId, assignment.Id);
-                var html = BuildAssignmentEmailHtml(person.FirstName, assignment.ProtocolNumber, acceptedAssets.Select(x => x.Name), requiredProcedures, link);
-                await _emailSender.SendAsync(person.Email, $"Nowy sprzęt do odebrania — {assignment.ProtocolNumber}", html, cancellationToken);
+                var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+                var (subject, html) = EmailTemplates.NewAssignmentNotification(organization?.Language, person.FirstName, assignment.ProtocolNumber, acceptedAssets.Select(x => x.Name), requiredProcedures, link);
+                await _emailSender.SendAsync(person.Email, subject, html, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -176,7 +182,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> ReturnAsync(Guid id, ReturnAssignmentRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         try
@@ -187,10 +193,19 @@ public sealed class AssignmentService
 
             var assetIds = assignment.Assets.Select(x => x.AssetId).ToArray();
             var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
-            foreach (var asset in assets) asset.ReturnToStock(request.DestinationLocation);
-
+            var categories = await _categories.ListAsync(organizationId, cancellationToken);
             var perAssetConditions = request.Assets?.ToDictionary(x => x.AssetId, x => x.ReturnCondition);
-            assignment.Return(_clock.UtcNow, request.ReturnCondition, perAssetConditions);
+            var now = _clock.UtcNow;
+
+            foreach (var asset in assets)
+            {
+                var condition = perAssetConditions is not null && perAssetConditions.TryGetValue(asset.Id, out var perAsset) && !string.IsNullOrWhiteSpace(perAsset)
+                    ? perAsset
+                    : request.ReturnCondition;
+                var category = categories.FirstOrDefault(x => x.Id == asset.CategoryId);
+                ApplyAssetReturn(assignment, asset, category, ReturnResolution.Returned, condition, request.DestinationLocation, null, organizationId, now);
+            }
+
             _activity.Add(new ActivityLog(organizationId, "assignment.returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await BuildResponseAsync(id, cancellationToken);
@@ -198,6 +213,101 @@ public sealed class AssignmentService
         catch (DomainException ex)
         {
             return Result<AssignmentResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    public async Task<Result<AssignmentResponse>> ReturnAssetAsync(Guid assignmentId, Guid assetId, ReturnAssignmentAssetItemRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
+
+        try
+        {
+            var organizationId = _currentUser.OrganizationId;
+            var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
+            if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+
+            if (assignment.Assets.All(x => x.AssetId != assetId))
+            {
+                return Result<AssignmentResponse>.Failure(Error.NotFound("To aktywo nie należy do tego wydania."));
+            }
+
+            var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
+            if (asset is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+            var category = await _categories.GetAsync(organizationId, asset.CategoryId, cancellationToken);
+
+            var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, _clock.UtcNow);
+            if (changed)
+            {
+                _activity.Add(new ActivityLog(organizationId, "assignment.asset_returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildResponseAsync(assignmentId, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<AssignmentResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    private bool ApplyAssetReturn(Assignment assignment, Asset asset, AssetCategory? category, ReturnResolution resolution, string? returnCondition, string? returnLocation, string? notes, Guid organizationId, DateTimeOffset now)
+    {
+        var item = assignment.Assets.FirstOrDefault(x => x.AssetId == asset.Id);
+        if (item is null || item.ReturnResolution is not null)
+        {
+            return false;
+        }
+
+        assignment.ReturnAsset(asset.Id, resolution, now, returnCondition, returnLocation, _currentUser.Subject, notes);
+        ApplyReturnResolutionToAsset(assignment, asset, category, resolution, returnLocation, organizationId, now);
+        return true;
+    }
+
+    private void ApplyReturnResolutionToAsset(Assignment assignment, Asset asset, AssetCategory? category, ReturnResolution resolution, string? returnLocation, Guid organizationId, DateTimeOffset now)
+    {
+        switch (resolution)
+        {
+            case ReturnResolution.Returned:
+                ApplyPhysicalReturn(assignment, asset, category, returnLocation, organizationId, now);
+                break;
+            case ReturnResolution.Damaged:
+                asset.ReleaseAssignment(AssetStatus.Damaged, returnLocation);
+                break;
+            case ReturnResolution.Missing:
+                asset.ReleaseAssignment(AssetStatus.Lost);
+                break;
+            case ReturnResolution.Retained:
+                asset.ChangeStatus(AssetStatus.Retired);
+                break;
+            case ReturnResolution.WrittenOff:
+                asset.ReleaseAssignment(AssetStatus.Disposed);
+                break;
+        }
+    }
+
+    private void ApplyPhysicalReturn(Assignment assignment, Asset asset, AssetCategory? category, string? returnLocation, Guid organizationId, DateTimeOffset now)
+    {
+        var disposition = category?.PostReturnDisposition ?? PostReturnDisposition.Reuse;
+        switch (disposition)
+        {
+            case PostReturnDisposition.ReturnToVendor:
+                asset.ReleaseAssignment(AssetStatus.InTransit, returnLocation);
+                break;
+            case PostReturnDisposition.Dispose:
+                asset.ReleaseAssignment(AssetStatus.InService, returnLocation);
+                break;
+            default: // Reuse
+                if (category?.ReturnHandlingMode == ReturnHandlingMode.InspectionRequired)
+                {
+                    asset.ReleaseAssignment(AssetStatus.InService, returnLocation);
+                    _inspections.Add(new AssetInspection(organizationId, asset.Id, assignment.Id, now, _currentUser.Subject));
+                }
+                else
+                {
+                    asset.ReleaseAssignment(AssetStatus.InStock, returnLocation);
+                }
+                break;
         }
     }
 
@@ -326,7 +436,7 @@ public sealed class AssignmentService
         var items = assignment.Assets.Select(item =>
         {
             var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-            return new AssignmentAssetResponse(item.AssetId, asset?.Name, asset?.AssetTag, item.IssueCondition, item.ReturnCondition);
+            return new AssignmentAssetResponse(item.AssetId, asset?.Name, asset?.AssetTag, item.IssueCondition, item.ReturnCondition, item.ReturnedAt, item.ReturnLocation, item.ReturnedBy, item.ReturnResolution, item.ReturnNotes);
         }).ToList();
 
         var acceptances = assignment.ProcedureAcceptances.Select(acceptance =>
@@ -340,24 +450,4 @@ public sealed class AssignmentService
     }
 
     private static string CreateProtocolNumber(DateTimeOffset now) => $"TEN-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
-
-    private static string BuildAssignmentEmailHtml(string firstName, string protocolNumber, IEnumerable<string> assetNames, IReadOnlyList<string> procedureTitles, string acceptanceLink)
-    {
-        var assetsHtml = string.Join("", assetNames.Select(name => $"<li>{System.Net.WebUtility.HtmlEncode(name)}</li>"));
-        var proceduresHtml = procedureTitles.Count == 0
-            ? ""
-            : $"<p><strong>Procedury i regulaminy do zapoznania:</strong></p><ul>{string.Join("", procedureTitles.Select(title => $"<li>{System.Net.WebUtility.HtmlEncode(title)}</li>"))}</ul>";
-
-        return $"""
-            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-                <h2>Witaj, {System.Net.WebUtility.HtmlEncode(firstName)}!</h2>
-                <p>Otrzymujesz nowy sprzęt do odebrania. Numer protokołu: <strong>{System.Net.WebUtility.HtmlEncode(protocolNumber)}</strong></p>
-                <p><strong>Sprzęt:</strong></p>
-                <ul>{assetsHtml}</ul>
-                {proceduresHtml}
-                <p><a href="{acceptanceLink}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Zobacz i potwierdź odbiór</a></p>
-                <p style="color:#687385;font-size:13px;">Jeśli przycisk nie działa, skopiuj ten link do przeglądarki: {acceptanceLink}</p>
-            </div>
-            """;
-    }
 }

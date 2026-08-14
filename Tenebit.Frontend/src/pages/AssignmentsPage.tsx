@@ -194,7 +194,7 @@ export function AssignmentsPage() {
 
       <Modal open={drawerMode === 'create'} title={t('assignments.newAssignment')} onClose={() => setDrawerMode(null)} width="wide">
         <form className="formGrid" onSubmit={createAssignment}>
-          <Field label={t('assignments.personLabel')}><SelectInput name="personId" required><option value="">{t('assignments.choosePersonOption')}</option>{people.data?.map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}</SelectInput></Field>
+          <Field label={t('assignments.personLabel')}><SelectInput name="personId" required><option value="">{t('assignments.choosePersonOption')}</option>{people.data?.filter(person => person.employmentStatus === 'Active').map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}</SelectInput></Field>
           <Field label={t('assignments.dueDateLabel')}><TextInput name="dueDate" type="date" min={todayIso()} /></Field>
           <Field label={t('assignments.notesLabel')}><TextArea name="notes" /></Field>
           <fieldset className="choiceBox"><legend>{t('assignments.assetsFromStock')}</legend>{!assets.data?.length ? <p className="muted">{t('assignments.noAssetsInStock')}</p> : <>

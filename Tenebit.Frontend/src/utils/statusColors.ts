@@ -5,6 +5,7 @@ const statusColorMap: Record<AssetStatus, string> = {
   InStock: '#5f7a5f',
   Reserved: '#5b7c99',
   Assigned: '#a63a2e',
+  PendingReturn: '#b45309',
   InTransit: '#c08a1f',
   InService: '#7a4a5c',
   Damaged: '#b91c1c',

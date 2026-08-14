@@ -11,8 +11,13 @@ public sealed class SentAlertRepository : ISentAlertRepository
 
     public SentAlertRepository(TenebitDbContext db) => _db = db;
 
-    public Task<bool> ExistsAsync(Guid organizationId, string alertKey, Guid entityId, CancellationToken cancellationToken) =>
-        _db.SentAlerts.AnyAsync(x => x.OrganizationId == organizationId && x.AlertKey == alertKey && x.EntityId == entityId, cancellationToken);
+    public Task<SentAlert?> GetAsync(Guid organizationId, string alertKey, Guid entityId, string recipientEmail, CancellationToken cancellationToken)
+    {
+        var normalized = recipientEmail.Trim().ToLowerInvariant();
+        return _db.SentAlerts.FirstOrDefaultAsync(x =>
+            x.OrganizationId == organizationId && x.AlertKey == alertKey && x.EntityId == entityId && x.RecipientEmail == normalized,
+            cancellationToken);
+    }
 
     public void Add(SentAlert alert) => _db.SentAlerts.Add(alert);
 }

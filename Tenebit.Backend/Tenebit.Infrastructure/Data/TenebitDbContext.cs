@@ -5,6 +5,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Dashboards;
+using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.Licenses;
@@ -23,6 +24,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<AssetInspection> AssetInspections => Set<AssetInspection>();
     public DbSet<Person> People => Set<Person>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<PersonRelationType> PersonRelationTypes => Set<PersonRelationType>();
@@ -45,6 +47,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<DashboardSnapshot> DashboardSnapshots => Set<DashboardSnapshot>();
     public DbSet<License> Licenses => Set<License>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<AssetEvidence> AssetEvidence => Set<AssetEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +65,27 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureAlerts(modelBuilder);
         ConfigureDashboards(modelBuilder);
         ConfigureLicenses(modelBuilder);
+        ConfigureAssetEvidence(modelBuilder);
+    }
+
+    private static void ConfigureAssetEvidence(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AssetEvidence>(entity =>
+        {
+            entity.ToTable("asset_evidence");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Content).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Caption).HasMaxLength(500);
+            entity.Property(x => x.UploadedBy).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.Phase).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.UploadedVia).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Phase });
+            entity.HasOne<Asset>().WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Assignment>().WithMany().HasForeignKey(x => x.AssignmentId).OnDelete(DeleteBehavior.SetNull);
+        });
     }
 
     private static void ConfigureDashboards(ModelBuilder modelBuilder)
@@ -89,7 +113,10 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.ToTable("sent_alerts");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.AlertKey).HasMaxLength(60).IsRequired();
-            entity.HasIndex(x => new { x.OrganizationId, x.AlertKey, x.EntityId }).IsUnique();
+            entity.Property(x => x.RecipientEmail).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.LastError).HasMaxLength(SentAlert.LastErrorMaxLength);
+            entity.HasIndex(x => new { x.OrganizationId, x.AlertKey, x.EntityId, x.RecipientEmail }).IsUnique();
         });
     }
 
@@ -105,6 +132,9 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Currency).HasMaxLength(8).IsRequired();
             entity.Property(x => x.TimeZone).HasMaxLength(80).IsRequired();
             entity.Property(x => x.LogoUrl).HasMaxLength(600);
+            entity.Property(x => x.CapturePublicIp).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.PrivacyNoticeUrl).HasMaxLength(600);
+            entity.Property(x => x.PrivacyContactEmail).HasMaxLength(320);
         });
     }
 
@@ -192,6 +222,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(600);
             entity.Property(x => x.Icon).HasMaxLength(40);
+            entity.Property(x => x.ReturnHandlingMode).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.PostReturnDisposition).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ReturnChecklistTemplate).HasMaxLength(2000);
+            entity.Property(x => x.PhotoOnIssue).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.PhotoOnReturn).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
 
             entity.OwnsMany(x => x.FieldDefinitions, owned =>
@@ -233,13 +268,27 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 owned.Property(x => x.Value).HasMaxLength(2000).IsRequired();
             });
         });
+
+        modelBuilder.Entity<AssetInspection>(entity =>
+        {
+            entity.ToTable("asset_inspections");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CreatedBy).HasMaxLength(240);
+            entity.Property(x => x.DamageAssessmentNotes).HasMaxLength(2000);
+            entity.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(40);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CompletedBy).HasMaxLength(240);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Outcome });
+        });
     }
 
     private static void ConfigurePeople(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Person>(entity =>
         {
-            entity.ToTable("people");
+            entity.ToTable("people", table => table.HasCheckConstraint(
+                "CK_people_employment_status_active",
+                "(\"EmploymentStatus\" IN ('Active', 'Offboarding') AND \"IsActive\") OR (\"EmploymentStatus\" = 'Inactive' AND NOT \"IsActive\")"));
             entity.HasKey(x => x.Id);
             entity.Property(x => x.FirstName).HasMaxLength(80).IsRequired();
             entity.Property(x => x.LastName).HasMaxLength(120).IsRequired();
@@ -250,7 +299,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.JobTitle).HasMaxLength(120);
             entity.Property(x => x.Location).HasMaxLength(180);
             entity.Property(x => x.CostCenter).HasMaxLength(80);
+            entity.Property(x => x.EmploymentStatus).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.PreferredLanguage).HasMaxLength(8);
             entity.HasIndex(x => new { x.OrganizationId, x.Email }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.EmploymentStatus });
+            entity.HasIndex(x => new { x.OrganizationId, x.EmploymentEndsAt });
         });
 
         modelBuilder.Entity<Team>(entity =>
@@ -384,6 +437,10 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 owned.HasKey(x => new { x.AssignmentId, x.AssetId });
                 owned.Property(x => x.IssueCondition).HasMaxLength(400).IsRequired();
                 owned.Property(x => x.ReturnCondition).HasMaxLength(400);
+                owned.Property(x => x.ReturnResolution).HasConversion<string>().HasMaxLength(40);
+                owned.Property(x => x.ReturnLocation).HasMaxLength(200);
+                owned.Property(x => x.ReturnedBy).HasMaxLength(240);
+                owned.Property(x => x.ReturnNotes).HasMaxLength(800);
             });
 
             entity.OwnsMany(x => x.ProcedureAcceptances, owned =>

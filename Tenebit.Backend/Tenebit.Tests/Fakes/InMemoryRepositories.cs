@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Identity;
@@ -61,6 +62,22 @@ public sealed class InMemoryAssetCategoryRepository : IAssetCategoryRepository
 
     public void Add(AssetCategory category) => Categories.Add(category);
     public void Remove(AssetCategory category) => Categories.Remove(category);
+}
+
+public sealed class InMemoryAssetInspectionRepository : IAssetInspectionRepository
+{
+    public List<AssetInspection> Inspections { get; } = [];
+
+    public Task<AssetInspection?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Inspections.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<AssetInspection?> GetPendingByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
+        Task.FromResult(Inspections
+            .Where(x => x.OrganizationId == organizationId && x.AssetId == assetId && x.Outcome is null)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault());
+
+    public void Add(AssetInspection inspection) => Inspections.Add(inspection);
 }
 
 public sealed class InMemoryActivityLogRepository : IActivityLogRepository
@@ -153,12 +170,30 @@ public sealed class InMemoryTwoFactorRecoveryCodeRepository : ITwoFactorRecovery
     public void RemoveAll(IEnumerable<TwoFactorRecoveryCode> codes) { foreach (var code in codes.ToList()) Codes.Remove(code); }
 }
 
+public sealed class InMemorySentAlertRepository : ISentAlertRepository
+{
+    public List<SentAlert> Alerts { get; } = [];
+
+    public Task<SentAlert?> GetAsync(Guid organizationId, string alertKey, Guid entityId, string recipientEmail, CancellationToken cancellationToken)
+    {
+        var normalized = recipientEmail.Trim().ToLowerInvariant();
+        return Task.FromResult(Alerts.FirstOrDefault(x =>
+            x.OrganizationId == organizationId && x.AlertKey == alertKey && x.EntityId == entityId && x.RecipientEmail == normalized));
+    }
+
+    public void Add(SentAlert alert) => Alerts.Add(alert);
+}
+
 public sealed class FakeEmailSender : IEmailSender
 {
     public List<(string To, string Subject)> Sent { get; } = [];
+    public HashSet<string> FailFor { get; } = [];
+    public int AttemptCount { get; private set; }
 
     public Task SendAsync(string to, string subject, string htmlBody, CancellationToken cancellationToken)
     {
+        AttemptCount++;
+        if (FailFor.Contains(to)) throw new InvalidOperationException("Simulated SMTP failure");
         Sent.Add((to, subject));
         return Task.CompletedTask;
     }

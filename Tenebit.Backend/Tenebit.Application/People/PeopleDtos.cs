@@ -17,7 +17,11 @@ public sealed record PersonResponse(
     Guid? ManagerId,
     string? Location,
     string? CostCenter,
-    bool IsActive);
+    bool IsActive,
+    EmploymentStatus EmploymentStatus,
+    DateTimeOffset? EmploymentEndsAt,
+    DateTimeOffset? DeactivatedAt,
+    string? PreferredLanguage);
 
 public sealed record CreatePersonRequest(
     string FirstName,
@@ -30,7 +34,8 @@ public sealed record CreatePersonRequest(
     Guid? TeamId,
     Guid? ManagerId,
     string? Location,
-    string? CostCenter);
+    string? CostCenter,
+    string? PreferredLanguage = null);
 
 public sealed record UpdatePersonRequest(
     string FirstName,
@@ -44,7 +49,10 @@ public sealed record UpdatePersonRequest(
     Guid? ManagerId,
     string? Location,
     string? CostCenter,
-    bool IsActive);
+    bool IsActive,
+    string? PreferredLanguage = null);
+
+public sealed record StartOffboardingRequest(DateTimeOffset EmploymentEndsAt);
 
 public sealed record TeamResponse(Guid Id, string Name, Guid? ManagerId, string? CostCenter);
 public sealed record CreateTeamRequest(string Name, Guid? ManagerId, string? CostCenter);
