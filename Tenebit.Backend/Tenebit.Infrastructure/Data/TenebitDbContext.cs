@@ -14,6 +14,7 @@ using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Reservations;
 using Tenebit.Domain.Settings;
 using Tenebit.Domain.Subscriptions;
 
@@ -55,6 +56,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<AssetAuditCampaign> AssetAuditCampaigns => Set<AssetAuditCampaign>();
     public DbSet<AssetAuditParticipant> AssetAuditParticipants => Set<AssetAuditParticipant>();
     public DbSet<AssetAuditItem> AssetAuditItems => Set<AssetAuditItem>();
+    public DbSet<EquipmentKitDefinition> EquipmentKitDefinitions => Set<EquipmentKitDefinition>();
+    public DbSet<EquipmentKitDefinitionItem> EquipmentKitDefinitionItems => Set<EquipmentKitDefinitionItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -75,6 +78,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureAssetEvidence(modelBuilder);
         ConfigureOffboarding(modelBuilder);
         ConfigureAudits(modelBuilder);
+        ConfigureReservations(modelBuilder);
     }
 
     private static void ConfigureAudits(ModelBuilder modelBuilder)
@@ -116,6 +120,27 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasIndex(x => new { x.OrganizationId, x.ParticipantId });
             entity.HasOne<AssetAuditCampaign>().WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<AssetAuditParticipant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureReservations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EquipmentKitDefinition>(entity =>
+        {
+            entity.ToTable("equipment_kit_definitions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.CreatedBy).HasMaxLength(240).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
+            entity.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.KitDefinitionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EquipmentKitDefinitionItem>(entity =>
+        {
+            entity.ToTable("equipment_kit_definition_items");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.OrganizationId, x.KitDefinitionId });
         });
     }
 
@@ -319,6 +344,10 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.ReturnChecklistTemplate).HasMaxLength(2000);
             entity.Property(x => x.PhotoOnIssue).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.PhotoOnReturn).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CatalogName).HasMaxLength(120);
+            entity.Property(x => x.CatalogDescription).HasMaxLength(600);
+            entity.Property(x => x.CatalogImageUrl).HasMaxLength(600);
+            entity.Property(x => x.ReservationMode).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
 
             entity.OwnsMany(x => x.FieldDefinitions, owned =>
@@ -348,6 +377,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Currency).HasMaxLength(8);
             entity.Property(x => x.QrCodePayload).HasMaxLength(160).IsRequired();
             entity.Property(x => x.PurchasePrice).HasPrecision(18, 2);
+            entity.Property(x => x.ReservationInstructions).HasMaxLength(2000);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetTag }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
 
