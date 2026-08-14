@@ -216,6 +216,7 @@ public interface IOffboardingCaseRepository
     Task<(IReadOnlyList<OffboardingCase> Items, int Total)> ListPagedAsync(Guid organizationId, OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken);
     Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OffboardingCase>> ListWithPublicTokenAsync(CancellationToken cancellationToken);
     void Add(OffboardingCase offboardingCase);
 }
 

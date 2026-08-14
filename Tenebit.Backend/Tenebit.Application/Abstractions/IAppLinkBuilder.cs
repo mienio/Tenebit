@@ -6,4 +6,5 @@ public interface IAppLinkBuilder
     string BuildAssetScanLink(Guid organizationId, Guid assetId);
     string BuildPasswordResetLink(string rawToken);
     string BuildEmailVerificationLink(string rawToken);
+    string BuildOffboardingLink(string rawToken);
 }

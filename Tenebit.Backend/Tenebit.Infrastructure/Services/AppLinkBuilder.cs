@@ -32,4 +32,10 @@ public sealed class AppLinkBuilder : IAppLinkBuilder
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
         return $"{baseUrl}/verify-email?token={Uri.EscapeDataString(rawToken)}";
     }
+
+    public string BuildOffboardingLink(string rawToken)
+    {
+        var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        return $"{baseUrl}/exit/{Uri.EscapeDataString(rawToken)}";
+    }
 }

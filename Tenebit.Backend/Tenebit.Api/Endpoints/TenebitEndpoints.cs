@@ -73,6 +73,7 @@ public static class TenebitEndpoints
         MapAssignments(api);
         MapOffboarding(api);
         MapPublicAssignments(api);
+        MapPublicOffboarding(api);
         MapPublicAssets(api);
         MapActivityLog(api);
         MapSubscription(api);
@@ -894,8 +895,18 @@ public static class TenebitEndpoints
             .WithTags("Offboarding")
             .WithOpenApi();
 
-        api.MapPost("/offboarding/{id:guid}/start", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
-                (await service.StartAsync(id, cancellationToken)).ToHttpResult())
+        api.MapPost("/offboarding/{id:guid}/start", async (Guid id, StartOffboardingCaseRequest? request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.StartAsync(id, request ?? new StartOffboardingCaseRequest(), cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/resend", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.ResendLinkAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/regenerate-link", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.RegenerateLinkAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Offboarding")
             .WithOpenApi();
 
@@ -988,6 +999,49 @@ public static class TenebitEndpoints
             .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
+    }
+
+    private static void MapPublicOffboarding(RouteGroupBuilder api)
+    {
+        api.MapGet("/public/offboarding/{token}", async (string token, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/public/offboarding/{token}/response", async (string token, SubmitPublicOffboardingResponseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.RecordEmployeeResponsesAsync(token, request, cancellationToken)).ToHttpResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/public/offboarding/{token}/items/{itemId:guid}/evidence", async (string token, Guid itemId, HttpRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+        {
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
+            }
+
+            var form = await request.ReadFormAsync(cancellationToken);
+            var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+            {
+                return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
+            }
+
+            await using var stream = file.OpenReadStream();
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, cancellationToken);
+
+            var result = await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, memory.ToArray(), cancellationToken);
+            return result.ToHttpResult();
+        })
+            .DisableAntiforgery()
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public offboarding");
     }
 
     private static void MapPublicAssets(RouteGroupBuilder api)

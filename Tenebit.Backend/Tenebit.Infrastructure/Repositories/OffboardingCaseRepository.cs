@@ -38,5 +38,10 @@ public sealed class OffboardingCaseRepository : IOffboardingCaseRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.PersonId == personId && !ClosedStatuses.Contains(x.Status), cancellationToken);
 
+    public async Task<IReadOnlyList<OffboardingCase>> ListWithPublicTokenAsync(CancellationToken cancellationToken) =>
+        await _db.OffboardingCases
+            .Where(x => x.PublicTokenHash != null && x.PublicTokenRevokedAt == null)
+            .ToListAsync(cancellationToken);
+
     public void Add(OffboardingCase offboardingCase) => _db.OffboardingCases.Add(offboardingCase);
 }

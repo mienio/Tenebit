@@ -31,6 +31,16 @@ public sealed record WaiveOffboardingItemRequest(string Reason);
 
 public sealed record CancelOffboardingCaseRequest(string Reason);
 
+public sealed record StartOffboardingCaseRequest(bool NotifyEmployee = true);
+
+public sealed record PublicOffboardingItemResponse(Guid Id, string Label, string? AssetTag, OffboardingItemStatus Status, string? EmployeeResponse, string? EmployeeComment, Guid? IssuePhotoEvidenceId);
+
+public sealed record PublicOffboardingResponse(string OrganizationName, DateTimeOffset ReturnDueDate, string? DefaultReturnLocation, string? Notes, IReadOnlyList<PublicOffboardingItemResponse> Items);
+
+public sealed record PublicOffboardingItemAnswer(Guid ItemId, string Response, string? Comment);
+
+public sealed record SubmitPublicOffboardingResponseRequest(IReadOnlyList<PublicOffboardingItemAnswer> Answers);
+
 public sealed record OffboardingItemResponse(
     Guid Id,
     OffboardingItemType Type,

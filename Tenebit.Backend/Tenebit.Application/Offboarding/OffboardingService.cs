@@ -1,17 +1,20 @@
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Common;
+using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
+using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.People;
 
 namespace Tenebit.Application.Offboarding;
 
-/// <summary>Tworzenie, uruchamianie i rozliczanie spraw offboardingowych (spec 4.5). Publiczny token i protokół
-/// PDF są poza zakresem — przyjdą w kolejnym zadaniu.</summary>
+/// <summary>Tworzenie, uruchamianie i rozliczanie spraw offboardingowych (spec 4.5), łącznie z publicznym
+/// kanałem dla odchodzącego pracownika (token, odpowiedzi, upload zdjęć — spec 4.6). Protokół PDF przyjdzie
+/// w kolejnym zadaniu.</summary>
 public sealed class OffboardingService
 {
     private static readonly AssignmentStatus[] OpenAssignmentStatuses =
@@ -32,12 +35,18 @@ public sealed class OffboardingService
     private readonly AssetReturnDispositionService _disposition;
     private readonly AssetInspectionService _inspectionService;
     private readonly IAssetInspectionRepository _inspections;
+    private readonly IOrganizationRepository _organizations;
+    private readonly IEmailSender _emailSender;
+    private readonly IAppLinkBuilder _linkBuilder;
+    private readonly IAssetEvidenceRepository _evidence;
+    private readonly AssetEvidenceService _evidenceService;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
         IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
         OffboardingScheduledActionsService scheduledActions, AssetReturnDispositionService disposition, AssetInspectionService inspectionService,
-        IAssetInspectionRepository inspections)
+        IAssetInspectionRepository inspections, IOrganizationRepository organizations, IEmailSender emailSender, IAppLinkBuilder linkBuilder,
+        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService)
     {
         _cases = cases;
         _items = items;
@@ -54,6 +63,11 @@ public sealed class OffboardingService
         _disposition = disposition;
         _inspectionService = inspectionService;
         _inspections = inspections;
+        _organizations = organizations;
+        _emailSender = emailSender;
+        _linkBuilder = linkBuilder;
+        _evidence = evidence;
+        _evidenceService = evidenceService;
     }
 
 
@@ -153,7 +167,7 @@ public sealed class OffboardingService
         }
     }
 
-    public async Task<Result<OffboardingCaseDetailsResponse>> StartAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result<OffboardingCaseDetailsResponse>> StartAsync(Guid id, StartOffboardingCaseRequest request, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
@@ -217,6 +231,13 @@ public sealed class OffboardingService
             person.StartOffboarding(offboardingCase.EmploymentEndsAt);
             _activity.Add(new ActivityLog(organizationId, "offboarding.person_marked_offboarding", "person", person.Id, _currentUser.Subject, person.FullName, now));
             _activity.Add(new ActivityLog(organizationId, "offboarding.started", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person.FullName, now));
+
+            // Spec 4.5 krok 8: wiadomość i publiczny token powstają tylko, gdy osoba ma e-mail i admin nie wyłączył
+            // powiadomienia przy starcie. Brak adresu nie blokuje uruchomienia sprawy.
+            if (request.NotifyEmployee && !string.IsNullOrWhiteSpace(person.Email))
+            {
+                await IssueTokenAndSendLinkAsync(offboardingCase, person, now, cancellationToken);
+            }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await BuildDetailsAsync(offboardingCase.Id, cancellationToken);
@@ -577,6 +598,186 @@ public sealed class OffboardingService
     }
 
     private static string CreateProtocolNumber(DateTimeOffset now) => $"OFF-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+
+    // --- Publiczny kanał pracownika (spec 4.6) ---
+
+    private async Task IssueTokenAndSendLinkAsync(OffboardingCase offboardingCase, Domain.People.Person person, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var organizationId = offboardingCase.OrganizationId;
+        var generated = PublicTokenService.Generate();
+        // Token żyje do terminu zwrotu + 30 dni bufora — daje czas na dokończenie odpowiedzi/uploadu zdjęć
+        // nawet jeśli fizyczny zwrot się opóźni; po tym czasie link wygasa samoczynnie bez ręcznej interwencji.
+        var expiresAt = offboardingCase.ReturnDueDate.AddDays(30);
+        offboardingCase.SetPublicToken(generated.TokenHash, expiresAt);
+
+        try
+        {
+            var link = _linkBuilder.BuildOffboardingLink(generated.RawToken);
+            var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+            var (subject, html) = EmailTemplates.OffboardingLink(organization?.Language, person.FirstName, offboardingCase.ReturnDueDate, link);
+            await _emailSender.SendAsync(person.Email, subject, html, cancellationToken);
+            _activity.Add(new ActivityLog(organizationId, "offboarding.link_sent", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person.FullName, now));
+        }
+        catch (Exception ex)
+        {
+            _activity.Add(new ActivityLog(organizationId, "offboarding.email_failed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, ex.Message, now));
+        }
+    }
+
+    public async Task<Result<bool>> ResendLinkAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<bool>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
+        if (person is null || string.IsNullOrWhiteSpace(person.Email))
+        {
+            return Result<bool>.Failure(Error.Validation("Osoba nie ma adresu e-mail — nie można wysłać linku."));
+        }
+
+        // PublicTokenService przechowuje wyłącznie hash (surowy token nigdy nie jest zapisywany) — dlatego
+        // "ponowne wysłanie z niezmienionym tokenem" nie jest technicznie odtwarzalne. Praktycznym i bezpiecznym
+        // odpowiednikiem jest wystawienie nowego tokenu (identyczny efekt końcowy: pracownik dostaje działający
+        // link), niezależnie czy poprzedni token istniał, wygasł, czy nigdy nie został wygenerowany.
+        var now = _clock.UtcNow;
+        await IssueTokenAndSendLinkAsync(offboardingCase, person, now, cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
+
+    public async Task<Result<bool>> RegenerateLinkAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<bool>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
+        if (person is null || string.IsNullOrWhiteSpace(person.Email))
+        {
+            return Result<bool>.Failure(Error.Validation("Osoba nie ma adresu e-mail — nie można wysłać linku."));
+        }
+
+        var now = _clock.UtcNow;
+        await IssueTokenAndSendLinkAsync(offboardingCase, person, now, cancellationToken);
+        _activity.Add(new ActivityLog(organizationId, "offboarding.link_regenerated", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person.FullName, now));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<bool>.Success(true);
+    }
+
+    /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów offboardingu. Zwraca zawsze ten sam
+    /// generyczny NotFound (bez ujawniania czy sprawa/organizacja istnieje) dla tokenu nieistniejącego, wygasłego
+    /// lub unieważnionego — spec sekcja 13.</summary>
+    private async Task<Result<OffboardingCase>> ResolveByTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        var now = _clock.UtcNow;
+        var offboardingCase = await _cases.ListWithPublicTokenAsync(cancellationToken);
+        // Repozytorium nie może przeszukiwać po hashu (token jest jednorazowy, porównanie musi być stałoczasowe
+        // per rekord) — pobieramy kandydatów i weryfikujemy każdego, tak jak inne mechanizmy oparte o PublicTokenService.
+        foreach (var candidate in offboardingCase)
+        {
+            if (PublicTokenService.Verify(token, candidate.PublicTokenHash, candidate.PublicTokenExpiresAt ?? DateTimeOffset.MinValue, candidate.PublicTokenRevokedAt, now))
+            {
+                return Result<OffboardingCase>.Success(candidate);
+            }
+        }
+
+        return Result<OffboardingCase>.Failure(Error.NotFound("Link jest nieprawidłowy lub wygasł."));
+    }
+
+    public async Task<Result<PublicOffboardingResponse>> GetPublicAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicOffboardingResponse>.Failure(resolved.Error!);
+
+        return Result<PublicOffboardingResponse>.Success(await BuildPublicResponseAsync(resolved.Value!, cancellationToken));
+    }
+
+    private async Task<PublicOffboardingResponse> BuildPublicResponseAsync(OffboardingCase offboardingCase, CancellationToken cancellationToken)
+    {
+        var organization = await _organizations.GetAsync(offboardingCase.OrganizationId, cancellationToken);
+        var items = await _items.ListByCaseAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
+        var assetItems = items.Where(x => x.Type == OffboardingItemType.AssetReturn).ToList();
+
+        var assetTags = new Dictionary<Guid, string>();
+        var issuePhotos = new Dictionary<Guid, Guid>();
+        foreach (var item in assetItems.Where(x => x.AssetId is not null))
+        {
+            var asset = await _assets.GetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken);
+            if (asset is not null) assetTags[item.Id] = asset.AssetTag;
+
+            var evidence = (await _evidence.ListByAssetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken))
+                .Where(x => x.Phase == EvidencePhase.Issue)
+                .OrderByDescending(x => x.UploadedAt)
+                .FirstOrDefault();
+            if (evidence is not null) issuePhotos[item.Id] = evidence.Id;
+        }
+
+        var itemResponses = assetItems.Select(item => new PublicOffboardingItemResponse(
+            item.Id, item.Label, assetTags.GetValueOrDefault(item.Id), item.Status, item.EmployeeResponse, item.EmployeeComment,
+            issuePhotos.GetValueOrDefault(item.Id))).ToList();
+
+        return new PublicOffboardingResponse(organization?.Name ?? string.Empty, offboardingCase.ReturnDueDate,
+            offboardingCase.DefaultReturnLocation, offboardingCase.Notes, itemResponses);
+    }
+
+    public async Task<Result<PublicOffboardingResponse>> RecordEmployeeResponsesAsync(string token, SubmitPublicOffboardingResponseRequest request, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicOffboardingResponse>.Failure(resolved.Error!);
+
+        var offboardingCase = resolved.Value!;
+        var now = _clock.UtcNow;
+        var items = await _items.ListByCaseAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
+        var itemsById = items.ToDictionary(x => x.Id);
+
+        foreach (var answer in request.Answers)
+        {
+            if (!itemsById.TryGetValue(answer.ItemId, out var item)) continue;
+
+            try
+            {
+                // Odpowiedź pracownika NIGDY nie zmienia statusu aktywa — wyłącznie zapisuje deklarację do
+                // ręcznego zatwierdzenia przez operatora (spec 2.3/4.6). Pozycja już rozliczona (IsResolved)
+                // rzuca wyjątek domenowy — pomijamy ją, żeby jedna nieaktualna odpowiedź nie blokowała reszty.
+                item.RecordEmployeeResponse(answer.Response, answer.Comment);
+                _activity.Add(new ActivityLog(offboardingCase.OrganizationId, "offboarding.employee_responded", "offboarding_item", item.Id, "employee", answer.Response, now));
+            }
+            catch (DomainException)
+            {
+                // Pozycja już rozliczona — ignorujemy tę odpowiedź, reszta żądania jest przetwarzana dalej.
+            }
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<PublicOffboardingResponse>.Success(await BuildPublicResponseAsync(offboardingCase, cancellationToken));
+    }
+
+    public async Task<Result<Guid>> UploadPublicEvidenceAsync(string token, Guid itemId, string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<Guid>.Failure(resolved.Error!);
+
+        var offboardingCase = resolved.Value!;
+        var item = await _items.GetAsync(offboardingCase.OrganizationId, offboardingCase.Id, itemId, cancellationToken);
+        if (item is null || item.Type != OffboardingItemType.AssetReturn || item.AssetId is null)
+        {
+            return Result<Guid>.Failure(Error.NotFound("Pozycja nie istnieje."));
+        }
+
+        var uploadResult = await _evidenceService.UploadViaPublicTokenAsync(offboardingCase.OrganizationId, item.AssetId.Value, item.Id, fileName, declaredContentType, content, cancellationToken);
+        if (uploadResult.IsFailure) return Result<Guid>.Failure(uploadResult.Error!);
+
+        return Result<Guid>.Success(uploadResult.Value!.Id);
+    }
 
     private static OffboardingCaseResponse Map(OffboardingCase offboardingCase, IReadOnlyDictionary<Guid, string> personNames) =>
         new(

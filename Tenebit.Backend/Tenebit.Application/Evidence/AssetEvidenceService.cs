@@ -59,26 +59,8 @@ public sealed class AssetEvidenceService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
         if (access.IsFailure) return Result<AssetEvidenceResponse>.Failure(access.Error!);
 
-        if (!ImageSignature.IsAllowedContentType(declaredContentType))
-        {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Dozwolone są tylko zdjęcia w formacie JPEG, PNG lub WebP."));
-        }
-
-        if (content.Length == 0)
-        {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Zdjęcie jest puste."));
-        }
-
-        if (content.LongLength > MaxSizeBytes)
-        {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Zdjęcie może mieć maksymalnie 5 MB."));
-        }
-
-        var format = ImageSignature.Detect(content);
-        if (format == DetectedImageFormat.Unknown)
-        {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Plik nie jest prawidłowym obrazem JPEG/PNG/WebP."));
-        }
+        var validation = ValidateAndDetectFormat(declaredContentType, content);
+        if (validation.IsFailure) return Result<AssetEvidenceResponse>.Failure(validation.Error!);
 
         var organizationId = _currentUser.OrganizationId;
         var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
@@ -98,7 +80,7 @@ public sealed class AssetEvidenceService
 
         try
         {
-            var sanitized = _sanitizer.StripMetadata(format, content);
+            var sanitized = _sanitizer.StripMetadata(validation.Value, content);
             var item = new AssetEvidence(organizationId, assetId, request.AssignmentId, request.Phase, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, request.Caption, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser, _clock.UtcNow);
             _evidence.Add(item);
             _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, _currentUser.Subject, item.FileName, _clock.UtcNow));
@@ -109,6 +91,62 @@ public sealed class AssetEvidenceService
         {
             return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    /// <summary>Upload zdjęcia przez publiczny token offboardingu (spec 4.6) — bez AccessPolicy/ICurrentUser,
+    /// z tą samą walidacją formatu/rozmiaru/limitu i sanityzacją EXIF/GPS co <see cref="UploadAsync"/>.
+    /// Organizacja/aktor pochodzą z już zweryfikowanego tokenu, nie z zalogowanego użytkownika.</summary>
+    public async Task<Result<AssetEvidenceResponse>> UploadViaPublicTokenAsync(Guid organizationId, Guid assetId, Guid offboardingItemId,
+        string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
+    {
+        var validation = ValidateAndDetectFormat(declaredContentType, content);
+        if (validation.IsFailure) return Result<AssetEvidenceResponse>.Failure(validation.Error!);
+
+        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
+        if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+        var existingCount = await _evidence.CountAsync(organizationId, assetId, EvidencePhase.Offboarding, cancellationToken);
+        if (existingCount >= MaxPerAssetAndPhase)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+        }
+
+        try
+        {
+            var sanitized = _sanitizer.StripMetadata(validation.Value, content);
+            var item = new AssetEvidence(organizationId, assetId, null, EvidencePhase.Offboarding, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, null, "employee", EvidenceUploadSource.PublicToken, _clock.UtcNow, offboardingItemId);
+            _evidence.Add(item);
+            _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, "public-link", item.FileName, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result<AssetEvidenceResponse>.Success(Map(item));
+        }
+        catch (DomainException ex)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    private static Result<DetectedImageFormat> ValidateAndDetectFormat(string? declaredContentType, byte[] content)
+    {
+        if (!ImageSignature.IsAllowedContentType(declaredContentType))
+        {
+            return Result<DetectedImageFormat>.Failure(Error.Validation("Dozwolone są tylko zdjęcia w formacie JPEG, PNG lub WebP."));
+        }
+
+        if (content.Length == 0)
+        {
+            return Result<DetectedImageFormat>.Failure(Error.Validation("Zdjęcie jest puste."));
+        }
+
+        if (content.LongLength > MaxSizeBytes)
+        {
+            return Result<DetectedImageFormat>.Failure(Error.Validation("Zdjęcie może mieć maksymalnie 5 MB."));
+        }
+
+        var format = ImageSignature.Detect(content);
+        return format == DetectedImageFormat.Unknown
+            ? Result<DetectedImageFormat>.Failure(Error.Validation("Plik nie jest prawidłowym obrazem JPEG/PNG/WebP."))
+            : Result<DetectedImageFormat>.Success(format);
     }
 
     public async Task<Result<AssetEvidenceResponse>> LockAsync(Guid id, CancellationToken cancellationToken)

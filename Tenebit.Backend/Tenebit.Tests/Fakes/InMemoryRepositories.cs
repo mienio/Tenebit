@@ -187,6 +187,7 @@ public sealed class InMemorySentAlertRepository : ISentAlertRepository
 public sealed class FakeEmailSender : IEmailSender
 {
     public List<(string To, string Subject)> Sent { get; } = [];
+    public List<string> Bodies { get; } = [];
     public HashSet<string> FailFor { get; } = [];
     public int AttemptCount { get; private set; }
 
@@ -195,6 +196,7 @@ public sealed class FakeEmailSender : IEmailSender
         AttemptCount++;
         if (FailFor.Contains(to)) throw new InvalidOperationException("Simulated SMTP failure");
         Sent.Add((to, subject));
+        Bodies.Add(htmlBody);
         return Task.CompletedTask;
     }
 }
@@ -205,6 +207,7 @@ public sealed class FakeAppLinkBuilder : IAppLinkBuilder
     public string BuildAssetScanLink(Guid organizationId, Guid assetId) => $"https://test/scan/{organizationId}/{assetId}";
     public string BuildPasswordResetLink(string rawToken) => $"https://test/reset-password?token={rawToken}";
     public string BuildEmailVerificationLink(string rawToken) => $"https://test/verify-email?token={rawToken}";
+    public string BuildOffboardingLink(string rawToken) => $"https://test/exit/{rawToken}";
 }
 
 public sealed class FakeQrCodeGenerator : IQrCodeGenerator

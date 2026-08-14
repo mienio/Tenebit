@@ -180,6 +180,53 @@ public static class EmailTemplates
         return $"<p><strong>{heading}</strong></p><ul>{items}</ul>";
     }
 
+    public static (string Subject, string Html) OffboardingLink(
+        string? language,
+        string firstName,
+        DateTimeOffset returnDueDate,
+        string link)
+    {
+        var lang = Normalize(language);
+        var encodedFirstName = WebUtility.HtmlEncode(firstName);
+        var dueDate = returnDueDate.ToString("yyyy-MM-dd");
+
+        return lang switch
+        {
+            "en" => ("Returning company equipment", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>Hi {encodedFirstName}!</h2>
+                    <p>Please review the company equipment and licenses associated with you. Return due date: <strong>{dueDate}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Open the return checklist</a></p>
+                    <p style="color:#687385;font-size:13px;">If the button doesn't work, copy this link into your browser: {link}</p>
+                </div>
+                """),
+            "es" => ("Devolución del equipo de la empresa", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>¡Hola, {encodedFirstName}!</h2>
+                    <p>Por favor, revisa el equipo y las licencias de la empresa asociadas a ti. Fecha límite de devolución: <strong>{dueDate}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Abrir la lista de devolución</a></p>
+                    <p style="color:#687385;font-size:13px;">Si el botón no funciona, copia este enlace en tu navegador: {link}</p>
+                </div>
+                """),
+            "de" => ("Rückgabe der Firmenausrüstung", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>Hallo {encodedFirstName}!</h2>
+                    <p>Bitte überprüfen Sie die Ihnen zugeordnete Firmenausrüstung und Lizenzen. Rückgabetermin: <strong>{dueDate}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Rückgabeliste öffnen</a></p>
+                    <p style="color:#687385;font-size:13px;">Falls die Schaltfläche nicht funktioniert, kopieren Sie diesen Link in Ihren Browser: {link}</p>
+                </div>
+                """),
+            _ => ("Zwrot sprzętu firmowego", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>Witaj, {encodedFirstName}!</h2>
+                    <p>Sprawdź proszę listę sprzętu firmowego i licencji przypisanych do Ciebie. Termin zwrotu: <strong>{dueDate}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Otwórz listę zwrotu</a></p>
+                    <p style="color:#687385;font-size:13px;">Jeśli przycisk nie działa, skopiuj ten link do przeglądarki: {link}</p>
+                </div>
+                """),
+        };
+    }
+
     public static (string Subject, string Html) ProcedureUnsignedAlert(
         string? language,
         string? procedureTitle,

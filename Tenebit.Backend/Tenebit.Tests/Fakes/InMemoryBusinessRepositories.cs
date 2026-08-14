@@ -231,6 +231,9 @@ public sealed class InMemoryOffboardingCaseRepository : IOffboardingCaseReposito
     public Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
         Task.FromResult(Cases.FirstOrDefault(x => x.OrganizationId == organizationId && x.PersonId == personId && !ClosedStatuses.Contains(x.Status)));
 
+    public Task<IReadOnlyList<OffboardingCase>> ListWithPublicTokenAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OffboardingCase>>(Cases.Where(x => x.PublicTokenHash != null && x.PublicTokenRevokedAt == null).ToList());
+
     public void Add(OffboardingCase offboardingCase) => Cases.Add(offboardingCase);
 }
 
