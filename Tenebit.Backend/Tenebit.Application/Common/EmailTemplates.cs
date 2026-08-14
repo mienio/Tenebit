@@ -227,6 +227,53 @@ public static class EmailTemplates
         };
     }
 
+    public static (string Subject, string Html) AssetAuditLink(
+        string? language,
+        string firstName,
+        DateTimeOffset dueDate,
+        string link)
+    {
+        var lang = Normalize(language);
+        var encodedFirstName = WebUtility.HtmlEncode(firstName);
+        var due = dueDate.ToString("yyyy-MM-dd");
+
+        return lang switch
+        {
+            "en" => ("Please confirm your assigned equipment", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>Hi {encodedFirstName}!</h2>
+                    <p>Please confirm the company equipment currently assigned to you. Due date: <strong>{due}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Open the confirmation form</a></p>
+                    <p style="color:#687385;font-size:13px;">If the button doesn't work, copy this link into your browser: {link}</p>
+                </div>
+                """),
+            "es" => ("Confirma tu equipo asignado", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>¡Hola, {encodedFirstName}!</h2>
+                    <p>Por favor, confirma el equipo de la empresa actualmente asignado a ti. Fecha límite: <strong>{due}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Abrir el formulario de confirmación</a></p>
+                    <p style="color:#687385;font-size:13px;">Si el botón no funciona, copia este enlace en tu navegador: {link}</p>
+                </div>
+                """),
+            "de" => ("Bitte bestätigen Sie Ihre zugewiesene Ausrüstung", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>Hallo {encodedFirstName}!</h2>
+                    <p>Bitte bestätigen Sie die Ihnen aktuell zugewiesene Firmenausrüstung. Termin: <strong>{due}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Bestätigungsformular öffnen</a></p>
+                    <p style="color:#687385;font-size:13px;">Falls die Schaltfläche nicht funktioniert, kopieren Sie diesen Link in Ihren Browser: {link}</p>
+                </div>
+                """),
+            _ => ("Potwierdź przypisany sprzęt", $"""
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                    <h2>Witaj, {encodedFirstName}!</h2>
+                    <p>Potwierdź proszę sprzęt firmowy aktualnie przypisany do Ciebie. Termin: <strong>{due}</strong></p>
+                    <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;">Otwórz formularz potwierdzenia</a></p>
+                    <p style="color:#687385;font-size:13px;">Jeśli przycisk nie działa, skopiuj ten link do przeglądarki: {link}</p>
+                </div>
+                """),
+        };
+    }
+
     public static (string Subject, string Html) ProcedureUnsignedAlert(
         string? language,
         string? procedureTitle,

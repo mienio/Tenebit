@@ -115,4 +115,24 @@ public sealed class AssetAuditCampaign
 
         DueDate = newDueDate;
     }
+
+    /// <summary>Edycja nazwy/opisu/terminu/zakresu dozwolona wyłącznie w Draft — po starcie zakres jest zablokowany
+    /// (sekcja 5.4), a wydłużenie terminu po starcie idzie przez <see cref="ExtendDueDate"/>.</summary>
+    public void UpdateDraft(string name, string? description, DateTimeOffset dueDate, string? scopeJson)
+    {
+        if (Status != AssetAuditCampaignStatus.Draft)
+        {
+            throw new DomainException("Kampanię można edytować tylko w statusie roboczym.");
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new DomainException("Nazwa kampanii jest wymagana.");
+        }
+
+        Name = name.Trim();
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        DueDate = dueDate;
+        ScopeJson = scopeJson;
+    }
 }

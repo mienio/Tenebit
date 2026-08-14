@@ -3,6 +3,7 @@ using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
+using Tenebit.Domain.Audits;
 using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Licenses;
@@ -251,6 +252,48 @@ public sealed class InMemoryOffboardingItemRepository : IOffboardingItemReposito
         Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId && x.Id == itemId));
 
     public void Add(OffboardingItem item) => Items.Add(item);
+}
+
+public sealed class InMemoryAssetAuditCampaignRepository : IAssetAuditCampaignRepository
+{
+    public List<AssetAuditCampaign> Campaigns { get; } = [];
+
+    public Task<(IReadOnlyList<AssetAuditCampaign> Items, int Total)> ListPagedAsync(Guid organizationId, AssetAuditCampaignStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Campaigns.Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value)).ToList();
+        return Task.FromResult<(IReadOnlyList<AssetAuditCampaign>, int)>((rows, rows.Count));
+    }
+
+    public Task<AssetAuditCampaign?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Campaigns.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public void Add(AssetAuditCampaign campaign) => Campaigns.Add(campaign);
+}
+
+public sealed class InMemoryAssetAuditParticipantRepository : IAssetAuditParticipantRepository
+{
+    public List<AssetAuditParticipant> Participants { get; } = [];
+
+    public Task<IReadOnlyList<AssetAuditParticipant>> ListByCampaignAsync(Guid organizationId, Guid campaignId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetAuditParticipant>>(Participants.Where(x => x.OrganizationId == organizationId && x.CampaignId == campaignId).ToList());
+
+    public Task<AssetAuditParticipant?> GetAsync(Guid organizationId, Guid campaignId, Guid participantId, CancellationToken cancellationToken) =>
+        Task.FromResult(Participants.FirstOrDefault(x => x.OrganizationId == organizationId && x.CampaignId == campaignId && x.Id == participantId));
+
+    public void Add(AssetAuditParticipant participant) => Participants.Add(participant);
+}
+
+public sealed class InMemoryAssetAuditItemRepository : IAssetAuditItemRepository
+{
+    public List<AssetAuditItem> Items { get; } = [];
+
+    public Task<IReadOnlyList<AssetAuditItem>> ListByCampaignAsync(Guid organizationId, Guid campaignId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetAuditItem>>(Items.Where(x => x.OrganizationId == organizationId && x.CampaignId == campaignId).ToList());
+
+    public Task<IReadOnlyList<AssetAuditItem>> ListByParticipantAsync(Guid organizationId, Guid participantId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetAuditItem>>(Items.Where(x => x.OrganizationId == organizationId && x.ParticipantId == participantId).ToList());
+
+    public void Add(AssetAuditItem item) => Items.Add(item);
 }
 
 public sealed class FakePaymentGateway : IPaymentGateway

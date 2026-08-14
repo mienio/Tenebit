@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Audit;
+using Tenebit.Application.Audits;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Dashboard;
 using Tenebit.Application.Evidence;
@@ -51,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<EvidenceRetentionService>();
         services.AddScoped<OffboardingScheduledActionsService>();
         services.AddScoped<OffboardingService>();
+        services.AddScoped<AssetAuditCampaignService>();
         return services;
     }
 }

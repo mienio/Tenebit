@@ -2,6 +2,7 @@ using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
+using Tenebit.Domain.Audits;
 using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
@@ -225,6 +226,27 @@ public interface IOffboardingItemRepository
     Task<IReadOnlyList<OffboardingItem>> ListByCaseAsync(Guid organizationId, Guid offboardingCaseId, CancellationToken cancellationToken);
     Task<OffboardingItem?> GetAsync(Guid organizationId, Guid offboardingCaseId, Guid itemId, CancellationToken cancellationToken);
     void Add(OffboardingItem item);
+}
+
+public interface IAssetAuditCampaignRepository
+{
+    Task<(IReadOnlyList<AssetAuditCampaign> Items, int Total)> ListPagedAsync(Guid organizationId, AssetAuditCampaignStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    Task<AssetAuditCampaign?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    void Add(AssetAuditCampaign campaign);
+}
+
+public interface IAssetAuditParticipantRepository
+{
+    Task<IReadOnlyList<AssetAuditParticipant>> ListByCampaignAsync(Guid organizationId, Guid campaignId, CancellationToken cancellationToken);
+    Task<AssetAuditParticipant?> GetAsync(Guid organizationId, Guid campaignId, Guid participantId, CancellationToken cancellationToken);
+    void Add(AssetAuditParticipant participant);
+}
+
+public interface IAssetAuditItemRepository
+{
+    Task<IReadOnlyList<AssetAuditItem>> ListByCampaignAsync(Guid organizationId, Guid campaignId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AssetAuditItem>> ListByParticipantAsync(Guid organizationId, Guid participantId, CancellationToken cancellationToken);
+    void Add(AssetAuditItem item);
 }
 
 public interface IAssetEvidenceRepository

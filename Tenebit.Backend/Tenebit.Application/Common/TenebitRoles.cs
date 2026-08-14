@@ -39,6 +39,8 @@ public static class TenebitRoles
     public static readonly string[] ProcedureViewers = [Owner, Admin, Hr, Manager, AssetOperator, Auditor, ProcedureManager];
     public static readonly string[] LicenseViewers = [Owner, Admin, LicenseManager, Finance, Auditor];
     public static readonly string[] OffboardingManagers = [Owner, Admin, Hr, AssetOperator];
+    public static readonly string[] AssetAuditViewers = [Owner, Admin, AssetOperator, Auditor];
+    public static readonly string[] AssetAuditManagers = [Owner, Admin, AssetOperator];
 }
 
 public sealed record RoleInfo(string Key, string Label, string Description);

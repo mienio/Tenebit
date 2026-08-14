@@ -38,4 +38,10 @@ public sealed class AppLinkBuilder : IAppLinkBuilder
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
         return $"{baseUrl}/exit/{Uri.EscapeDataString(rawToken)}";
     }
+
+    public string BuildAssetAuditLink(string rawToken)
+    {
+        var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        return $"{baseUrl}/audit/{Uri.EscapeDataString(rawToken)}";
+    }
 }

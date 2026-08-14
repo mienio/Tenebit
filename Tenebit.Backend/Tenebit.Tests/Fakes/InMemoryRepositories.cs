@@ -208,6 +208,7 @@ public sealed class FakeAppLinkBuilder : IAppLinkBuilder
     public string BuildPasswordResetLink(string rawToken) => $"https://test/reset-password?token={rawToken}";
     public string BuildEmailVerificationLink(string rawToken) => $"https://test/verify-email?token={rawToken}";
     public string BuildOffboardingLink(string rawToken) => $"https://test/exit/{rawToken}";
+    public string BuildAssetAuditLink(string rawToken) => $"https://test/audit/{rawToken}";
 }
 
 public sealed class FakeQrCodeGenerator : IQrCodeGenerator

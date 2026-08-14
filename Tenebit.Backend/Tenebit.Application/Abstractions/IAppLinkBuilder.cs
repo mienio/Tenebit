@@ -7,4 +7,5 @@ public interface IAppLinkBuilder
     string BuildPasswordResetLink(string rawToken);
     string BuildEmailVerificationLink(string rawToken);
     string BuildOffboardingLink(string rawToken);
+    string BuildAssetAuditLink(string rawToken);
 }

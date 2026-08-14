@@ -8,6 +8,8 @@ using Tenebit.Application.Abstractions;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Audit;
+using Tenebit.Application.Audits;
+using Tenebit.Domain.Audits;
 using Tenebit.Application.Dashboard;
 using Tenebit.Application.Evidence;
 using Tenebit.Application.Identity;
@@ -72,6 +74,7 @@ public static class TenebitEndpoints
         MapProcedures(api);
         MapAssignments(api);
         MapOffboarding(api);
+        MapAssetAudits(api);
         MapPublicAssignments(api);
         MapPublicOffboarding(api);
         MapPublicAssets(api);
@@ -963,6 +966,39 @@ public static class TenebitEndpoints
                 : Results.File(result.Value, "application/pdf", $"protokol-offboarding-{id}.pdf");
         })
             .WithTags("Offboarding")
+            .WithOpenApi();
+    }
+
+    private static void MapAssetAudits(RouteGroupBuilder api)
+    {
+        api.MapGet("/asset-audits", async (AssetAuditCampaignStatus? status, int? page, int? pageSize, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapGet("/asset-audits/{id:guid}", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits", async (CreateAssetAuditCampaignRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/asset-audits/{response.Campaign.Id}"))
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPut("/asset-audits/{id:guid}", async (Guid id, UpdateAssetAuditCampaignRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/preview", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.PreviewAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/asset-audits/{id:guid}/start", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.StartAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Asset audits")
             .WithOpenApi();
     }
 
