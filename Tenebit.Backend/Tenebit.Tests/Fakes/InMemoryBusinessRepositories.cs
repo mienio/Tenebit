@@ -281,6 +281,7 @@ public sealed class FakePaymentGateway : IPaymentGateway
 public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator
 {
     public byte[] GenerateHandoverProtocol(ProtocolPdfModel model) => [1, 2, 3];
+    public byte[] GenerateOffboardingProtocol(OffboardingProtocolPdfModel model) => [1, 2, 3];
 }
 
 public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository

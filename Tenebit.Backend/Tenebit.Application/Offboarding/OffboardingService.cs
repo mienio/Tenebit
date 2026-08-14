@@ -40,13 +40,14 @@ public sealed class OffboardingService
     private readonly IAppLinkBuilder _linkBuilder;
     private readonly IAssetEvidenceRepository _evidence;
     private readonly AssetEvidenceService _evidenceService;
+    private readonly IPdfProtocolGenerator _pdfGenerator;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
         IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
         OffboardingScheduledActionsService scheduledActions, AssetReturnDispositionService disposition, AssetInspectionService inspectionService,
         IAssetInspectionRepository inspections, IOrganizationRepository organizations, IEmailSender emailSender, IAppLinkBuilder linkBuilder,
-        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService)
+        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator)
     {
         _cases = cases;
         _items = items;
@@ -68,6 +69,7 @@ public sealed class OffboardingService
         _linkBuilder = linkBuilder;
         _evidence = evidence;
         _evidenceService = evidenceService;
+        _pdfGenerator = pdfGenerator;
     }
 
 
@@ -515,9 +517,16 @@ public sealed class OffboardingService
         try
         {
             var now = _clock.UtcNow;
+            var alreadyCompleted = offboardingCase.Status == OffboardingCaseStatus.Completed;
             var protocolNumber = offboardingCase.FinalProtocolNumber ?? CreateProtocolNumber(now);
             offboardingCase.Complete(now, _currentUser.Subject, protocolNumber);
-            _activity.Add(new ActivityLog(organizationId, "offboarding.completed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, protocolNumber, now));
+
+            // Complete(...) jest no-op na już zakończonej sprawie (domena) — analogicznie nie duplikujemy wpisu
+            // ActivityLog przy powtórnym wywołaniu, żeby dziennik pozostał idempotentny (spec 4.9/4.12).
+            if (!alreadyCompleted)
+            {
+                _activity.Add(new ActivityLog(organizationId, "offboarding.completed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, protocolNumber, now));
+            }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await BuildDetailsAsync(id, cancellationToken);
@@ -526,6 +535,97 @@ public sealed class OffboardingService
         {
             return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    public async Task<Result<byte[]>> GetProtocolPdfAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<byte[]>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<byte[]>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        if (offboardingCase.Status != OffboardingCaseStatus.Completed || string.IsNullOrWhiteSpace(offboardingCase.FinalProtocolNumber))
+        {
+            return Result<byte[]>.Failure(Error.Validation("Protokół jest dostępny dopiero po zamknięciu sprawy."));
+        }
+
+        // Budowany na bieżąco z aktualnych (już niezmiennych po zamknięciu) danych sprawy — brak cache'u w bazie,
+        // więc wielokrotne pobranie daje identyczną zawartość biznesową (spec 4.12).
+        var model = await BuildProtocolModelAsync(offboardingCase, cancellationToken);
+        return Result<byte[]>.Success(_pdfGenerator.GenerateOffboardingProtocol(model));
+    }
+
+    private async Task<OffboardingProtocolPdfModel> BuildProtocolModelAsync(OffboardingCase offboardingCase, CancellationToken cancellationToken)
+    {
+        var organizationId = offboardingCase.OrganizationId;
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
+        var items = await _items.ListByCaseAsync(organizationId, offboardingCase.Id, cancellationToken);
+
+        var assetItems = items.Where(x => x.Type == OffboardingItemType.AssetReturn).ToList();
+        var licenseItems = items.Where(x => x.Type == OffboardingItemType.LicenseRelease).ToList();
+
+        var assetRows = new List<OffboardingProtocolAssetRow>();
+        var photos = new List<OffboardingProtocolPhoto>();
+        foreach (var item in assetItems)
+        {
+            var asset = item.AssetId.HasValue ? await _assets.GetAsync(organizationId, item.AssetId.Value, cancellationToken) : null;
+            assetRows.Add(new OffboardingProtocolAssetRow(asset?.Name ?? item.Label, asset?.AssetTag ?? "—", item.Status.ToString(),
+                item.ResolutionNotes, item.CompletedBy, item.CompletedAt));
+
+            if (item.AssetId.HasValue)
+            {
+                var evidenceForAsset = await _evidence.ListByAssetAsync(organizationId, item.AssetId.Value, cancellationToken);
+                photos.AddRange(evidenceForAsset
+                    .Where(e => e.OffboardingItemId == item.Id && e.Content.Length > 0)
+                    .Select(e => new OffboardingProtocolPhoto(e.FileName, e.ContentType, e.Content, e.Sha256)));
+            }
+        }
+
+        var licenseRows = new List<OffboardingProtocolLicenseRow>();
+        foreach (var item in licenseItems.Where(x => x.Status == OffboardingItemStatus.Released))
+        {
+            var license = item.LicenseId.HasValue ? await _licenses.GetAsync(organizationId, item.LicenseId.Value, cancellationToken) : null;
+            licenseRows.Add(new OffboardingProtocolLicenseRow(license?.Name ?? item.Label, item.CompletedAt, item.CompletedBy));
+        }
+
+        var exceptionStatuses = new[] { OffboardingItemStatus.Missing, OffboardingItemStatus.Damaged, OffboardingItemStatus.Retained, OffboardingItemStatus.Waived };
+        var exceptions = items
+            .Where(x => exceptionStatuses.Contains(x.Status))
+            .Select(x => new OffboardingProtocolExceptionRow(x.Label, x.Status.ToString(), x.ResolutionNotes, ResolveActorKind(x), x.CompletedAt))
+            .ToList();
+
+        var requiredItems = items.Where(x => x.Required).ToList();
+        var hasExceptions = requiredItems.Any(x => exceptionStatuses.Contains(x.Status));
+        var outcome = hasExceptions ? "Rozliczony z wyjątkami" : "Rozliczony";
+
+        return new OffboardingProtocolPdfModel(
+            organization?.Name ?? "Tenebit",
+            organization?.LogoUrl,
+            organization?.Country ?? "PL",
+            offboardingCase.FinalProtocolNumber ?? string.Empty,
+            person?.FullName ?? "—",
+            offboardingCase.StartedAt,
+            offboardingCase.ReturnDueDate,
+            offboardingCase.CompletedAt ?? offboardingCase.ReturnDueDate,
+            assetRows,
+            licenseRows,
+            exceptions,
+            photos,
+            outcome,
+            offboardingCase.Notes);
+    }
+
+    /// <summary>Kto rozstrzygnął pozycję — jeśli sam pracownik zgłosił odpowiedź (EmployeeResponse) i nikt inny
+    /// jej nie nadpisał, uznajemy rozstrzygnięcie za pochodzące od pracownika; "system" jako CompletedBy oznacza
+    /// automatyzację; w pozostałych przypadkach rozstrzygnął administrator/operator.</summary>
+    private static string ResolveActorKind(OffboardingItem item)
+    {
+        if (item.CompletedBy == "system") return "automatyzacja";
+        if (!string.IsNullOrWhiteSpace(item.EmployeeResponse) && string.IsNullOrWhiteSpace(item.ResolutionNotes)) return "pracownik";
+        return item.CompletedBy ?? "administrator";
     }
 
     /// <summary>Anuluje sprawę i — dla nieodebranych pozycji AssetReturn — przywraca aktywo do statusu Assigned

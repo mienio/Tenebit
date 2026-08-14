@@ -37,7 +37,7 @@ public class OffboardingServiceTests
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, new FakeClock(), unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            organizations, emailSender, linkBuilder, evidence, evidenceService);
+            organizations, emailSender, linkBuilder, evidence, evidenceService, new FakePdfProtocolGenerator());
 
         return (service, currentUser, cases, items, people, assets, assignments, licenses, activity, categories, inspections, emailSender);
     }
@@ -336,6 +336,56 @@ public class OffboardingServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(OffboardingItemStatus.Waived, result.Value!.Items.Single(x => x.Id == item.Id).Status);
         Assert.Contains(activity.Logs, x => x.Action == "offboarding.item_waived");
+    }
+
+    [Fact]
+    public async Task CompleteAsync_IsIdempotent_DoesNotGenerateSecondProtocolNumber()
+    {
+        var (service, user, _, _, people, assets, _, _, activity, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(3), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, new StartOffboardingCaseRequest(), CancellationToken.None);
+        var item = started.Value!.Items.Single();
+        await service.WaiveItemAsync(created.Value.Case.Id, item.Id, new WaiveOffboardingItemRequest("Nie odzyskane"), CancellationToken.None);
+        await service.ExecuteScheduledActionsAsync(created.Value.Case.Id, CancellationToken.None);
+
+        var first = await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error?.Message);
+        var firstProtocolNumber = first.Value!.Case.FinalProtocolNumber;
+        Assert.False(string.IsNullOrWhiteSpace(firstProtocolNumber));
+
+        var second = await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(firstProtocolNumber, second.Value!.Case.FinalProtocolNumber);
+        Assert.Single(activity.Logs, x => x.Action == "offboarding.completed");
+    }
+
+    [Fact]
+    public async Task GetProtocolPdfAsync_FailsBeforeCompletion_SucceedsAfter_AndIsStableAcrossCalls()
+    {
+        var (service, user, _, _, people, assets, _, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(3), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, new StartOffboardingCaseRequest(), CancellationToken.None);
+        var item = started.Value!.Items.Single();
+
+        var beforeCompletion = await service.GetProtocolPdfAsync(created.Value.Case.Id, CancellationToken.None);
+        Assert.True(beforeCompletion.IsFailure);
+
+        await service.WaiveItemAsync(created.Value.Case.Id, item.Id, new WaiveOffboardingItemRequest("Nie odzyskane"), CancellationToken.None);
+        await service.ExecuteScheduledActionsAsync(created.Value.Case.Id, CancellationToken.None);
+        await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
+
+        var firstPdf = await service.GetProtocolPdfAsync(created.Value.Case.Id, CancellationToken.None);
+        var secondPdf = await service.GetProtocolPdfAsync(created.Value.Case.Id, CancellationToken.None);
+
+        Assert.True(firstPdf.IsSuccess);
+        Assert.True(secondPdf.IsSuccess);
+        Assert.Equal(firstPdf.Value, secondPdf.Value);
     }
 
     [Fact]

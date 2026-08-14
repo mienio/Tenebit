@@ -954,6 +954,16 @@ public static class TenebitEndpoints
                 (await service.RestoreEmploymentAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Offboarding")
             .WithOpenApi();
+
+        api.MapGet("/offboarding/{id:guid}/protocol", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetProtocolPdfAsync(id, cancellationToken);
+            return result.IsFailure || result.Value is null
+                ? result.ToHttpResult()
+                : Results.File(result.Value, "application/pdf", $"protokol-offboarding-{id}.pdf");
+        })
+            .WithTags("Offboarding")
+            .WithOpenApi();
     }
 
     private static void MapPublicAssignments(RouteGroupBuilder api)
