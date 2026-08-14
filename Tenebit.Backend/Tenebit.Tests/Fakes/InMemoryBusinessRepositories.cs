@@ -244,6 +244,9 @@ public sealed class InMemoryOffboardingItemRepository : IOffboardingItemReposito
             .OrderBy(x => x.SortOrder)
             .ToList());
 
+    public Task<OffboardingItem?> GetAsync(Guid organizationId, Guid offboardingCaseId, Guid itemId, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId && x.Id == itemId));
+
     public void Add(OffboardingItem item) => Items.Add(item);
 }
 

@@ -23,6 +23,14 @@ public sealed record UpdateOffboardingCaseRequest(
     bool CancelFutureReservations,
     bool AutoReleaseLicenses);
 
+public sealed record ConfirmOffboardingItemReturnRequest(string? ReturnCondition, string? ReturnLocation, string? Notes);
+
+public sealed record ResolveOffboardingItemRequest(OffboardingItemStatus Status, string Notes);
+
+public sealed record WaiveOffboardingItemRequest(string Reason);
+
+public sealed record CancelOffboardingCaseRequest(string Reason);
+
 public sealed record OffboardingItemResponse(
     Guid Id,
     OffboardingItemType Type,

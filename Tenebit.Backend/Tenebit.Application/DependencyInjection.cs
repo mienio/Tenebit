@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<AssetService>();
         services.AddScoped<AssetCategoryService>();
         services.AddScoped<AssetInspectionService>();
+        services.AddScoped<AssetReturnDispositionService>();
         services.AddScoped<PeopleService>();
         services.AddScoped<PersonOffboardingSchedulerService>();
         services.AddScoped<TeamService>();

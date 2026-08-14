@@ -903,6 +903,46 @@ public static class TenebitEndpoints
                 (await service.ExecuteScheduledActionsAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Offboarding")
             .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/confirm-return", async (Guid id, Guid itemId, ConfirmOffboardingItemReturnRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.ConfirmItemReturnAsync(id, itemId, request, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/complete-inspection", async (Guid id, Guid itemId, CompleteAssetInspectionRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.CompleteItemInspectionAsync(id, itemId, request, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/release-license", async (Guid id, Guid itemId, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.ReleaseItemLicenseAsync(id, itemId, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/resolve", async (Guid id, Guid itemId, ResolveOffboardingItemRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.ResolveItemAsync(id, itemId, request, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/waive", async (Guid id, Guid itemId, WaiveOffboardingItemRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.WaiveItemAsync(id, itemId, request, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/complete", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.CompleteAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/cancel", async (Guid id, CancelOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/restore-employment", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.RestoreEmploymentAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
     }
 
     private static void MapPublicAssignments(RouteGroupBuilder api)

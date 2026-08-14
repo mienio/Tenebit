@@ -222,6 +222,7 @@ public interface IOffboardingCaseRepository
 public interface IOffboardingItemRepository
 {
     Task<IReadOnlyList<OffboardingItem>> ListByCaseAsync(Guid organizationId, Guid offboardingCaseId, CancellationToken cancellationToken);
+    Task<OffboardingItem?> GetAsync(Guid organizationId, Guid offboardingCaseId, Guid itemId, CancellationToken cancellationToken);
     void Add(OffboardingItem item);
 }
 

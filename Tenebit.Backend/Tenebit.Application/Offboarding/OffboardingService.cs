@@ -1,5 +1,7 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assets;
 using Tenebit.Application.Common;
+using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
@@ -8,8 +10,8 @@ using Tenebit.Domain.People;
 
 namespace Tenebit.Application.Offboarding;
 
-/// <summary>Tworzenie i uruchamianie spraw offboardingowych (spec 4.5 kroki 1-7). Rozliczanie pozycji, zamykanie,
-/// anulowanie, publiczny token i protokół PDF są poza zakresem — przyjdą w kolejnych zadaniach.</summary>
+/// <summary>Tworzenie, uruchamianie i rozliczanie spraw offboardingowych (spec 4.5). Publiczny token i protokół
+/// PDF są poza zakresem — przyjdą w kolejnym zadaniu.</summary>
 public sealed class OffboardingService
 {
     private static readonly AssignmentStatus[] OpenAssignmentStatuses =
@@ -19,6 +21,7 @@ public sealed class OffboardingService
     private readonly IOffboardingItemRepository _items;
     private readonly IPersonRepository _people;
     private readonly IAssetRepository _assets;
+    private readonly IAssetCategoryRepository _categories;
     private readonly IAssignmentRepository _assignments;
     private readonly ILicenseRepository _licenses;
     private readonly IActivityLogRepository _activity;
@@ -26,16 +29,21 @@ public sealed class OffboardingService
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly OffboardingScheduledActionsService _scheduledActions;
+    private readonly AssetReturnDispositionService _disposition;
+    private readonly AssetInspectionService _inspectionService;
+    private readonly IAssetInspectionRepository _inspections;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
-        IAssetRepository assets, IAssignmentRepository assignments, ILicenseRepository licenses,
+        IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
         IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
-        OffboardingScheduledActionsService scheduledActions)
+        OffboardingScheduledActionsService scheduledActions, AssetReturnDispositionService disposition, AssetInspectionService inspectionService,
+        IAssetInspectionRepository inspections)
     {
         _cases = cases;
         _items = items;
         _people = people;
         _assets = assets;
+        _categories = categories;
         _assignments = assignments;
         _licenses = licenses;
         _activity = activity;
@@ -43,7 +51,11 @@ public sealed class OffboardingService
         _clock = clock;
         _unitOfWork = unitOfWork;
         _scheduledActions = scheduledActions;
+        _disposition = disposition;
+        _inspectionService = inspectionService;
+        _inspections = inspections;
     }
+
 
     public async Task<Result<PagedResult<OffboardingCaseResponse>>> ListPagedAsync(OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
@@ -234,6 +246,337 @@ public sealed class OffboardingService
         await _scheduledActions.ExecuteAsync(organizationId, person, _clock.UtcNow, _currentUser.Subject, cancellationToken);
         return await BuildDetailsAsync(id, cancellationToken);
     }
+
+    /// <summary>Fizyczne przyjęcie zwrotu pozycji AssetReturn (spec 4.5 krok 10). Stosuje politykę zwrotu kategorii
+    /// aktywa — DirectToStock i InspectionRequired reużywają <see cref="AssetReturnDispositionService"/> (ta sama
+    /// logika co w AssignmentService). ReturnToVendor/Dispose są tu uproszczone do bezpośredniej zmiany statusu
+    /// aktywa — pełny przepływ przekazania do zewnętrznego odbiorcy to osobny, przyszły temat (YAGNI na razie).</summary>
+    public async Task<Result<OffboardingCaseDetailsResponse>> ConfirmItemReturnAsync(Guid id, Guid itemId, ConfirmOffboardingItemReturnRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var item = await _items.GetAsync(organizationId, id, itemId, cancellationToken);
+        if (item is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
+        if (item.Type != OffboardingItemType.AssetReturn || item.AssetId is null)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Ta pozycja nie dotyczy zwrotu aktywa."));
+        }
+
+        var asset = await _assets.GetAsync(organizationId, item.AssetId.Value, cancellationToken);
+        if (asset is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+        var category = await _categories.GetAsync(organizationId, asset.CategoryId, cancellationToken);
+
+        try
+        {
+            var now = _clock.UtcNow;
+            item.MarkReceived(now, _currentUser.Subject);
+
+            var disposition = _disposition.ApplyPhysicalReturn(asset, category, request.ReturnLocation, organizationId, now, _currentUser.Subject, item.AssignmentId, item.Id);
+            switch (disposition)
+            {
+                case AssetReturnDisposition.InspectionRequired:
+                    // Kontrola trwa — pozycja czeka na complete-inspection, nie ma jeszcze stanu końcowego.
+                    break;
+                case AssetReturnDisposition.ReturnToVendor:
+                case AssetReturnDisposition.Disposed:
+                case AssetReturnDisposition.DirectToStock:
+                    item.CompleteInspection(now, _currentUser.Subject);
+                    break;
+            }
+
+            _activity.Add(new ActivityLog(organizationId, "offboarding.asset_returned", "asset", asset.Id, _currentUser.Subject, asset.Name, now));
+
+            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            offboardingCase.RecomputeStatus(items, now);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    /// <summary>Kończy kontrolę powiązaną z pozycją InspectionRequired — reużywa <see cref="AssetInspectionService.CompleteAsync"/>
+    /// (nie duplikuje logiki zmiany statusu aktywa), a następnie rozlicza pozycję offboardingu wg wyniku kontroli.</summary>
+    public async Task<Result<OffboardingCaseDetailsResponse>> CompleteItemInspectionAsync(Guid id, Guid itemId, CompleteAssetInspectionRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var item = await _items.GetAsync(organizationId, id, itemId, cancellationToken);
+        if (item is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
+        if (item.IsResolved) return await BuildDetailsAsync(id, cancellationToken);
+        if (item.AssetId is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Ta pozycja nie dotyczy aktywa."));
+
+        var inspection = await _inspections.GetPendingByAssetAsync(organizationId, item.AssetId.Value, cancellationToken);
+        if (inspection is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Brak oczekującej kontroli dla tego aktywa."));
+
+        var inspectionResult = await _inspectionService.CompleteAsync(inspection.Id, request, cancellationToken);
+        if (inspectionResult.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(inspectionResult.Error!);
+
+        try
+        {
+            var now = _clock.UtcNow;
+            if (request.Outcome == InspectionOutcome.ReadyForReuse)
+            {
+                item.CompleteInspection(now, _currentUser.Subject);
+            }
+            else
+            {
+                var status = request.Outcome switch
+                {
+                    InspectionOutcome.Damaged => OffboardingItemStatus.Damaged,
+                    _ => OffboardingItemStatus.Retained // Retired/Disposed — aktywo fizycznie obecne, ale nie wraca do obiegu.
+                };
+                item.Resolve(status, request.Notes ?? request.DamageAssessmentNotes ?? "Wynik kontroli", _currentUser.Subject, now);
+            }
+
+            _activity.Add(new ActivityLog(organizationId, "offboarding.asset_inspection_completed", "offboarding_item", item.Id, _currentUser.Subject, item.Label, now));
+
+            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            offboardingCase.RecomputeStatus(items, now);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    /// <summary>Ręczne zwolnienie miejsca licencyjnego dla pozycji LicenseRelease — dla trybu Manual albo gdy
+    /// administrator chce wyprzedzić automatykę AtEmploymentEnd.</summary>
+    public async Task<Result<OffboardingCaseDetailsResponse>> ReleaseItemLicenseAsync(Guid id, Guid itemId, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var item = await _items.GetAsync(organizationId, id, itemId, cancellationToken);
+        if (item is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
+        if (item.Type != OffboardingItemType.LicenseRelease || item.LicenseId is null)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Ta pozycja nie dotyczy zwolnienia licencji."));
+        }
+
+        if (item.IsResolved) return await BuildDetailsAsync(id, cancellationToken);
+
+        var license = await _licenses.GetAsync(organizationId, item.LicenseId.Value, cancellationToken);
+        if (license is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Licencja nie istnieje."));
+
+        try
+        {
+            var now = _clock.UtcNow;
+            license.UnassignSeat(offboardingCase.PersonId);
+            item.MarkReleased(now, _currentUser.Subject);
+            _activity.Add(new ActivityLog(organizationId, "offboarding.license_released", "offboarding_item", item.Id, _currentUser.Subject, item.Label, now));
+
+            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            offboardingCase.RecomputeStatus(items, now);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    /// <summary>Jawne rozstrzygnięcie Missing/Damaged/Retained dla pozycji AssetReturn — moment, w którym operator
+    /// zatwierdza status aktywa; sama odpowiedź pracownika (spec 2.3) tego nie robi automatycznie.</summary>
+    public async Task<Result<OffboardingCaseDetailsResponse>> ResolveItemAsync(Guid id, Guid itemId, ResolveOffboardingItemRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var item = await _items.GetAsync(organizationId, id, itemId, cancellationToken);
+        if (item is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
+
+        try
+        {
+            var now = _clock.UtcNow;
+            item.Resolve(request.Status, request.Notes, _currentUser.Subject, now);
+
+            if (item.AssetId is not null)
+            {
+                var asset = await _assets.GetAsync(organizationId, item.AssetId.Value, cancellationToken);
+                if (asset is not null)
+                {
+                    switch (request.Status)
+                    {
+                        case OffboardingItemStatus.Missing:
+                            asset.ReleaseAssignment(AssetStatus.Lost);
+                            _activity.Add(new ActivityLog(organizationId, "offboarding.asset_missing", "asset", asset.Id, _currentUser.Subject, asset.Name, now));
+                            break;
+                        case OffboardingItemStatus.Damaged:
+                            asset.ReleaseAssignment(AssetStatus.Damaged);
+                            _activity.Add(new ActivityLog(organizationId, "offboarding.asset_damaged", "asset", asset.Id, _currentUser.Subject, asset.Name, now));
+                            break;
+                        case OffboardingItemStatus.Retained:
+                            asset.ChangeStatus(AssetStatus.Retired);
+                            _activity.Add(new ActivityLog(organizationId, "offboarding.asset_available", "asset", asset.Id, _currentUser.Subject, asset.Name, now));
+                            break;
+                    }
+                }
+            }
+
+            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            offboardingCase.RecomputeStatus(items, now);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    public async Task<Result<OffboardingCaseDetailsResponse>> WaiveItemAsync(Guid id, Guid itemId, WaiveOffboardingItemRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var item = await _items.GetAsync(organizationId, id, itemId, cancellationToken);
+        if (item is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
+
+        try
+        {
+            var now = _clock.UtcNow;
+            item.Waive(request.Reason, _currentUser.Subject, now);
+            _activity.Add(new ActivityLog(organizationId, "offboarding.item_waived", "offboarding_item", item.Id, _currentUser.Subject, item.Label, now));
+
+            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            offboardingCase.RecomputeStatus(items, now);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    public async Task<Result<OffboardingCaseDetailsResponse>> CompleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        try
+        {
+            var now = _clock.UtcNow;
+            var protocolNumber = offboardingCase.FinalProtocolNumber ?? CreateProtocolNumber(now);
+            offboardingCase.Complete(now, _currentUser.Subject, protocolNumber);
+            _activity.Add(new ActivityLog(organizationId, "offboarding.completed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, protocolNumber, now));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    /// <summary>Anuluje sprawę i — dla nieodebranych pozycji AssetReturn — przywraca aktywo do statusu Assigned
+    /// dla tej samej osoby (spec 4.4). Rezerwacje nie są odtwarzane (moduł nie istnieje jeszcze).</summary>
+    public async Task<Result<OffboardingCaseDetailsResponse>> CancelAsync(Guid id, CancelOffboardingCaseRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
+
+        try
+        {
+            var now = _clock.UtcNow;
+            offboardingCase.Cancel(now, request.Reason);
+
+            if (person is not null && person.EmploymentStatus != EmploymentStatus.Active)
+            {
+                person.Activate();
+            }
+
+            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            foreach (var item in items.Where(x => x.Type == OffboardingItemType.AssetReturn && !x.IsResolved && x.AssetId is not null))
+            {
+                var asset = await _assets.GetAsync(organizationId, item.AssetId!.Value, cancellationToken);
+                if (asset is null) continue;
+                asset.RestorePendingReturn(offboardingCase.PersonId);
+            }
+
+            _activity.Add(new ActivityLog(organizationId, "offboarding.cancelled", "offboarding_case", offboardingCase.Id, _currentUser.Subject, request.Reason, now));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    public async Task<Result<OffboardingCaseDetailsResponse>> RestoreEmploymentAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
+
+        try
+        {
+            var now = _clock.UtcNow;
+            offboardingCase.RestoreEmployment(now);
+            person?.Activate();
+            _activity.Add(new ActivityLog(organizationId, "offboarding.restored", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person?.FullName, now));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return await BuildDetailsAsync(id, cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    private static string CreateProtocolNumber(DateTimeOffset now) => $"OFF-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
 
     private static OffboardingCaseResponse Map(OffboardingCase offboardingCase, IReadOnlyDictionary<Guid, string> personNames) =>
         new(

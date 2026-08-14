@@ -1,3 +1,4 @@
+using Tenebit.Application.Assets;
 using Tenebit.Application.Offboarding;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
@@ -12,21 +13,27 @@ public class OffboardingServiceTests
 {
     private static (OffboardingService Service, FakeCurrentUser User, InMemoryOffboardingCaseRepository Cases, InMemoryOffboardingItemRepository Items,
         InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryAssignmentRepository Assignments, InMemoryLicenseRepository Licenses,
-        InMemoryActivityLogRepository Activity) CreateService()
+        InMemoryActivityLogRepository Activity, InMemoryAssetCategoryRepository Categories, InMemoryAssetInspectionRepository Inspections) CreateService()
     {
         var currentUser = new FakeCurrentUser();
         var cases = new InMemoryOffboardingCaseRepository();
         var items = new InMemoryOffboardingItemRepository();
         var people = new InMemoryPersonRepository();
         var assets = new InMemoryAssetRepository();
+        var categories = new InMemoryAssetCategoryRepository();
         var assignments = new InMemoryAssignmentRepository();
         var licenses = new InMemoryLicenseRepository();
         var activity = new InMemoryActivityLogRepository();
+        var inspections = new InMemoryAssetInspectionRepository();
+        var unitOfWork = new FakeUnitOfWork();
 
-        var service = new OffboardingService(cases, items, people, assets, assignments, licenses, activity, currentUser, new FakeClock(), new FakeUnitOfWork(),
-            new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()));
+        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, new FakeClock(), unitOfWork);
+        var disposition = new AssetReturnDispositionService(inspections);
 
-        return (service, currentUser, cases, items, people, assets, assignments, licenses, activity);
+        var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, new FakeClock(), unitOfWork,
+            new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections);
+
+        return (service, currentUser, cases, items, people, assets, assignments, licenses, activity, categories, inspections);
     }
 
     private static Person AddPerson(FakeCurrentUser user, InMemoryPersonRepository people, string email = "jan.kowalski@acme.test")
@@ -47,7 +54,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task CreateAsync_CreatesDraftCase()
     {
-        var (service, user, _, _, people, _, _, _, activity) = CreateService();
+        var (service, user, _, _, people, _, _, _, activity, _, _) = CreateService();
         var person = AddPerson(user, people);
 
         var result = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, true, true, true), CancellationToken.None);
@@ -60,7 +67,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task CreateAsync_RejectsSecondOpenCaseForSamePerson_WithConflictNotException()
     {
-        var (service, user, _, _, people, _, _, _, _) = CreateService();
+        var (service, user, _, _, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
 
         var first = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
@@ -75,7 +82,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task CreateAsync_RejectsPersonNotActive()
     {
-        var (service, user, _, _, people, _, _, _, _) = CreateService();
+        var (service, user, _, _, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         person.StartOffboarding(DateTimeOffset.UtcNow.AddDays(1));
 
@@ -87,7 +94,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task StartAsync_SnapshotsDirectlyAssignedAndOpenAssignmentAssets_AndLicenseSeats()
     {
-        var (service, user, cases, items, people, assets, assignments, licenses, activity) = CreateService();
+        var (service, user, cases, items, people, assets, assignments, licenses, activity, _, _) = CreateService();
         var person = AddPerson(user, people);
 
         // Directly assigned asset (e.g. via onboarding starter package, no Assignment record).
@@ -136,7 +143,7 @@ public class OffboardingServiceTests
     {
         // The service never reads/sends email during Start — it only touches domain state and items,
         // so the result is identical regardless of the person's email content.
-        var (service, user, _, _, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, people, assets, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people, email: "no-reply@acme.test");
         AddAsset(user, assets, person.Id);
 
@@ -150,7 +157,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task ListPagedAsync_OnlyReturnsCasesForCurrentOrganization()
     {
-        var (service, user, cases, _, people, _, _, _, _) = CreateService();
+        var (service, user, cases, _, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
 
@@ -166,7 +173,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task UpdateAsync_AllowedOnlyInDraft()
     {
-        var (service, user, _, _, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, people, assets, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
@@ -180,7 +187,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task ExecuteScheduledActionsAsync_PastEmploymentEndsAt_ImmediatelyDeactivatesAndReleasesLicenses()
     {
-        var (service, user, _, _, people, assets, _, licenses, activity) = CreateService();
+        var (service, user, _, _, people, assets, _, licenses, activity, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -200,5 +207,146 @@ public class OffboardingServiceTests
         Assert.Contains(result.Value!.Items, x => x.Type == OffboardingItemType.LicenseRelease && x.Status == OffboardingItemStatus.Released);
         Assert.Contains(activity.Logs, x => x.Action == "person.deactivated");
         Assert.Contains(activity.Logs, x => x.Action == "offboarding.license_released");
+    }
+
+    [Fact]
+    public async Task ConfirmItemReturnAsync_DirectToStockCategory_CompletesReturnInStock()
+    {
+        var (service, user, _, _, people, assets, _, _, activity, categories, _) = CreateService();
+        var person = AddPerson(user, people);
+        var category = new AssetCategory(user.OrganizationId, "Laptops", AssetCategoryType.Physical, null, returnHandlingMode: ReturnHandlingMode.DirectToStock);
+        categories.Add(category);
+        var asset = new Asset(user.OrganizationId, category.Id, "Laptop", "AT-0001");
+        asset.AssignTo(person.Id);
+        assets.Add(asset);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+        var item = started.Value!.Items.Single(x => x.Type == OffboardingItemType.AssetReturn);
+
+        var result = await service.ConfirmItemReturnAsync(created.Value.Case.Id, item.Id, new ConfirmOffboardingItemReturnRequest(null, null, null), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AssetStatus.InStock, assets.Assets.Single(x => x.Id == asset.Id).Status);
+        Assert.Equal(OffboardingItemStatus.Returned, result.Value!.Items.Single(x => x.Id == item.Id).Status);
+        Assert.Contains(activity.Logs, x => x.Action == "offboarding.asset_returned");
+    }
+
+    [Fact]
+    public async Task ConfirmItemReturnAsync_InspectionRequiredCategory_StaysInProgressUntilInspectionCompleted()
+    {
+        var (service, user, _, _, people, assets, _, _, activity, categories, inspections) = CreateService();
+        var person = AddPerson(user, people);
+        var category = new AssetCategory(user.OrganizationId, "Laptops", AssetCategoryType.Physical, null, returnHandlingMode: ReturnHandlingMode.InspectionRequired);
+        categories.Add(category);
+        var asset = new Asset(user.OrganizationId, category.Id, "Laptop", "AT-0002");
+        asset.AssignTo(person.Id);
+        assets.Add(asset);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+        var item = started.Value!.Items.Single(x => x.Type == OffboardingItemType.AssetReturn);
+
+        var confirmed = await service.ConfirmItemReturnAsync(created.Value.Case.Id, item.Id, new ConfirmOffboardingItemReturnRequest(null, null, null), CancellationToken.None);
+
+        Assert.True(confirmed.IsSuccess);
+        Assert.Equal(AssetStatus.InService, assets.Assets.Single(x => x.Id == asset.Id).Status);
+        Assert.Equal(OffboardingItemStatus.Received, confirmed.Value!.Items.Single(x => x.Id == item.Id).Status);
+        Assert.Single(inspections.Inspections);
+
+        var completed = await service.CompleteItemInspectionAsync(created.Value.Case.Id, item.Id,
+            new CompleteAssetInspectionRequest(InspectionOutcome.ReadyForReuse, true, true, true, true, null, null), CancellationToken.None);
+
+        Assert.True(completed.IsSuccess);
+        Assert.Equal(AssetStatus.InStock, assets.Assets.Single(x => x.Id == asset.Id).Status);
+        Assert.Equal(OffboardingItemStatus.Returned, completed.Value!.Items.Single(x => x.Id == item.Id).Status);
+        Assert.Contains(activity.Logs, x => x.Action == "offboarding.asset_inspection_completed");
+    }
+
+    [Fact]
+    public async Task CompleteAsync_FailsWithOpenRequiredItem()
+    {
+        var (service, user, _, _, people, assets, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+
+        var result = await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CancelAsync_RestoresUnresolvedAssetsToAssigned()
+    {
+        var (service, user, _, _, people, assets, _, _, activity, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+        Assert.Equal(AssetStatus.PendingReturn, assets.Assets.Single(x => x.Id == asset.Id).Status);
+
+        var cancelled = await service.CancelAsync(created.Value.Case.Id, new CancelOffboardingCaseRequest("Pomyłka"), CancellationToken.None);
+
+        Assert.True(cancelled.IsSuccess, cancelled.Error?.Message);
+        Assert.Equal(OffboardingCaseStatus.Cancelled, cancelled.Value!.Case.Status);
+        Assert.Equal(AssetStatus.Assigned, assets.Assets.Single(x => x.Id == asset.Id).Status);
+        Assert.Equal(person.Id, assets.Assets.Single(x => x.Id == asset.Id).AssignedPersonId);
+        Assert.Contains(activity.Logs, x => x.Action == "offboarding.cancelled");
+    }
+
+    [Fact]
+    public async Task CancelAsync_BlockedAfterPersonDeactivation()
+    {
+        var (service, user, _, _, people, assets, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(3), null, null, null, false, false, false), CancellationToken.None);
+        await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+        await service.ExecuteScheduledActionsAsync(created.Value.Case.Id, CancellationToken.None);
+
+        var cancelled = await service.CancelAsync(created.Value.Case.Id, new CancelOffboardingCaseRequest("Za późno"), CancellationToken.None);
+
+        Assert.True(cancelled.IsFailure);
+    }
+
+    [Fact]
+    public async Task WaiveItemAsync_MarksItemAsWaived()
+    {
+        var (service, user, _, _, people, assets, _, _, activity, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+        var item = started.Value!.Items.Single();
+
+        var result = await service.WaiveItemAsync(created.Value.Case.Id, item.Id, new WaiveOffboardingItemRequest("Aktywo już nie istnieje"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(OffboardingItemStatus.Waived, result.Value!.Items.Single(x => x.Id == item.Id).Status);
+        Assert.Contains(activity.Logs, x => x.Action == "offboarding.item_waived");
+    }
+
+    [Fact]
+    public async Task ResolveItemAsync_Missing_MarksAssetLost()
+    {
+        var (service, user, _, _, people, assets, _, _, activity, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+        var item = started.Value!.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value.Case.Id, item.Id, new ResolveOffboardingItemRequest(OffboardingItemStatus.Missing, "Pracownik nie odpowiada"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AssetStatus.Lost, assets.Assets.Single(x => x.Id == asset.Id).Status);
+        Assert.Contains(activity.Logs, x => x.Action == "offboarding.asset_missing");
     }
 }

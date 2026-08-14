@@ -6,12 +6,13 @@ public sealed class AssetInspection
 {
     private AssetInspection() { }
 
-    public AssetInspection(Guid organizationId, Guid assetId, Guid? assignmentId, DateTimeOffset createdAt, string? createdBy)
+    public AssetInspection(Guid organizationId, Guid assetId, Guid? assignmentId, DateTimeOffset createdAt, string? createdBy, Guid? offboardingItemId = null)
     {
         Id = Guid.NewGuid();
         OrganizationId = organizationId;
         AssetId = assetId;
         AssignmentId = assignmentId;
+        OffboardingItemId = offboardingItemId;
         CreatedAt = createdAt;
         CreatedBy = createdBy;
     }
@@ -20,6 +21,7 @@ public sealed class AssetInspection
     public Guid OrganizationId { get; private set; }
     public Guid AssetId { get; private set; }
     public Guid? AssignmentId { get; private set; }
+    public Guid? OffboardingItemId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public string? CreatedBy { get; private set; }
     public bool? SerialNumberMatched { get; private set; }

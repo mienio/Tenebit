@@ -134,6 +134,17 @@ public sealed class Asset
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>Cofnięcie <see cref="MarkPendingReturn"/> — używane przy anulowaniu offboardingu dla pozycji,
+    /// których nie zdążono jeszcze fizycznie zwrócić (spec 4.4).</summary>
+    public void RestorePendingReturn(Guid personId)
+    {
+        if (Status != AssetStatus.PendingReturn) return;
+
+        AssignedPersonId = personId;
+        Status = AssetStatus.Assigned;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     public void ReturnToStock(string? location) => ReleaseAssignment(AssetStatus.InStock, location);
 
     public void ReleaseAssignment(AssetStatus status, string? location = null)

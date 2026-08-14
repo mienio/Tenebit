@@ -25,6 +25,7 @@ public sealed class AssignmentService
     private readonly IPdfProtocolGenerator _pdfGenerator;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _linkBuilder;
+    private readonly Assets.AssetReturnDispositionService _disposition;
 
     public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder)
     {
@@ -43,6 +44,7 @@ public sealed class AssignmentService
         _pdfGenerator = pdfGenerator;
         _emailSender = emailSender;
         _linkBuilder = linkBuilder;
+        _disposition = new Assets.AssetReturnDispositionService(inspections);
     }
 
     public async Task<Result<IReadOnlyList<AssignmentResponse>>> ListAsync(CancellationToken cancellationToken)
@@ -269,7 +271,7 @@ public sealed class AssignmentService
         switch (resolution)
         {
             case ReturnResolution.Returned:
-                ApplyPhysicalReturn(assignment, asset, category, returnLocation, organizationId, now);
+                _disposition.ApplyPhysicalReturn(asset, category, returnLocation, organizationId, now, _currentUser.Subject, assignment.Id, null);
                 break;
             case ReturnResolution.Damaged:
                 asset.ReleaseAssignment(AssetStatus.Damaged, returnLocation);
@@ -282,31 +284,6 @@ public sealed class AssignmentService
                 break;
             case ReturnResolution.WrittenOff:
                 asset.ReleaseAssignment(AssetStatus.Disposed);
-                break;
-        }
-    }
-
-    private void ApplyPhysicalReturn(Assignment assignment, Asset asset, AssetCategory? category, string? returnLocation, Guid organizationId, DateTimeOffset now)
-    {
-        var disposition = category?.PostReturnDisposition ?? PostReturnDisposition.Reuse;
-        switch (disposition)
-        {
-            case PostReturnDisposition.ReturnToVendor:
-                asset.ReleaseAssignment(AssetStatus.InTransit, returnLocation);
-                break;
-            case PostReturnDisposition.Dispose:
-                asset.ReleaseAssignment(AssetStatus.InService, returnLocation);
-                break;
-            default: // Reuse
-                if (category?.ReturnHandlingMode == ReturnHandlingMode.InspectionRequired)
-                {
-                    asset.ReleaseAssignment(AssetStatus.InService, returnLocation);
-                    _inspections.Add(new AssetInspection(organizationId, asset.Id, assignment.Id, now, _currentUser.Subject));
-                }
-                else
-                {
-                    asset.ReleaseAssignment(AssetStatus.InStock, returnLocation);
-                }
                 break;
         }
     }

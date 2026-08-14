@@ -18,5 +18,9 @@ public sealed class OffboardingItemRepository : IOffboardingItemRepository
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
+    public async Task<OffboardingItem?> GetAsync(Guid organizationId, Guid offboardingCaseId, Guid itemId, CancellationToken cancellationToken) =>
+        await _db.OffboardingItems
+            .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId && x.Id == itemId, cancellationToken);
+
     public void Add(OffboardingItem item) => _db.OffboardingItems.Add(item);
 }
