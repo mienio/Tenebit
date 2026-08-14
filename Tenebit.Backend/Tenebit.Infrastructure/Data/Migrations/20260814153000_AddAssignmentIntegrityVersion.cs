@@ -1,10 +1,14 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Tenebit.Infrastructure.Data;
 
 #nullable disable
 
 namespace Tenebit.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(TenebitDbContext))]
+    [Migration("20260814153000_AddAssignmentIntegrityVersion")]
     public partial class AddAssignmentIntegrityVersion : Migration
     {
         /// <inheritdoc />
