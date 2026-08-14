@@ -26,9 +26,23 @@ public sealed class EquipmentReservationRepository : IEquipmentReservationReposi
         EquipmentReservationStatus.CheckedOut
     ];
 
+    private static readonly EquipmentReservationStatus[] OpenStatuses =
+    [
+        EquipmentReservationStatus.PendingApproval,
+        EquipmentReservationStatus.Approved,
+        EquipmentReservationStatus.ReadyForPickup,
+        EquipmentReservationStatus.CheckedOut
+    ];
+
     private readonly TenebitDbContext _db;
 
     public EquipmentReservationRepository(TenebitDbContext db) => _db = db;
+
+    public async Task<IReadOnlyList<EquipmentReservation>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        await _db.EquipmentReservations
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && OpenStatuses.Contains(x.Status))
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
         await _db.EquipmentReservations

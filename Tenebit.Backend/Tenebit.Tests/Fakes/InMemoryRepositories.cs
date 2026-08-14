@@ -97,6 +97,11 @@ public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservati
 
     public List<EquipmentReservation> Reservations { get; } = [];
 
+    public Task<IReadOnlyList<EquipmentReservation>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
+            .Where(x => x.OrganizationId == organizationId && CalendarStatuses.Contains(x.Status))
+            .ToList());
+
     public Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
             .Where(x => x.OrganizationId == organizationId && HoldingStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
@@ -251,6 +256,26 @@ public sealed class InMemorySentAlertRepository : ISentAlertRepository
     }
 
     public void Add(SentAlert alert) => Alerts.Add(alert);
+}
+
+public sealed class InMemoryAlertRuleRepository : IAlertRuleRepository
+{
+    public List<AlertRule> Rules { get; } = [];
+
+    public Task<IReadOnlyList<AlertRule>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AlertRule>>(Rules.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public void Add(AlertRule rule) => Rules.Add(rule);
+}
+
+public sealed class InMemoryAlertDigestSettingsRepository : IAlertDigestSettingsRepository
+{
+    public List<AlertDigestSettings> Settings { get; } = [];
+
+    public Task<AlertDigestSettings?> GetAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Settings.FirstOrDefault(x => x.OrganizationId == organizationId));
+
+    public void Add(AlertDigestSettings settings) => Settings.Add(settings);
 }
 
 public sealed class FakeEmailSender : IEmailSender

@@ -28,6 +28,12 @@ public sealed class AssetAuditCampaignRepository : IAssetAuditCampaignRepository
         return (items, total);
     }
 
+    public async Task<IReadOnlyList<AssetAuditCampaign>> ListActiveAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        await _db.AssetAuditCampaigns
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.Status == AssetAuditCampaignStatus.Active)
+            .ToListAsync(cancellationToken);
+
     public Task<AssetAuditCampaign?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.AssetAuditCampaigns.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

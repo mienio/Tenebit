@@ -44,6 +44,8 @@ public static class DependencyInjection
         services.AddScoped<IAssetStatusSettingRepository, AssetStatusSettingRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<ISentAlertRepository, SentAlertRepository>();
+        services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
+        services.AddScoped<IAlertDigestSettingsRepository, AlertDigestSettingsRepository>();
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<IDashboardSnapshotRepository, DashboardSnapshotRepository>();
         services.AddScoped<IAssetEvidenceRepository, AssetEvidenceRepository>();

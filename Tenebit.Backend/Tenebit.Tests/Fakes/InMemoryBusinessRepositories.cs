@@ -228,6 +228,9 @@ public sealed class InMemoryOffboardingCaseRepository : IOffboardingCaseReposito
         return Task.FromResult<(IReadOnlyList<OffboardingCase>, int)>((rows, rows.Count));
     }
 
+    public Task<IReadOnlyList<OffboardingCase>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OffboardingCase>>(Cases.Where(x => x.OrganizationId == organizationId && (x.Status == OffboardingCaseStatus.Active || x.Status == OffboardingCaseStatus.WaitingForReturn)).ToList());
+
     public Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Cases.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
@@ -265,6 +268,9 @@ public sealed class InMemoryAssetAuditCampaignRepository : IAssetAuditCampaignRe
         var rows = Campaigns.Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value)).ToList();
         return Task.FromResult<(IReadOnlyList<AssetAuditCampaign>, int)>((rows, rows.Count));
     }
+
+    public Task<IReadOnlyList<AssetAuditCampaign>> ListActiveAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetAuditCampaign>>(Campaigns.Where(x => x.OrganizationId == organizationId && x.Status == AssetAuditCampaignStatus.Active).ToList());
 
     public Task<AssetAuditCampaign?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Campaigns.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));

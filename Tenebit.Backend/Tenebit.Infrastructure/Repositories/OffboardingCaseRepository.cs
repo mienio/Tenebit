@@ -30,6 +30,12 @@ public sealed class OffboardingCaseRepository : IOffboardingCaseRepository
         return (items, total);
     }
 
+    public async Task<IReadOnlyList<OffboardingCase>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        await _db.OffboardingCases
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && (x.Status == OffboardingCaseStatus.Active || x.Status == OffboardingCaseStatus.WaitingForReturn))
+            .ToListAsync(cancellationToken);
+
     public Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.OffboardingCases.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

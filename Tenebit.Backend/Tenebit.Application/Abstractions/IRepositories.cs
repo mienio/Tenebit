@@ -192,6 +192,18 @@ public interface ISentAlertRepository
     void Add(SentAlert alert);
 }
 
+public interface IAlertRuleRepository
+{
+    Task<IReadOnlyList<AlertRule>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    void Add(AlertRule rule);
+}
+
+public interface IAlertDigestSettingsRepository
+{
+    Task<AlertDigestSettings?> GetAsync(Guid organizationId, CancellationToken cancellationToken);
+    void Add(AlertDigestSettings settings);
+}
+
 public interface IDashboardLayoutRepository
 {
     Task<DashboardLayout?> GetAsync(Guid organizationUserId, CancellationToken cancellationToken);
@@ -216,6 +228,7 @@ public interface ILicenseRepository
 public interface IOffboardingCaseRepository
 {
     Task<(IReadOnlyList<OffboardingCase> Items, int Total)> ListPagedAsync(Guid organizationId, OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OffboardingCase>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
     Task<IReadOnlyList<OffboardingCase>> ListWithPublicTokenAsync(CancellationToken cancellationToken);
@@ -232,6 +245,7 @@ public interface IOffboardingItemRepository
 public interface IAssetAuditCampaignRepository
 {
     Task<(IReadOnlyList<AssetAuditCampaign> Items, int Total)> ListPagedAsync(Guid organizationId, AssetAuditCampaignStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AssetAuditCampaign>> ListActiveAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<AssetAuditCampaign?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(AssetAuditCampaign campaign);
 }
@@ -279,6 +293,7 @@ public interface IEquipmentKitDefinitionRepository
 
 public interface IEquipmentReservationRepository
 {
+    Task<IReadOnlyList<EquipmentReservation>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
     Task<IReadOnlyList<EquipmentReservation>> ListByRequesterAsync(Guid organizationId, Guid requesterPersonId, CancellationToken cancellationToken);
     Task<(IReadOnlyList<EquipmentReservation> Items, int Total)> ListPagedAsync(Guid organizationId, EquipmentReservationStatus? status, IReadOnlyCollection<Guid>? requesterPersonIds, int page, int pageSize, CancellationToken cancellationToken);
