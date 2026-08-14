@@ -27,6 +27,7 @@ using Tenebit.Application.Workspace;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Offboarding;
+using Tenebit.Domain.Reservations;
 using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Api.Endpoints;
@@ -322,6 +323,66 @@ public static class TenebitEndpoints
                 var end = to ?? start.AddDays(7);
                 return Results.Ok(await service.GetAsync(start, end, search, location, cancellationToken));
             })
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/my/reservations", async (CreateReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(r => $"/api/my/reservations/{r.Reservation.Id}"))
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapGet("/my/reservations", async (ReservationService service, CancellationToken cancellationToken) =>
+                (await service.ListMyAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapGet("/my/reservations/{id:guid}", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.GetMyAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPut("/my/reservations/{id:guid}", async (Guid id, UpdateReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.UpdateMyAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/my/reservations/{id:guid}/submit", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.SubmitMyAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/my/reservations/{id:guid}/cancel", async (Guid id, CancelReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.CancelMyAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapGet("/reservations", async (EquipmentReservationStatus? status, int? page, int? pageSize, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapGet("/reservations/{id:guid}", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/reservations/{id:guid}/approve", async (Guid id, ApproveReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.ApproveAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/reservations/{id:guid}/reject", async (Guid id, RejectReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.RejectAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/reservations/{id:guid}/substitute", async (Guid id, SubstituteReservationItemRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.SubstituteAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/reservations/{id:guid}/cancel", async (Guid id, CancelReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
             .WithTags("Reservations")
             .WithOpenApi();
     }

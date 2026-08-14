@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<AssetAuditCampaignService>();
         services.AddScoped<AssetAvailabilityService>();
         services.AddScoped<ReservationCatalogService>();
+        services.AddScoped<ReservationService>();
         return services;
     }
 }

@@ -9,6 +9,7 @@ using Tenebit.Domain.Common;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Reservations;
 
 namespace Tenebit.Application.Offboarding;
 
@@ -41,13 +42,14 @@ public sealed class OffboardingService
     private readonly IAssetEvidenceRepository _evidence;
     private readonly AssetEvidenceService _evidenceService;
     private readonly IPdfProtocolGenerator _pdfGenerator;
+    private readonly IEquipmentReservationRepository _reservations;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
         IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
         OffboardingScheduledActionsService scheduledActions, AssetReturnDispositionService disposition, AssetInspectionService inspectionService,
         IAssetInspectionRepository inspections, IOrganizationRepository organizations, IEmailSender emailSender, IAppLinkBuilder linkBuilder,
-        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator)
+        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator, IEquipmentReservationRepository reservations)
     {
         _cases = cases;
         _items = items;
@@ -70,6 +72,7 @@ public sealed class OffboardingService
         _evidence = evidence;
         _evidenceService = evidenceService;
         _pdfGenerator = pdfGenerator;
+        _reservations = reservations;
     }
 
 
@@ -233,6 +236,27 @@ public sealed class OffboardingService
             person.StartOffboarding(offboardingCase.EmploymentEndsAt);
             _activity.Add(new ActivityLog(organizationId, "offboarding.person_marked_offboarding", "person", person.Id, _currentUser.Subject, person.FullName, now));
             _activity.Add(new ActivityLog(organizationId, "offboarding.started", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person.FullName, now));
+
+            // Spec 4.5/8.12: przy starcie offboardingu anuluj przyszłe zatwierdzone rezerwacje i odrzuć oczekujące
+            // wnioski tej osoby (jeśli sprawa tak konfiguruje). BlockNewReservations jest efektywnie pokryte przez
+            // blokadę nowych wniosków dla osób nieaktywnych w ReservationService.
+            if (offboardingCase.CancelFutureReservations)
+            {
+                var personReservations = await _reservations.ListByRequesterAsync(organizationId, person.Id, cancellationToken);
+                foreach (var reservation in personReservations)
+                {
+                    if (reservation.Status == EquipmentReservationStatus.PendingApproval)
+                    {
+                        reservation.Reject(now, _currentUser.Subject, "Offboarding");
+                        _activity.Add(new ActivityLog(organizationId, "reservation.rejected", "equipment_reservation", reservation.Id, _currentUser.Subject, "Offboarding", now));
+                    }
+                    else if (reservation.Status == EquipmentReservationStatus.Approved && reservation.StartAt > now)
+                    {
+                        reservation.Cancel(now, _currentUser.Subject, "Offboarding");
+                        _activity.Add(new ActivityLog(organizationId, "reservation.cancelled", "equipment_reservation", reservation.Id, _currentUser.Subject, "Offboarding", now));
+                    }
+                }
+            }
 
             // Spec 4.5 krok 8: wiadomość i publiczny token powstają tylko, gdy osoba ma e-mail i admin nie wyłączył
             // powiadomienia przy starcie. Brak adresu nie blokuje uruchomienia sprawy.

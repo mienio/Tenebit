@@ -5,6 +5,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Audits;
+using Tenebit.Domain.Common;
 using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
@@ -23,6 +24,18 @@ namespace Tenebit.Infrastructure.Data;
 public sealed class TenebitDbContext : DbContext, IUnitOfWork
 {
     public TenebitDbContext(DbContextOptions<TenebitDbContext> options) : base(options) { }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConcurrencyException("Dane zostały zmodyfikowane równolegle — odśwież i spróbuj ponownie.");
+        }
+    }
 
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();

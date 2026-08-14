@@ -30,6 +30,31 @@ public sealed class EquipmentReservationRepository : IEquipmentReservationReposi
                 && x.EndAt > from)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<EquipmentReservation>> ListByRequesterAsync(Guid organizationId, Guid requesterPersonId, CancellationToken cancellationToken) =>
+        await _db.EquipmentReservations
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .Where(x => x.OrganizationId == organizationId && x.RequesterPersonId == requesterPersonId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    public async Task<(IReadOnlyList<EquipmentReservation> Items, int Total)> ListPagedAsync(Guid organizationId, EquipmentReservationStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = _db.EquipmentReservations
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value));
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+
     public Task<EquipmentReservation?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.EquipmentReservations
             .Include(x => x.Items)

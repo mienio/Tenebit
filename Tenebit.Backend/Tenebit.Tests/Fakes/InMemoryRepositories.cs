@@ -94,6 +94,21 @@ public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservati
             .Where(x => x.OrganizationId == organizationId && HoldingStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
             .ToList());
 
+    public Task<IReadOnlyList<EquipmentReservation>> ListByRequesterAsync(Guid organizationId, Guid requesterPersonId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
+            .Where(x => x.OrganizationId == organizationId && x.RequesterPersonId == requesterPersonId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToList());
+
+    public Task<(IReadOnlyList<EquipmentReservation> Items, int Total)> ListPagedAsync(Guid organizationId, EquipmentReservationStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Reservations
+            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value))
+            .OrderByDescending(x => x.CreatedAt)
+            .ToList();
+        return Task.FromResult<(IReadOnlyList<EquipmentReservation>, int)>((rows, rows.Count));
+    }
+
     public Task<EquipmentReservation?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Reservations.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 

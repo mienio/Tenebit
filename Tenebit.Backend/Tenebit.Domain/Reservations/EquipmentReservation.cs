@@ -62,4 +62,129 @@ public sealed class EquipmentReservation
         UpdatedAt = DateTimeOffset.UtcNow;
         return item;
     }
+
+    public void Submit(DateTimeOffset requestedAt)
+    {
+        if (Status != EquipmentReservationStatus.Draft)
+        {
+            throw new DomainException("Wniosek można złożyć tylko ze statusu roboczego.");
+        }
+
+        if (EndAt <= StartAt)
+        {
+            throw new DomainException("Data zakończenia musi być późniejsza niż data rozpoczęcia.");
+        }
+
+        if (StartAt < requestedAt)
+        {
+            throw new DomainException("Data rozpoczęcia rezerwacji nie może być w przeszłości.");
+        }
+
+        if (Items.Count == 0)
+        {
+            throw new DomainException("Wniosek musi zawierać co najmniej jedną pozycję.");
+        }
+
+        Status = EquipmentReservationStatus.PendingApproval;
+        RequestedAt = requestedAt;
+        UpdatedAt = requestedAt;
+    }
+
+    public void Approve(DateTimeOffset approvedAt, string approvedBy)
+    {
+        if (Status != EquipmentReservationStatus.PendingApproval)
+        {
+            throw new DomainException("Zatwierdzić można tylko wniosek oczekujący na akceptację.");
+        }
+
+        Status = EquipmentReservationStatus.Approved;
+        ApprovedAt = approvedAt;
+        ApprovedBy = string.IsNullOrWhiteSpace(approvedBy) ? "system" : approvedBy.Trim();
+        UpdatedAt = approvedAt;
+    }
+
+    public void Reject(DateTimeOffset rejectedAt, string rejectedBy, string reason)
+    {
+        if (Status == EquipmentReservationStatus.Rejected)
+        {
+            return;
+        }
+
+        if (Status != EquipmentReservationStatus.PendingApproval)
+        {
+            throw new DomainException("Odrzucić można tylko wniosek oczekujący na akceptację.");
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new DomainException("Powód odrzucenia jest wymagany.");
+        }
+
+        Status = EquipmentReservationStatus.Rejected;
+        RejectedAt = rejectedAt;
+        RejectedBy = string.IsNullOrWhiteSpace(rejectedBy) ? "system" : rejectedBy.Trim();
+        DecisionNotes = reason.Trim();
+        UpdatedAt = rejectedAt;
+    }
+
+    public void Cancel(DateTimeOffset cancelledAt, string cancelledBy, string? reason)
+    {
+        if (Status == EquipmentReservationStatus.Cancelled)
+        {
+            return;
+        }
+
+        if (Status is not (EquipmentReservationStatus.Draft or EquipmentReservationStatus.PendingApproval
+            or EquipmentReservationStatus.Approved or EquipmentReservationStatus.ReadyForPickup))
+        {
+            throw new DomainException("Anulować można tylko wniosek przed wydaniem sprzętu.");
+        }
+
+        Status = EquipmentReservationStatus.Cancelled;
+        CancelledAt = cancelledAt;
+        CancelledBy = string.IsNullOrWhiteSpace(cancelledBy) ? "system" : cancelledBy.Trim();
+        CancellationReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        UpdatedAt = cancelledAt;
+    }
+
+    public void UpdateDraft(DateTimeOffset startAt, DateTimeOffset endAt, string purpose, string? pickupLocation, string? notes)
+    {
+        if (Status != EquipmentReservationStatus.Draft)
+        {
+            throw new DomainException("Wniosek można edytować tylko w statusie roboczym.");
+        }
+
+        if (string.IsNullOrWhiteSpace(purpose))
+        {
+            throw new DomainException("Cel rezerwacji jest wymagany.");
+        }
+
+        if (endAt <= startAt)
+        {
+            throw new DomainException("Data zakończenia musi być późniejsza niż data rozpoczęcia.");
+        }
+
+        StartAt = startAt;
+        EndAt = endAt;
+        Purpose = purpose.Trim();
+        PickupLocation = string.IsNullOrWhiteSpace(pickupLocation) ? null : pickupLocation.Trim();
+        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ReplaceItems(IEnumerable<(Guid CategoryId, int Quantity, Guid? KitDefinitionId)> items)
+    {
+        if (Status != EquipmentReservationStatus.Draft)
+        {
+            throw new DomainException("Pozycje wniosku można edytować tylko w statusie roboczym.");
+        }
+
+        Items.Clear();
+        foreach (var (categoryId, quantity, kitDefinitionId) in items)
+        {
+            AddItem(categoryId, quantity, kitDefinitionId);
+        }
+
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }

@@ -32,4 +32,48 @@ public sealed class EquipmentReservationItem
     public Guid? OriginalAssetId { get; private set; }
     public string? SubstitutionReason { get; private set; }
     public EquipmentReservationItemStatus Status { get; private set; }
+
+    public void Allocate(Guid assetId)
+    {
+        if (Status != EquipmentReservationItemStatus.Requested)
+        {
+            throw new DomainException("Przydzielić można tylko pozycję oczekującą.");
+        }
+
+        AssetId = assetId;
+        Status = EquipmentReservationItemStatus.Allocated;
+    }
+
+    public void Substitute(Guid newAssetId, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new DomainException("Powód zamiany jest wymagany.");
+        }
+
+        if (AssetId is null)
+        {
+            throw new DomainException("Nie można zamienić pozycji bez przydzielonego aktywa.");
+        }
+
+        if (Status is EquipmentReservationItemStatus.CheckedOut or EquipmentReservationItemStatus.Returned)
+        {
+            throw new DomainException("Pozycja jest już rozliczona i nie można jej zamienić.");
+        }
+
+        OriginalAssetId = AssetId;
+        AssetId = newAssetId;
+        SubstitutionReason = reason.Trim();
+    }
+
+    public void Reject(string? reason)
+    {
+        if (Status is EquipmentReservationItemStatus.CheckedOut or EquipmentReservationItemStatus.Returned or EquipmentReservationItemStatus.Rejected)
+        {
+            throw new DomainException("Pozycja jest już rozliczona.");
+        }
+
+        Status = EquipmentReservationItemStatus.Rejected;
+        SubstitutionReason = string.IsNullOrWhiteSpace(reason) ? SubstitutionReason : reason.Trim();
+    }
 }
