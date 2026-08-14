@@ -59,6 +59,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<OrganizationSubscription> Subscriptions => Set<OrganizationSubscription>();
     public DbSet<SentAlert> SentAlerts => Set<SentAlert>();
+    public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+    public DbSet<AlertDigestSettings> AlertDigestSettings => Set<AlertDigestSettings>();
     public DbSet<DashboardLayout> DashboardLayouts => Set<DashboardLayout>();
     public DbSet<DashboardSnapshot> DashboardSnapshots => Set<DashboardSnapshot>();
     public DbSet<License> Licenses => Set<License>();
@@ -280,6 +282,30 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.LastError).HasMaxLength(SentAlert.LastErrorMaxLength);
             entity.HasIndex(x => new { x.OrganizationId, x.AlertKey, x.EntityId, x.RecipientEmail }).IsUnique();
+        });
+
+        modelBuilder.Entity<AlertRule>(entity =>
+        {
+            entity.ToTable("alert_rules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(60).IsRequired();
+            entity.Property(x => x.DeliveryMode).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RecipientMode).HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(x => x.CustomEmails).HasMaxLength(600);
+            entity.Property(x => x.UpdatedBy).HasMaxLength(240).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Type }).IsUnique();
+            entity.HasIndex(x => x.OrganizationId);
+        });
+
+        modelBuilder.Entity<AlertDigestSettings>(entity =>
+        {
+            entity.ToTable("alert_digest_settings");
+            entity.HasKey(x => x.OrganizationId);
+            entity.Property(x => x.Frequency).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DayOfWeek).HasConversion<string>().HasMaxLength(10);
+            entity.Property(x => x.BusinessDays).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.HolidayCalendarCountryCode).HasMaxLength(8);
+            entity.Property(x => x.IncludeEmptyDigest).IsRequired();
         });
     }
 
