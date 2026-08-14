@@ -15,4 +15,6 @@ public sealed class AlertDigestSettingsRepository : IAlertDigestSettingsReposito
         _db.AlertDigestSettings.FirstOrDefaultAsync(x => x.OrganizationId == organizationId, cancellationToken);
 
     public void Add(AlertDigestSettings settings) => _db.AlertDigestSettings.Add(settings);
+
+    public void Update(AlertDigestSettings settings) => _db.AlertDigestSettings.Update(settings);
 }

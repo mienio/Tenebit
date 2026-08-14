@@ -256,6 +256,14 @@ public sealed class InMemorySentAlertRepository : ISentAlertRepository
     }
 
     public void Add(SentAlert alert) => Alerts.Add(alert);
+
+    public Task<(IReadOnlyList<SentAlert> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = Alerts.Where(x => x.OrganizationId == organizationId).OrderByDescending(x => x.CreatedAt);
+        var total = query.Count();
+        var items = query.Skip((page - 1) * pageSize).Take(pageSize).ToList().AsReadOnly();
+        return Task.FromResult(((IReadOnlyList<SentAlert>)items, total));
+    }
 }
 
 public sealed class InMemoryAlertRuleRepository : IAlertRuleRepository
@@ -265,7 +273,16 @@ public sealed class InMemoryAlertRuleRepository : IAlertRuleRepository
     public Task<IReadOnlyList<AlertRule>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<AlertRule>>(Rules.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<AlertRule?> GetAsync(Guid organizationId, AlertType type, CancellationToken cancellationToken) =>
+        Task.FromResult(Rules.FirstOrDefault(x => x.OrganizationId == organizationId && x.Type == type));
+
     public void Add(AlertRule rule) => Rules.Add(rule);
+
+    public void Update(AlertRule rule)
+    {
+        var idx = Rules.FindIndex(x => x.OrganizationId == rule.OrganizationId && x.Type == rule.Type);
+        if (idx >= 0) Rules[idx] = rule;
+    }
 }
 
 public sealed class InMemoryAlertDigestSettingsRepository : IAlertDigestSettingsRepository
@@ -276,6 +293,12 @@ public sealed class InMemoryAlertDigestSettingsRepository : IAlertDigestSettings
         Task.FromResult(Settings.FirstOrDefault(x => x.OrganizationId == organizationId));
 
     public void Add(AlertDigestSettings settings) => Settings.Add(settings);
+
+    public void Update(AlertDigestSettings settings)
+    {
+        var idx = Settings.FindIndex(x => x.OrganizationId == settings.OrganizationId);
+        if (idx >= 0) Settings[idx] = settings;
+    }
 }
 
 public sealed class FakeEmailSender : IEmailSender

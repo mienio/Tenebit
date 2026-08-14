@@ -17,5 +17,12 @@ public sealed class AlertRuleRepository : IAlertRuleRepository
             .Where(x => x.OrganizationId == organizationId)
             .ToListAsync(cancellationToken);
 
+    public Task<AlertRule?> GetAsync(Guid organizationId, AlertType type, CancellationToken cancellationToken) =>
+        _db.AlertRules
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Type == type, cancellationToken);
+
     public void Add(AlertRule rule) => _db.AlertRules.Add(rule);
+
+    public void Update(AlertRule rule) => _db.AlertRules.Update(rule);
 }

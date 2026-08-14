@@ -20,4 +20,16 @@ public sealed class SentAlertRepository : ISentAlertRepository
     }
 
     public void Add(SentAlert alert) => _db.SentAlerts.Add(alert);
+
+    public async Task<(IReadOnlyList<SentAlert> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var query = _db.SentAlerts
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId)
+            .OrderByDescending(x => x.CreatedAt);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return (items, total);
+    }
 }

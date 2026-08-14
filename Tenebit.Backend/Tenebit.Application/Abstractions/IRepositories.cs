@@ -1,3 +1,4 @@
+using Tenebit.Application.Common;
 using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
@@ -190,18 +191,22 @@ public interface ISentAlertRepository
 {
     Task<SentAlert?> GetAsync(Guid organizationId, string alertKey, Guid entityId, string recipientEmail, CancellationToken cancellationToken);
     void Add(SentAlert alert);
+    Task<(IReadOnlyList<SentAlert> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken);
 }
 
 public interface IAlertRuleRepository
 {
     Task<IReadOnlyList<AlertRule>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<AlertRule?> GetAsync(Guid organizationId, AlertType type, CancellationToken cancellationToken);
     void Add(AlertRule rule);
+    void Update(AlertRule rule);
 }
 
 public interface IAlertDigestSettingsRepository
 {
     Task<AlertDigestSettings?> GetAsync(Guid organizationId, CancellationToken cancellationToken);
     void Add(AlertDigestSettings settings);
+    void Update(AlertDigestSettings settings);
 }
 
 public interface IDashboardLayoutRepository

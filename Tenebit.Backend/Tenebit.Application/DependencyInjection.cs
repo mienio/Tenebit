@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<SubscriptionService>();
         services.AddScoped<MyWorkspaceService>();
         services.AddScoped<AlertCheckService>();
+services.AddScoped<AlertSettingsService>();
         services.AddScoped<ActivityLogService>();
         services.AddScoped<AssetEvidenceService>();
         services.AddScoped<EvidenceRetentionService>();

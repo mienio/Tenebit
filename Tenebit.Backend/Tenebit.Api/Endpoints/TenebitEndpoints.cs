@@ -7,9 +7,11 @@ using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Audit;
+using Tenebit.Domain.Alerts;
 using Tenebit.Application.Audits;
 using Tenebit.Domain.Audits;
 using Tenebit.Application.Dashboard;
@@ -689,6 +691,36 @@ public static class TenebitEndpoints
         api.MapPut("/settings/evidence-privacy", async (SaveEvidencePrivacySettingsRequest request, SettingsService service, CancellationToken cancellationToken) =>
                 (await service.SaveEvidencePrivacyAsync(request, cancellationToken)).ToHttpResult())
             .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapGet("/settings/alerts", async (AlertSettingsService service, CancellationToken cancellationToken) =>
+                (await service.ListAlertRulesAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapPut("/settings/alerts/{type}", async (AlertType type, SaveAlertRuleRequest request, AlertSettingsService service, CancellationToken cancellationToken) =>
+                (await service.UpsertAlertRuleAsync(type, request, cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapGet("/settings/alert-digest", async (AlertSettingsService service, CancellationToken cancellationToken) =>
+                (await service.GetAlertDigestAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapPut("/settings/alert-digest", async (SaveAlertDigestSettingsRequest request, AlertSettingsService service, CancellationToken cancellationToken) =>
+                (await service.UpsertAlertDigestAsync(request, cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapPost("/settings/alerts/test", async (AlertTestRequest? request, AlertSettingsService service, CancellationToken cancellationToken) =>
+                (await service.SendTestAlertAsync(request, cancellationToken)).ToNoContentResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapGet("/alerts/history", async (int? page, int? pageSize, AlertSettingsService service, CancellationToken cancellationToken) =>
+                (await service.ListSentAlertHistoryAsync(page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
+            .WithTags("Alerts")
             .WithOpenApi();
 
         static async Task<IResult> ListJobProfiles(JobProfileService service, CancellationToken cancellationToken) =>
