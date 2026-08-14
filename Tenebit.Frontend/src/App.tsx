@@ -26,6 +26,7 @@ const ProceduresPage = lazy(() => import('./pages/ProceduresPage').then(m => ({ 
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const OffboardingPage = lazy(() => import('./pages/OffboardingPage').then(m => ({ default: m.OffboardingPage })));
 const AssetAuditsPage = lazy(() => import('./pages/AssetAuditsPage').then(m => ({ default: m.AssetAuditsPage })));
+const ReservationsPage = lazy(() => import('./pages/ReservationsPage').then(m => ({ default: m.ReservationsPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
@@ -71,6 +72,8 @@ export function App() {
           <Route path="offboarding/:id" element={<RequireRoles path="/offboarding"><OffboardingPage /></RequireRoles>} />
           <Route path="asset-audits" element={<RequireRoles path="/asset-audits"><AssetAuditsPage /></RequireRoles>} />
           <Route path="asset-audits/:id" element={<RequireRoles path="/asset-audits"><AssetAuditsPage /></RequireRoles>} />
+          <Route path="reservations" element={<RequireRoles path="/reservations"><ReservationsPage /></RequireRoles>} />
+          <Route path="reservations/:id" element={<RequireRoles path="/reservations"><ReservationsPage /></RequireRoles>} />
           <Route path="reports" element={<RequireRoles path="/reports"><ReportsPage /></RequireRoles>} />
           <Route path="licenses" element={<RequireRoles path="/licenses"><LicensesPage /></RequireRoles>} />
           <Route path="audit" element={<RequireRoles path="/audit"><AuditLogPage /></RequireRoles>} />

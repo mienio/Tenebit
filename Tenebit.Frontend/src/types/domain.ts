@@ -705,3 +705,113 @@ export interface Subscription {
   status: string;
   currentPeriodEnd: string;
 }
+
+export type EquipmentReservationStatus = 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected' | 'Cancelled' | 'ReadyForPickup' | 'CheckedOut' | 'Completed' | 'Expired';
+export type EquipmentReservationItemStatus = 'Requested' | 'Allocated' | 'Approved' | 'Rejected' | 'Substituted' | 'CheckedOut' | 'Returned';
+export type ReservationMode = 'RequestByCategory' | 'SelectExactAsset';
+
+export interface ReservationCatalogCategory {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  reservationMode: ReservationMode;
+  availableCount: number;
+}
+
+export interface ReservationCatalogKitItem {
+  categoryId: string;
+  categoryName: string;
+  requiredQuantity: number;
+}
+
+export interface ReservationCatalogKit {
+  id: string;
+  name: string;
+  description?: string | null;
+  availableCount: number;
+  items: ReservationCatalogKitItem[];
+}
+
+export interface ReservationCatalogResponse {
+  hasPersonRecord: boolean;
+  categories: ReservationCatalogCategory[];
+  kits: ReservationCatalogKit[];
+}
+
+export interface ReservationItemRequest {
+  categoryId?: string | null;
+  kitDefinitionId?: string | null;
+  quantity: number;
+}
+
+export interface CreateReservationRequest {
+  startAt: string;
+  endAt: string;
+  purpose: string;
+  pickupLocation?: string | null;
+  notes?: string | null;
+  items: ReservationItemRequest[];
+}
+
+export type UpdateReservationRequest = CreateReservationRequest;
+
+export interface ReservationResponse {
+  id: string;
+  requesterPersonId: string;
+  status: EquipmentReservationStatus;
+  startAt: string;
+  endAt: string;
+  purpose: string;
+  pickupLocation?: string | null;
+  notes?: string | null;
+  requestedAt?: string | null;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  rejectedAt?: string | null;
+  rejectedBy?: string | null;
+  decisionNotes?: string | null;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
+  createdAt: string;
+}
+
+export interface ReservationItemResponse {
+  id: string;
+  requestedCategoryId: string;
+  requestedQuantity: number;
+  kitDefinitionId?: string | null;
+  assetId?: string | null;
+  originalAssetId?: string | null;
+  substitutionReason?: string | null;
+  status: EquipmentReservationItemStatus;
+}
+
+export interface ReservationDetailsResponse {
+  reservation: ReservationResponse;
+  items: ReservationItemResponse[];
+}
+
+export interface ReservationAllocationRequest {
+  itemId: string;
+  assetId: string;
+}
+
+export interface ApproveReservationRequest {
+  allocations: ReservationAllocationRequest[];
+}
+
+export interface ReservationCalendarItem {
+  id: string;
+  requesterPersonId: string;
+  status: EquipmentReservationStatus;
+  startAt: string;
+  endAt: string;
+  purpose: string;
+  pickupLocation?: string | null;
+  assetIds: string[];
+  isConflicting: boolean;
+  isDueToday: boolean;
+  isOverdue: boolean;
+}
