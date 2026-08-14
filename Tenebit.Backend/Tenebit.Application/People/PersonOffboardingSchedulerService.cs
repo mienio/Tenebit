@@ -1,26 +1,28 @@
 using Tenebit.Application.Abstractions;
-using Tenebit.Domain.Audit;
+using Tenebit.Application.Offboarding;
 using Tenebit.Domain.People;
 
 namespace Tenebit.Application.People;
 
+/// <summary>Cykliczny scheduler dla dezaktywacji osób w trakcie offboardingu i zwolnienia ich zaplanowanych
+/// (AtEmploymentEnd) miejsc licencyjnych. Faktyczna logika "jedna osoba" żyje w
+/// <see cref="OffboardingScheduledActionsService"/> — współdzielona z ręcznym endpointem
+/// <c>POST /api/offboarding/{id}/execute-scheduled-actions</c>, żeby nie duplikować kroków ani izolacji błędów.</summary>
 public sealed class PersonOffboardingSchedulerService
 {
     private readonly IOrganizationRepository _organizations;
     private readonly IPersonRepository _people;
-    private readonly ILicenseRepository _licenses;
-    private readonly IActivityLogRepository _activity;
+    private readonly IOffboardingCaseRepository _cases;
+    private readonly OffboardingScheduledActionsService _scheduledActions;
     private readonly IClock _clock;
-    private readonly IUnitOfWork _unitOfWork;
 
-    public PersonOffboardingSchedulerService(IOrganizationRepository organizations, IPersonRepository people, ILicenseRepository licenses, IActivityLogRepository activity, IClock clock, IUnitOfWork unitOfWork)
+    public PersonOffboardingSchedulerService(IOrganizationRepository organizations, IPersonRepository people, IOffboardingCaseRepository cases, OffboardingScheduledActionsService scheduledActions, IClock clock)
     {
         _organizations = organizations;
         _people = people;
-        _licenses = licenses;
-        _activity = activity;
+        _cases = cases;
+        _scheduledActions = scheduledActions;
         _clock = clock;
-        _unitOfWork = unitOfWork;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -34,30 +36,22 @@ public sealed class PersonOffboardingSchedulerService
     private async Task ProcessOrganizationAsync(Guid organizationId, CancellationToken cancellationToken)
     {
         var now = _clock.UtcNow;
-        var due = (await _people.ListAsync(organizationId, null, cancellationToken))
-            .Where(p => p.EmploymentStatus == EmploymentStatus.Offboarding && p.EmploymentEndsAt.HasValue && p.EmploymentEndsAt.Value <= now)
-            .ToList();
-        if (due.Count == 0) return;
+        var people = await _people.ListAsync(organizationId, null, cancellationToken);
 
-        var licenses = await _licenses.ListAsync(organizationId, cancellationToken);
-        var hasChanges = false;
+        // Two groups need a pass: people whose planned end date has just arrived (about to be deactivated),
+        // and already-deactivated people whose scheduled license releases haven't all succeeded yet (retry).
+        var dueForDeactivation = people.Where(p => p.EmploymentStatus == EmploymentStatus.Offboarding && p.EmploymentEndsAt.HasValue && p.EmploymentEndsAt.Value <= now);
+        var candidatesForRetry = people.Where(p => p.EmploymentStatus == EmploymentStatus.Inactive);
 
-        foreach (var person in due)
+        foreach (var person in dueForDeactivation.Concat(candidatesForRetry).Distinct())
         {
-            person.Deactivate(now);
-            _activity.Add(new ActivityLog(organizationId, "person.deactivated", "person", person.Id, "system", person.FullName, now));
-            hasChanges = true;
-
-            foreach (var license in licenses.Where(l => l.Seats.Any(s => s.PersonId == person.Id)))
+            if (person.EmploymentStatus == EmploymentStatus.Inactive)
             {
-                license.UnassignSeat(person.Id);
-                _activity.Add(new ActivityLog(organizationId, "license.seat_unassigned", "license", license.Id, "system", license.Name, now));
+                var openCase = await _cases.FindOpenByPersonAsync(organizationId, person.Id, cancellationToken);
+                if (openCase is null || openCase.ScheduledActionsCompletedAt.HasValue) continue;
             }
-        }
 
-        if (hasChanges)
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _scheduledActions.ExecuteAsync(organizationId, person, now, "system", cancellationToken);
         }
     }
 }

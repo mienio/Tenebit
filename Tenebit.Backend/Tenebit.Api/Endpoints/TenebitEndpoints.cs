@@ -898,6 +898,11 @@ public static class TenebitEndpoints
                 (await service.StartAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Offboarding")
             .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/execute-scheduled-actions", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.ExecuteScheduledActionsAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
     }
 
     private static void MapPublicAssignments(RouteGroupBuilder api)

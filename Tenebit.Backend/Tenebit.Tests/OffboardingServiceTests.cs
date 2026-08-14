@@ -23,7 +23,8 @@ public class OffboardingServiceTests
         var licenses = new InMemoryLicenseRepository();
         var activity = new InMemoryActivityLogRepository();
 
-        var service = new OffboardingService(cases, items, people, assets, assignments, licenses, activity, currentUser, new FakeClock(), new FakeUnitOfWork());
+        var service = new OffboardingService(cases, items, people, assets, assignments, licenses, activity, currentUser, new FakeClock(), new FakeUnitOfWork(),
+            new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()));
 
         return (service, currentUser, cases, items, people, assets, assignments, licenses, activity);
     }
@@ -174,5 +175,30 @@ public class OffboardingServiceTests
         var update = await service.UpdateAsync(created.Value.Case.Id, new UpdateOffboardingCaseRequest(DateTimeOffset.UtcNow.AddDays(15), DateTimeOffset.UtcNow.AddDays(22), null, null, null, false, false, false), CancellationToken.None);
 
         Assert.True(update.IsFailure);
+    }
+
+    [Fact]
+    public async Task ExecuteScheduledActionsAsync_PastEmploymentEndsAt_ImmediatelyDeactivatesAndReleasesLicenses()
+    {
+        var (service, user, _, _, people, assets, _, licenses, activity) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var license = new License(user.OrganizationId, "Office 365", null, null, 5, null, null);
+        license.AssignSeat(person.Id, DateTimeOffset.UtcNow);
+        licenses.Add(license);
+
+        // Employment end date is already in the past when the case is started.
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(3), null, null, null, false, false, true), CancellationToken.None);
+        await service.StartAsync(created.Value!.Case.Id, CancellationToken.None);
+
+        var result = await service.ExecuteScheduledActionsAsync(created.Value.Case.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(EmploymentStatus.Inactive, people.People.First(x => x.Id == person.Id).EmploymentStatus);
+        Assert.Empty(license.Seats);
+        Assert.Contains(result.Value!.Items, x => x.Type == OffboardingItemType.LicenseRelease && x.Status == OffboardingItemStatus.Released);
+        Assert.Contains(activity.Logs, x => x.Action == "person.deactivated");
+        Assert.Contains(activity.Logs, x => x.Action == "offboarding.license_released");
     }
 }

@@ -1,3 +1,4 @@
+using Tenebit.Application.Offboarding;
 using Tenebit.Application.People;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Licenses;
@@ -13,10 +14,13 @@ public class PersonOffboardingSchedulerServiceTests
     {
         var organizations = new InMemoryOrganizationRepository();
         var people = new InMemoryPersonRepository();
+        var cases = new InMemoryOffboardingCaseRepository();
+        var items = new InMemoryOffboardingItemRepository();
         var licenses = new InMemoryLicenseRepository();
         var activity = new InMemoryActivityLogRepository();
         var clock = new FakeClock();
-        var service = new PersonOffboardingSchedulerService(organizations, people, licenses, activity, clock, new FakeUnitOfWork());
+        var scheduledActions = new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork());
+        var service = new PersonOffboardingSchedulerService(organizations, people, cases, scheduledActions, clock);
         return (service, clock, organizations, people, licenses, activity);
     }
 

@@ -25,10 +25,12 @@ public sealed class OffboardingService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly OffboardingScheduledActionsService _scheduledActions;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssignmentRepository assignments, ILicenseRepository licenses,
-        IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+        IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
+        OffboardingScheduledActionsService scheduledActions)
     {
         _cases = cases;
         _items = items;
@@ -40,6 +42,7 @@ public sealed class OffboardingService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _scheduledActions = scheduledActions;
     }
 
     public async Task<Result<PagedResult<OffboardingCaseResponse>>> ListPagedAsync(OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken)
@@ -210,6 +213,26 @@ public sealed class OffboardingService
         {
             return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    /// <summary>Ręczny odpowiednik jednego przebiegu <see cref="Tenebit.Application.People.PersonOffboardingSchedulerService"/>
+    /// dla pojedynczej sprawy — dezaktywuje osobę (jeśli termin już minął) i próbuje zwolnić zaplanowane
+    /// (AtEmploymentEnd) miejsca licencyjne. Idempotentny: bezpieczny do wielokrotnego wywołania, w tym jako
+    /// ponowienie po naprawieniu przyczyny wcześniejszego błędu zwolnienia licencji.</summary>
+    public async Task<Result<OffboardingCaseDetailsResponse>> ExecuteScheduledActionsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
+        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
+        if (person is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Osoba przypisana do sprawy nie istnieje."));
+
+        await _scheduledActions.ExecuteAsync(organizationId, person, _clock.UtcNow, _currentUser.Subject, cancellationToken);
+        return await BuildDetailsAsync(id, cancellationToken);
     }
 
     private static OffboardingCaseResponse Map(OffboardingCase offboardingCase, IReadOnlyDictionary<Guid, string> personNames) =>

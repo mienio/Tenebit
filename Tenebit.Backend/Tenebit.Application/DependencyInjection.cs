@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ActivityLogService>();
         services.AddScoped<AssetEvidenceService>();
         services.AddScoped<EvidenceRetentionService>();
+        services.AddScoped<OffboardingScheduledActionsService>();
         services.AddScoped<OffboardingService>();
         return services;
     }
