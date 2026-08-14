@@ -7,6 +7,7 @@ using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.Licenses;
+using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
@@ -208,6 +209,20 @@ public interface ILicenseRepository
     Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(License license);
     void Remove(License license);
+}
+
+public interface IOffboardingCaseRepository
+{
+    Task<(IReadOnlyList<OffboardingCase> Items, int Total)> ListPagedAsync(Guid organizationId, OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
+    void Add(OffboardingCase offboardingCase);
+}
+
+public interface IOffboardingItemRepository
+{
+    Task<IReadOnlyList<OffboardingItem>> ListByCaseAsync(Guid organizationId, Guid offboardingCaseId, CancellationToken cancellationToken);
+    void Add(OffboardingItem item);
 }
 
 public interface IAssetEvidenceRepository

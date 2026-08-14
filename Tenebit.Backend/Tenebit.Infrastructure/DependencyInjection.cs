@@ -47,6 +47,8 @@ public static class DependencyInjection
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<IDashboardSnapshotRepository, DashboardSnapshotRepository>();
         services.AddScoped<IAssetEvidenceRepository, AssetEvidenceRepository>();
+        services.AddScoped<IOffboardingCaseRepository, OffboardingCaseRepository>();
+        services.AddScoped<IOffboardingItemRepository, OffboardingItemRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
         services.AddSingleton<IPdfProtocolGenerator, PdfProtocolGenerator>();

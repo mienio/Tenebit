@@ -6,6 +6,7 @@ using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Licenses;
+using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
 using Tenebit.Domain.Settings;
@@ -210,6 +211,40 @@ public sealed class InMemoryLicenseRepository : ILicenseRepository
 
     public void Add(License license) => Licenses.Add(license);
     public void Remove(License license) => Licenses.Remove(license);
+}
+
+public sealed class InMemoryOffboardingCaseRepository : IOffboardingCaseRepository
+{
+    private static readonly OffboardingCaseStatus[] ClosedStatuses = [OffboardingCaseStatus.Completed, OffboardingCaseStatus.Cancelled];
+
+    public List<OffboardingCase> Cases { get; } = [];
+
+    public Task<(IReadOnlyList<OffboardingCase> Items, int Total)> ListPagedAsync(Guid organizationId, OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Cases.Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value)).ToList();
+        return Task.FromResult<(IReadOnlyList<OffboardingCase>, int)>((rows, rows.Count));
+    }
+
+    public Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Cases.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
+        Task.FromResult(Cases.FirstOrDefault(x => x.OrganizationId == organizationId && x.PersonId == personId && !ClosedStatuses.Contains(x.Status)));
+
+    public void Add(OffboardingCase offboardingCase) => Cases.Add(offboardingCase);
+}
+
+public sealed class InMemoryOffboardingItemRepository : IOffboardingItemRepository
+{
+    public List<OffboardingItem> Items { get; } = [];
+
+    public Task<IReadOnlyList<OffboardingItem>> ListByCaseAsync(Guid organizationId, Guid offboardingCaseId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OffboardingItem>>(Items
+            .Where(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId)
+            .OrderBy(x => x.SortOrder)
+            .ToList());
+
+    public void Add(OffboardingItem item) => Items.Add(item);
 }
 
 public sealed class FakePaymentGateway : IPaymentGateway

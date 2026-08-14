@@ -53,6 +53,25 @@ public sealed class OffboardingCase
     public string? CancellationReason { get; private set; }
     public string? FinalProtocolNumber { get; private set; }
 
+    /// <summary>Edycja pól sprawy dozwolona tylko w statusie roboczym — po starcie migawka pozycji jest już wygenerowana.</summary>
+    public void UpdateDraft(DateTimeOffset employmentEndsAt, DateTimeOffset returnDueDate, string? defaultReturnLocation, string? notes,
+        Guid? processOwnerId, bool blockNewReservations, bool cancelFutureReservations, bool autoReleaseLicenses)
+    {
+        if (Status != OffboardingCaseStatus.Draft)
+        {
+            throw new DomainException("Sprawę offboardingową można edytować tylko w statusie roboczym.");
+        }
+
+        EmploymentEndsAt = employmentEndsAt;
+        ReturnDueDate = returnDueDate;
+        DefaultReturnLocation = string.IsNullOrWhiteSpace(defaultReturnLocation) ? null : defaultReturnLocation.Trim();
+        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        ProcessOwnerId = processOwnerId;
+        BlockNewReservations = blockNewReservations;
+        CancelFutureReservations = cancelFutureReservations;
+        AutoReleaseLicenses = autoReleaseLicenses;
+    }
+
     public void Start(DateTimeOffset startedAt)
     {
         if (Status != OffboardingCaseStatus.Draft)

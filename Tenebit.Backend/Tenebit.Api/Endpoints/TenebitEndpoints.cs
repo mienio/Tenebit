@@ -13,6 +13,7 @@ using Tenebit.Application.Evidence;
 using Tenebit.Application.Identity;
 using Tenebit.Application.JobProfiles;
 using Tenebit.Application.Licenses;
+using Tenebit.Application.Offboarding;
 using Tenebit.Application.Onboarding;
 using Tenebit.Application.Organizations;
 using Tenebit.Application.People;
@@ -22,6 +23,7 @@ using Tenebit.Application.Subscriptions;
 using Tenebit.Application.Workspace;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Evidence;
+using Tenebit.Domain.Offboarding;
 using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Api.Endpoints;
@@ -69,6 +71,7 @@ public static class TenebitEndpoints
         MapPeople(api);
         MapProcedures(api);
         MapAssignments(api);
+        MapOffboarding(api);
         MapPublicAssignments(api);
         MapPublicAssets(api);
         MapActivityLog(api);
@@ -866,6 +869,34 @@ public static class TenebitEndpoints
                 : Results.File(result.Value, "application/pdf", $"protokol-{id}.pdf");
         })
             .WithTags("Assignments")
+            .WithOpenApi();
+    }
+
+    private static void MapOffboarding(RouteGroupBuilder api)
+    {
+        api.MapGet("/offboarding", async (OffboardingCaseStatus? status, int? page, int? pageSize, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapGet("/offboarding/{id:guid}", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding", async (CreateOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/offboarding/{response.Case.Id}"))
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPut("/offboarding/{id:guid}", async (Guid id, UpdateOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
+            .WithOpenApi();
+
+        api.MapPost("/offboarding/{id:guid}/start", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.StartAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Offboarding")
             .WithOpenApi();
     }
 

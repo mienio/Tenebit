@@ -10,6 +10,7 @@ using Tenebit.Application.JobProfiles;
 using Tenebit.Application.Identity;
 using Tenebit.Application.Licenses;
 using Tenebit.Application.Settings;
+using Tenebit.Application.Offboarding;
 using Tenebit.Application.Organizations;
 using Tenebit.Application.People;
 using Tenebit.Application.Procedures;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ActivityLogService>();
         services.AddScoped<AssetEvidenceService>();
         services.AddScoped<EvidenceRetentionService>();
+        services.AddScoped<OffboardingService>();
         return services;
     }
 }
