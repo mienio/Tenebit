@@ -12,6 +12,7 @@ using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Reservations;
 using Tenebit.Domain.Settings;
 using Tenebit.Domain.Subscriptions;
 
@@ -266,4 +267,18 @@ public interface IRolePermissionRepository
     Task<RolePermission?> FindAsync(Guid organizationId, string roleKey, string permissionKey, CancellationToken cancellationToken);
     void Add(RolePermission permission);
     void Remove(RolePermission permission);
+}
+
+public interface IEquipmentKitDefinitionRepository
+{
+    Task<IReadOnlyList<EquipmentKitDefinition>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<EquipmentKitDefinition?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    void Add(EquipmentKitDefinition kitDefinition);
+}
+
+public interface IEquipmentReservationRepository
+{
+    Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
+    Task<EquipmentReservation?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    void Add(EquipmentReservation reservation);
 }

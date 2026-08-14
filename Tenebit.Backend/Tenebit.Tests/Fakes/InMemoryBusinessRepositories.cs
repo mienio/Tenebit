@@ -20,7 +20,9 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public List<Asset> Assets { get; } = [];
 
     public Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId).ToList());
+        Task.FromResult<IReadOnlyList<Asset>>(Assets
+            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value))
+            .ToList());
 
     public Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {

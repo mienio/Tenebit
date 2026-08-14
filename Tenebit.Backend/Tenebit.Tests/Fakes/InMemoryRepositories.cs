@@ -4,6 +4,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.Organizations;
+using Tenebit.Domain.Reservations;
 
 namespace Tenebit.Tests.Fakes;
 
@@ -62,6 +63,41 @@ public sealed class InMemoryAssetCategoryRepository : IAssetCategoryRepository
 
     public void Add(AssetCategory category) => Categories.Add(category);
     public void Remove(AssetCategory category) => Categories.Remove(category);
+}
+
+public sealed class InMemoryEquipmentKitDefinitionRepository : IEquipmentKitDefinitionRepository
+{
+    public List<EquipmentKitDefinition> KitDefinitions { get; } = [];
+
+    public Task<IReadOnlyList<EquipmentKitDefinition>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EquipmentKitDefinition>>(KitDefinitions.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<EquipmentKitDefinition?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(KitDefinitions.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public void Add(EquipmentKitDefinition kitDefinition) => KitDefinitions.Add(kitDefinition);
+}
+
+public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservationRepository
+{
+    private static readonly EquipmentReservationStatus[] HoldingStatuses =
+    [
+        EquipmentReservationStatus.Approved,
+        EquipmentReservationStatus.ReadyForPickup,
+        EquipmentReservationStatus.CheckedOut
+    ];
+
+    public List<EquipmentReservation> Reservations { get; } = [];
+
+    public Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
+            .Where(x => x.OrganizationId == organizationId && HoldingStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
+            .ToList());
+
+    public Task<EquipmentReservation?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Reservations.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public void Add(EquipmentReservation reservation) => Reservations.Add(reservation);
 }
 
 public sealed class InMemoryAssetInspectionRepository : IAssetInspectionRepository

@@ -58,6 +58,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<AssetAuditItem> AssetAuditItems => Set<AssetAuditItem>();
     public DbSet<EquipmentKitDefinition> EquipmentKitDefinitions => Set<EquipmentKitDefinition>();
     public DbSet<EquipmentKitDefinitionItem> EquipmentKitDefinitionItems => Set<EquipmentKitDefinitionItem>();
+    public DbSet<EquipmentReservation> EquipmentReservations => Set<EquipmentReservation>();
+    public DbSet<EquipmentReservationItem> EquipmentReservationItems => Set<EquipmentReservationItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -141,6 +143,37 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.ToTable("equipment_kit_definition_items");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.OrganizationId, x.KitDefinitionId });
+        });
+
+        modelBuilder.Entity<EquipmentReservation>(entity =>
+        {
+            entity.ToTable("equipment_reservations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Purpose).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.PickupLocation).HasMaxLength(240);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.ApprovedBy).HasMaxLength(240);
+            entity.Property(x => x.RejectedBy).HasMaxLength(240);
+            entity.Property(x => x.DecisionNotes).HasMaxLength(2000);
+            entity.Property(x => x.CancelledBy).HasMaxLength(240);
+            entity.Property(x => x.CancellationReason).HasMaxLength(2000);
+            // Token współbieżności wymagany przez sekcję 8.5 — zapobiega zatwierdzeniu dwóch nachodzących
+            // rezerwacji tego samego aktywa w równoległych żądaniach.
+            entity.Property(x => x.RowVersion).IsRowVersion();
+            entity.HasIndex(x => new { x.OrganizationId, x.RequesterPersonId });
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.StartAt, x.EndAt });
+            entity.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.ReservationId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EquipmentReservationItem>(entity =>
+        {
+            entity.ToTable("equipment_reservation_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.SubstitutionReason).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.OrganizationId, x.ReservationId });
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId });
         });
     }
 

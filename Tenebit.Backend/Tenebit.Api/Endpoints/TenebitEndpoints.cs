@@ -20,6 +20,7 @@ using Tenebit.Application.Onboarding;
 using Tenebit.Application.Organizations;
 using Tenebit.Application.People;
 using Tenebit.Application.Procedures;
+using Tenebit.Application.Reservations;
 using Tenebit.Application.Settings;
 using Tenebit.Application.Subscriptions;
 using Tenebit.Application.Workspace;
@@ -63,6 +64,7 @@ public static class TenebitEndpoints
         MapAuth(api);
         api.MapExternalAuthEndpoints();
         MapWorkspace(api);
+        MapReservations(api);
         MapDashboard(api);
         MapOrganization(api);
         MapOnboarding(api);
@@ -308,6 +310,19 @@ public static class TenebitEndpoints
         api.MapGet("/my/workspace", async (MyWorkspaceService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.GetAsync(cancellationToken)))
             .WithTags("Workspace")
+            .WithOpenApi();
+    }
+
+    private static void MapReservations(RouteGroupBuilder api)
+    {
+        api.MapGet("/reservation-catalog", async (DateTimeOffset? from, DateTimeOffset? to, string? search, string? location, ReservationCatalogService service, CancellationToken cancellationToken) =>
+            {
+                // Domyślny tydzień od dziś, gdy pracownik jeszcze nie wybrał terminu (spec 8.6 krok 1).
+                var start = from ?? DateTimeOffset.UtcNow;
+                var end = to ?? start.AddDays(7);
+                return Results.Ok(await service.GetAsync(start, end, search, location, cancellationToken));
+            })
+            .WithTags("Reservations")
             .WithOpenApi();
     }
 

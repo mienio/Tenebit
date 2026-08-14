@@ -52,6 +52,8 @@ public static class DependencyInjection
         services.AddScoped<IAssetAuditCampaignRepository, AssetAuditCampaignRepository>();
         services.AddScoped<IAssetAuditParticipantRepository, AssetAuditParticipantRepository>();
         services.AddScoped<IAssetAuditItemRepository, AssetAuditItemRepository>();
+        services.AddScoped<IEquipmentKitDefinitionRepository, EquipmentKitDefinitionRepository>();
+        services.AddScoped<IEquipmentReservationRepository, EquipmentReservationRepository>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
         services.AddSingleton<IPdfProtocolGenerator, PdfProtocolGenerator>();

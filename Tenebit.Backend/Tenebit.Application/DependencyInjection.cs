@@ -15,6 +15,7 @@ using Tenebit.Application.Offboarding;
 using Tenebit.Application.Organizations;
 using Tenebit.Application.People;
 using Tenebit.Application.Procedures;
+using Tenebit.Application.Reservations;
 using Tenebit.Application.Subscriptions;
 using Tenebit.Application.Workspace;
 
@@ -53,6 +54,8 @@ public static class DependencyInjection
         services.AddScoped<OffboardingScheduledActionsService>();
         services.AddScoped<OffboardingService>();
         services.AddScoped<AssetAuditCampaignService>();
+        services.AddScoped<AssetAvailabilityService>();
+        services.AddScoped<ReservationCatalogService>();
         return services;
     }
 }
