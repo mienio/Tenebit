@@ -168,20 +168,27 @@ public sealed class ReservationService
 
     public async Task<Result<PagedResult<ReservationResponse>>> ListPagedAsync(EquipmentReservationStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ReservationViewers);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Manager);
         if (access.IsFailure) return Result<PagedResult<ReservationResponse>>.Failure(access.Error!);
 
-        var (reservations, total) = await _reservations.ListPagedAsync(_currentUser.OrganizationId, status, page, pageSize, cancellationToken);
+        var requesterPersonIds = await ResolveManagerSubordinateFilterAsync(cancellationToken);
+        var (reservations, total) = await _reservations.ListPagedAsync(_currentUser.OrganizationId, status, requesterPersonIds, page, pageSize, cancellationToken);
         return Result<PagedResult<ReservationResponse>>.Success(new PagedResult<ReservationResponse>(reservations.Select(Map).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<ReservationDetailsResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ReservationViewers);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Manager);
         if (access.IsFailure) return Result<ReservationDetailsResponse>.Failure(access.Error!);
 
         var reservation = await _reservations.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
         if (reservation is null) return Result<ReservationDetailsResponse>.Failure(Error.NotFound("Wniosek nie istnieje."));
+
+        if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator))
+        {
+            var managerAccess = await EnsureApproveAccessAsync(reservation, cancellationToken);
+            if (managerAccess.IsFailure) return Result<ReservationDetailsResponse>.Failure(managerAccess.Error!);
+        }
 
         return Result<ReservationDetailsResponse>.Success(MapDetails(reservation));
     }
@@ -402,11 +409,12 @@ public sealed class ReservationService
 
     public async Task<Result<IReadOnlyList<ReservationCalendarItemResponse>>> GetCalendarAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ReservationViewers);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Manager);
         if (access.IsFailure) return Result<IReadOnlyList<ReservationCalendarItemResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var reservations = await _reservations.ListForCalendarAsync(organizationId, from, to, cancellationToken);
+        var requesterPersonIds = await ResolveManagerSubordinateFilterAsync(cancellationToken);
+        var reservations = await _reservations.ListForCalendarAsync(organizationId, from, to, requesterPersonIds, cancellationToken);
         var now = _clock.UtcNow;
         var today = now.UtcDateTime.Date;
 
@@ -447,6 +455,23 @@ public sealed class ReservationService
             .ToList();
 
         return Result<IReadOnlyList<ReservationCalendarItemResponse>>.Success(result);
+    }
+
+    /// <summary>Zwraca null (brak filtrowania — widok pełny) dla Owner/Admin/AssetOperator; dla samego
+    /// Managera zwraca zbiór Id osób, których jest bezpośrednim przełożonym (spec 8.10), żeby lista/kalendarz
+    /// pokazywały wyłącznie wnioski jego podwładnych — spójnie z <see cref="EnsureApproveAccessAsync"/>.</summary>
+    private async Task<IReadOnlyCollection<Guid>?> ResolveManagerSubordinateFilterAsync(CancellationToken cancellationToken)
+    {
+        if (_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator))
+        {
+            return null;
+        }
+
+        var currentPerson = await GetRequesterPersonAsync(cancellationToken);
+        if (currentPerson is null) return [];
+
+        var people = await _people.ListAsync(_currentUser.OrganizationId, search: null, cancellationToken);
+        return people.Where(p => p.ManagerId == currentPerson.Id).Select(p => p.Id).ToList();
     }
 
     private async Task<Result> EnsureApproveAccessAsync(EquipmentReservation reservation, CancellationToken cancellationToken)

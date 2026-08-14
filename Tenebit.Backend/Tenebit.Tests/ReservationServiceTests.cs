@@ -195,6 +195,138 @@ public class ReservationServiceTests
     }
 
     [Fact]
+    public async Task ListPagedAsync_ManagerSeesOnlyDirectReportsReservations()
+    {
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
+
+        var manager = new Person(user.OrganizationId, "Anna", "Kierownik", "anna@acme.test");
+        people.Add(manager);
+        var employee = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
+        employee.Update("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, null, manager.Id, null, null);
+        people.Add(employee);
+        var stranger = new Person(user.OrganizationId, "Piotr", "Obcy", "piotr@acme.test");
+        people.Add(stranger);
+
+        var categoryId = Guid.NewGuid();
+        AddReservableAsset(user, assets, categoryId);
+
+        var now = clock.UtcNow;
+        var employeeReservation = new EquipmentReservation(user.OrganizationId, employee.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        employeeReservation.AddItem(categoryId, 1, null);
+        employeeReservation.Submit(now);
+        reservations.Add(employeeReservation);
+
+        var strangerReservation = new EquipmentReservation(user.OrganizationId, stranger.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        strangerReservation.AddItem(categoryId, 1, null);
+        strangerReservation.Submit(now);
+        reservations.Add(strangerReservation);
+
+        user.Email = "anna@acme.test";
+        user.Roles = ["manager"];
+
+        var result = await service.ListPagedAsync(null, 1, 25, CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value!.Items);
+        Assert.Equal(employee.Id, result.Value.Items.Single().RequesterPersonId);
+    }
+
+    [Fact]
+    public async Task ListPagedAsync_OwnerSeesAllReservations()
+    {
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
+
+        var employee = AddPerson(people, user.OrganizationId, "jan@acme.test");
+        var categoryId = Guid.NewGuid();
+        AddReservableAsset(user, assets, categoryId);
+
+        var now = clock.UtcNow;
+        var employeeReservation = new EquipmentReservation(user.OrganizationId, employee.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        employeeReservation.AddItem(categoryId, 1, null);
+        employeeReservation.Submit(now);
+        reservations.Add(employeeReservation);
+
+        user.Roles = ["owner"];
+
+        var result = await service.ListPagedAsync(null, 1, 25, CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value!.Items);
+    }
+
+    [Fact]
+    public async Task GetAsync_ManagerCanSeeOnlyDirectReportsReservation()
+    {
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
+
+        var manager = new Person(user.OrganizationId, "Anna", "Kierownik", "anna@acme.test");
+        people.Add(manager);
+        var employee = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
+        employee.Update("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, null, manager.Id, null, null);
+        people.Add(employee);
+        var stranger = new Person(user.OrganizationId, "Piotr", "Obcy", "piotr@acme.test");
+        people.Add(stranger);
+
+        var categoryId = Guid.NewGuid();
+        AddReservableAsset(user, assets, categoryId);
+
+        var now = clock.UtcNow;
+        var employeeReservation = new EquipmentReservation(user.OrganizationId, employee.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        employeeReservation.AddItem(categoryId, 1, null);
+        employeeReservation.Submit(now);
+        reservations.Add(employeeReservation);
+
+        var strangerReservation = new EquipmentReservation(user.OrganizationId, stranger.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        strangerReservation.AddItem(categoryId, 1, null);
+        strangerReservation.Submit(now);
+        reservations.Add(strangerReservation);
+
+        user.Email = "anna@acme.test";
+        user.Roles = ["manager"];
+
+        var ownReport = await service.GetAsync(employeeReservation.Id, CancellationToken.None);
+        Assert.True(ownReport.IsSuccess);
+
+        var notOwnReport = await service.GetAsync(strangerReservation.Id, CancellationToken.None);
+        Assert.True(notOwnReport.IsFailure);
+        Assert.Equal(403, notOwnReport.Error!.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetCalendarAsync_ManagerSeesOnlyDirectReportsReservations()
+    {
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
+
+        var manager = new Person(user.OrganizationId, "Anna", "Kierownik", "anna@acme.test");
+        people.Add(manager);
+        var employee = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
+        employee.Update("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, null, manager.Id, null, null);
+        people.Add(employee);
+        var stranger = new Person(user.OrganizationId, "Piotr", "Obcy", "piotr@acme.test");
+        people.Add(stranger);
+
+        var categoryId = Guid.NewGuid();
+        AddReservableAsset(user, assets, categoryId);
+
+        var now = clock.UtcNow;
+        var employeeReservation = new EquipmentReservation(user.OrganizationId, employee.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        employeeReservation.AddItem(categoryId, 1, null);
+        employeeReservation.Submit(now);
+        reservations.Add(employeeReservation);
+
+        var strangerReservation = new EquipmentReservation(user.OrganizationId, stranger.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        strangerReservation.AddItem(categoryId, 1, null);
+        strangerReservation.Submit(now);
+        reservations.Add(strangerReservation);
+
+        user.Email = "anna@acme.test";
+        user.Roles = ["manager"];
+
+        var result = await service.GetCalendarAsync(now, now.AddDays(10), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value!);
+        Assert.Equal(employee.Id, result.Value.Single().RequesterPersonId);
+    }
+
+    [Fact]
     public async Task CreateAsync_BlocksWhenPersonIsNotActive()
     {
         var (service, user, _, people, assets, _, clock, _, _) = CreateService();

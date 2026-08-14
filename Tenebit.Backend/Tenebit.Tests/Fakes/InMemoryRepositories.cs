@@ -102,9 +102,10 @@ public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservati
             .Where(x => x.OrganizationId == organizationId && HoldingStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
             .ToList());
 
-    public Task<IReadOnlyList<EquipmentReservation>> ListForCalendarAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<EquipmentReservation>> ListForCalendarAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, IReadOnlyCollection<Guid>? requesterPersonIds, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
-            .Where(x => x.OrganizationId == organizationId && CalendarStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
+            .Where(x => x.OrganizationId == organizationId && CalendarStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from
+                && (requesterPersonIds == null || requesterPersonIds.Contains(x.RequesterPersonId)))
             .ToList());
 
     public Task<IReadOnlyList<EquipmentReservation>> ListByRequesterAsync(Guid organizationId, Guid requesterPersonId, CancellationToken cancellationToken) =>
@@ -113,10 +114,11 @@ public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservati
             .OrderByDescending(x => x.CreatedAt)
             .ToList());
 
-    public Task<(IReadOnlyList<EquipmentReservation> Items, int Total)> ListPagedAsync(Guid organizationId, EquipmentReservationStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    public Task<(IReadOnlyList<EquipmentReservation> Items, int Total)> ListPagedAsync(Guid organizationId, EquipmentReservationStatus? status, IReadOnlyCollection<Guid>? requesterPersonIds, int page, int pageSize, CancellationToken cancellationToken)
     {
         var rows = Reservations
-            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value))
+            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value)
+                && (requesterPersonIds == null || requesterPersonIds.Contains(x.RequesterPersonId)))
             .OrderByDescending(x => x.CreatedAt)
             .ToList();
         return Task.FromResult<(IReadOnlyList<EquipmentReservation>, int)>((rows, rows.Count));
