@@ -16,6 +16,16 @@ public sealed class EquipmentReservationRepository : IEquipmentReservationReposi
         EquipmentReservationStatus.CheckedOut
     ];
 
+    // Widok kalendarza (spec 8.7) pokazuje również oczekujące na akceptację, żeby administrator widział
+    // nadchodzące konflikty zanim jeszcze zatwierdzi wniosek.
+    private static readonly EquipmentReservationStatus[] CalendarStatuses =
+    [
+        EquipmentReservationStatus.PendingApproval,
+        EquipmentReservationStatus.Approved,
+        EquipmentReservationStatus.ReadyForPickup,
+        EquipmentReservationStatus.CheckedOut
+    ];
+
     private readonly TenebitDbContext _db;
 
     public EquipmentReservationRepository(TenebitDbContext db) => _db = db;
@@ -26,6 +36,16 @@ public sealed class EquipmentReservationRepository : IEquipmentReservationReposi
             .Include(x => x.Items)
             .Where(x => x.OrganizationId == organizationId
                 && HoldingStatuses.Contains(x.Status)
+                && x.StartAt < to
+                && x.EndAt > from)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<EquipmentReservation>> ListForCalendarAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
+        await _db.EquipmentReservations
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .Where(x => x.OrganizationId == organizationId
+                && CalendarStatuses.Contains(x.Status)
                 && x.StartAt < to
                 && x.EndAt > from)
             .ToListAsync(cancellationToken);
@@ -59,6 +79,11 @@ public sealed class EquipmentReservationRepository : IEquipmentReservationReposi
         _db.EquipmentReservations
             .Include(x => x.Items)
             .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
+
+    public Task<EquipmentReservation?> GetByAssignmentIdAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
+        _db.EquipmentReservations
+            .Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId, cancellationToken);
 
     public void Add(EquipmentReservation reservation) => _db.EquipmentReservations.Add(reservation);
 }

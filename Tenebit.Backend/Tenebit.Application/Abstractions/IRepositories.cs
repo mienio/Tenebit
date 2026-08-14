@@ -281,6 +281,8 @@ public interface IEquipmentReservationRepository
     Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
     Task<IReadOnlyList<EquipmentReservation>> ListByRequesterAsync(Guid organizationId, Guid requesterPersonId, CancellationToken cancellationToken);
     Task<(IReadOnlyList<EquipmentReservation> Items, int Total)> ListPagedAsync(Guid organizationId, EquipmentReservationStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    Task<IReadOnlyList<EquipmentReservation>> ListForCalendarAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
     Task<EquipmentReservation?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<EquipmentReservation?> GetByAssignmentIdAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken);
     void Add(EquipmentReservation reservation);
 }

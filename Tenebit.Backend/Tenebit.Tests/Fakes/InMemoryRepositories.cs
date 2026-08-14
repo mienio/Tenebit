@@ -87,11 +87,24 @@ public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservati
         EquipmentReservationStatus.CheckedOut
     ];
 
+    private static readonly EquipmentReservationStatus[] CalendarStatuses =
+    [
+        EquipmentReservationStatus.PendingApproval,
+        EquipmentReservationStatus.Approved,
+        EquipmentReservationStatus.ReadyForPickup,
+        EquipmentReservationStatus.CheckedOut
+    ];
+
     public List<EquipmentReservation> Reservations { get; } = [];
 
     public Task<IReadOnlyList<EquipmentReservation>> ListApprovedOverlappingAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
             .Where(x => x.OrganizationId == organizationId && HoldingStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
+            .ToList());
+
+    public Task<IReadOnlyList<EquipmentReservation>> ListForCalendarAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EquipmentReservation>>(Reservations
+            .Where(x => x.OrganizationId == organizationId && CalendarStatuses.Contains(x.Status) && x.StartAt < to && x.EndAt > from)
             .ToList());
 
     public Task<IReadOnlyList<EquipmentReservation>> ListByRequesterAsync(Guid organizationId, Guid requesterPersonId, CancellationToken cancellationToken) =>
@@ -111,6 +124,9 @@ public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservati
 
     public Task<EquipmentReservation?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Reservations.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<EquipmentReservation?> GetByAssignmentIdAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
+        Task.FromResult(Reservations.FirstOrDefault(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId));
 
     public void Add(EquipmentReservation reservation) => Reservations.Add(reservation);
 }

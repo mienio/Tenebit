@@ -361,6 +361,11 @@ public static class TenebitEndpoints
             .WithTags("Reservations")
             .WithOpenApi();
 
+        api.MapGet("/reservations/calendar", async (DateTimeOffset from, DateTimeOffset to, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.GetCalendarAsync(from, to, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
         api.MapGet("/reservations/{id:guid}", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Reservations")
@@ -383,6 +388,11 @@ public static class TenebitEndpoints
 
         api.MapPost("/reservations/{id:guid}/cancel", async (Guid id, CancelReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
                 (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Reservations")
+            .WithOpenApi();
+
+        api.MapPost("/reservations/{id:guid}/checkout", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
+                (await service.CheckoutAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Reservations")
             .WithOpenApi();
     }

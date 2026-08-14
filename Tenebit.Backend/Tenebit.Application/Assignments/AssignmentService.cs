@@ -5,6 +5,7 @@ using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Reservations;
 
 namespace Tenebit.Application.Assignments;
 
@@ -25,9 +26,10 @@ public sealed class AssignmentService
     private readonly IPdfProtocolGenerator _pdfGenerator;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _linkBuilder;
+    private readonly IEquipmentReservationRepository _reservations;
     private readonly Assets.AssetReturnDispositionService _disposition;
 
-    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder)
+    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations)
     {
         _assignments = assignments;
         _assets = assets;
@@ -44,6 +46,7 @@ public sealed class AssignmentService
         _pdfGenerator = pdfGenerator;
         _emailSender = emailSender;
         _linkBuilder = linkBuilder;
+        _reservations = reservations;
         _disposition = new Assets.AssetReturnDispositionService(inspections);
     }
 
@@ -97,7 +100,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> CreateAsync(CreateAssignmentRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         try
@@ -209,6 +212,7 @@ public sealed class AssignmentService
             }
 
             _activity.Add(new ActivityLog(organizationId, "assignment.returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
+            await CompleteLinkedReservationAsync(organizationId, assignment, now, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await BuildResponseAsync(id, cancellationToken);
         }
@@ -238,10 +242,12 @@ public sealed class AssignmentService
             if (asset is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
             var category = await _categories.GetAsync(organizationId, asset.CategoryId, cancellationToken);
 
-            var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, _clock.UtcNow);
+            var now = _clock.UtcNow;
+            var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now);
             if (changed)
             {
                 _activity.Add(new ActivityLog(organizationId, "assignment.asset_returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
+                await CompleteLinkedReservationAsync(organizationId, assignment, now, cancellationToken);
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -251,6 +257,19 @@ public sealed class AssignmentService
         {
             return Result<AssignmentResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    /// <summary>Spec 8.8/8.12: gdy wszystkie pozycje wydania powiązanego z rezerwacją zostaną rozliczone
+    /// (Assignment.Status przechodzi na Returned), powiązana rezerwacja automatycznie kończy się jako Completed.</summary>
+    private async Task CompleteLinkedReservationAsync(Guid organizationId, Assignment assignment, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (assignment.Status != AssignmentStatus.Returned) return;
+
+        var reservation = await _reservations.GetByAssignmentIdAsync(organizationId, assignment.Id, cancellationToken);
+        if (reservation is null || reservation.Status != EquipmentReservationStatus.CheckedOut) return;
+
+        reservation.Complete(now);
+        _activity.Add(new ActivityLog(organizationId, "reservation.completed", "equipment_reservation", reservation.Id, _currentUser.Subject, reservation.Purpose, now));
     }
 
     private bool ApplyAssetReturn(Assignment assignment, Asset asset, AssetCategory? category, ReturnResolution resolution, string? returnCondition, string? returnLocation, string? notes, Guid organizationId, DateTimeOffset now)

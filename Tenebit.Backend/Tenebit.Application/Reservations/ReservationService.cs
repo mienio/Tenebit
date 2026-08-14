@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assignments;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
@@ -7,9 +8,9 @@ using Tenebit.Domain.Reservations;
 
 namespace Tenebit.Application.Reservations;
 
-/// <summary>Wniosek pracownika (create/submit/cancel) oraz zatwierdzanie/odrzucanie/zamiana przez administratora
-/// (spec 8.6–8.9), z re-weryfikacją dostępności przy zatwierdzeniu (spec 8.5). Konwersja do wydania, kalendarz
-/// i integracja z Assignment to kolejne zadania.</summary>
+/// <summary>Wniosek pracownika (create/submit/cancel), zatwierdzanie/odrzucanie/zamiana przez administratora
+/// (spec 8.6–8.9), wydanie sprzętu (checkout, spec 8.8) oraz widok kalendarzowy (spec 8.7), z re-weryfikacją
+/// dostępności przy zatwierdzeniu i wydaniu (spec 8.5/8.12).</summary>
 public sealed class ReservationService
 {
     private readonly IEquipmentReservationRepository _reservations;
@@ -18,13 +19,14 @@ public sealed class ReservationService
     private readonly IPersonRepository _people;
     private readonly IActivityLogRepository _activity;
     private readonly AssetAvailabilityService _availability;
+    private readonly AssignmentService _assignmentService;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public ReservationService(IEquipmentReservationRepository reservations, IEquipmentKitDefinitionRepository kits,
         IAssetRepository assets, IPersonRepository people, IActivityLogRepository activity,
-        AssetAvailabilityService availability, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+        AssetAvailabilityService availability, AssignmentService assignmentService, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _reservations = reservations;
         _kits = kits;
@@ -32,6 +34,7 @@ public sealed class ReservationService
         _people = people;
         _activity = activity;
         _availability = availability;
+        _assignmentService = assignmentService;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
@@ -338,6 +341,112 @@ public sealed class ReservationService
         {
             return Result<ReservationDetailsResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    public async Task<Result<ReservationDetailsResponse>> CheckoutAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ReservationCheckoutRoles);
+        if (access.IsFailure) return Result<ReservationDetailsResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var reservation = await _reservations.GetAsync(organizationId, id, cancellationToken);
+        if (reservation is null) return Result<ReservationDetailsResponse>.Failure(Error.NotFound("Wniosek nie istnieje."));
+
+        if (reservation.Status != EquipmentReservationStatus.Approved && reservation.Status != EquipmentReservationStatus.ReadyForPickup)
+            return Result<ReservationDetailsResponse>.Failure(Error.Validation("Wydać sprzęt można tylko dla wniosku zatwierdzonego lub gotowego do odbioru."));
+
+        if (reservation.Items.Any(x => x.AssetId is null))
+            return Result<ReservationDetailsResponse>.Failure(Error.Validation("Wszystkie pozycje wniosku muszą mieć przydzielone aktywo przed wydaniem."));
+
+        // Re-weryfikacja dostępności KAŻDEGO przydzielonego aktywa tuż przed wydaniem (spec 8.8) — mogło
+        // zostać w międzyczasie oznaczone jako niedostępne (np. Damaged) — excludeReservationId pomija
+        // konflikt z własną (już zaakceptowaną) rezerwacją.
+        var unavailable = new List<Guid>();
+        foreach (var item in reservation.Items)
+        {
+            if (!await _availability.IsAssetAvailableAsync(organizationId, item.AssetId!.Value, reservation.StartAt, reservation.EndAt, cancellationToken, reservation.Id))
+            {
+                unavailable.Add(item.Id);
+            }
+        }
+
+        if (unavailable.Count > 0)
+        {
+            return Result<ReservationDetailsResponse>.Failure(Error.Conflict($"Następujące pozycje przestały być dostępne: {string.Join(", ", unavailable)}"));
+        }
+
+        var createRequest = new CreateAssignmentRequest(
+            reservation.RequesterPersonId,
+            reservation.Items.Select(x => new AssignmentAssetRequest(x.AssetId!.Value, null)).ToList(),
+            [],
+            DateOnly.FromDateTime(reservation.EndAt.UtcDateTime),
+            reservation.Notes);
+
+        var assignmentResult = await _assignmentService.CreateAsync(createRequest, cancellationToken);
+        if (assignmentResult.IsFailure) return Result<ReservationDetailsResponse>.Failure(assignmentResult.Error!);
+
+        try
+        {
+            var now = _clock.UtcNow;
+            reservation.MarkCheckedOut(assignmentResult.Value!.Id, now);
+            _activity.Add(new ActivityLog(organizationId, "reservation.checked_out", "equipment_reservation", reservation.Id, _currentUser.Subject, reservation.Purpose, now));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result<ReservationDetailsResponse>.Success(MapDetails(reservation));
+        }
+        catch (DomainException ex)
+        {
+            return Result<ReservationDetailsResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<ReservationCalendarItemResponse>>> GetCalendarAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ReservationViewers);
+        if (access.IsFailure) return Result<IReadOnlyList<ReservationCalendarItemResponse>>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var reservations = await _reservations.ListForCalendarAsync(organizationId, from, to, cancellationToken);
+        var now = _clock.UtcNow;
+        var today = now.UtcDateTime.Date;
+
+        // Konflikt = to samo aktywo pojawia się w co najmniej dwóch rezerwacjach z nachodzącymi się przedziałami.
+        var assetOccurrences = reservations
+            .SelectMany(r => r.Items.Where(i => i.AssetId.HasValue).Select(i => (Reservation: r, AssetId: i.AssetId!.Value)))
+            .GroupBy(x => x.AssetId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Reservation).ToList());
+
+        bool IsConflicting(EquipmentReservation reservation)
+        {
+            var assetIds = reservation.Items.Where(i => i.AssetId.HasValue).Select(i => i.AssetId!.Value);
+            foreach (var assetId in assetIds)
+            {
+                var others = assetOccurrences[assetId].Where(other => other.Id != reservation.Id);
+                if (others.Any(other => other.StartAt < reservation.EndAt && other.EndAt > reservation.StartAt))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        var result = reservations
+            .Select(r => new ReservationCalendarItemResponse(
+                r.Id,
+                r.RequesterPersonId,
+                r.Status,
+                r.StartAt,
+                r.EndAt,
+                r.Purpose,
+                r.PickupLocation,
+                r.Items.Where(i => i.AssetId.HasValue).Select(i => i.AssetId!.Value).ToList(),
+                IsConflicting(r),
+                r.StartAt.UtcDateTime.Date == today,
+                r.EndAt < now && r.Status == EquipmentReservationStatus.CheckedOut))
+            .ToList();
+
+        return Result<IReadOnlyList<ReservationCalendarItemResponse>>.Success(result);
     }
 
     private async Task<Result> EnsureApproveAccessAsync(EquipmentReservation reservation, CancellationToken cancellationToken)

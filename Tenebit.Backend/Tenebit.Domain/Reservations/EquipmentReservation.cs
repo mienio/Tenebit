@@ -187,4 +187,45 @@ public sealed class EquipmentReservation
 
         UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    /// <summary>Akcja "Wydaj sprzęt" (spec 8.8) — wymaga, żeby każda pozycja miała już przydzielone aktywo
+    /// (przydział/zamiana dzieje się wcześniej, przy zatwierdzeniu). Backend re-weryfikuje dostępność aktywów
+    /// przed wywołaniem tej metody (w serwisie), więc tutaj pilnujemy tylko spójności stanu.</summary>
+    public void MarkCheckedOut(Guid assignmentId, DateTimeOffset at)
+    {
+        if (Status is not (EquipmentReservationStatus.Approved or EquipmentReservationStatus.ReadyForPickup))
+        {
+            throw new DomainException("Wydać sprzęt można tylko z zatwierdzonego wniosku gotowego do odbioru.");
+        }
+
+        if (Items.Any(x => x.AssetId is null))
+        {
+            throw new DomainException("Wszystkie pozycje muszą mieć przydzielone aktywo przed wydaniem.");
+        }
+
+        AssignmentId = assignmentId;
+        Status = EquipmentReservationStatus.CheckedOut;
+        UpdatedAt = at;
+        foreach (var item in Items)
+        {
+            item.MarkCheckedOut();
+        }
+    }
+
+    /// <summary>Domknięcie po pełnym zwrocie powiązanego wydania (spec 8.8/8.12) — wywoływane przez
+    /// AssignmentService, gdy wszystkie pozycje tego wydania mają już ustaloną rezolucję zwrotu.</summary>
+    public void Complete(DateTimeOffset at)
+    {
+        if (Status != EquipmentReservationStatus.CheckedOut)
+        {
+            throw new DomainException("Zakończyć można tylko wydaną rezerwację.");
+        }
+
+        Status = EquipmentReservationStatus.Completed;
+        UpdatedAt = at;
+        foreach (var item in Items.Where(x => x.Status == EquipmentReservationItemStatus.CheckedOut))
+        {
+            item.MarkReturned();
+        }
+    }
 }

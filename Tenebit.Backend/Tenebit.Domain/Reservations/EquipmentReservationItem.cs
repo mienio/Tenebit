@@ -76,4 +76,24 @@ public sealed class EquipmentReservationItem
         Status = EquipmentReservationItemStatus.Rejected;
         SubstitutionReason = string.IsNullOrWhiteSpace(reason) ? SubstitutionReason : reason.Trim();
     }
+
+    public void MarkCheckedOut()
+    {
+        if (AssetId is null)
+        {
+            throw new DomainException("Nie można wydać pozycji bez przydzielonego aktywa.");
+        }
+
+        if (Status is EquipmentReservationItemStatus.Rejected or EquipmentReservationItemStatus.Returned)
+        {
+            throw new DomainException("Pozycja jest już rozliczona.");
+        }
+
+        Status = EquipmentReservationItemStatus.CheckedOut;
+    }
+
+    public void MarkReturned()
+    {
+        Status = EquipmentReservationItemStatus.Returned;
+    }
 }

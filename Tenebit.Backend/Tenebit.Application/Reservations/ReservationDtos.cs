@@ -61,3 +61,19 @@ public sealed record ReservationItemResponse(
     EquipmentReservationItemStatus Status);
 
 public sealed record ReservationDetailsResponse(ReservationResponse Reservation, IReadOnlyList<ReservationItemResponse> Items);
+
+/// <summary>Widok kalendarzowy dla administratora (spec 8.7): rezerwacje z przedziałem nachodzącym na from-to,
+/// wzbogacone o obliczone flagi konfliktu/terminu.</summary>
+public sealed record ReservationCalendarItemResponse(
+    Guid Id,
+    Guid RequesterPersonId,
+    EquipmentReservationStatus Status,
+    DateTimeOffset StartAt,
+    DateTimeOffset EndAt,
+    string Purpose,
+    string? PickupLocation,
+    IReadOnlyList<Guid> AssetIds,
+    bool IsConflicting,
+    bool IsDueToday,
+    bool IsOverdue);
+

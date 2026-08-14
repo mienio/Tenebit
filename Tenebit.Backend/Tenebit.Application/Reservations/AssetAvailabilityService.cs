@@ -55,8 +55,10 @@ public sealed class AssetAvailabilityService
 
     /// <summary>Sprawdza dostępność KONKRETNEGO aktywa w terminie — używane przy zatwierdzaniu/zamianie (spec 8.5),
     /// gdzie samo policzenie wolnych sztuk kategorii nie wystarcza, bo trzeba wykluczyć aktywa już zarezerwowane
-    /// albo związane otwartym wydaniem.</summary>
-    public async Task<bool> IsAssetAvailableAsync(Guid organizationId, Guid assetId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    /// albo związane otwartym wydaniem. <paramref name="excludeReservationId"/> pomija roszczenie samej
+    /// rezerwacji, której dotyczy sprawdzenie (np. przy wydaniu sprzętu z zatwierdzonego wniosku — jego własne
+    /// pozycje nie mogą liczyć się jako konflikt z samym sobą).</summary>
+    public async Task<bool> IsAssetAvailableAsync(Guid organizationId, Guid assetId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken, Guid? excludeReservationId = null)
     {
         var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
         if (asset is null || asset.Status != AssetStatus.InStock || !asset.IsReservable || asset.AssignedPersonId is not null)
@@ -64,15 +66,16 @@ public sealed class AssetAvailabilityService
             return false;
         }
 
-        var reservedAssetIds = await GetReservedAssetIdsAsync(organizationId, from, to, cancellationToken);
+        var reservedAssetIds = await GetReservedAssetIdsAsync(organizationId, from, to, cancellationToken, excludeReservationId);
         if (reservedAssetIds.Contains(assetId)) return false;
 
         var openAssignedAssetIds = await GetOpenAssignedAssetIdsAsync(organizationId, from, to, cancellationToken);
         return !openAssignedAssetIds.Contains(assetId);
     }
 
-    private async Task<HashSet<Guid>> GetReservedAssetIdsAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
+    private async Task<HashSet<Guid>> GetReservedAssetIdsAsync(Guid organizationId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken, Guid? excludeReservationId = null) =>
         (await _reservations.ListApprovedOverlappingAsync(organizationId, from, to, cancellationToken))
+            .Where(r => r.Id != excludeReservationId)
             .SelectMany(r => r.Items)
             .Where(i => i.AssetId.HasValue)
             .Select(i => i.AssetId!.Value)

@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assignments;
 using Tenebit.Application.Reservations;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Common;
@@ -11,7 +12,8 @@ namespace Tenebit.Tests;
 public class ReservationServiceTests
 {
     private static (ReservationService Service, FakeCurrentUser User, InMemoryEquipmentReservationRepository Reservations,
-        InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryActivityLogRepository Activity, FakeClock Clock) CreateService()
+        InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryActivityLogRepository Activity, FakeClock Clock,
+        InMemoryAssignmentRepository Assignments, InMemoryAssetCategoryRepository Categories) CreateService()
     {
         var currentUser = new FakeCurrentUser();
         var reservations = new InMemoryEquipmentReservationRepository();
@@ -19,12 +21,20 @@ public class ReservationServiceTests
         var assets = new InMemoryAssetRepository();
         var people = new InMemoryPersonRepository();
         var assignments = new InMemoryAssignmentRepository();
+        var categories = new InMemoryAssetCategoryRepository();
+        var inspections = new InMemoryAssetInspectionRepository();
+        var procedures = new InMemoryProcedureRepository();
+        var teams = new InMemoryTeamRepository();
+        var organizations = new InMemoryOrganizationRepository();
         var activity = new InMemoryActivityLogRepository();
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
         var availability = new AssetAvailabilityService(assets, assignments, reservations);
-        var service = new ReservationService(reservations, kits, assets, people, activity, availability, currentUser, clock, unitOfWork);
-        return (service, currentUser, reservations, people, assets, activity, clock);
+        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams,
+            organizations, activity, currentUser, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(),
+            new FakeAppLinkBuilder(), reservations);
+        var service = new ReservationService(reservations, kits, assets, people, activity, availability, assignmentService, currentUser, clock, unitOfWork);
+        return (service, currentUser, reservations, people, assets, activity, clock, assignments, categories);
     }
 
     private static Person AddPerson(InMemoryPersonRepository people, Guid organizationId, string email = "jan.kowalski@acme.test", Guid? managerId = null)
@@ -54,7 +64,7 @@ public class ReservationServiceTests
     [Fact]
     public async Task CreateSubmitApprove_FullFlow()
     {
-        var (service, user, _, people, assets, activity, _) = CreateService();
+        var (service, user, _, people, assets, activity, _, _, _) = CreateService();
         var person = AddPerson(people, user.OrganizationId);
         user.Email = person.Email;
         var categoryId = Guid.NewGuid();
@@ -82,7 +92,7 @@ public class ReservationServiceTests
     [Fact]
     public async Task ApproveAsync_RejectsOverlappingReservationForSameAsset()
     {
-        var (service, user, _, people, assets, _, _) = CreateService();
+        var (service, user, _, people, assets, _, _, _, _) = CreateService();
         var person = AddPerson(people, user.OrganizationId);
         user.Email = person.Email;
         var categoryId = Guid.NewGuid();
@@ -108,7 +118,7 @@ public class ReservationServiceTests
     [Fact]
     public async Task ApproveAsync_ConflictDoesNotAllocateAnyItem()
     {
-        var (service, user, reservations, people, assets, _, clock) = CreateService();
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
         var person = AddPerson(people, user.OrganizationId);
         user.Email = person.Email;
         var categoryA = Guid.NewGuid();
@@ -147,7 +157,7 @@ public class ReservationServiceTests
     [Fact]
     public async Task ApproveAsync_ManagerCanOnlyApproveDirectReports()
     {
-        var (service, user, reservations, people, assets, _, clock) = CreateService();
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
 
         var manager = new Person(user.OrganizationId, "Anna", "Kierownik", "anna@acme.test");
         people.Add(manager);
@@ -187,7 +197,7 @@ public class ReservationServiceTests
     [Fact]
     public async Task CreateAsync_BlocksWhenPersonIsNotActive()
     {
-        var (service, user, _, people, assets, _, clock) = CreateService();
+        var (service, user, _, people, assets, _, clock, _, _) = CreateService();
         var person = AddPerson(people, user.OrganizationId);
         user.Email = person.Email;
         var categoryId = Guid.NewGuid();
@@ -209,10 +219,14 @@ public class ReservationServiceTests
         var assets = new InMemoryAssetRepository();
         var people = new InMemoryPersonRepository();
         var assignments = new InMemoryAssignmentRepository();
+        var categories = new InMemoryAssetCategoryRepository();
         var activity = new InMemoryActivityLogRepository();
         var clock = new FakeClock();
         var availability = new AssetAvailabilityService(assets, assignments, reservations);
-        var service = new ReservationService(reservations, kits, assets, people, activity, availability, currentUser, clock, new ThrowingConcurrencyUnitOfWork());
+        var assignmentService = new AssignmentService(assignments, assets, categories, new InMemoryAssetInspectionRepository(), people,
+            new InMemoryProcedureRepository(), new InMemoryTeamRepository(), new InMemoryOrganizationRepository(), activity, currentUser,
+            clock, new FakeUnitOfWork(), new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), reservations);
+        var service = new ReservationService(reservations, kits, assets, people, activity, availability, assignmentService, currentUser, clock, new ThrowingConcurrencyUnitOfWork());
 
         var person = AddPerson(people, currentUser.OrganizationId);
         var categoryId = Guid.NewGuid();
@@ -229,6 +243,164 @@ public class ReservationServiceTests
 
         Assert.True(approve.IsFailure);
         Assert.Equal(409, approve.Error!.StatusCode);
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_CreatesAssignmentWithDueDateAndAssets()
+    {
+        var (service, user, _, people, assets, activity, _, assignments, _) = CreateService();
+        var person = AddPerson(people, user.OrganizationId);
+        user.Email = person.Email;
+        var categoryId = Guid.NewGuid();
+        var asset = AddReservableAsset(user, assets, categoryId);
+
+        var created = await service.CreateAsync(CreateRequest(categoryId), CancellationToken.None);
+        await service.SubmitMyAsync(created.Value!.Reservation.Id, CancellationToken.None);
+        var item = created.Value.Items.Single();
+        var approved = await service.ApproveAsync(created.Value.Reservation.Id,
+            new ApproveReservationRequest([new ReservationAllocationRequest(item.Id, asset.Id)]), CancellationToken.None);
+        Assert.True(approved.IsSuccess);
+
+        var checkedOut = await service.CheckoutAsync(created.Value.Reservation.Id, CancellationToken.None);
+
+        Assert.True(checkedOut.IsSuccess);
+        Assert.Equal(EquipmentReservationStatus.CheckedOut, checkedOut.Value!.Reservation.Status);
+        Assert.Contains(activity.Logs, x => x.Action == "reservation.checked_out");
+
+        var assignment = assignments.Assignments.Single();
+        Assert.Equal(person.Id, assignment.PersonId);
+        Assert.Equal(DateOnly.FromDateTime(approved.Value!.Reservation.EndAt.UtcDateTime), assignment.DueDate);
+        Assert.Contains(assignment.Assets, x => x.AssetId == asset.Id);
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_RejectsWhenItemHasNoAssignedAsset()
+    {
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
+        var person = AddPerson(people, user.OrganizationId);
+        user.Email = person.Email;
+        var categoryId = Guid.NewGuid();
+        AddReservableAsset(user, assets, categoryId);
+
+        // Symulujemy wniosek zatwierdzony domenowo bez alokacji pozycji (edge case niedopuszczalny przez
+        // normalny przepływ ApproveAsync, ale checkout musi go bezpiecznie odrzucić).
+        var now = clock.UtcNow;
+        var reservation = new EquipmentReservation(user.OrganizationId, person.Id, now.AddDays(3), now.AddDays(6), "Cel", null, null);
+        reservation.AddItem(categoryId, 1, null);
+        reservation.Submit(now);
+        reservation.Approve(now, user.Subject);
+        reservations.Add(reservation);
+
+        var result = await service.CheckoutAsync(reservation.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(400, result.Error!.StatusCode);
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_DetectsConflictAndDoesNotCreateAssignment()
+    {
+        var (service, user, _, people, assets, _, _, assignments, _) = CreateService();
+        var person = AddPerson(people, user.OrganizationId);
+        user.Email = person.Email;
+        var categoryId = Guid.NewGuid();
+        var asset = AddReservableAsset(user, assets, categoryId);
+
+        var created = await service.CreateAsync(CreateRequest(categoryId), CancellationToken.None);
+        await service.SubmitMyAsync(created.Value!.Reservation.Id, CancellationToken.None);
+        var item = created.Value.Items.Single();
+        var approved = await service.ApproveAsync(created.Value.Reservation.Id,
+            new ApproveReservationRequest([new ReservationAllocationRequest(item.Id, asset.Id)]), CancellationToken.None);
+        Assert.True(approved.IsSuccess);
+
+        // Aktywo staje się niedostępne pomiędzy zatwierdzeniem a wydaniem (np. oznaczone jako uszkodzone).
+        asset.ChangeStatus(AssetStatus.Damaged);
+
+        var result = await service.CheckoutAsync(created.Value.Reservation.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(409, result.Error!.StatusCode);
+        Assert.Empty(assignments.Assignments);
+    }
+
+    [Fact]
+    public async Task ReturnAsync_FullReturnOfLinkedAssignmentCompletesReservation()
+    {
+        var (service, user, reservations, people, assets, activity, _, assignments, categories) = CreateService();
+        var person = AddPerson(people, user.OrganizationId);
+        user.Email = person.Email;
+        var categoryId = Guid.NewGuid();
+        var asset = AddReservableAsset(user, assets, categoryId);
+
+        var created = await service.CreateAsync(CreateRequest(categoryId), CancellationToken.None);
+        await service.SubmitMyAsync(created.Value!.Reservation.Id, CancellationToken.None);
+        var item = created.Value.Items.Single();
+        await service.ApproveAsync(created.Value.Reservation.Id,
+            new ApproveReservationRequest([new ReservationAllocationRequest(item.Id, asset.Id)]), CancellationToken.None);
+
+        var checkedOut = await service.CheckoutAsync(created.Value.Reservation.Id, CancellationToken.None);
+        Assert.True(checkedOut.IsSuccess);
+        var assignmentId = assignments.Assignments.Single().Id;
+
+        var assignmentService = new AssignmentService(assignments, assets, categories, new InMemoryAssetInspectionRepository(), people,
+            new InMemoryProcedureRepository(), new InMemoryTeamRepository(), new InMemoryOrganizationRepository(), activity, user,
+            new FakeClock(), new FakeUnitOfWork(), new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), reservations);
+
+        var returned = await assignmentService.ReturnAsync(assignmentId, new ReturnAssignmentRequest("Sprawny", null), CancellationToken.None);
+
+        Assert.True(returned.IsSuccess);
+        var stored = reservations.Reservations.Single(x => x.Id == created.Value.Reservation.Id);
+        Assert.Equal(EquipmentReservationStatus.Completed, stored.Status);
+        Assert.Contains(activity.Logs, x => x.Action == "reservation.completed");
+    }
+
+    [Fact]
+    public async Task GetCalendarAsync_FlagsOverdueDueTodayAndConflicting()
+    {
+        var (service, user, reservations, people, assets, _, clock, _, _) = CreateService();
+        var person = AddPerson(people, user.OrganizationId);
+        var categoryId = Guid.NewGuid();
+        var asset = AddReservableAsset(user, assets, categoryId);
+        var now = clock.UtcNow;
+
+        // Zaległy zwrot: termin minął, wciąż CheckedOut.
+        var overdue = new EquipmentReservation(user.OrganizationId, person.Id, now.AddDays(-10), now.AddDays(-1), "Cel", null, null);
+        var overdueItem = overdue.AddItem(categoryId, 1, null);
+        overdue.Submit(now.AddDays(-10));
+        overdue.Approve(now.AddDays(-10), user.Subject);
+        overdueItem.Allocate(asset.Id);
+        overdue.MarkCheckedOut(Guid.NewGuid(), now.AddDays(-9));
+        reservations.Add(overdue);
+
+        // Do wydania dzisiaj.
+        var dueToday = new EquipmentReservation(user.OrganizationId, person.Id, now, now.AddDays(2), "Cel", null, null);
+        dueToday.AddItem(categoryId, 1, null);
+        dueToday.Submit(now);
+        reservations.Add(dueToday);
+
+        // Dwie zatwierdzone rezerwacje tego samego aktywa z nachodzącym terminem = konflikt.
+        var conflictA = new EquipmentReservation(user.OrganizationId, person.Id, now.AddDays(1), now.AddDays(5), "Cel", null, null);
+        var conflictAItem = conflictA.AddItem(categoryId, 1, null);
+        conflictA.Submit(now);
+        conflictA.Approve(now, user.Subject);
+        conflictAItem.Allocate(asset.Id);
+        reservations.Add(conflictA);
+
+        var conflictB = new EquipmentReservation(user.OrganizationId, person.Id, now.AddDays(2), now.AddDays(6), "Cel", null, null);
+        var conflictBItem = conflictB.AddItem(categoryId, 1, null);
+        conflictB.Submit(now);
+        conflictB.Approve(now, user.Subject);
+        conflictBItem.Allocate(asset.Id);
+        reservations.Add(conflictB);
+
+        var result = await service.GetCalendarAsync(now.AddDays(-30), now.AddDays(30), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var items = result.Value!;
+        Assert.True(items.Single(x => x.Id == overdue.Id).IsOverdue);
+        Assert.True(items.Single(x => x.Id == dueToday.Id).IsDueToday);
+        Assert.True(items.Single(x => x.Id == conflictA.Id).IsConflicting);
+        Assert.True(items.Single(x => x.Id == conflictB.Id).IsConflicting);
     }
 
     private sealed class ThrowingConcurrencyUnitOfWork : IUnitOfWork

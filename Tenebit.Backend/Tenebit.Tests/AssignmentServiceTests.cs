@@ -10,7 +10,7 @@ namespace Tenebit.Tests;
 
 public class AssignmentServiceTests
 {
-    private static (AssignmentService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemoryPersonRepository People, InMemoryProcedureRepository Procedures, InMemoryAssetCategoryRepository Categories, InMemoryAssetInspectionRepository Inspections) CreateService()
+    private static (AssignmentService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemoryPersonRepository People, InMemoryProcedureRepository Procedures, InMemoryAssetCategoryRepository Categories, InMemoryAssetInspectionRepository Inspections, InMemoryAssignmentRepository Assignments, InMemoryActivityLogRepository Activity, InMemoryEquipmentReservationRepository Reservations) CreateService()
     {
         var currentUser = new FakeCurrentUser();
         var assets = new InMemoryAssetRepository();
@@ -21,9 +21,11 @@ public class AssignmentServiceTests
         var teams = new InMemoryTeamRepository();
         var organizations = new InMemoryOrganizationRepository();
         var activity = new InMemoryActivityLogRepository();
+        var assignments = new InMemoryAssignmentRepository();
+        var reservations = new InMemoryEquipmentReservationRepository();
 
         var service = new AssignmentService(
-            new InMemoryAssignmentRepository(),
+            assignments,
             assets,
             categories,
             inspections,
@@ -37,9 +39,10 @@ public class AssignmentServiceTests
             new FakeUnitOfWork(),
             new FakePdfProtocolGenerator(),
             new FakeEmailSender(),
-            new FakeAppLinkBuilder());
+            new FakeAppLinkBuilder(),
+            reservations);
 
-        return (service, currentUser, assets, people, procedures, categories, inspections);
+        return (service, currentUser, assets, people, procedures, categories, inspections, assignments, activity, reservations);
     }
 
     private static Person AddPerson(FakeCurrentUser user, InMemoryPersonRepository people)
@@ -59,7 +62,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task CreateAsync_RejectsEmptyAssetList()
     {
-        var (service, user, _, people, _, _, _) = CreateService();
+        var (service, user, _, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
 
         var result = await service.CreateAsync(new CreateAssignmentRequest(person.Id, [], [], null, null), CancellationToken.None);
@@ -70,7 +73,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task CreateAsync_RejectsAssetThatIsAlreadyAssigned()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
         asset.AssignTo(Guid.NewGuid());
@@ -85,7 +88,7 @@ public class AssignmentServiceTests
     [InlineData(EmploymentStatus.Inactive)]
     public async Task CreateAsync_RejectsPersonWhoIsNotActive(EmploymentStatus status)
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         if (status == EmploymentStatus.Offboarding) person.StartOffboarding(DateTimeOffset.UtcNow.AddDays(7));
         else person.Deactivate(DateTimeOffset.UtcNow);
@@ -100,7 +103,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task CreateAsync_DoesNotResolvePersonFromAnotherOrganization()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var otherPerson = new Person(Guid.NewGuid(), "Jan", "Kowalski", "jan@other.test");
         people.Add(otherPerson);
         var asset = AddAsset(user, assets);
@@ -113,7 +116,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task CreateAsync_OnlyRequiresAcceptanceForPublishedProcedures()
     {
-        var (service, user, assets, people, procedures, _, _) = CreateService();
+        var (service, user, assets, people, procedures, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -143,7 +146,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task AcceptAsync_TransitionsFromAwaitingAcceptanceToAccepted()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -159,7 +162,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task AcceptAsync_CannotAcceptAlreadyReturnedAssignment()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -175,7 +178,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task AcceptAsync_StampsTamperEvidentIpAndHash()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -305,7 +308,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_ReturnsAssetToStock_AndClearsAssignedPerson()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -324,7 +327,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Damaged_SetsAssetDamagedAndClearsAssignedPerson()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -339,7 +342,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Missing_SetsAssetLost()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -354,7 +357,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Retained_KeepsAssignedPersonId_SetsRetired()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -369,7 +372,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_WrittenOff_SetsAssetDisposed()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -384,7 +387,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_IsIdempotent_SecondCallDoesNotDuplicateActivityLog()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -401,7 +404,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_TwoAssetAssignment_BecomesPartiallyReturned_ThenReturned()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset1 = AddAsset(user, assets);
         var asset2 = AddAsset(user, assets);
@@ -418,7 +421,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_RejectsAssetNotBelongingToAssignment()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
         var otherAsset = AddAsset(user, assets);
@@ -434,7 +437,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAsync_FullReturn_StillWorks_AndSkipsAlreadyResolvedItems()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset1 = AddAsset(user, assets);
         var asset2 = AddAsset(user, assets);
@@ -500,7 +503,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Returned_NoCategoryFound_DefaultsToInStock()
     {
-        var (service, user, assets, people, _, _, _) = CreateService();
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets);
 
@@ -513,7 +516,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Returned_InspectionRequiredCategory_SetsInServiceAndCreatesPendingInspection()
     {
-        var (service, user, assets, people, _, categories, inspections) = CreateService();
+        var (service, user, assets, people, _, categories, inspections, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var category = new AssetCategory(user.OrganizationId, "Laptopy", AssetCategoryType.Physical, null);
         category.UpdateReturnPolicy(ReturnHandlingMode.InspectionRequired, PostReturnDisposition.Reuse, null, PhotoRequirement.Disabled, PhotoRequirement.Disabled);
@@ -533,7 +536,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Returned_ReturnToVendorCategory_SetsInTransit()
     {
-        var (service, user, assets, people, _, categories, _) = CreateService();
+        var (service, user, assets, people, _, categories, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var category = new AssetCategory(user.OrganizationId, "Sprzęt wynajęty", AssetCategoryType.Physical, null);
         category.UpdateReturnPolicy(ReturnHandlingMode.DirectToStock, PostReturnDisposition.ReturnToVendor, null, PhotoRequirement.Disabled, PhotoRequirement.Disabled);
@@ -550,7 +553,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Returned_DisposeCategory_SetsInService_NoInspectionCreated()
     {
-        var (service, user, assets, people, _, categories, inspections) = CreateService();
+        var (service, user, assets, people, _, categories, inspections, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var category = new AssetCategory(user.OrganizationId, "Materiały eksploatacyjne", AssetCategoryType.Consumable, null);
         category.UpdateReturnPolicy(ReturnHandlingMode.DirectToStock, PostReturnDisposition.Dispose, null, PhotoRequirement.Disabled, PhotoRequirement.Disabled);
@@ -568,7 +571,7 @@ public class AssignmentServiceTests
     [Fact]
     public async Task ReturnAssetAsync_Returned_DirectToStockCategory_SetsInStock()
     {
-        var (service, user, assets, people, _, categories, _) = CreateService();
+        var (service, user, assets, people, _, categories, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         var category = new AssetCategory(user.OrganizationId, "Myszy", AssetCategoryType.Physical, null);
         categories.Add(category);
