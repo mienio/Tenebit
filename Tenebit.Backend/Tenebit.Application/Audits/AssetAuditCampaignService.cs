@@ -1,16 +1,18 @@
 using System.Text.Json;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
+using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Audits;
 using Tenebit.Domain.Common;
+using Tenebit.Domain.Evidence;
 using Tenebit.Domain.People;
 
 namespace Tenebit.Application.Audits;
 
-/// <summary>Tworzenie, podgląd i uruchamianie kampanii potwierdzenia aktywów (spec 5.4/5.8). Rozliczanie
-/// odpowiedzi uczestników i pozycji to kolejny krok — tutaj wyłącznie zarządzanie samą kampanią.</summary>
+/// <summary>Tworzenie, podgląd i uruchamianie kampanii potwierdzenia aktywów (spec 5.4/5.8), oraz publiczny
+/// przepływ uczestnika (spec 5.5) — token per uczestnik (nie per kampania, w przeciwieństwie do offboardingu).</summary>
 public sealed class AssetAuditCampaignService
 {
     private static readonly JsonSerializerOptions ScopeJsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -20,6 +22,8 @@ public sealed class AssetAuditCampaignService
     private readonly IAssetAuditItemRepository _items;
     private readonly IPersonRepository _people;
     private readonly IAssetRepository _assets;
+    private readonly IAssetEvidenceRepository _evidence;
+    private readonly AssetEvidenceService _evidenceService;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
@@ -29,7 +33,8 @@ public sealed class AssetAuditCampaignService
     private readonly IAppLinkBuilder _linkBuilder;
 
     public AssetAuditCampaignService(IAssetAuditCampaignRepository campaigns, IAssetAuditParticipantRepository participants,
-        IAssetAuditItemRepository items, IPersonRepository people, IAssetRepository assets, IActivityLogRepository activity,
+        IAssetAuditItemRepository items, IPersonRepository people, IAssetRepository assets, IAssetEvidenceRepository evidence,
+        AssetEvidenceService evidenceService, IActivityLogRepository activity,
         ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IOrganizationRepository organizations,
         IEmailSender emailSender, IAppLinkBuilder linkBuilder)
     {
@@ -38,6 +43,8 @@ public sealed class AssetAuditCampaignService
         _items = items;
         _people = people;
         _assets = assets;
+        _evidence = evidence;
+        _evidenceService = evidenceService;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -277,4 +284,124 @@ public sealed class AssetAuditCampaignService
     private static AssetAuditCampaignResponse Map(AssetAuditCampaign campaign) => new(
         campaign.Id, campaign.Name, campaign.Description, campaign.Status, campaign.DueDate,
         campaign.CreatedAt, campaign.CreatedBy, campaign.StartedAt, campaign.CompletedAt, campaign.CompletedBy);
+
+    /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów audytu — wzorem
+    /// <c>OffboardingService.ResolveByTokenAsync</c>, ale token jest tutaj przypisany do uczestnika, nie do
+    /// kampanii. Zwraca zawsze ten sam generyczny NotFound dla tokenu nieistniejącego/wygasłego/unieważnionego.</summary>
+    private async Task<Result<AssetAuditParticipant>> ResolveByTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        var now = _clock.UtcNow;
+        var candidates = await _participants.ListWithActiveTokenAsync(cancellationToken);
+        foreach (var candidate in candidates)
+        {
+            if (PublicTokenService.Verify(token, candidate.TokenHash, candidate.TokenExpiresAt ?? DateTimeOffset.MinValue, candidate.TokenRevokedAt, now))
+            {
+                return Result<AssetAuditParticipant>.Success(candidate);
+            }
+        }
+
+        return Result<AssetAuditParticipant>.Failure(Error.NotFound("Link jest nieprawidłowy lub wygasł."));
+    }
+
+    public async Task<Result<PublicAssetAuditResponse>> GetPublicAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicAssetAuditResponse>.Failure(resolved.Error!);
+
+        return Result<PublicAssetAuditResponse>.Success(await BuildPublicResponseAsync(resolved.Value!, cancellationToken));
+    }
+
+    private async Task<PublicAssetAuditResponse> BuildPublicResponseAsync(AssetAuditParticipant participant, CancellationToken cancellationToken)
+    {
+        var campaign = await _campaigns.GetAsync(participant.OrganizationId, participant.CampaignId, cancellationToken);
+        var organization = await _organizations.GetAsync(participant.OrganizationId, cancellationToken);
+        var items = await _items.ListByParticipantAsync(participant.OrganizationId, participant.Id, cancellationToken);
+
+        var itemResponses = new List<PublicAssetAuditItemResponse>();
+        foreach (var item in items)
+        {
+            var asset = await _assets.GetAsync(participant.OrganizationId, item.AssetId, cancellationToken);
+            var photo = (await _evidence.ListByAssetAsync(participant.OrganizationId, item.AssetId, cancellationToken))
+                .Where(x => x.AssetAuditItemId == item.Id)
+                .OrderByDescending(x => x.UploadedAt)
+                .FirstOrDefault();
+
+            itemResponses.Add(new PublicAssetAuditItemResponse(item.Id, asset?.Name ?? string.Empty, asset?.AssetTag ?? string.Empty,
+                asset?.Model, item.Response, item.Comment, photo?.Id));
+        }
+
+        var readOnly = participant.Status is AssetAuditParticipantStatus.Submitted or AssetAuditParticipantStatus.Reviewed;
+
+        return new PublicAssetAuditResponse(organization?.Name ?? string.Empty, campaign?.Name ?? string.Empty, campaign?.DueDate ?? default, readOnly, itemResponses);
+    }
+
+    /// <summary>Do momentu wysłania odpowiedzi pracownik może poprawiać wybory (spec 5.5) — po Submit dalsze
+    /// zmiany są odrzucane, ponowne otwarcie jest możliwe wyłącznie przez administratora.</summary>
+    public async Task<Result<PublicAssetAuditResponse>> RecordItemResponseAsync(string token, Guid itemId, SubmitPublicAssetAuditItemRequest request, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicAssetAuditResponse>.Failure(resolved.Error!);
+
+        var participant = resolved.Value!;
+        if (participant.Status is AssetAuditParticipantStatus.Submitted or AssetAuditParticipantStatus.Reviewed)
+        {
+            return Result<PublicAssetAuditResponse>.Failure(Error.Validation("Odpowiedzi zostały już wysłane i nie można ich zmienić."));
+        }
+
+        var item = (await _items.ListByParticipantAsync(participant.OrganizationId, participant.Id, cancellationToken)).FirstOrDefault(x => x.Id == itemId);
+        if (item is null) return Result<PublicAssetAuditResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
+
+        var now = _clock.UtcNow;
+        participant.MarkInProgress();
+        item.RecordResponse(request.Response, request.Comment, now);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<PublicAssetAuditResponse>.Success(await BuildPublicResponseAsync(participant, cancellationToken));
+    }
+
+    public async Task<Result<PublicAssetAuditResponse>> SubmitAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicAssetAuditResponse>.Failure(resolved.Error!);
+
+        var participant = resolved.Value!;
+        var now = _clock.UtcNow;
+
+        try
+        {
+            participant.Submit(now);
+        }
+        catch (DomainException ex)
+        {
+            return Result<PublicAssetAuditResponse>.Failure(Error.Validation(ex.Message));
+        }
+
+        var campaign = await _campaigns.GetAsync(participant.OrganizationId, participant.CampaignId, cancellationToken);
+        if (campaign is not null)
+        {
+            var allParticipants = await _participants.ListByCampaignAsync(participant.OrganizationId, participant.CampaignId, cancellationToken);
+            campaign.RecomputeStatus(allParticipants);
+        }
+
+        _activity.Add(new ActivityLog(participant.OrganizationId, "asset_audit.participant_submitted", "asset_audit_participant", participant.Id, "employee", participant.Email, now));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<PublicAssetAuditResponse>.Success(await BuildPublicResponseAsync(participant, cancellationToken));
+    }
+
+    public async Task<Result<Guid>> UploadPublicEvidenceAsync(string token, Guid itemId, string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<Guid>.Failure(resolved.Error!);
+
+        var participant = resolved.Value!;
+        var item = (await _items.ListByParticipantAsync(participant.OrganizationId, participant.Id, cancellationToken)).FirstOrDefault(x => x.Id == itemId);
+        if (item is null) return Result<Guid>.Failure(Error.NotFound("Pozycja nie istnieje."));
+
+        var uploadResult = await _evidenceService.UploadViaAuditPublicTokenAsync(participant.OrganizationId, item.AssetId, item.Id, fileName, declaredContentType, content, cancellationToken);
+        if (uploadResult.IsFailure) return Result<Guid>.Failure(uploadResult.Error!);
+
+        return Result<Guid>.Success(uploadResult.Value!.Id);
+    }
 }
+

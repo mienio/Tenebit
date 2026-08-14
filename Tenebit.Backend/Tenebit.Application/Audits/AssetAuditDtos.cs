@@ -49,3 +49,9 @@ public sealed record AssetAuditParticipantResponse(
     int ItemCount);
 
 public sealed record AssetAuditCampaignDetailsResponse(AssetAuditCampaignResponse Campaign, IReadOnlyList<AssetAuditParticipantResponse> Participants);
+
+public sealed record PublicAssetAuditItemResponse(Guid Id, string AssetName, string AssetTag, string? Model, AssetAuditResponse Response, string? Comment, Guid? PhotoEvidenceId);
+
+public sealed record PublicAssetAuditResponse(string OrganizationName, string CampaignName, DateTimeOffset DueDate, bool ReadOnly, IReadOnlyList<PublicAssetAuditItemResponse> Items);
+
+public sealed record SubmitPublicAssetAuditItemRequest(AssetAuditResponse Response, string? Comment);

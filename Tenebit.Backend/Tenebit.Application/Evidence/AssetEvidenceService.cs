@@ -126,6 +126,39 @@ public sealed class AssetEvidenceService
         }
     }
 
+    /// <summary>Upload zdjęcia przez publiczny token kampanii audytu aktywów (spec 5.5) — analogicznie do
+    /// <see cref="UploadViaPublicTokenAsync"/> dla offboardingu, ale z fazą Audit i AssetAuditItemId zamiast
+    /// OffboardingItemId.</summary>
+    public async Task<Result<AssetEvidenceResponse>> UploadViaAuditPublicTokenAsync(Guid organizationId, Guid assetId, Guid assetAuditItemId,
+        string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
+    {
+        var validation = ValidateAndDetectFormat(declaredContentType, content);
+        if (validation.IsFailure) return Result<AssetEvidenceResponse>.Failure(validation.Error!);
+
+        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
+        if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+        var existingCount = await _evidence.CountAsync(organizationId, assetId, EvidencePhase.Audit, cancellationToken);
+        if (existingCount >= MaxPerAssetAndPhase)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+        }
+
+        try
+        {
+            var sanitized = _sanitizer.StripMetadata(validation.Value, content);
+            var item = new AssetEvidence(organizationId, assetId, null, EvidencePhase.Audit, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, null, "employee", EvidenceUploadSource.PublicToken, _clock.UtcNow, null, assetAuditItemId);
+            _evidence.Add(item);
+            _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, "public-link", item.FileName, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result<AssetEvidenceResponse>.Success(Map(item));
+        }
+        catch (DomainException ex)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
     private static Result<DetectedImageFormat> ValidateAndDetectFormat(string? declaredContentType, byte[] content)
     {
         if (!ImageSignature.IsAllowedContentType(declaredContentType))

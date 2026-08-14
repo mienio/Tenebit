@@ -1,4 +1,5 @@
 using Tenebit.Application.Audits;
+using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audits;
 using Tenebit.Domain.People;
@@ -23,8 +24,11 @@ public class AssetAuditCampaignServiceTests
         var organizations = new InMemoryOrganizationRepository();
         var emailSender = new FakeEmailSender();
         var linkBuilder = new FakeAppLinkBuilder();
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var assignments = new InMemoryAssignmentRepository();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork);
 
-        var service = new AssetAuditCampaignService(campaigns, participants, items, people, assets, activity, currentUser,
+        var service = new AssetAuditCampaignService(campaigns, participants, items, people, assets, evidence, evidenceService, activity, currentUser,
             new FakeClock(), unitOfWork, organizations, emailSender, linkBuilder);
 
         return (service, currentUser, campaigns, participants, items, people, assets, activity, emailSender);
@@ -175,5 +179,105 @@ public class AssetAuditCampaignServiceTests
 
         Assert.True(update.IsFailure);
         Assert.Equal("VALIDATION_ERROR", update.Error!.Code);
+    }
+
+    [Fact]
+    public async Task PublicToken_OfOneParticipant_DoesNotResolveOtherParticipantsItem()
+    {
+        var (service, user, _, participants, items, people, assets, _, emailSender) = CreateService();
+        var personA = AddPerson(user, people, "a@acme.test");
+        var personB = AddPerson(user, people, "b@acme.test");
+        AddAsset(user, assets, personA.Id);
+        AddAsset(user, assets, personB.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        var tokenA = ExtractRawTokenFromEmail(emailSender, personA.Email);
+        var itemOfB = items.Items.Single(x => x.ExpectedPersonId == personB.Id);
+
+        var result = await service.RecordItemResponseAsync(tokenA, itemOfB.Id, new SubmitPublicAssetAuditItemRequest(AssetAuditResponse.Confirmed, null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("NOT_FOUND", result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task RecordItemResponseAsync_RejectedAfterSubmit()
+    {
+        var (service, user, _, _, items, people, assets, _, emailSender) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var token = ExtractRawTokenFromEmail(emailSender, person.Email);
+        var item = items.Items.Single();
+
+        var submit = await service.SubmitAsync(token, CancellationToken.None);
+        Assert.True(submit.IsSuccess);
+
+        var result = await service.RecordItemResponseAsync(token, item.Id, new SubmitPublicAssetAuditItemRequest(AssetAuditResponse.Missing, "zgubione"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task RecordItemResponseAsync_DoesNotChangeAssetStatus()
+    {
+        var (service, user, _, _, items, people, assets, _, emailSender) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var token = ExtractRawTokenFromEmail(emailSender, person.Email);
+        var item = items.Items.Single();
+
+        var result = await service.RecordItemResponseAsync(token, item.Id, new SubmitPublicAssetAuditItemRequest(AssetAuditResponse.Damaged, "Rysa na obudowie"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AssetStatus.Assigned, assets.Assets.Single(x => x.Id == asset.Id).Status);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_SetsStatusSubmitted_AndRecomputesCampaignStatus()
+    {
+        var (service, user, campaigns, participants, _, people, assets, activity, emailSender) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var token = ExtractRawTokenFromEmail(emailSender, person.Email);
+
+        var submit = await service.SubmitAsync(token, CancellationToken.None);
+
+        Assert.True(submit.IsSuccess);
+        Assert.Equal(AssetAuditParticipantStatus.Submitted, participants.Participants.Single().Status);
+        Assert.Equal(AssetAuditCampaignStatus.Reviewing, campaigns.Campaigns.Single().Status);
+        Assert.Contains(activity.Logs, x => x.Action == "asset_audit.participant_submitted");
+    }
+
+    [Fact]
+    public async Task GetPublicAsync_ExpiredOrRevokedOrUnknownToken_ReturnsNotFound()
+    {
+        var (service, _, _, _, _, _, _, _, _) = CreateService();
+
+        var result = await service.GetPublicAsync("does-not-exist", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("NOT_FOUND", result.Error!.Code);
+    }
+
+    private static string ExtractRawTokenFromEmail(FakeEmailSender emailSender, string recipient)
+    {
+        var index = emailSender.Sent.FindLastIndex(x => x.To == recipient);
+        Assert.True(index >= 0, "Nie znaleziono e-maila do wskazanego odbiorcy.");
+        var body = emailSender.Bodies[index];
+        var match = System.Text.RegularExpressions.Regex.Match(body, @"https://test/audit/([^""'\s]+)");
+        Assert.True(match.Success, "E-mail nie zawierał linku audytowego.");
+        return match.Groups[1].Value;
     }
 }

@@ -281,6 +281,9 @@ public sealed class InMemoryAssetAuditParticipantRepository : IAssetAuditPartici
         Task.FromResult(Participants.FirstOrDefault(x => x.OrganizationId == organizationId && x.CampaignId == campaignId && x.Id == participantId));
 
     public void Add(AssetAuditParticipant participant) => Participants.Add(participant);
+
+    public Task<IReadOnlyList<AssetAuditParticipant>> ListWithActiveTokenAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetAuditParticipant>>(Participants.Where(x => x.TokenHash != null && x.TokenRevokedAt == null).ToList());
 }
 
 public sealed class InMemoryAssetAuditItemRepository : IAssetAuditItemRepository

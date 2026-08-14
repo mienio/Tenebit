@@ -22,4 +22,9 @@ public sealed class AssetAuditParticipantRepository : IAssetAuditParticipantRepo
             .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.CampaignId == campaignId && x.Id == participantId, cancellationToken);
 
     public void Add(AssetAuditParticipant participant) => _db.AssetAuditParticipants.Add(participant);
+
+    public async Task<IReadOnlyList<AssetAuditParticipant>> ListWithActiveTokenAsync(CancellationToken cancellationToken) =>
+        await _db.AssetAuditParticipants
+            .Where(x => x.TokenHash != null && x.TokenRevokedAt == null)
+            .ToListAsync(cancellationToken);
 }

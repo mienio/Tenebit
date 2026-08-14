@@ -77,6 +77,7 @@ public static class TenebitEndpoints
         MapAssetAudits(api);
         MapPublicAssignments(api);
         MapPublicOffboarding(api);
+        MapPublicAssetAudits(api);
         MapPublicAssets(api);
         MapActivityLog(api);
         MapSubscription(api);
@@ -1088,6 +1089,56 @@ public static class TenebitEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("public")
             .WithTags("Public offboarding");
+    }
+
+    private static void MapPublicAssetAudits(RouteGroupBuilder api)
+    {
+        api.MapGet("/public/asset-audits/{token}", async (string token, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public asset audits")
+            .WithOpenApi();
+
+        api.MapPut("/public/asset-audits/{token}/items/{itemId:guid}", async (string token, Guid itemId, SubmitPublicAssetAuditItemRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.RecordItemResponseAsync(token, itemId, request, cancellationToken)).ToHttpResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/public/asset-audits/{token}/submit", async (string token, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+                (await service.SubmitAsync(token, cancellationToken)).ToHttpResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public asset audits")
+            .WithOpenApi();
+
+        api.MapPost("/public/asset-audits/{token}/items/{itemId:guid}/evidence", async (string token, Guid itemId, HttpRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+        {
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
+            }
+
+            var form = await request.ReadFormAsync(cancellationToken);
+            var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+            {
+                return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
+            }
+
+            await using var stream = file.OpenReadStream();
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory, cancellationToken);
+
+            var result = await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, memory.ToArray(), cancellationToken);
+            return result.ToHttpResult();
+        })
+            .DisableAntiforgery()
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public asset audits");
     }
 
     private static void MapPublicAssets(RouteGroupBuilder api)

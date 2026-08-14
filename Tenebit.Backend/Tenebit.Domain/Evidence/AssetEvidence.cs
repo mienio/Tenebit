@@ -8,7 +8,8 @@ public sealed class AssetEvidence
 
     public AssetEvidence(Guid organizationId, Guid assetId, Guid? assignmentId, EvidencePhase phase,
         string fileName, string contentType, byte[] content, string sha256, string? caption,
-        string uploadedBy, EvidenceUploadSource uploadedVia, DateTimeOffset uploadedAt, Guid? offboardingItemId = null)
+        string uploadedBy, EvidenceUploadSource uploadedVia, DateTimeOffset uploadedAt, Guid? offboardingItemId = null,
+        Guid? assetAuditItemId = null)
     {
         if (content.Length == 0) throw new DomainException("Zdjęcie jest puste.");
         if (content.Length > 5 * 1024 * 1024) throw new DomainException("Zdjęcie może mieć maksymalnie 5 MB.");
@@ -20,6 +21,7 @@ public sealed class AssetEvidence
         AssetId = assetId;
         AssignmentId = assignmentId;
         OffboardingItemId = offboardingItemId;
+        AssetAuditItemId = assetAuditItemId;
         Phase = phase;
         FileName = Path.GetFileName(fileName.Trim());
         ContentType = contentType.Trim();
