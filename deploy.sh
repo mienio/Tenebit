@@ -8,6 +8,12 @@ BACKUPS="$BASE/backups"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DOMAIN="${TENEBIT_DOMAIN:-https://skinny-tiger4900.byst.re}"
 
+# Read the real DB name from the server-side .env instead of assuming it matches the app name —
+# on this box it's "Tanebit", not "tenebit". A hardcoded wrong name here made every past db-backup
+# step silently no-op (pg_dump errored, script only warned and kept going).
+POSTGRES_DB="$(grep -E '^POSTGRES_DB=' "$BASE/.env" 2>/dev/null | cut -d= -f2-)"
+POSTGRES_DB="${POSTGRES_DB:-tenebit}"
+
 echo "=== TENEBIT DEPLOY ==="
 
 # Check ZIPs
@@ -23,8 +29,8 @@ fi
 
 mkdir -p "$BACKUPS"
 
-echo "  Backup bazy danych..."
-docker exec tenebit-db pg_dump -U postgres tenebit 2>/dev/null | gzip > "$BACKUPS/db-$STAMP.sql.gz" || echo "  WARN: backup bazy danych nie powiódł się (kontener tenebit-db niedostępny?)"
+echo "  Backup bazy danych (baza: $POSTGRES_DB)..."
+docker exec tenebit-db pg_dump -U postgres -d "$POSTGRES_DB" 2>/dev/null | gzip > "$BACKUPS/db-$STAMP.sql.gz" || echo "  WARN: backup bazy danych nie powiódł się (kontener tenebit-db niedostępny? zła nazwa bazy?)"
 
 # === BACKEND ===
 echo -e "\n[1/4] Backend..."
@@ -157,6 +163,22 @@ echo "  Building frontend..."
 docker compose -p tenebit build frontend
 
 echo "  ✓ Built"
+
+# === MIGRATE ===
+# Applies pending EF Core migrations before the new backend image goes live. The backend runtime
+# image has no `dotnet ef` (aspnet runtime, not sdk), so this expects an idempotent SQL script
+# (`dotnet ef migrations script --idempotent`) shipped as migrate.sql at the root of the backend
+# zip — generate and include it in every release going forward. Safe to skip if absent (older
+# release zips, or a deploy with no schema changes), but never silently continues on a real
+# failure: deploying app code against a schema it doesn't match is exactly how the "database
+# 'X' does not exist" / "relation does not exist" incident on 2026-08-14 happened.
+if [ -f "$BACKEND/migrate.sql" ]; then
+  echo -e "\n  Migracja bazy danych ($POSTGRES_DB)..."
+  docker exec -i tenebit-db psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 < "$BACKEND/migrate.sql"
+  echo "  ✓ Migracja zastosowana"
+else
+  echo -e "\n  Brak migrate.sql w paczce backendu — pomijam migrację (upewnij się że to zamierzone)."
+fi
 
 # === DEPLOY ===
 echo -e "\n[4/4] Deploy..."
