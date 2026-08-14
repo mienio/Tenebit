@@ -349,6 +349,9 @@ public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository
     public Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<IReadOnlyList<AssetEvidence>> ListByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId).ToList());
+
     public Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 

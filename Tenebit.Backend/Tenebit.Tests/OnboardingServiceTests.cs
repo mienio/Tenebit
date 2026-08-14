@@ -1,5 +1,6 @@
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Assignments;
+using Tenebit.Application.Evidence;
 using Tenebit.Application.Onboarding;
 using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.People;
@@ -23,7 +24,9 @@ public class OnboardingServiceTests
         var organizations = new InMemoryOrganizationRepository();
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
-        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository());
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork);
+        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService);
         var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService);
         return (service, user, people);
     }

@@ -16,6 +16,9 @@ public sealed class AssetEvidenceRepository : IAssetEvidenceRepository
     public async Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         await _db.AssetEvidence.Where(x => x.OrganizationId == organizationId).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<AssetEvidence>> ListByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
+        await _db.AssetEvidence.Where(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId).ToListAsync(cancellationToken);
+
     public Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.AssetEvidence.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

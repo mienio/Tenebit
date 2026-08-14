@@ -1,4 +1,5 @@
 using Tenebit.Domain.Common;
+using Tenebit.Domain.Evidence;
 
 namespace Tenebit.Domain.Assignments;
 
@@ -37,6 +38,7 @@ public sealed class Assignment
     public string CreatedBy { get; private set; } = string.Empty;
     public string? AcceptedIp { get; private set; }
     public string? AcceptanceHash { get; private set; }
+    public int IntegrityVersion { get; private set; } = 1;
     public List<AssignmentAsset> Assets { get; private set; } = [];
     public List<ProcedureAcceptance> ProcedureAcceptances { get; private set; } = [];
 
@@ -65,7 +67,7 @@ public sealed class Assignment
     // Hardening: the accepted protocol is a legal proof-of-receipt record — capture who signed it, when, from
     // where, and a hash of exactly what was confirmed (assets + conditions + procedures), so any later direct
     // edit to those rows can be detected by recomputing the hash (see VerifyIntegrity).
-    public void Accept(DateTimeOffset acceptedAt, string? ipAddress)
+    public void Accept(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidence>? evidence = null)
     {
         // BUG FIX: Previously allowed accepting already-accepted or returned/cancelled assignments.
         // Now only AwaitingAcceptance and Overdue statuses can transition to Accepted.
@@ -77,7 +79,7 @@ public sealed class Assignment
         Status = AssignmentStatus.Accepted;
         AcceptedAt = acceptedAt;
         AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
-        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp);
+        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp, evidence);
         foreach (var acceptance in ProcedureAcceptances)
         {
             acceptance.Accept(acceptedAt, ipAddress);
@@ -86,10 +88,17 @@ public sealed class Assignment
 
     // Recomputes the hash from the assignment's current field values — a mismatch with the stored
     // AcceptanceHash means the protocol was altered after signing, bypassing this class.
-    public bool VerifyIntegrity()
+    public bool VerifyIntegrity(IReadOnlyList<AssetEvidence>? evidence = null)
     {
         if (AcceptedAt is null || AcceptanceHash is null) return true;
-        return ComputeHash(AcceptedAt.Value, AcceptedIp) == AcceptanceHash;
+        return ComputeHash(AcceptedAt.Value, AcceptedIp, evidence) == AcceptanceHash;
+    }
+
+    // Spec 6.6: wersja 2 obejmuje zdjęcia wydania w hashu akceptacji. Wersja 1 pozostaje bez zmian
+    // dla istniejących protokołów — nie przeliczamy ich nowym algorytmem.
+    public void EnableEvidenceIntegrity()
+    {
+        IntegrityVersion = 2;
     }
 
     public void MarkOverdue()
@@ -108,11 +117,24 @@ public sealed class Assignment
         }
     }
 
-    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress)
+    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidence>? evidence)
     {
         var assetsPart = string.Join(',', Assets.OrderBy(x => x.AssetId).Select(x => $"{x.AssetId}:{x.IssueCondition}"));
         var proceduresPart = string.Join(',', ProcedureAcceptances.Select(x => x.ProcedureId).OrderBy(x => x));
         var payload = string.Join('|', Id, OrganizationId, PersonId, ProtocolNumber, assetsPart, proceduresPart, acceptedAt.ToUniversalTime().ToString("O"), ipAddress ?? "");
+
+        if (IntegrityVersion >= 2)
+        {
+            // Zdjęcia wydania są częścią potwierdzonego protokołu (spec 6.6). Zdjęcia zwrotu dodawane później
+            // nie mogą zmieniać hashu akceptacji, dlatego bierzemy pod uwagę wyłącznie fazę Issue.
+            var entries = evidence ?? Array.Empty<AssetEvidence>();
+            var evidencePart = string.Join(',', entries
+                .Where(x => x.Phase == EvidencePhase.Issue)
+                .OrderBy(x => x.Id)
+                .Select(x => $"{x.Id}:{x.Phase}:{x.Sha256}"));
+            payload = string.Join('|', payload, evidencePart);
+        }
+
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }

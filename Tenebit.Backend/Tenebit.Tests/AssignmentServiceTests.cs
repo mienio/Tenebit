@@ -1,4 +1,5 @@
 using Tenebit.Application.Assignments;
+using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Common;
@@ -23,6 +24,10 @@ public class AssignmentServiceTests
         var activity = new InMemoryActivityLogRepository();
         var assignments = new InMemoryAssignmentRepository();
         var reservations = new InMemoryEquipmentReservationRepository();
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var clock = new FakeClock();
+        var unitOfWork = new FakeUnitOfWork();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork);
 
         var service = new AssignmentService(
             assignments,
@@ -35,12 +40,14 @@ public class AssignmentServiceTests
             organizations,
             activity,
             currentUser,
-            new FakeClock(),
-            new FakeUnitOfWork(),
+            clock,
+            unitOfWork,
             new FakePdfProtocolGenerator(),
             new FakeEmailSender(),
             new FakeAppLinkBuilder(),
-            reservations);
+            reservations,
+            evidence,
+            evidenceService);
 
         return (service, currentUser, assets, people, procedures, categories, inspections, assignments, activity, reservations);
     }

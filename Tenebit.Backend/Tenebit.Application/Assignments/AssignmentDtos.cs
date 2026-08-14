@@ -14,6 +14,12 @@ public sealed record CreateAssignmentRequest(
 public sealed record ReturnAssignmentAssetRequest(Guid AssetId, string? ReturnCondition);
 public sealed record ReturnAssignmentRequest(string? ReturnCondition, string? DestinationLocation, IReadOnlyList<ReturnAssignmentAssetRequest>? Assets = null);
 public sealed record ReturnAssignmentAssetItemRequest(ReturnResolution Resolution, string? ReturnCondition, string? ReturnLocation, string? Notes);
+
+// Multipart "evidenceManifest": mapuje nazwę części pliku na aktywo i podpis zdjęcia.
+public sealed record EvidenceManifestEntry(Guid AssetId, string? Caption);
+
+// Multipart "files": pojedynczy plik wraz z nazwą części formularza, do której należy.
+public sealed record EvidenceFileInput(string FieldName, string FileName, string? ContentType, byte[] Content);
 public sealed record AssignmentAssetResponse(Guid AssetId, string? AssetName, string? AssetTag, string IssueCondition, string? ReturnCondition, DateTimeOffset? ReturnedAt, string? ReturnLocation, string? ReturnedBy, ReturnResolution? ReturnResolution, string? ReturnNotes);
 public sealed record ProcedureAcceptanceResponse(Guid Id, Guid ProcedureId, string? ProcedureTitle, AcceptanceStatus Status, DateTimeOffset SentAt, DateTimeOffset? AcceptedAt, string? ConfirmedIp, string? ConfirmationHash, bool IsIntegrityVerified);
 

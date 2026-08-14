@@ -345,6 +345,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<int>("IntegrityVersion")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone");
 

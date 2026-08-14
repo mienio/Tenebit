@@ -255,6 +255,7 @@ public interface IAssetEvidenceRepository
 {
     Task<IReadOnlyList<AssetEvidence>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AssetEvidence>> ListByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken);
     Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<int> CountAsync(Guid organizationId, Guid assetId, EvidencePhase phase, CancellationToken cancellationToken);
     void Add(AssetEvidence evidence);

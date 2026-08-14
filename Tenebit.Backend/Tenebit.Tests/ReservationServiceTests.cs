@@ -1,5 +1,6 @@
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Assignments;
+using Tenebit.Application.Evidence;
 using Tenebit.Application.Reservations;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Common;
@@ -30,9 +31,11 @@ public class ReservationServiceTests
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
         var availability = new AssetAvailabilityService(assets, assignments, reservations);
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork);
         var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams,
             organizations, activity, currentUser, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(),
-            new FakeAppLinkBuilder(), reservations);
+            new FakeAppLinkBuilder(), reservations, evidence, evidenceService);
         var service = new ReservationService(reservations, kits, assets, people, activity, availability, assignmentService, currentUser, clock, unitOfWork);
         return (service, currentUser, reservations, people, assets, activity, clock, assignments, categories);
     }
@@ -355,9 +358,11 @@ public class ReservationServiceTests
         var activity = new InMemoryActivityLogRepository();
         var clock = new FakeClock();
         var availability = new AssetAvailabilityService(assets, assignments, reservations);
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, new FakeUnitOfWork());
         var assignmentService = new AssignmentService(assignments, assets, categories, new InMemoryAssetInspectionRepository(), people,
             new InMemoryProcedureRepository(), new InMemoryTeamRepository(), new InMemoryOrganizationRepository(), activity, currentUser,
-            clock, new FakeUnitOfWork(), new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), reservations);
+            clock, new FakeUnitOfWork(), new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), reservations, evidence, evidenceService);
         var service = new ReservationService(reservations, kits, assets, people, activity, availability, assignmentService, currentUser, clock, new ThrowingConcurrencyUnitOfWork());
 
         var person = AddPerson(people, currentUser.OrganizationId);
@@ -474,9 +479,13 @@ public class ReservationServiceTests
         Assert.True(checkedOut.IsSuccess);
         var assignmentId = assignments.Assignments.Single().Id;
 
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var clock = new FakeClock();
+        var unitOfWork = new FakeUnitOfWork();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork);
         var assignmentService = new AssignmentService(assignments, assets, categories, new InMemoryAssetInspectionRepository(), people,
             new InMemoryProcedureRepository(), new InMemoryTeamRepository(), new InMemoryOrganizationRepository(), activity, user,
-            new FakeClock(), new FakeUnitOfWork(), new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), reservations);
+            clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), reservations, evidence, evidenceService);
 
         var returned = await assignmentService.ReturnAsync(assignmentId, new ReturnAssignmentRequest("Sprawny", null), CancellationToken.None);
 

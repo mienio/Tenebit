@@ -54,6 +54,22 @@ public sealed class AssetEvidenceService
         return item is null ? Result<AssetEvidence>.Failure(Error.NotFound("Materiał dowodowy nie istnieje.")) : Result<AssetEvidence>.Success(item);
     }
 
+    /// <summary>Publiczny odczyt zdjęcia wydania (spec 6.8). Zwraca wyłącznie materiał należący do
+    /// konkretnego assignment i organizacji — brak izolacji zwracałby zdjęcia innych protokołów.</summary>
+    public async Task<Result<AssetEvidence>> GetPublicAssignmentEvidenceAsync(Guid organizationId, Guid assignmentId, Guid id, CancellationToken cancellationToken)
+    {
+        var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
+        if (assignment is null) return Result<AssetEvidence>.Failure(Error.NotFound("Wydanie nie istnieje."));
+
+        var item = await _evidence.GetAsync(organizationId, id, cancellationToken);
+        if (item is null || item.AssignmentId != assignmentId)
+        {
+            return Result<AssetEvidence>.Failure(Error.NotFound("Materiał dowodowy nie istnieje."));
+        }
+
+        return Result<AssetEvidence>.Success(item);
+    }
+
     public async Task<Result<AssetEvidenceResponse>> UploadAsync(Guid assetId, UploadAssetEvidenceRequest request, string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
@@ -157,6 +173,58 @@ public sealed class AssetEvidenceService
         {
             return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    /// <summary>Przygotowuje partię zdjęć do zapisania W RAMACH transakcji zbiorczej (wydanie/zwrot ze zdjęciami).
+    /// Najpierw waliduje i sanityzuje wszystkie pliki, a dopiero potem dodaje encje do repozytorium — dzięki temu
+    /// błąd dowolnego pliku nie pozostawia częściowo zapisanego materiału. Nie wywołuje SaveChanges; zapisem
+    /// (pojedynczym, atomowym) zarządza wywołujący serwis.</summary>
+    public async Task<Result<IReadOnlyList<AssetEvidence>>> PrepareEvidenceBatchAsync(
+        Guid organizationId, Guid? assignmentId, EvidencePhase phase, IReadOnlyList<EvidenceUploadInput> uploads, CancellationToken cancellationToken)
+    {
+        var sanitized = new List<(EvidenceUploadInput Upload, SanitizedImage Image)>();
+        var perAssetCount = new Dictionary<Guid, int>();
+
+        foreach (var upload in uploads)
+        {
+            var validation = ValidateAndDetectFormat(upload.ContentType, upload.Content);
+            if (validation.IsFailure) return Result<IReadOnlyList<AssetEvidence>>.Failure(validation.Error!);
+
+            var asset = await _assets.GetAsync(organizationId, upload.AssetId, cancellationToken);
+            if (asset is null) return Result<IReadOnlyList<AssetEvidence>>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+            var existing = perAssetCount.TryGetValue(upload.AssetId, out var current)
+                ? current
+                : await _evidence.CountAsync(organizationId, upload.AssetId, phase, cancellationToken);
+            if (existing >= MaxPerAssetAndPhase)
+            {
+                return Result<IReadOnlyList<AssetEvidence>>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+            }
+
+            SanitizedImage image;
+            try
+            {
+                image = _sanitizer.StripMetadata(validation.Value, upload.Content);
+            }
+            catch (DomainException ex)
+            {
+                return Result<IReadOnlyList<AssetEvidence>>.Failure(Error.Validation(ex.Message));
+            }
+
+            perAssetCount[upload.AssetId] = existing + 1;
+            sanitized.Add((upload, image));
+        }
+
+        var items = new List<AssetEvidence>(uploads.Count);
+        foreach (var entry in sanitized)
+        {
+            var upload = entry.Upload;
+            var item = new AssetEvidence(organizationId, upload.AssetId, assignmentId, phase, upload.FileName, entry.Image.ContentType, entry.Image.Content, entry.Image.Sha256, upload.Caption, upload.UploadedBy, upload.UploadedVia, _clock.UtcNow);
+            _evidence.Add(item);
+            items.Add(item);
+        }
+
+        return Result<IReadOnlyList<AssetEvidence>>.Success(items);
     }
 
     private static Result<DetectedImageFormat> ValidateAndDetectFormat(string? declaredContentType, byte[] content)

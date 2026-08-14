@@ -1,4 +1,6 @@
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
@@ -34,6 +36,11 @@ namespace Tenebit.Api.Endpoints;
 
 public static class TenebitEndpoints
 {
+    private static readonly JsonSerializerOptions MultipartJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     public static RouteGroupBuilder MapTenebitApi(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api").WithTags("Tenebit");
@@ -952,6 +959,57 @@ public static class TenebitEndpoints
             .WithTags("Assignments")
             .WithOpenApi();
 
+        api.MapPost("/assignments/with-evidence", async (HttpRequest request, AssignmentService service, CancellationToken cancellationToken) =>
+        {
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest(new { message = "Wyślij żądanie jako multipart/form-data.", code = "VALIDATION_ERROR" });
+            }
+
+            var form = await request.ReadFormAsync(cancellationToken);
+            var createRequest = DeserializePart<CreateAssignmentRequest>(form, "request");
+            if (createRequest is null)
+            {
+                return Results.BadRequest(new { message = "Pole 'request' musi zawierać poprawny JSON wydania.", code = "VALIDATION_ERROR" });
+            }
+
+            var manifest = DeserializeManifest(form);
+            if (manifest is null)
+            {
+                return Results.BadRequest(new { message = "Pole 'evidenceManifest' musi zawierać poprawny JSON.", code = "VALIDATION_ERROR" });
+            }
+
+            var files = new List<EvidenceFileInput>();
+            foreach (var file in form.Files)
+            {
+                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await ReadFileAsync(file, cancellationToken)));
+            }
+
+            return (await service.CreateWithEvidenceAsync(createRequest, manifest, files, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.Id}");
+        })
+            .DisableAntiforgery()
+            .WithTags("Assignments");
+
+        api.MapPost("/assignments/{assignmentId:guid}/assets/{assetId:guid}/return-with-evidence", async (Guid assignmentId, Guid assetId, HttpRequest request, AssignmentService service, CancellationToken cancellationToken) =>
+        {
+            var form = await request.ReadFormAsync(cancellationToken);
+            var returnRequest = DeserializePart<ReturnAssignmentAssetItemRequest>(form, "request");
+            if (returnRequest is null)
+            {
+                return Results.BadRequest(new { message = "Pole 'request' musi zawierać poprawny JSON zwrotu.", code = "VALIDATION_ERROR" });
+            }
+
+            var files = new List<EvidenceFileInput>();
+            foreach (var file in form.Files)
+            {
+                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await ReadFileAsync(file, cancellationToken)));
+            }
+
+            return (await service.ReturnAssetWithEvidenceAsync(assignmentId, assetId, returnRequest, files, cancellationToken)).ToHttpResult();
+        })
+            .DisableAntiforgery()
+            .WithTags("Assignments");
+
         api.MapGet("/assignments/{id:guid}/protocol", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
         {
             var result = await service.GetProtocolPdfAsync(id, cancellationToken);
@@ -1177,6 +1235,22 @@ public static class TenebitEndpoints
             .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
+
+        api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}/evidence/{id:guid}", async (Guid organizationId, Guid assignmentId, Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
+        {
+            var result = await service.GetPublicAssignmentEvidenceAsync(organizationId, assignmentId, id, cancellationToken);
+            if (result.IsFailure || result.Value is null)
+            {
+                return result.ToHttpResult();
+            }
+
+            var evidence = result.Value;
+            return Results.File(evidence.Content, evidence.ContentType, evidence.FileName);
+        })
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
+            .WithTags("Public assignments")
+            .WithOpenApi();
     }
 
     private static void MapPublicOffboarding(RouteGroupBuilder api)
@@ -1322,6 +1396,42 @@ public static class TenebitEndpoints
             .RequireRateLimiting("public")
             .WithTags("Subscription")
             .WithOpenApi();
+    }
+
+    private static T? DeserializePart<T>(IFormCollection form, string name)
+    {
+        var json = form[name].ToString();
+        if (string.IsNullOrWhiteSpace(json)) return default;
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, MultipartJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
+    }
+
+    private static Dictionary<string, EvidenceManifestEntry>? DeserializeManifest(IFormCollection form)
+    {
+        var json = form["evidenceManifest"].ToString();
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, EvidenceManifestEntry>();
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, EvidenceManifestEntry>>(json, MultipartJsonOptions) ?? new Dictionary<string, EvidenceManifestEntry>();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<byte[]> ReadFileAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var stream = file.OpenReadStream();
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory, cancellationToken);
+        return memory.ToArray();
     }
 
     private record UpgradeRequest(string PlanKey);

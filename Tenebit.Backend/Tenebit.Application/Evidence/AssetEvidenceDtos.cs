@@ -11,3 +11,14 @@ public sealed record AssetEvidenceResponse(
 
 public sealed record UploadAssetEvidenceRequest(EvidencePhase Phase, Guid? AssignmentId, string? Caption);
 public sealed record SetEvidenceLegalHoldRequest(bool Enabled);
+
+/// <summary>Pojedynczy plik do zapisania jako materiał dowodowy w ramach transakcji zbiorczej
+/// (wydanie ze zdjęciami / zwrot ze zdjęciami).</summary>
+public sealed record EvidenceUploadInput(
+    Guid AssetId,
+    string FileName,
+    string? ContentType,
+    byte[] Content,
+    string? Caption,
+    string UploadedBy,
+    EvidenceUploadSource UploadedVia);
