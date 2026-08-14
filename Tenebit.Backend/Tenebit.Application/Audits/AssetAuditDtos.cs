@@ -48,7 +48,26 @@ public sealed record AssetAuditParticipantResponse(
     DateTimeOffset? LastReminderAt,
     int ItemCount);
 
-public sealed record AssetAuditCampaignDetailsResponse(AssetAuditCampaignResponse Campaign, IReadOnlyList<AssetAuditParticipantResponse> Participants);
+public sealed record AssetAuditItemAdminResponse(
+    Guid Id,
+    Guid ParticipantId,
+    string? ParticipantName,
+    Guid AssetId,
+    string AssetName,
+    string AssetTag,
+    string? ExpectedLocation,
+    AssetAuditResponse Response,
+    string? Comment,
+    DateTimeOffset? RespondedAt,
+    AssetAuditResolution Resolution,
+    string? ResolutionNotes,
+    string? ResolvedBy,
+    DateTimeOffset? ResolvedAt);
+
+public sealed record AssetAuditCampaignDetailsResponse(
+    AssetAuditCampaignResponse Campaign,
+    IReadOnlyList<AssetAuditParticipantResponse> Participants,
+    IReadOnlyList<AssetAuditItemAdminResponse> Items);
 
 public sealed record PublicAssetAuditItemResponse(Guid Id, string AssetName, string AssetTag, string? Model, AssetAuditResponse Response, string? Comment, Guid? PhotoEvidenceId);
 

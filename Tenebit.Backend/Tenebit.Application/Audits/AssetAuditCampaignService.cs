@@ -85,12 +85,26 @@ public sealed class AssetAuditCampaignService
         var itemCountByParticipant = campaignItems.GroupBy(x => x.ParticipantId).ToDictionary(g => g.Key, g => g.Count());
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var names = people.ToDictionary(x => x.Id, x => x.FullName);
+        var participantsById = participants.ToDictionary(p => p.Id);
+        var assetIds = campaignItems.Select(x => x.AssetId).Distinct().ToList();
+        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
+        var assetLookup = assets.ToDictionary(x => x.Id);
 
         var participantResponses = participants.Select(p => new AssetAuditParticipantResponse(
             p.Id, p.PersonId, names.GetValueOrDefault(p.PersonId), p.Email, p.Status, p.SubmittedAt, p.LastReminderAt,
             itemCountByParticipant.GetValueOrDefault(p.Id))).ToList();
 
-        return Result<AssetAuditCampaignDetailsResponse>.Success(new AssetAuditCampaignDetailsResponse(Map(campaign), participantResponses));
+        var itemResponses = campaignItems.Select(x =>
+        {
+            var participant = participantsById.GetValueOrDefault(x.ParticipantId);
+            var asset = assetLookup.GetValueOrDefault(x.AssetId);
+            return new AssetAuditItemAdminResponse(
+                x.Id, x.ParticipantId, participant is null ? null : names.GetValueOrDefault(participant.PersonId),
+                x.AssetId, asset?.Name ?? "—", asset?.AssetTag ?? "—", x.ExpectedLocation,
+                x.Response, x.Comment, x.RespondedAt, x.Resolution, x.ResolutionNotes, x.ResolvedBy, x.ResolvedAt);
+        }).ToList();
+
+        return Result<AssetAuditCampaignDetailsResponse>.Success(new AssetAuditCampaignDetailsResponse(Map(campaign), participantResponses, itemResponses));
     }
 
     public async Task<Result<AssetAuditCampaignDetailsResponse>> CreateAsync(CreateAssetAuditCampaignRequest request, CancellationToken cancellationToken)

@@ -16,6 +16,7 @@ const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then(m => (
 const PublicAssignmentPage = lazy(() => import('./pages/PublicAssignmentPage').then(m => ({ default: m.PublicAssignmentPage })));
 const PublicOffboardingPage = lazy(() => import('./pages/PublicOffboardingPage').then(m => ({ default: m.PublicOffboardingPage })));
 const PublicAssetScanPage = lazy(() => import('./pages/PublicAssetScanPage').then(m => ({ default: m.PublicAssetScanPage })));
+const PublicAssetAuditPage = lazy(() => import('./pages/PublicAssetAuditPage').then(m => ({ default: m.PublicAssetAuditPage })));
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const MyWorkspacePage = lazy(() => import('./pages/MyWorkspacePage').then(m => ({ default: m.MyWorkspacePage })));
 const AssetsPage = lazy(() => import('./pages/AssetsPage').then(m => ({ default: m.AssetsPage })));
@@ -24,6 +25,7 @@ const AssignmentsPage = lazy(() => import('./pages/AssignmentsPage').then(m => (
 const ProceduresPage = lazy(() => import('./pages/ProceduresPage').then(m => ({ default: m.ProceduresPage })));
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const OffboardingPage = lazy(() => import('./pages/OffboardingPage').then(m => ({ default: m.OffboardingPage })));
+const AssetAuditsPage = lazy(() => import('./pages/AssetAuditsPage').then(m => ({ default: m.AssetAuditsPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
@@ -56,6 +58,7 @@ export function App() {
         <Route path="/accept/:organizationId/:assignmentId" element={<PublicAssignmentPage />} />
         <Route path="/exit/:token" element={<PublicOffboardingPage />} />
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
+        <Route path="/audit/:token" element={<PublicAssetAuditPage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="my" element={<MyWorkspacePage />} />
@@ -66,6 +69,8 @@ export function App() {
           <Route path="onboarding" element={<RequireRoles path="/onboarding"><OnboardingPage /></RequireRoles>} />
           <Route path="offboarding" element={<RequireRoles path="/offboarding"><OffboardingPage /></RequireRoles>} />
           <Route path="offboarding/:id" element={<RequireRoles path="/offboarding"><OffboardingPage /></RequireRoles>} />
+          <Route path="asset-audits" element={<RequireRoles path="/asset-audits"><AssetAuditsPage /></RequireRoles>} />
+          <Route path="asset-audits/:id" element={<RequireRoles path="/asset-audits"><AssetAuditsPage /></RequireRoles>} />
           <Route path="reports" element={<RequireRoles path="/reports"><ReportsPage /></RequireRoles>} />
           <Route path="licenses" element={<RequireRoles path="/licenses"><LicensesPage /></RequireRoles>} />
           <Route path="audit" element={<RequireRoles path="/audit"><AuditLogPage /></RequireRoles>} />

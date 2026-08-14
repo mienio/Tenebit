@@ -391,6 +391,115 @@ export interface OffboardingCaseDetails {
   items: OffboardingItem[];
 }
 
+export type AssetAuditCampaignStatus = 'Draft' | 'Active' | 'Reviewing' | 'Completed' | 'Cancelled';
+export type AssetAuditParticipantStatus = 'Pending' | 'InProgress' | 'Submitted' | 'Reviewed';
+export type AssetAuditResponse = 'Pending' | 'Confirmed' | 'Missing' | 'Damaged' | 'WrongOwner';
+export type AssetAuditResolution = 'None' | 'Accepted' | 'AssetMarkedLost' | 'AssetMarkedDamaged' | 'OwnershipCorrected' | 'Dismissed';
+export type AssetAuditScopeType = 'Organization' | 'Team' | 'Location' | 'AssetCategory' | 'Person';
+
+export interface AssetAuditScope {
+  type: AssetAuditScopeType;
+  teamIds?: string[] | null;
+  locations?: string[] | null;
+  assetCategoryIds?: string[] | null;
+  personIds?: string[] | null;
+}
+
+export interface CreateAssetAuditCampaignRequest {
+  name: string;
+  description?: string | null;
+  dueDate: string;
+  scope: AssetAuditScope;
+}
+
+export type UpdateAssetAuditCampaignRequest = CreateAssetAuditCampaignRequest;
+
+export interface AssetAuditCampaignPreviewResponse {
+  participantCount: number;
+  assetCount: number;
+  peopleWithoutEmail: string[];
+}
+
+export interface AssetAuditCampaignResponse {
+  id: string;
+  name: string;
+  description?: string | null;
+  status: AssetAuditCampaignStatus;
+  dueDate: string;
+  createdAt: string;
+  createdBy: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+}
+
+export interface AssetAuditParticipantResponse {
+  id: string;
+  personId: string;
+  personName?: string | null;
+  email: string;
+  status: AssetAuditParticipantStatus;
+  submittedAt?: string | null;
+  lastReminderAt?: string | null;
+  itemCount: number;
+}
+
+export interface AssetAuditItemAdminResponse {
+  id: string;
+  participantId: string;
+  participantName?: string | null;
+  assetId: string;
+  assetName: string;
+  assetTag: string;
+  expectedLocation?: string | null;
+  response: AssetAuditResponse;
+  comment?: string | null;
+  respondedAt?: string | null;
+  resolution: AssetAuditResolution;
+  resolutionNotes?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface AssetAuditCampaignDetailsResponse {
+  campaign: AssetAuditCampaignResponse;
+  participants: AssetAuditParticipantResponse[];
+  items: AssetAuditItemAdminResponse[];
+}
+
+export interface RemindParticipantsResponse {
+  remindedCount: number;
+}
+
+export interface ResolveAssetAuditItemRequest {
+  resolution: AssetAuditResolution;
+  notes?: string | null;
+  newOwnerPersonId?: string | null;
+}
+
+export interface PublicAssetAuditItemResponse {
+  id: string;
+  assetName: string;
+  assetTag: string;
+  model?: string | null;
+  response: AssetAuditResponse;
+  comment?: string | null;
+  photoEvidenceId?: string | null;
+}
+
+export interface PublicAssetAuditResponse {
+  organizationName: string;
+  campaignName: string;
+  dueDate: string;
+  readOnly: boolean;
+  items: PublicAssetAuditItemResponse[];
+}
+
+export interface SubmitPublicAssetAuditItemRequest {
+  response: AssetAuditResponse;
+  comment?: string | null;
+}
+
 export interface DashboardComparison {
   comparedToDate: string;
   currentTotalAssets: number;

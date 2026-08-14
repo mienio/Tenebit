@@ -7,6 +7,16 @@ import type {
   AssetStatus,
   AssetStatusSetting,
   Assignment,
+  AssetAuditCampaignDetailsResponse,
+  AssetAuditCampaignPreviewResponse,
+  AssetAuditCampaignResponse,
+  AssetAuditCampaignStatus,
+  CreateAssetAuditCampaignRequest,
+  UpdateAssetAuditCampaignRequest,
+  PublicAssetAuditResponse,
+  RemindParticipantsResponse,
+  ResolveAssetAuditItemRequest,
+  SubmitPublicAssetAuditItemRequest,
   CreateOffboardingCaseRequest,
   CreateAssignmentRequest,
   CreateAssetRequest,
@@ -252,6 +262,35 @@ export const api = {
     const body = new FormData();
     body.set('file', file);
     return apiRequest<unknown>(`/api/public/offboarding/${token}/items/${itemId}/evidence`, { method: 'POST', body });
+  },
+
+  assetAuditsPaged: (params: { status?: AssetAuditCampaignStatus | ''; page: number; pageSize: number }) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    query.set('page', String(params.page));
+    query.set('pageSize', String(params.pageSize));
+    return apiRequest<Paged<AssetAuditCampaignResponse>>(`/api/asset-audits?${query.toString()}`);
+  },
+  assetAudit: (id: string) => apiRequest<AssetAuditCampaignDetailsResponse>(`/api/asset-audits/${id}`),
+  createAssetAudit: (body: CreateAssetAuditCampaignRequest) => apiRequest<AssetAuditCampaignDetailsResponse>('/api/asset-audits', { method: 'POST', body: JSON.stringify(body) }),
+  updateAssetAudit: (id: string, body: UpdateAssetAuditCampaignRequest) => apiRequest<AssetAuditCampaignDetailsResponse>(`/api/asset-audits/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  previewAssetAudit: (id: string) => apiRequest<AssetAuditCampaignPreviewResponse>(`/api/asset-audits/${id}/preview`, { method: 'POST' }),
+  startAssetAudit: (id: string) => apiRequest<AssetAuditCampaignDetailsResponse>(`/api/asset-audits/${id}/start`, { method: 'POST' }),
+  remindAssetAuditParticipants: (id: string) => apiRequest<RemindParticipantsResponse>(`/api/asset-audits/${id}/remind`, { method: 'POST' }),
+  reopenAssetAuditParticipant: (id: string, participantId: string) => apiRequest<unknown>(`/api/asset-audits/${id}/participants/${participantId}/reopen`, { method: 'POST' }),
+  resolveAssetAuditItem: (id: string, itemId: string, body: ResolveAssetAuditItemRequest) => apiRequest<unknown>(`/api/asset-audits/${id}/items/${itemId}/resolve`, { method: 'POST', body: JSON.stringify(body) }),
+  completeAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/complete`, { method: 'POST' }),
+  cancelAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/cancel`, { method: 'POST' }),
+  downloadAssetAuditCsv: (id: string) => apiBlob(`/api/asset-audits/${id}/export.csv`),
+  downloadAssetAuditReport: (id: string) => apiBlob(`/api/asset-audits/${id}/report.pdf`),
+
+  publicAssetAudit: (token: string) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}`),
+  submitPublicAssetAuditItemResponse: (token: string, itemId: string, body: SubmitPublicAssetAuditItemRequest) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  submitPublicAssetAudit: (token: string) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}/submit`, { method: 'POST' }),
+  uploadPublicAssetAuditEvidence: (token: string, itemId: string, file: File) => {
+    const body = new FormData();
+    body.set('file', file);
+    return apiRequest<unknown>(`/api/public/asset-audits/${token}/items/${itemId}/evidence`, { method: 'POST', body });
   },
 
   publicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}`),
