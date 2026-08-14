@@ -204,6 +204,74 @@ public sealed class OnboardingService
         return Result<EmployeePackageResponse>.Success(new EmployeePackageResponse(assignment.Id, assignment.ProtocolNumber, assignment, warnings));
     }
 
+    // Spec 6.4: onboarding variant of CreateEmployeePackageAsync — identical package resolution (job profile
+    // to assets/procedures), but delegates to AssignmentService.CreateWithEvidenceAsync so the assignment
+    // and photos are persisted atomically in a single transaction.
+    public async Task<Result<EmployeePackageResponse>> CreateEmployeePackageWithEvidenceAsync(
+        CreateEmployeePackageRequest request,
+        IReadOnlyDictionary<string, EvidenceManifestEntry> evidenceManifest,
+        IReadOnlyList<EvidenceFileInput> files,
+        CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<EmployeePackageResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var person = await _people.GetAsync(organizationId, request.PersonId, cancellationToken);
+        if (person is null) return Result<EmployeePackageResponse>.Failure(Error.Validation("Wybrany pracownik nie istnieje."));
+        if (!person.CanReceiveNewObligations) return Result<EmployeePackageResponse>.Failure(Error.Validation("Pakiet onboardingowy można utworzyć tylko dla aktywnej osoby."));
+
+        var assetIds = request.AssetIds.Distinct().ToList();
+        var procedureIds = request.ProcedureIds.Distinct().ToList();
+        var warnings = new List<string>();
+
+        if (request.JobProfileId is { } profileId)
+        {
+            var profile = await _jobProfiles.GetAsync(organizationId, profileId, cancellationToken);
+            if (profile is null) return Result<EmployeePackageResponse>.Failure(Error.Validation("Wybrany zestaw stanowiskowy nie istnieje."));
+
+            foreach (var procedureId in profile.Procedures.Select(x => x.ProcedureId))
+            {
+                if (!procedureIds.Contains(procedureId)) procedureIds.Add(procedureId);
+            }
+
+            var existingAssets = assetIds.Count > 0 ? await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken) : [];
+            var coveredCategories = existingAssets.Select(x => x.CategoryId).ToHashSet();
+            var available = await _assets.ListAsync(organizationId, null, AssetStatus.InStock, null, cancellationToken);
+            var categories = await _categories.ListAsync(organizationId, cancellationToken);
+
+            foreach (var categoryId in profile.AssetCategories.Select(x => x.AssetCategoryId))
+            {
+                if (coveredCategories.Contains(categoryId)) continue;
+                var candidate = available.FirstOrDefault(a => a.CategoryId == categoryId && !assetIds.Contains(a.Id));
+                if (candidate is null)
+                {
+                    var categoryName = categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "—";
+                    warnings.Add($"Brak dostępnego aktywa w kategorii \"{categoryName}\" z zestawu stanowiskowego \"{profile.Name}\".");
+                    continue;
+                }
+
+                assetIds.Add(candidate.Id);
+                coveredCategories.Add(categoryId);
+            }
+        }
+
+        if (assetIds.Count == 0) return Result<EmployeePackageResponse>.Failure(Error.Validation("Zestaw stanowiskowy nie zawiera żadnego dostępnego aktywa — dodaj aktywo ręcznie."));
+
+        var createResult = await _assignmentService.CreateWithEvidenceAsync(
+            new CreateAssignmentRequest(person.Id, assetIds.Select(id => new AssignmentAssetRequest(id, request.AssetConditions?.GetValueOrDefault(id.ToString()))).ToList(), procedureIds, request.DueDate, request.Notes),
+            evidenceManifest,
+            files,
+            cancellationToken);
+        if (createResult.IsFailure) return Result<EmployeePackageResponse>.Failure(createResult.Error!);
+
+        var assignment = createResult.Value!;
+        _activity.Add(new ActivityLog(organizationId, "onboarding.employee_package.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result<EmployeePackageResponse>.Success(new EmployeePackageResponse(assignment.Id, assignment.ProtocolNumber, assignment, warnings));
+    }
+
     // Task checklist per employee: one row per asset/procedure across all of their assignments, with a
     // per-item completion status — this is what makes onboarding a tracked flow instead of a one-off email.
     public async Task<Result<OnboardingChecklistResponse>> GetChecklistAsync(Guid personId, CancellationToken cancellationToken)

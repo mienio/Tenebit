@@ -465,6 +465,38 @@ public static class TenebitEndpoints
             .WithTags("Onboarding")
             .WithOpenApi();
 
+        api.MapPost("/onboarding/employee-package/with-evidence", async (HttpRequest request, OnboardingService service, CancellationToken cancellationToken) =>
+        {
+            if (!request.HasFormContentType)
+            {
+                return Results.BadRequest(new { message = "Wyślij żądanie jako multipart/form-data.", code = "VALIDATION_ERROR" });
+            }
+
+            var form = await request.ReadFormAsync(cancellationToken);
+            var createRequest = DeserializePart<CreateEmployeePackageRequest>(form, "request");
+            if (createRequest is null)
+            {
+                return Results.BadRequest(new { message = "Pole 'request' musi zawierać poprawny JSON pakietu pracownika.", code = "VALIDATION_ERROR" });
+            }
+
+            var manifest = DeserializeManifest(form);
+            if (manifest is null)
+            {
+                return Results.BadRequest(new { message = "Pole 'evidenceManifest' musi zawierać poprawny JSON.", code = "VALIDATION_ERROR" });
+            }
+
+            var files = new List<EvidenceFileInput>();
+            foreach (var file in form.Files)
+            {
+                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await ReadFileAsync(file, cancellationToken)));
+            }
+
+            return (await service.CreateEmployeePackageWithEvidenceAsync(createRequest, manifest, files, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}");
+        })
+            .DisableAntiforgery()
+            .WithTags("Onboarding")
+            .WithOpenApi();
+
         api.MapGet("/onboarding/checklist/{personId:guid}", async (Guid personId, OnboardingService service, CancellationToken cancellationToken) =>
                 (await service.GetChecklistAsync(personId, cancellationToken)).ToHttpResult())
             .WithTags("Onboarding")
