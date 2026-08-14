@@ -238,4 +238,27 @@ public class AssignmentWithEvidenceTests
         Assert.True(wrongOrganization.IsFailure);
         Assert.Equal("NOT_FOUND", wrongOrganization.Error!.Code);
     }
+
+    [Fact]
+    public async Task GetPublicAssignmentEvidenceAsync_RejectsReturnPhaseEvidence()
+    {
+        var orgId = Guid.NewGuid();
+        var assignments = new InMemoryAssignmentRepository();
+        var evidence = new InMemoryAssetEvidenceRepository();
+        var assets = new InMemoryAssetRepository();
+        var activity = new InMemoryActivityLogRepository();
+
+        var assignment = new Assignment(orgId, Guid.NewGuid(), "TEN-R", DateTimeOffset.UtcNow, null, null, "system");
+        assignments.Add(assignment);
+
+        var returnItem = new AssetEvidence(orgId, Guid.NewGuid(), assignment.Id, EvidencePhase.Return, "return.jpg", "image/jpeg", JpegBytes(), Sha("r"), null, "tester", EvidenceUploadSource.AuthenticatedUser, DateTimeOffset.UtcNow);
+        evidence.Add(returnItem);
+
+        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork());
+
+        var result = await service.GetPublicAssignmentEvidenceAsync(orgId, assignment.Id, returnItem.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("NOT_FOUND", result.Error!.Code);
+    }
 }

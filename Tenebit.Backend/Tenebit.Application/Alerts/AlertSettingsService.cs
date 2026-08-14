@@ -45,7 +45,7 @@ public sealed class AlertSettingsService
 
         var responses = allTypes.Select(type => dict.TryGetValue(type, out var rule)
             ? MapRule(rule)
-            : new AlertRuleResponse(type, false, new(), AlertDeliveryMode.Immediate, AlertRecipientMode.OwnersAndAdmins, null, 1))
+            : DefaultRuleResponse(type))
             .ToList()
             .AsReadOnly();
 
@@ -58,10 +58,13 @@ public sealed class AlertSettingsService
         if (access.IsFailure) return Result<AlertRuleResponse>.Failure(access.Error!);
 
         var rule = await _rules.GetAsync(_currentUser.OrganizationId, type, cancellationToken);
-        if (rule is null) return Result<AlertRuleResponse>.Failure(Error.NotFound($"Reguła alertu typu {type} nie istnieje."));
+        if (rule is null) return Result<AlertRuleResponse>.Success(DefaultRuleResponse(type));
 
         return Result<AlertRuleResponse>.Success(MapRule(rule));
     }
+
+    private static AlertRuleResponse DefaultRuleResponse(AlertType type) =>
+        new(type, false, new(), AlertDeliveryMode.Immediate, AlertRecipientMode.OwnersAndAdmins, null, 1);
 
     public async Task<Result<AlertRuleResponse>> UpsertAlertRuleAsync(AlertType type, SaveAlertRuleRequest request, CancellationToken cancellationToken)
     {
@@ -128,7 +131,7 @@ public sealed class AlertSettingsService
         if (access.IsFailure) return Result<AlertDigestSettingsResponse>.Failure(access.Error!);
 
         if (request.Frequency == AlertDigestFrequency.Weekly && request.DayOfWeek is null)
-            return Result<AlertDigestSettingsResponse>.Failure(Error.Validation("Dla cyfrengo tygodniowego konieczny jest dzień tygodnia."));
+            return Result<AlertDigestSettingsResponse>.Failure(Error.Validation("Dla digestu tygodniowego konieczny jest dzień tygodnia."));
 
         if (request.QuietHoursStart.HasValue != request.QuietHoursEnd.HasValue)
             return Result<AlertDigestSettingsResponse>.Failure(Error.Validation("Godziny cichego trybu muszą być ustawione razem."));

@@ -173,14 +173,20 @@ public class AlertSettingsServiceTests
     }
 
     [Fact]
-    public async Task GetAlertRuleAsync_ReturnsNotFoundForNonExistent()
+    public async Task GetAlertRuleAsync_ReturnsDefaultsForUnconfiguredType()
     {
         var (service, _, _, _, _, _) = CreateService();
 
         var result = await service.GetAlertRuleAsync(AlertType.LicenseExpiring, CancellationToken.None);
 
-        Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AlertType.LicenseExpiring, result.Value!.Type);
+        Assert.False(result.Value!.IsEnabled);
+        Assert.Empty(result.Value!.ThresholdDays);
+        Assert.Equal(AlertDeliveryMode.Immediate, result.Value!.DeliveryMode);
+        Assert.Equal(AlertRecipientMode.OwnersAndAdmins, result.Value!.RecipientMode);
+        Assert.Null(result.Value!.CustomEmails);
+        Assert.Equal(1, result.Value!.CooldownDays);
     }
 
     [Fact]

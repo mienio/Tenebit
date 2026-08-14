@@ -62,7 +62,7 @@ public sealed class AssetEvidenceService
         if (assignment is null) return Result<AssetEvidence>.Failure(Error.NotFound("Wydanie nie istnieje."));
 
         var item = await _evidence.GetAsync(organizationId, id, cancellationToken);
-        if (item is null || item.AssignmentId != assignmentId)
+        if (item is null || item.AssignmentId != assignmentId || item.Phase != EvidencePhase.Issue)
         {
             return Result<AssetEvidence>.Failure(Error.NotFound("Materiał dowodowy nie istnieje."));
         }
