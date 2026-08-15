@@ -111,7 +111,18 @@ export function ReservationsPage() {
           </Card>
 
           {!items.length ? (
-            <EmptyState title={t('reservations.emptyTitle')} description={t('reservations.emptyDesc')} />
+            <EmptyState
+              title={t('reservations.emptyTitle')}
+              description={t('reservations.emptyDesc')}
+              action={
+                <>
+                  <p>{t('reservations.emptyHint')}</p>
+                  <Button variant="secondary" onClick={() => navigate('/settings?tab=customFields')}>
+                    {t('reservations.emptyHintAction')}
+                  </Button>
+                </>
+              }
+            />
           ) : (
             <Card>
               <div className="tableWrap tableWrap--cards">
