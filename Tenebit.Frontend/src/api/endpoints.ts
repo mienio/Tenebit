@@ -54,6 +54,7 @@ import type {
   OffboardingCaseDetails,
   OffboardingCaseStatus,
   OffboardingCaseSummary,
+  OffboardingPreview,
   SaveAssetFieldDefinitionRequest,
   Team,
   EquipmentReservationStatus,
@@ -296,6 +297,7 @@ export const api = {
     return apiRequest<Paged<OffboardingCaseSummary>>(`/api/offboarding?${query.toString()}`);
   },
   offboarding: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}`),
+  offboardingPreview: (personId: string) => apiRequest<OffboardingPreview>(`/api/people/${personId}/offboarding-preview`),
   createOffboarding: (body: CreateOffboardingCaseRequest) => apiRequest<OffboardingCaseDetails>('/api/offboarding', { method: 'POST', body: JSON.stringify(body) }),
   updateOffboarding: (id: string, body: Omit<CreateOffboardingCaseRequest, 'personId'>) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   startOffboarding: (id: string, body: { notifyEmployee: boolean }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/start`, { method: 'POST', body: JSON.stringify(body) }),

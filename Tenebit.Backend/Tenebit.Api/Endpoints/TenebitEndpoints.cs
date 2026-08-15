@@ -907,6 +907,11 @@ public static class TenebitEndpoints
                 (await service.GetForPersonAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("People")
             .WithOpenApi();
+
+        api.MapGet("/people/{id:guid}/offboarding-preview", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
+                (await service.GetPreviewAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("People")
+            .WithOpenApi();
     }
 
     private static void MapProcedures(RouteGroupBuilder api)

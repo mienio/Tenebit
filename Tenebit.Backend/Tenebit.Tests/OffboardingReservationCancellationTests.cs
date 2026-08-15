@@ -35,7 +35,8 @@ public class OffboardingReservationCancellationTests
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, clock, unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            organizations, emailSender, linkBuilder, evidence, evidenceService, new FakePdfProtocolGenerator(), reservations);
+            organizations, emailSender, linkBuilder, evidence, evidenceService, new FakePdfProtocolGenerator(), reservations,
+            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository());
 
         return (service, currentUser, reservations, people, clock);
     }

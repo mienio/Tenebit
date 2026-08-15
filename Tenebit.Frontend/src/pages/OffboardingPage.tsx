@@ -15,7 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useI18n } from '../i18n/I18nProvider';
-import type { InspectionOutcome, OffboardingCaseDetails, OffboardingCaseStatus, OffboardingCaseSummary, OffboardingItem, OffboardingItemStatus, Person } from '../types/domain';
+import type { InspectionOutcome, OffboardingCaseDetails, OffboardingCaseStatus, OffboardingCaseSummary, OffboardingItem, OffboardingItemStatus, OffboardingPreview, Person } from '../types/domain';
 import { formatDate, formatDateTime, toNullable } from '../utils/format';
 
 const pageSize = 10;
@@ -67,6 +67,7 @@ export function OffboardingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<OffboardingCaseDetails | null>(null);
   const [prefillPersonId, setPrefillPersonId] = useState(searchParams.get('personId') ?? '');
+  const [modalPersonId, setModalPersonId] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [startDialog, setStartDialog] = useState<OffboardingCaseSummary | null>(null);
@@ -83,6 +84,8 @@ export function OffboardingPage() {
   const details = useAsyncData(detailsLoader, [detailsLoader]);
   const activityLoader = useMemo(() => () => (id ? api.activityLog({ entityType: 'offboarding_case', entityId: id, page: 1, pageSize: 20 }) : Promise.resolve(null)), [id]);
   const activity = useAsyncData(activityLoader, [activityLoader]);
+  const previewLoader = useMemo(() => () => (modalOpen && !editing && modalPersonId ? api.offboardingPreview(modalPersonId) : Promise.resolve(null)), [modalOpen, editing, modalPersonId]);
+  const preview = useAsyncData(previewLoader, [previewLoader]);
 
   useEffect(() => {
     if (!message) return;
@@ -100,12 +103,14 @@ export function OffboardingPage() {
   useEffect(() => {
     if (!searchParams.get('new')) return;
     setEditing(null);
+    setModalPersonId(searchParams.get('personId') ?? '');
     setModalOpen(true);
   }, [searchParams]);
 
   function openCreate(personId?: string) {
     setEditing(null);
     setPrefillPersonId(personId ?? '');
+    setModalPersonId(personId ?? '');
     setModalOpen(true);
   }
 
@@ -268,12 +273,15 @@ export function OffboardingPage() {
       <Modal open={modalOpen} title={editing ? t('offboarding.editTitle') : t('offboarding.createTitle')} onClose={() => setModalOpen(false)} width="wide">
         <form className="formGrid" onSubmit={handleSave} key={editing?.case.id ?? 'new-offboarding'}>
           {!editing ? (
-            <Field label={t('offboarding.personLabel')}>
-              <SelectInput name="personId" required defaultValue={prefillPersonId}>
-                <option value="">{t('offboarding.personChoose')}</option>
-                {(people.data ?? []).filter(person => person.employmentStatus === 'Active').map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}
-              </SelectInput>
-            </Field>
+            <>
+              <Field label={t('offboarding.personLabel')}>
+                <SelectInput name="personId" required value={modalPersonId} onChange={event => setModalPersonId(event.target.value)}>
+                  <option value="">{t('offboarding.personChoose')}</option>
+                  {(people.data ?? []).filter(person => person.employmentStatus === 'Active').map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}
+                </SelectInput>
+              </Field>
+              {modalPersonId ? <OffboardingPreviewBlock preview={preview.data} isLoading={preview.isLoading} /> : null}
+            </>
           ) : null}
           <Field label={t('offboarding.employmentEndsAtLabel')}><TextInput name="employmentEndsAt" type="datetime-local" defaultValue={toLocalDateTimeValue(editing?.case.employmentEndsAt)} min={todayIso()} required /></Field>
           <Field label={t('offboarding.returnDueDateLabel')}><TextInput name="returnDueDate" type="datetime-local" defaultValue={toLocalDateTimeValue(editing?.case.returnDueDate)} min={todayIso()} required /></Field>
@@ -428,6 +436,23 @@ function OffboardingDetailsView({
       </Card>
 
       <Card className="card--flat">
+        <div className="sectionTitle"><div><h2>{t('offboarding.reservationsTitle')}</h2></div></div>
+        {!(details.reservations ?? []).length ? <p className="muted">{t('offboarding.noReservations')}</p> : (
+          <div className="listRows">
+            {details.reservations.map(reservation => (
+              <div className="listRow" key={reservation.id}>
+                <div>
+                  <strong>{reservation.purpose}</strong>
+                  <small>{formatDateTime(reservation.startAt)} – {formatDateTime(reservation.endAt)}</small>
+                </div>
+                <StatusBadge status={reservation.status} />
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="card--flat">
         <div className="sectionTitle"><div><h2>{t('offboarding.equipmentTitle')}</h2></div></div>
         {!equipment.length ? <p className="muted">{t('offboarding.noEquipment')}</p> : (
           <div className="listRows">
@@ -517,6 +542,56 @@ function OffboardingDetailsView({
       <ResolveItemModal item={resolveItem} onClose={() => setResolveItem(null)} onSubmit={(body) => onAction(`resolve-${resolveItem?.id}`, () => api.resolveOffboardingItem(caseItem.id, resolveItem!.id, body), 'offboarding.itemResolved')} />
       <WaiveItemModal item={waiveItem} onClose={() => setWaiveItem(null)} onSubmit={(body) => onAction(`waive-${waiveItem?.id}`, () => api.waiveOffboardingItem(caseItem.id, waiveItem!.id, body), 'offboarding.itemWaived')} />
       <InspectionModal item={inspectItem} onClose={() => setInspectItem(null)} onSubmit={(body) => onAction(`inspect-${inspectItem?.id}`, () => api.completeOffboardingInspection(caseItem.id, inspectItem!.id, body), 'offboarding.inspectionCompleted')} />
+    </div>
+  );
+}
+
+function OffboardingPreviewBlock({ preview, isLoading }: { preview: OffboardingPreview | null; isLoading: boolean }) {
+  const { t } = useI18n();
+  if (isLoading && !preview) return <p className="muted" style={{ gridColumn: '1 / -1' }}>{t('offboarding.previewLoading')}</p>;
+  if (!preview) return null;
+
+  const sections = [
+    {
+      title: t('offboarding.previewHeldAssets'),
+      rows: preview.heldAssets.map(asset => ({ key: asset.id, label: asset.name, sub: asset.assetTag, badgeStatus: asset.status as string, badgeLabel: undefined }))
+    },
+    {
+      title: t('offboarding.previewOpenAssignments'),
+      rows: preview.openAssignments.map(assignment => ({ key: assignment.id, label: assignment.protocolNumber || '—', sub: formatDateTime(assignment.issuedAt), badgeStatus: assignment.status as string, badgeLabel: undefined }))
+    },
+    {
+      title: t('offboarding.previewLicenseSeats'),
+      rows: preview.licenseSeats.map(license => ({ key: license.id, label: license.name, sub: undefined, badgeStatus: undefined, badgeLabel: undefined }))
+    },
+    {
+      title: t('offboarding.previewReservations'),
+      rows: preview.reservations.map(reservation => ({ key: reservation.id, label: reservation.purpose, sub: `${formatDateTime(reservation.startAt)} – ${formatDateTime(reservation.endAt)}`, badgeStatus: reservation.status as string, badgeLabel: undefined }))
+    },
+    {
+      title: t('offboarding.previewAuditItems'),
+      rows: preview.unresolvedAuditItems.map(item => ({ key: item.id, label: item.assetName, sub: [item.assetTag, item.campaignName].filter(Boolean).join(' · '), badgeStatus: item.response as string, badgeLabel: t(`assetAudits.response.${item.response}`) }))
+    }
+  ];
+
+  return (
+    <div style={{ gridColumn: '1 / -1' }}>
+      <p><strong>{t('offboarding.previewTitle')}</strong></p>
+      {sections.map(section => (
+        <div key={section.title} style={{ marginBottom: '12px' }}>
+          <small>{section.title} ({section.rows.length})</small>
+          {!section.rows.length ? <p className="muted">{t('offboarding.previewEmpty')}</p> : (
+            <div className="listRows">
+              {section.rows.map(row => (
+                <div className="listRow" key={row.key}>
+                  <div><strong>{row.label}</strong>{row.sub ? <small>{row.sub}</small> : null}</div>
+                  {row.badgeStatus ? <StatusBadge status={row.badgeStatus} label={row.badgeLabel} /> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

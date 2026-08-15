@@ -37,7 +37,8 @@ public class OffboardingServiceTests
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, new FakeClock(), unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            organizations, emailSender, linkBuilder, evidence, evidenceService, new FakePdfProtocolGenerator(), new InMemoryEquipmentReservationRepository());
+            organizations, emailSender, linkBuilder, evidence, evidenceService, new FakePdfProtocolGenerator(), new InMemoryEquipmentReservationRepository(),
+            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository());
 
         return (service, currentUser, cases, items, people, assets, assignments, licenses, activity, categories, inspections, emailSender);
     }

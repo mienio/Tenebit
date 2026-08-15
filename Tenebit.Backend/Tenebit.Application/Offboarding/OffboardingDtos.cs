@@ -1,3 +1,7 @@
+using Tenebit.Application.Reservations;
+using Tenebit.Domain.Assets;
+using Tenebit.Domain.Assignments;
+using Tenebit.Domain.Audits;
 using Tenebit.Domain.Offboarding;
 
 namespace Tenebit.Application.Offboarding;
@@ -88,4 +92,22 @@ public sealed record OffboardingCaseResponse(
     string? CancellationReason,
     string? FinalProtocolNumber);
 
-public sealed record OffboardingCaseDetailsResponse(OffboardingCaseResponse Case, IReadOnlyList<OffboardingItemResponse> Items);
+public sealed record OffboardingCaseDetailsResponse(OffboardingCaseResponse Case, IReadOnlyList<OffboardingItemResponse> Items, IReadOnlyList<ReservationResponse> Reservations);
+
+/// <summary>Podsumowanie przed uruchomieniem sprawy (spec 4.5 krok 2) — co osoba trzyma, bez żadnych mutacji.</summary>
+public sealed record OffboardingPreviewResponse(
+    Guid PersonId,
+    string PersonName,
+    IReadOnlyList<OffboardingPreviewAssetResponse> HeldAssets,
+    IReadOnlyList<OffboardingPreviewAssignmentResponse> OpenAssignments,
+    IReadOnlyList<OffboardingPreviewLicenseResponse> LicenseSeats,
+    IReadOnlyList<ReservationResponse> Reservations,
+    IReadOnlyList<OffboardingPreviewAuditItemResponse> UnresolvedAuditItems);
+
+public sealed record OffboardingPreviewAssetResponse(Guid Id, string Name, string AssetTag, AssetStatus Status);
+
+public sealed record OffboardingPreviewAssignmentResponse(Guid Id, string ProtocolNumber, AssignmentStatus Status, DateTimeOffset IssuedAt);
+
+public sealed record OffboardingPreviewLicenseResponse(Guid Id, string Name);
+
+public sealed record OffboardingPreviewAuditItemResponse(Guid Id, string AssetName, string? AssetTag, string CampaignName, AssetAuditResponse Response);

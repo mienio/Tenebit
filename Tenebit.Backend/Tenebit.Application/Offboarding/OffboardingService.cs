@@ -10,6 +10,8 @@ using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Reservations;
+using Tenebit.Application.Reservations;
+using Tenebit.Domain.Audits;
 
 namespace Tenebit.Application.Offboarding;
 
@@ -43,13 +45,16 @@ public sealed class OffboardingService
     private readonly AssetEvidenceService _evidenceService;
     private readonly IPdfProtocolGenerator _pdfGenerator;
     private readonly IEquipmentReservationRepository _reservations;
+    private readonly IAssetAuditCampaignRepository _auditCampaigns;
+    private readonly IAssetAuditItemRepository _auditItems;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
         IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
         OffboardingScheduledActionsService scheduledActions, AssetReturnDispositionService disposition, AssetInspectionService inspectionService,
         IAssetInspectionRepository inspections, IOrganizationRepository organizations, IEmailSender emailSender, IAppLinkBuilder linkBuilder,
-        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator, IEquipmentReservationRepository reservations)
+        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator, IEquipmentReservationRepository reservations,
+        IAssetAuditCampaignRepository auditCampaigns, IAssetAuditItemRepository auditItems)
     {
         _cases = cases;
         _items = items;
@@ -73,6 +78,8 @@ public sealed class OffboardingService
         _evidenceService = evidenceService;
         _pdfGenerator = pdfGenerator;
         _reservations = reservations;
+        _auditCampaigns = auditCampaigns;
+        _auditItems = auditItems;
     }
 
 
@@ -110,8 +117,72 @@ public sealed class OffboardingService
         var person = await _people.GetAsync(offboardingCase.OrganizationId, offboardingCase.PersonId, cancellationToken);
         var items = await _items.ListByCaseAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
         var names = person is null ? new Dictionary<Guid, string>() : new Dictionary<Guid, string> { [person.Id] = person.FullName };
-        return new OffboardingCaseDetailsResponse(Map(offboardingCase, names), items.Select(MapItem).ToList());
+        var reservations = await ListRelevantReservationsAsync(offboardingCase.OrganizationId, offboardingCase.PersonId, cancellationToken);
+        return new OffboardingCaseDetailsResponse(Map(offboardingCase, names), items.Select(MapItem).ToList(), reservations);
     }
+
+    /// <summary>Podsumowanie przed uruchomieniem sprawy (spec 4.5 krok 2) — wyłącznie odczyt, bez efektów ubocznych.</summary>
+    public async Task<Result<OffboardingPreviewResponse>> GetPreviewAsync(Guid personId, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        if (access.IsFailure) return Result<OffboardingPreviewResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var person = await _people.GetAsync(organizationId, personId, cancellationToken);
+        if (person is null) return Result<OffboardingPreviewResponse>.Failure(Error.NotFound("Osoba nie istnieje."));
+
+        var heldAssets = (await _assets.ListAsync(organizationId, null, null, null, cancellationToken))
+            .Where(a => a.AssignedPersonId == person.Id)
+            .Select(a => new OffboardingPreviewAssetResponse(a.Id, a.Name, a.AssetTag, a.Status))
+            .ToList();
+
+        var openAssignments = (await _assignments.ListAsync(organizationId, cancellationToken))
+            .Where(a => a.PersonId == person.Id && OpenAssignmentStatuses.Contains(a.Status))
+            .Select(a => new OffboardingPreviewAssignmentResponse(a.Id, a.ProtocolNumber, a.Status, a.IssuedAt))
+            .ToList();
+
+        var licenseSeats = (await _licenses.ListAsync(organizationId, cancellationToken))
+            .Where(l => l.Seats.Any(s => s.PersonId == person.Id))
+            .Select(l => new OffboardingPreviewLicenseResponse(l.Id, l.Name))
+            .ToList();
+
+        var reservations = await ListRelevantReservationsAsync(organizationId, person.Id, cancellationToken);
+
+        var unresolvedAuditItems = new List<OffboardingPreviewAuditItemResponse>();
+        var (campaigns, _) = await _auditCampaigns.ListPagedAsync(organizationId, null, 1, int.MaxValue, cancellationToken);
+        foreach (var campaign in campaigns)
+        {
+            var campaignItems = await _auditItems.ListByCampaignAsync(organizationId, campaign.Id, cancellationToken);
+            foreach (var auditItem in campaignItems.Where(x => x.ExpectedPersonId == person.Id
+                && x.Response != AssetAuditResponse.Pending && x.Resolution == AssetAuditResolution.None))
+            {
+                var asset = await _assets.GetAsync(organizationId, auditItem.AssetId, cancellationToken);
+                unresolvedAuditItems.Add(new OffboardingPreviewAuditItemResponse(auditItem.Id, asset?.Name ?? "—", asset?.AssetTag, campaign.Name, auditItem.Response));
+            }
+        }
+
+        return Result<OffboardingPreviewResponse>.Success(new OffboardingPreviewResponse(
+            person.Id, person.FullName, heldAssets, openAssignments, licenseSeats, reservations, unresolvedAuditItems));
+    }
+
+    /// <summary>Rezerwacje osoby istotne dla offboardingu: oczekujące na decyzję oraz zatwierdzone/nieodebrane/w trakcie
+    /// z przyszłym końcem (te same kryteria, których używa StartAsync przy anulowaniu — spec 4.5/8.12).</summary>
+    private async Task<IReadOnlyList<ReservationResponse>> ListRelevantReservationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken)
+    {
+        var now = _clock.UtcNow;
+        return (await _reservations.ListByRequesterAsync(organizationId, personId, cancellationToken))
+            .Where(r => r.Status == EquipmentReservationStatus.PendingApproval
+                || (r.Status is EquipmentReservationStatus.Approved or EquipmentReservationStatus.ReadyForPickup
+                    or EquipmentReservationStatus.CheckedOut && r.EndAt > now))
+            .Select(MapReservation)
+            .ToList();
+    }
+
+    private static ReservationResponse MapReservation(EquipmentReservation reservation) => new(
+        reservation.Id, reservation.RequesterPersonId, reservation.Status, reservation.StartAt, reservation.EndAt,
+        reservation.Purpose, reservation.PickupLocation, reservation.Notes, reservation.RequestedAt, reservation.ApprovedAt,
+        reservation.ApprovedBy, reservation.RejectedAt, reservation.RejectedBy, reservation.DecisionNotes,
+        reservation.CancelledAt, reservation.CancelledBy, reservation.CancellationReason, reservation.CreatedAt);
 
     public async Task<Result<OffboardingCaseDetailsResponse>> CreateAsync(CreateOffboardingCaseRequest request, CancellationToken cancellationToken)
     {

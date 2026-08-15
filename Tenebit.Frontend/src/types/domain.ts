@@ -490,6 +490,44 @@ export interface OffboardingItem {
 export interface OffboardingCaseDetails {
   case: OffboardingCaseSummary;
   items: OffboardingItem[];
+  reservations: ReservationResponse[];
+}
+
+export interface OffboardingPreviewAsset {
+  id: string;
+  name: string;
+  assetTag: string;
+  status: AssetStatus;
+}
+
+export interface OffboardingPreviewAssignment {
+  id: string;
+  protocolNumber: string;
+  status: AssignmentStatus;
+  issuedAt: string;
+}
+
+export interface OffboardingPreviewLicense {
+  id: string;
+  name: string;
+}
+
+export interface OffboardingPreviewAuditItem {
+  id: string;
+  assetName: string;
+  assetTag?: string | null;
+  campaignName: string;
+  response: AssetAuditResponse;
+}
+
+export interface OffboardingPreview {
+  personId: string;
+  personName: string;
+  heldAssets: OffboardingPreviewAsset[];
+  openAssignments: OffboardingPreviewAssignment[];
+  licenseSeats: OffboardingPreviewLicense[];
+  reservations: ReservationResponse[];
+  unresolvedAuditItems: OffboardingPreviewAuditItem[];
 }
 
 export type AssetAuditCampaignStatus = 'Draft' | 'Active' | 'Reviewing' | 'Completed' | 'Cancelled';
