@@ -8,7 +8,7 @@ import { SelectInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
-import { formatDate, formatDateTime, formatMoney } from '../utils/format';
+import { csvCell, formatDate, formatDateTime, formatMoney } from '../utils/format';
 import { activityActionLabel, auditEntityLabel } from '../utils/labels';
 import { useI18n } from '../i18n/I18nProvider';
 import { DonutChart } from '../components/charts/DonutChart';
@@ -28,10 +28,6 @@ function TrendRow({ label, current, previous, format }: { label: string; current
       </span>
     </div>
   );
-}
-
-function csvCell(value: string | number) {
-  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 function downloadReportCsv(data: DashboardSummary, t: (key: string, params?: Record<string, string | number>) => string, statusLabel: (status: string) => string) {

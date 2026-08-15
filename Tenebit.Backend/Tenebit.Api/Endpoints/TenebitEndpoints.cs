@@ -93,6 +93,7 @@ public static class TenebitEndpoints
         MapActivityLog(api);
         MapSubscription(api);
         MapLicenses(api);
+        MapServiceTickets(api);
 
         return api;
     }
@@ -460,6 +461,26 @@ public static class TenebitEndpoints
             .WithTags("Assets")
             .WithOpenApi();
 
+        api.MapGet("/assets/export.csv", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
+        {
+            var result = await service.ExportCsvAsync(search, status, location, cancellationToken);
+            return result.IsFailure || result.Value is null
+                ? result.ToHttpResult()
+                : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "text/csv", "assets.csv");
+        })
+            .WithTags("Assets")
+            .WithOpenApi();
+
+        api.MapGet("/assets/export.json", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
+        {
+            var result = await service.ExportJsonAsync(search, status, location, cancellationToken);
+            return result.IsFailure || result.Value is null
+                ? result.ToHttpResult()
+                : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "application/json", "assets.json");
+        })
+            .WithTags("Assets")
+            .WithOpenApi();
+
         api.MapGet("/assets/{id:guid}", async (Guid id, AssetService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
             .WithName("GetAsset")
@@ -737,6 +758,44 @@ public static class TenebitEndpoints
         api.MapDelete("/licenses/{id:guid}/seats/{personId:guid}", async (Guid id, Guid personId, LicenseService service, CancellationToken cancellationToken) =>
                 (await service.UnassignSeatAsync(id, personId, cancellationToken)).ToHttpResult())
             .WithTags("Licenses")
+            .WithOpenApi();
+    }
+
+    private static void MapServiceTickets(RouteGroupBuilder api)
+    {
+        api.MapGet("/assets/{assetId:guid}/service-tickets", async (Guid assetId, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.ListByAssetAsync(assetId, cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets")
+            .WithOpenApi();
+
+        api.MapGet("/service-tickets", async (ServiceTicketStatus? status, int? page, int? pageSize, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets")
+            .WithOpenApi();
+
+        api.MapGet("/service-tickets/{id:guid}", async (Guid id, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.GetAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets")
+            .WithOpenApi();
+
+        api.MapPost("/service-tickets", async (OpenServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.OpenAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/service-tickets/{response.Id}"))
+            .WithTags("Service tickets")
+            .WithOpenApi();
+
+        api.MapPut("/service-tickets/{id:guid}", async (Guid id, UpdateServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets")
+            .WithOpenApi();
+
+        api.MapPost("/service-tickets/{id:guid}/complete", async (Guid id, CompleteServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.CompleteAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets")
+            .WithOpenApi();
+
+        api.MapPost("/service-tickets/{id:guid}/cancel", async (Guid id, CancelServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets")
             .WithOpenApi();
     }
 

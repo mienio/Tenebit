@@ -56,6 +56,11 @@ import type {
   OffboardingCaseSummary,
   OffboardingPreview,
   SaveAssetFieldDefinitionRequest,
+  ServiceTicket,
+  ServiceTicketStatus,
+  OpenServiceTicketRequest,
+  CompleteServiceTicketRequest,
+  CancelServiceTicketRequest,
   Team
 } from '../types/domain';
 
@@ -169,6 +174,10 @@ export const api = {
   assetQr: (id: string) => apiRequest<string>(`/api/assets/${id}/qr`),
   revealAssetField: (id: string, fieldKey: string) => apiRequest<string>(`/api/assets/${id}/fields/${encodeURIComponent(fieldKey)}/reveal`, { method: 'POST' }),
   assetEvidence: (assetId: string) => apiRequest<AssetEvidence[]>(`/api/assets/${assetId}/evidence`),
+  assetServiceTickets: (assetId: string) => apiRequest<ServiceTicket[]>(`/api/assets/${assetId}/service-tickets`),
+  openServiceTicket: (body: OpenServiceTicketRequest) => apiRequest<ServiceTicket>('/api/service-tickets', { method: 'POST', body: JSON.stringify(body) }),
+  completeServiceTicket: (id: string, body: CompleteServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/complete`, { method: 'POST', body: JSON.stringify(body) }),
+  cancelServiceTicket: (id: string, body: CancelServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
   evidenceBlob: (id: string) => apiBlob(`/api/evidence/${id}`),
   publicAssetScan: (organizationId: string, assetId: string) => apiRequest<{ organizationName: string }>(`/api/public/assets/${organizationId}/${assetId}`),
   reportAssetIssue: (organizationId: string, assetId: string, message: string) => apiRequest<void>(`/api/public/assets/${organizationId}/${assetId}/report`, { method: 'POST', body: JSON.stringify({ message }) }),
@@ -331,6 +340,22 @@ export const api = {
   cancelAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/cancel`, { method: 'POST' }),
   downloadAssetAuditCsv: (id: string) => apiBlob(`/api/asset-audits/${id}/export.csv`),
   downloadAssetAuditReport: (id: string) => apiBlob(`/api/asset-audits/${id}/report.pdf`),
+  downloadAssetsCsv: (params?: { search?: string; status?: string; location?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.status) query.set('status', params.status);
+    if (params?.location) query.set('location', params.location);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiBlob(`/api/assets/export.csv${suffix}`);
+  },
+  downloadAssetsJson: (params?: { search?: string; status?: string; location?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.status) query.set('status', params.status);
+    if (params?.location) query.set('location', params.location);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiBlob(`/api/assets/export.json${suffix}`);
+  },
 
   publicAssetAudit: (token: string) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}`),
   submitPublicAssetAuditItemResponse: (token: string, itemId: string, body: SubmitPublicAssetAuditItemRequest) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(body) }),

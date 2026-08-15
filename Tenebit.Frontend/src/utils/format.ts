@@ -20,3 +20,12 @@ export function formatDateTime(value?: string | null) {
 export function toNullable(value: string) {
   return value.trim() ? value.trim() : null;
 }
+
+/** Quotes a CSV cell per RFC4180 and defuses leading =/+/-/@ so Excel/Sheets can't
+ * interpret user-entered data (asset/person names, locations, ...) as a formula
+ * when the export is opened later (CSV/formula injection, CWE-1236). */
+export function csvCell(value: string | number) {
+  const text = String(value);
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+}

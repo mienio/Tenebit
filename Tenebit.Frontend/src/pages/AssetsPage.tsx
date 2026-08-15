@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Download, Eye, FileSpreadsheet, Pencil, Plus, Printer, QrCode, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Building2, Download, Eye, FileSpreadsheet, Pencil, Plus, Printer, QrCode, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
@@ -10,6 +10,7 @@ import { Field, SelectInput, TextArea, TextInput } from '../components/FormField
 import { IconPicker } from '../components/IconPicker';
 import { ImportModal } from '../components/ImportModal';
 import { LocationInventoryModal } from '../components/LocationInventoryModal';
+import { LocationAssetBrowser } from '../components/LocationAssetBrowser';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
 import { PersonPreviewModal } from '../components/PersonPreviewModal';
@@ -19,8 +20,8 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { Asset, AssetCategoryType, AssetStatus, CreateAssetRequest, LocationType } from '../types/domain';
-import { formatDate, formatDateTime, formatMoney, toNullable } from '../utils/format';
+import type { Asset, AssetCategoryType, AssetStatus, CreateAssetRequest, LocationType, ServiceTicket, ServiceTicketStatus } from '../types/domain';
+import { csvCell, formatDate, formatDateTime, formatMoney, toNullable } from '../utils/format';
 import { activityLabel, assetStatusValues, categoryTypeValues, locationTypeValues } from '../utils/labels';
 import { CategoryIcon } from '../utils/categoryIcons';
 import { useI18n } from '../i18n/I18nProvider';
@@ -35,6 +36,17 @@ function parseMoney(value: FormDataEntryValue | null) {
   if (!raw) return null;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export function AssetsPage() {
@@ -56,6 +68,7 @@ export function AssetsPage() {
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState<AssetStatus | ''>((searchParams.get('status') as AssetStatus | null) ?? '');
   const [location, setLocation] = useState(searchParams.get('location') ?? '');
+  const [locationTreeOpen, setLocationTreeOpen] = useState(false);
   const [team, setTeam] = useState(searchParams.get('team') ?? '');
   const [owner, setOwner] = useState(searchParams.get('owner') ?? '');
   const [warranty, setWarranty] = useState(searchParams.get('warranty') ?? '');
@@ -100,6 +113,13 @@ export function AssetsPage() {
   const rows = useMemo(() => assets.data?.items ?? [], [assets.data]);
   const totalAssets = assets.data?.total ?? 0;
 
+  async function handleSelectAssetFromTree(assetId: string) {
+    try {
+      const asset = await api.getAsset(assetId);
+      setSelected(asset);
+    } catch {}
+  }
+
   function toggleSort(key: SortKey) {
     setSort(current => (current?.key === key ? (current.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 }));
     setPage(1);
@@ -130,6 +150,134 @@ export function AssetsPage() {
     [selected?.id]
   );
   const evidence = useAsyncData(evidenceLoader, [evidenceLoader]);
+  const serviceTicketsLoader = useMemo(
+    () => () => (selected ? api.assetServiceTickets(selected.id) : Promise.resolve(null)),
+    [selected?.id]
+  );
+  const serviceTickets = useAsyncData(serviceTicketsLoader, [serviceTicketsLoader]);
+
+  const [serviceTicketModalOpen, setServiceTicketModalOpen] = useState(false);
+  const [serviceTicketSaving, setServiceTicketSaving] = useState(false);
+  const [completingTicket, setCompletingTicket] = useState<ServiceTicket | null>(null);
+  const [completingSaving, setCompletingSaving] = useState(false);
+  const [cancellingTicket, setCancellingTicket] = useState<ServiceTicket | null>(null);
+  const [cancellingSaving, setCancellingSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function openServiceTicket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selected) return;
+    const form = new FormData(event.currentTarget);
+    const vendor = String(form.get('vendor') ?? '').trim();
+    if (!vendor) {
+      setMessage({ type: 'error', text: t('serviceTickets.vendor') });
+      return;
+    }
+    const description = String(form.get('description') ?? '').trim();
+    const estimatedCostRaw = String(form.get('estimatedCost') ?? '').trim();
+    const estimatedCost = estimatedCostRaw ? parseMoney(estimatedCostRaw) : null;
+    const currency = String(form.get('currency') ?? '').trim();
+    const slaDueAt = String(form.get('slaDueAt') ?? '').trim();
+    setServiceTicketSaving(true);
+    try {
+      await api.openServiceTicket({
+        assetId: selected.id,
+        assetInspectionId: null,
+        vendor,
+        description: description || null,
+        estimatedCost,
+        currency: currency || null,
+        slaDueAt: slaDueAt ? new Date(slaDueAt).toISOString() : null
+      });
+      setServiceTicketModalOpen(false);
+      setMessage({ type: 'success', text: t('serviceTickets.title') });
+      await Promise.all([serviceTickets.reload(), assets.reload()]);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
+    } finally {
+      setServiceTicketSaving(false);
+    }
+  }
+
+  async function completeServiceTicket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!completingTicket) return;
+    const form = new FormData(event.currentTarget);
+    const actualCostRaw = String(form.get('actualCost') ?? '').trim();
+    const actualCost = actualCostRaw ? parseMoney(actualCostRaw) : null;
+    const resolution = String(form.get('resolution') ?? '').trim();
+    const resultStatus = String(form.get('resultStatus') ?? '') as AssetStatus;
+    setCompletingSaving(true);
+    try {
+      await api.completeServiceTicket(completingTicket.id, {
+        actualCost,
+        resolution: resolution || null,
+        resultStatus
+      });
+      setCompletingTicket(null);
+      await Promise.all([serviceTickets.reload(), assets.reload()]);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
+    } finally {
+      setCompletingSaving(false);
+    }
+  }
+
+  async function cancelServiceTicket() {
+    if (!cancellingTicket) return;
+    setCancellingSaving(true);
+    try {
+      await api.cancelServiceTicket(cancellingTicket.id, { resolution: null });
+      setCancellingTicket(null);
+      await Promise.all([serviceTickets.reload(), assets.reload()]);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
+    } finally {
+      setCancellingSaving(false);
+    }
+  }
+
+  function ticketStatusClass(status: ServiceTicketStatus): string {
+    if (status === 'Completed') return 'status status--InStock';
+    if (status === 'Cancelled') return 'status status--Damaged';
+    return 'status status--InService';
+  }
+
+  const serviceTicketStatusLabels: Record<ServiceTicketStatus, string> = {
+    Open: t('serviceTickets.status.Open'),
+    InProgress: t('serviceTickets.status.InProgress'),
+    WaitingForParts: t('serviceTickets.status.WaitingForParts'),
+    Completed: t('serviceTickets.status.Completed'),
+    Cancelled: t('serviceTickets.status.Cancelled')
+  };
+  const resultStatusOptions: AssetStatus[] = ['InStock', 'Damaged', 'Retired', 'Disposed'];
+  const resultStatusLabels: Record<AssetStatus, string> = Object.fromEntries(resultStatusOptions.map(value => [value, t(`status.${value}`)])) as Record<AssetStatus, string>;
+
+  async function downloadCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const blob = await api.downloadAssetsCsv({ search: debouncedSearch, status: status || undefined, location: location || undefined });
+      saveBlob(blob, 'assets.csv');
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function downloadJson() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const blob = await api.downloadAssetsJson({ search: debouncedSearch, status: status || undefined, location: location || undefined });
+      saveBlob(blob, 'assets.json');
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function toggleSelected(id: string) {
     setSelectedIds(current => {
@@ -191,7 +339,7 @@ export function AssetsPage() {
   function exportSelectedCsv() {
     const header = [t('assets.csvName'), t('assets.csvTag'), t('assets.csvSerialNumber'), t('assets.csvCategory'), t('assets.csvStatus'), t('assets.csvLocation'), t('assets.csvAssignee')];
     const rows = selectedAssets.map(asset => [asset.name, asset.assetTag, asset.serialNumber ?? '', asset.categoryName ?? '', t(`status.${asset.status}`), asset.location ?? '', asset.assignedPersonName ?? '']);
-    const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const csv = [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -456,6 +604,12 @@ export function AssetsPage() {
             <Button variant="secondary" onClick={assets.reload} icon={<RefreshCw size={16} />}>
               {t('common.refresh')}
             </Button>
+            <Button variant="secondary" disabled={exporting} onClick={() => void downloadCsv()} icon={<Download size={16} />}>
+              {exporting ? t('common.loading') : t('assets.exportCsv')}
+            </Button>
+            <Button variant="secondary" disabled={exporting} onClick={() => void downloadJson()} icon={<Download size={16} />}>
+              {exporting ? t('common.loading') : t('assets.exportJson')}
+            </Button>
             <Button variant="secondary" onClick={() => setImportOpen(true)} icon={<Upload size={16} />}>
               {t('assets.import')}
             </Button>
@@ -505,10 +659,15 @@ export function AssetsPage() {
             </SelectInput>
           </Field>
           <Field label={t('assets.locationLabel')}>
-            <SelectInput value={location} onChange={event => setLocation(event.target.value)}>
-              <option value="">{t('assets.allLocations')}</option>
-              {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
-            </SelectInput>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <SelectInput value={location} onChange={event => setLocation(event.target.value)} style={{ flex: 1 }}>
+                <option value="">{t('assets.allLocations')}</option>
+                {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
+              </SelectInput>
+              <Button variant="secondary" type="button" onClick={() => setLocationTreeOpen(current => !current)} icon={<Building2 size={16} />}>
+                {t('assets.browseByLocation')}
+              </Button>
+            </div>
           </Field>
           <Field label={t('assets.teamLabel')}>
             <SelectInput value={team} onChange={event => setTeam(event.target.value)}>
@@ -519,11 +678,22 @@ export function AssetsPage() {
         </form>
       </Card>
 
-      <Card>
-        <div className="sectionTitle">
-          <div>
-            <h2>{t('assets.listTitle')}</h2>
-            <p>{t('assets.countSummary', { count: totalAssets, pageSize, noun: tPlural('count.assets', totalAssets) })}</p>
+      <div style={{ display: locationTreeOpen ? undefined : 'none' }}>
+        <Card>
+          <div className="sectionTitle">
+            <div><h2>{t('assets.locationTreeTitle')}</h2></div>
+            <Button variant="ghost" type="button" onClick={() => setLocationTreeOpen(false)} icon={<X size={16} />}>{t('common.close')}</Button>
+          </div>
+          <LocationAssetBrowser locations={locations.data ?? []} onSelectAsset={handleSelectAssetFromTree} />
+        </Card>
+      </div>
+
+      {!locationTreeOpen && (
+        <Card>
+          <div className="sectionTitle">
+            <div>
+              <h2>{t('assets.listTitle')}</h2>
+              <p>{t('assets.countSummary', { count: totalAssets, pageSize, noun: tPlural('count.assets', totalAssets) })}</p>
           </div>
         </div>
 
@@ -604,7 +774,8 @@ export function AssetsPage() {
             <Pagination page={page} total={totalAssets} pageSize={pageSize} onPageChange={setPage} />
           </>
         )}
-      </Card>
+        </Card>
+      )}
 
       <SlidePanel open={!!selected} title={selected?.name ?? t('assets.colName')} onClose={() => setSelected(null)} width="wide">
         {selected && (
@@ -725,6 +896,47 @@ export function AssetsPage() {
               </div>
             )}
 
+            <div className="formSectionTitle">{t('serviceTickets.title')}</div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <Button
+                variant="secondary"
+                onClick={() => setServiceTicketModalOpen(true)}
+                icon={<Plus size={16} />}
+                disabled={selected.status === 'Disposed'}
+                title={selected.status === 'Disposed' ? t('serviceTickets.cannotOpenForDisposed') : undefined}
+              >
+                {t('serviceTickets.open')}
+              </Button>
+            </div>
+            {serviceTickets.isLoading ? <p className="muted">{t('common.loading')}</p> : !serviceTickets.data?.length ? (
+              <p className="muted">{t('serviceTickets.none')}</p>
+            ) : (
+              <div className="listRows">
+                {serviceTickets.data.map(ticket => {
+                  const cost = ticket.actualCost ?? ticket.estimatedCost;
+                  const isOpen = ticket.status === 'Open' || ticket.status === 'InProgress' || ticket.status === 'WaitingForParts';
+                  return (
+                    <div className="listRow" key={ticket.id}>
+                      <div>
+                        <strong>{ticket.vendor}</strong>
+                        <small>
+                          <span className={ticketStatusClass(ticket.status)}>{serviceTicketStatusLabels[ticket.status]}</span>
+                          {' · '}{formatDate(ticket.openedAt)}
+                          {cost != null && ` · ${formatMoney(cost, ticket.currency ?? 'PLN')}`}
+                        </small>
+                      </div>
+                      {isOpen ? (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <Button variant="secondary" onClick={() => setCompletingTicket(ticket)}>{t('serviceTickets.complete')}</Button>
+                          <Button variant="ghost" onClick={() => setCancellingTicket(ticket)}>{t('serviceTickets.cancel')}</Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="formSectionTitle">{t('assets.historyTitle')}</div>
             {history.isLoading ? <p className="muted">{t('common.loading')}</p> : !history.data?.items.length ? (
               <p className="muted">{t('assets.noHistory')}</p>
@@ -793,10 +1005,9 @@ export function AssetsPage() {
           <Field label={t('assets.purchaseDateLabel')}><TextInput name="purchaseDate" type="date" defaultValue={editing?.purchaseDate ?? ''} /></Field>
           <Field label={t('assets.warrantyUntilLabel')}><TextInput name="warrantyUntil" type="date" defaultValue={editing?.warrantyUntil ?? ''} /></Field>
 
-          <div className="formSectionTitle">{t('assets.customFieldsSection')}</div>
-          <div className="formSectionTitle">{t('assets.customFieldsSection')}</div>
           {selectedCategoryFields.length > 0 && (
             <>
+              <div className="formSectionTitle">{t('assets.customFieldsSection')}</div>
               {selectedCategoryFields.map(field => (
                 <Field key={field.id} label={field.required ? `${field.label} *` : field.label}>
                   {field.fieldType === 'Boolean' ? (
@@ -830,6 +1041,46 @@ export function AssetsPage() {
           </div>
         </form>
       </Modal>
+
+      <Modal open={serviceTicketModalOpen} title={t('serviceTickets.open')} onClose={() => setServiceTicketModalOpen(false)}>
+        <form className="formGrid" onSubmit={openServiceTicket}>
+          <Field label={`${t('serviceTickets.vendor')} *`}><TextInput name="vendor" required /></Field>
+          <Field label={t('serviceTickets.description')}><TextArea name="description" rows={3} /></Field>
+          <Field label={t('serviceTickets.estimatedCost')}><TextInput name="estimatedCost" type="number" inputMode="decimal" /></Field>
+          <Field label={t('serviceTickets.currency')}><TextInput name="currency" maxLength={3} /></Field>
+          <Field label={t('serviceTickets.slaDueAt')}><TextInput name="slaDueAt" type="date" /></Field>
+          <div className="formActions formActions--split">
+            <Button type="button" variant="ghost" onClick={() => setServiceTicketModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button disabled={serviceTicketSaving}>{serviceTicketSaving ? t('common.saving') : t('serviceTickets.open')}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!completingTicket} title={t('serviceTickets.complete')} onClose={() => setCompletingTicket(null)}>
+        <form className="formGrid" onSubmit={completeServiceTicket}>
+          <Field label={t('serviceTickets.actualCost')}><TextInput name="actualCost" type="number" inputMode="decimal" /></Field>
+          <Field label={t('serviceTickets.resolution')}><TextArea name="resolution" rows={3} /></Field>
+          <Field label={t('serviceTickets.resultStatus')}>
+            <SelectInput name="resultStatus" defaultValue="InStock" required>
+              {resultStatusOptions.map(value => <option key={value} value={value}>{resultStatusLabels[value]}</option>)}
+            </SelectInput>
+          </Field>
+          <div className="formActions formActions--split">
+            <Button type="button" variant="ghost" onClick={() => setCompletingTicket(null)}>{t('common.cancel')}</Button>
+            <Button disabled={completingSaving}>{completingSaving ? t('common.saving') : t('serviceTickets.complete')}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!cancellingTicket}
+        title={t('serviceTickets.confirmCancelTitle')}
+        description={t('serviceTickets.confirmCancelBody')}
+        confirmLabel={t('serviceTickets.cancel')}
+        confirmDisabled={cancellingSaving}
+        onConfirm={cancelServiceTicket}
+        onClose={() => setCancellingTicket(null)}
+      />
 
       <ConfirmDialog
         open={!!deleteTarget}

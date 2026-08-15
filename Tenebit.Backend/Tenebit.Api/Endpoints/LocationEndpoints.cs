@@ -241,14 +241,21 @@ public static class LocationEndpoints
         return rows.Select(row =>
         {
             var path = FullPath(row);
+            var pathPrefix = path + " / ";
+            var assetCount = assets.Count(x =>
+                string.Equals(x.Location, path, StringComparison.OrdinalIgnoreCase)
+                || (x.Location != null && x.Location.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase)));
+            var personCount = people.Count(x =>
+                string.Equals(x.Location, path, StringComparison.OrdinalIgnoreCase)
+                || (x.Location != null && x.Location.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase)));
             return new LocationResponse(
                 row.Id,
                 row.Name,
                 row.Type,
                 row.ParentId,
                 path,
-                assets.Count(x => string.Equals(x.Location, path, StringComparison.OrdinalIgnoreCase)),
-                people.Count(x => string.Equals(x.Location, path, StringComparison.OrdinalIgnoreCase)),
+                assetCount,
+                personCount,
                 row.IsActive);
         }).OrderBy(x => x.FullPath).ToList();
     }

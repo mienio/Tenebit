@@ -1,4 +1,5 @@
 export type AssetStatus = 'Draft' | 'InStock' | 'Reserved' | 'Assigned' | 'PendingReturn' | 'InTransit' | 'InService' | 'Damaged' | 'Lost' | 'Retired' | 'Disposed';
+export type ServiceTicketStatus = 'Open' | 'InProgress' | 'WaitingForParts' | 'Completed' | 'Cancelled';
 export type AssetCategoryType = 'Physical' | 'Digital' | 'License' | 'Account' | 'Document' | 'Location' | 'Vehicle' | 'Key' | 'Consumable' | 'Other';
 export type PersonRelationType = string;
 export type EmploymentStatus = 'Active' | 'Offboarding' | 'Inactive';
@@ -139,6 +140,42 @@ export interface CreateAssetRequest {
   warrantyUntil?: string | null;
   teamId?: string | null;
   customFields?: Record<string, string> | null;
+}
+
+export interface ServiceTicket {
+  id: string;
+  assetId: string;
+  assetInspectionId?: string | null;
+  vendor: string;
+  description?: string | null;
+  estimatedCost?: number | null;
+  actualCost?: number | null;
+  currency?: string | null;
+  openedAt: string;
+  slaDueAt?: string | null;
+  closedAt?: string | null;
+  status: ServiceTicketStatus;
+  resolution?: string | null;
+}
+
+export interface OpenServiceTicketRequest {
+  assetId: string;
+  assetInspectionId?: string | null;
+  vendor: string;
+  description?: string | null;
+  estimatedCost?: number | null;
+  currency?: string | null;
+  slaDueAt?: string | null;
+}
+
+export interface CompleteServiceTicketRequest {
+  actualCost?: number | null;
+  resolution?: string | null;
+  resultStatus: AssetStatus;
+}
+
+export interface CancelServiceTicketRequest {
+  resolution?: string | null;
 }
 
 export interface Person {

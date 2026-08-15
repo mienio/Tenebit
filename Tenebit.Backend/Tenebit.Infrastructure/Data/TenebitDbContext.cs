@@ -41,6 +41,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetInspection> AssetInspections => Set<AssetInspection>();
+    public DbSet<ServiceTicket> ServiceTickets => Set<ServiceTicket>();
     public DbSet<Person> People => Set<Person>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<PersonRelationType> PersonRelationTypes => Set<PersonRelationType>();
@@ -448,6 +449,18 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.CompletedBy).HasMaxLength(240);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Outcome });
+        });
+
+        modelBuilder.Entity<ServiceTicket>(entity =>
+        {
+            entity.ToTable("service_tickets");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Vendor).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.Currency).HasMaxLength(3);
+            entity.Property(x => x.Resolution).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30);
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Status });
         });
     }
 

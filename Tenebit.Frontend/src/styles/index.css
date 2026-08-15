@@ -203,7 +203,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .reservationCategoryCard__img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 3px; }
 .reservationCategoryCard__icon { display: flex; justify-content: center; padding: 6px 0; }
 .barItem { color: inherit; text-decoration: none; padding: 11px; border: 1px solid var(--border); border-radius: 3px; background: #fff; display: grid; gap: 8px; }
-.barItem:hover { border-color: var(--border-strong); background: var(--accent-soft); }
+.barItem:hover { border-color: var(--border-strong); background: var(--brand-soft); }
 .barItem div, .listRow, .procedureCard div, .assignmentCard div { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .barItem span { height: 8px; background: var(--surface-strong); border-radius: 999px; overflow: hidden; }
 .barItem span i { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
@@ -211,7 +211,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .barItem > div > strong { flex-shrink: 0; }
 .barItem--clickable { width: 100%; font: inherit; text-align: left; cursor: pointer; }
 .listRow { padding: 13px; border: 1px solid var(--border); border-radius: 3px; color: inherit; text-decoration: none; min-width: 0; background: #fff; }
-.listRow:hover { border-color: var(--border-strong); background: var(--accent-soft); }
+.listRow:hover { border-color: var(--border-strong); background: var(--brand-soft); }
 .listRow div { min-width: 0; }
 .listRow small { display: block; color: var(--muted); margin-top: 3px; }
 
@@ -246,7 +246,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .listRow > span { color: var(--muted); font-size: 13px; text-align: right; }
 .personCard, .procedureCard, .assignmentCard, .reportCard, .compactList article { display: grid; gap: 8px; padding: 15px; border: 1px solid var(--border); border-radius: 3px; background: #fff; }
 .personCard { width: 100%; text-align: left; cursor: pointer; color: var(--text); }
-.personCard:hover, .personCard--active { border-color: var(--focus); background: var(--accent-soft); }
+.personCard:hover, .personCard--active { border-color: var(--border-strong); background: var(--brand-soft); }
 .personCard strong, .procedureCard strong, .assignmentCard strong { font-weight: 680; overflow-wrap: anywhere; }
 .personCard > span, .procedureCard > span, .assignmentCard > span { color: var(--muted); }
 .personCard small, .procedureCard small, .assignmentCard small, .compactList small { color: var(--muted); }
@@ -445,7 +445,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .locationGroup { display: grid; gap: 8px; }
 .locationGroup__children { display: grid; gap: 8px; margin-top: 8px; padding-left: 22px; border-left: 2px solid var(--border); }
 .locationRow { border: 1px solid var(--border); border-radius: 3px; background: #fff; padding: 8px 10px 8px 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px; transition: background .16s ease, border-color .16s ease; }
-.locationRow:hover, .locationRow--active { border-color: var(--focus); background: var(--accent-soft); }
+.locationRow:hover, .locationRow--active { border-color: var(--border-strong); background: var(--brand-soft); }
 .locationRow__main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; border: none; background: none; padding: 8px; cursor: pointer; color: var(--text); border-radius: 3px; font: inherit; }
 .locationRow__main span { display: block; min-width: 0; }
 .locationRow__main strong { display: block; font-weight: 720; overflow-wrap: anywhere; }
@@ -465,7 +465,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .choiceCard { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 12px; border: 1px solid var(--border); border-radius: 3px; background: #fff; cursor: pointer; text-align: center; font-weight: 640; transition: border-color .15s, background .15s; }
 .choiceCard input { position: absolute; opacity: 0; pointer-events: none; }
 .choiceCard:hover { border-color: var(--border-strong); }
-.choiceCard--active { border-color: var(--focus); background: var(--accent-soft); }
+.choiceCard--active { border-color: var(--border-strong); background: var(--brand-soft); }
 
 .packageFlow { display: grid; gap: 18px; }
 .packageStep { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
@@ -476,14 +476,14 @@ button.authIcon:hover { filter: brightness(0.94); }
 .packageStep__header small { display: block; margin-top: 3px; color: var(--muted); line-height: 1.45; }
 .choiceList { display: grid; gap: 8px; }
 .choiceRow { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: 3px; background: #fff; cursor: pointer; font-weight: 500; }
-.choiceRow:hover { border-color: var(--focus); background: var(--accent-soft); }
+.choiceRow:hover { border-color: var(--border-strong); background: var(--brand-soft); }
 .choiceRow input { margin-top: 3px; }
 .choiceRow span { display: grid; gap: 2px; }
 .choiceRow strong { font-weight: 640; }
 .choiceRow small, .emptyInline { color: var(--muted); line-height: 1.45; }
 .emptyInline { margin: 0; padding: 12px; border: 1px dashed var(--border); border-radius: 3px; background: #fff; }
 .inlineAction { display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: fit-content; min-height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); text-decoration: none; color: var(--brand); background: var(--surface); font-weight: 600; }
-.inlineAction:hover { border-color: var(--focus); background: var(--accent-soft); }
+.inlineAction:hover { border-color: var(--border-strong); background: var(--brand-soft); }
 .toastStack { position: fixed; right: 24px; bottom: 24px; z-index: 160; display: grid; gap: 10px; pointer-events: none; }
 .toast { min-width: min(360px, calc(100vw - 48px)); max-width: 420px; padding: 13px 15px; border-radius: 3px; border: 1px solid var(--border); background: #fff; box-shadow: 4px 4px 0 rgba(34,29,24,.18); color: var(--text); font-weight: 560; }
 .toast--success { border-color: #bbf7d0; background: #ecfdf5; color: #047857; }
@@ -516,7 +516,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .payment-summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 15px; }
 .payment-summary-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); font-size: 16px; font-weight: 600; }
 .payment-form { padding: 24px; }
-.payment-notice { margin-top: 16px; padding: 12px; background: var(--accent-soft); border-radius: 4px; font-size: 13px; color: var(--muted); text-align: center; }
+.payment-notice { margin-top: 16px; padding: 12px; background: var(--brand-soft); border-radius: 4px; font-size: 13px; color: var(--muted); text-align: center; }
 .payment-processing, .payment-success { padding: 60px 24px; text-align: center; }
 .payment-processing h3, .payment-success h2 { margin: 16px 0 8px; font-size: 20px; font-weight: 600; }
 .payment-processing p, .payment-success p { margin: 0; color: var(--muted); }

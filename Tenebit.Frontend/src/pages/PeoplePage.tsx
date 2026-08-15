@@ -18,7 +18,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { getEmploymentStatusPresentation, type Person } from '../types/domain';
-import { formatDateTime, toNullable } from '../utils/format';
+import { csvCell, formatDateTime, toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
 import { languages } from '../i18n/translations';
 import { useCelebration } from '../celebration/CelebrationProvider';
@@ -264,7 +264,7 @@ export function PeoplePage() {
   function exportSelectedCsv() {
     const header = [t('people.csvFirstName'), t('people.csvLastName'), t('people.csvEmail'), t('people.csvPhone'), t('people.csvJobTitle'), t('people.csvTeam'), t('people.csvStatus')];
     const rows = selectedPeople.map(person => [person.firstName, person.lastName, person.email, person.phone ?? '', person.jobTitle ?? '', person.teamName ?? '', t(getEmploymentStatusPresentation(person.employmentStatus).labelKey)]);
-    const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const csv = [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

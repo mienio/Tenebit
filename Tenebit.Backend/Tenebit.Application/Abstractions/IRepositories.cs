@@ -301,3 +301,11 @@ public interface IEquipmentReservationRepository
     Task<EquipmentReservation?> GetByAssignmentIdAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken);
     void Add(EquipmentReservation reservation);
 }
+
+public interface IServiceTicketRepository
+{
+    Task<ServiceTicket?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ServiceTicket>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<ServiceTicket> Items, int Total)> ListPagedAsync(Guid organizationId, ServiceTicketStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    void Add(ServiceTicket ticket);
+}

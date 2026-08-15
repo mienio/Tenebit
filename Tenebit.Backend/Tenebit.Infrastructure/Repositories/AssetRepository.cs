@@ -28,7 +28,8 @@ public sealed class AssetRepository : IAssetRepository
         if (!string.IsNullOrWhiteSpace(location))
         {
             var normalizedLocation = location.Trim();
-            query = query.Where(x => x.Location == normalizedLocation);
+            var prefix = normalizedLocation + " / ";
+            query = query.Where(x => x.Location == normalizedLocation || (x.Location != null && x.Location.StartsWith(prefix)));
         }
 
         return await query.OrderBy(x => x.Name).ToListAsync(cancellationToken);
@@ -47,7 +48,8 @@ public sealed class AssetRepository : IAssetRepository
         if (!string.IsNullOrWhiteSpace(location))
         {
             var normalizedLocation = location.Trim();
-            query = query.Where(x => x.Location == normalizedLocation);
+            var prefix = normalizedLocation + " / ";
+            query = query.Where(x => x.Location == normalizedLocation || (x.Location != null && x.Location.StartsWith(prefix)));
         }
 
         if (teamId.HasValue) query = query.Where(x => x.TeamId == teamId.Value);

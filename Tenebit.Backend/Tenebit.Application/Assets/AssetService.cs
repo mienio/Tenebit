@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using System.Text;
+using System.Text.Json;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
@@ -330,5 +332,85 @@ public sealed class AssetService
         _activity.Add(new ActivityLog(organizationId, "asset.sensitive_field_revealed", "asset", asset.Id, _currentUser.Subject, definition.Label, _clock.UtcNow));
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<string>.Success(value);
+    }
+
+    /// <summary>Eksport listy aktywów do JSON. Zawiera wyłącznie dane z <see cref="AssetResponse"/> — bez materiałów dowodowych (AssetEvidence),
+    /// które są danymi własnościowymi organizacji i nie podlegają eksportowi.</summary>
+    public async Task<Result<string>> ExportJsonAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var assets = await _assets.ListAsync(organizationId, search, status, location, cancellationToken);
+        var categories = await _categories.ListAsync(organizationId, cancellationToken);
+        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        var language = _currentUser.Language;
+        var payload = assets.Select(asset => Map(asset, categories, people, teams, language)).ToList();
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        return Result<string>.Success(json);
+    }
+
+    /// <summary>Eksport listy aktywów do CSV. Dane identyczne jak <see cref="ExportJsonAsync"/> (bez AssetEvidence). Status
+    /// eksportowany jako nazwa enuma — brak dedykowanego helpera translacji w warstwie Application.</summary>
+    public async Task<Result<string>> ExportCsvAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var assets = await _assets.ListAsync(organizationId, search, status, location, cancellationToken);
+        var categories = await _categories.ListAsync(organizationId, cancellationToken);
+        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        var language = _currentUser.Language;
+
+        var csv = new StringBuilder();
+        csv.AppendLine(string.Join(',', new[]
+        {
+            "Nazwa", "Tag", "Numer seryjny", "Kategoria", "Status", "Osoba", "Lokalizacja", "Zespół",
+            "Producent", "Model", "Cena zakupu", "Waluta", "Data zakupu", "Gwarancja do"
+        }.Select(CsvField)));
+
+        foreach (var asset in assets)
+        {
+            var mapped = Map(asset, categories, people, teams, language);
+            var row = new[]
+            {
+                mapped.Name,
+                mapped.AssetTag,
+                mapped.SerialNumber ?? "",
+                mapped.CategoryName ?? "",
+                mapped.Status.ToString(),
+                mapped.AssignedPersonName ?? "",
+                mapped.Location ?? "",
+                mapped.TeamName ?? "",
+                mapped.Manufacturer ?? "",
+                mapped.Model ?? "",
+                mapped.PurchasePrice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "",
+                mapped.Currency ?? "",
+                mapped.PurchaseDate?.ToString("yyyy-MM-dd") ?? "",
+                mapped.WarrantyUntil?.ToString("yyyy-MM-dd") ?? ""
+            };
+            csv.AppendLine(string.Join(',', row.Select(CsvField)));
+        }
+
+        return Result<string>.Success(csv.ToString());
+    }
+
+    /// <summary>Escapuje pole wg RFC4180 — cudzysłów wokół pola zawierającego przecinek, cudzysłów lub nową linię,
+    /// z podwojeniem wewnętrznych cudzysłowów. Pola zaczynające się od =, +, -, @ dostają wiodący apostrof,
+    /// żeby Excel/Sheets nie interpretowały danych użytkownika (nazwa aktywa, lokalizacja) jako formuły
+    /// (CSV/formula injection, CWE-1236).</summary>
+    private static string CsvField(string value)
+    {
+        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+        {
+            value = "'" + value;
+        }
+
+        if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 }

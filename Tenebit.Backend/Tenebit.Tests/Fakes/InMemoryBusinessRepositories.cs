@@ -19,14 +19,30 @@ public sealed class InMemoryAssetRepository : IAssetRepository
 {
     public List<Asset> Assets { get; } = [];
 
-    public Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<Asset>>(Assets
-            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value))
-            .ToList());
+    public Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
+    {
+        var prefix = string.IsNullOrWhiteSpace(location) ? null : location.Trim() + " / ";
+        var normalized = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
+        IReadOnlyList<Asset> rows = Assets
+            .Where(x => x.OrganizationId == organizationId
+                && (!status.HasValue || x.Status == status.Value)
+                && (normalized is null
+                    || x.Location == normalized
+                    || (x.Location != null && prefix != null && x.Location.StartsWith(prefix))))
+            .ToList();
+        return Task.FromResult<IReadOnlyList<Asset>>(rows);
+    }
 
     public Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var rows = Assets.Where(x => x.OrganizationId == organizationId).ToList();
+        var prefix = string.IsNullOrWhiteSpace(location) ? null : location.Trim() + " / ";
+        var normalized = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
+        var rows = Assets
+            .Where(x => x.OrganizationId == organizationId
+                && (normalized is null
+                    || x.Location == normalized
+                    || (x.Location != null && prefix != null && x.Location.StartsWith(prefix))))
+            .ToList();
         return Task.FromResult<(IReadOnlyList<Asset>, int)>((rows, rows.Count));
     }
 
@@ -343,6 +359,36 @@ public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator
         LastAssetAuditReportModel = model;
         return [1, 2, 3];
     }
+}
+
+public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository
+{
+    public List<ServiceTicket> Tickets { get; } = [];
+
+    public Task<ServiceTicket?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Tickets.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<IReadOnlyList<ServiceTicket>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ServiceTicket>>(Tickets
+            .Where(x => x.OrganizationId == organizationId && x.AssetId == assetId)
+            .OrderByDescending(x => x.OpenedAt)
+            .ToList());
+
+    public Task<(IReadOnlyList<ServiceTicket> Items, int Total)> ListPagedAsync(Guid organizationId, ServiceTicketStatus? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var rows = Tickets
+            .Where(x => x.OrganizationId == organizationId && (!status.HasValue || x.Status == status.Value))
+            .OrderByDescending(x => x.OpenedAt)
+            .ToList();
+        var total = rows.Count;
+        var items = rows
+            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 100))
+            .Take(Math.Clamp(pageSize, 1, 100))
+            .ToList();
+        return Task.FromResult<(IReadOnlyList<ServiceTicket>, int)>((items, total));
+    }
+
+    public void Add(ServiceTicket ticket) => Tickets.Add(ticket);
 }
 
 public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository
