@@ -162,9 +162,6 @@ export function AssetsPage() {
       purchaseDate: asset.purchaseDate,
       warrantyUntil: asset.warrantyUntil,
       teamId: asset.teamId,
-      isReservable: asset.isReservable,
-      maxReservationDays: asset.maxReservationDays,
-      reservationInstructions: asset.reservationInstructions,
       customFields: asset.customFields,
       status: asset.status,
       ...overrides
@@ -320,8 +317,6 @@ export function AssetsPage() {
       }
     }
 
-    const rawMaxDays = String(form.get('maxReservationDays') ?? '').trim();
-
     const body: CreateAssetRequest = {
       name: String(form.get('name') ?? '').trim(),
       assetTag: String(form.get('assetTag') ?? '').trim(),
@@ -335,9 +330,6 @@ export function AssetsPage() {
       purchaseDate: toNullable(String(form.get('purchaseDate') ?? '')),
       warrantyUntil: toNullable(String(form.get('warrantyUntil') ?? '')),
       teamId: toNullable(String(form.get('teamId') ?? '')),
-      isReservable: form.get('isReservable') === 'on',
-      maxReservationDays: rawMaxDays === '' ? null : Number(rawMaxDays),
-      reservationInstructions: toNullable(String(form.get('reservationInstructions') ?? '')),
       customFields
     };
 
@@ -801,18 +793,10 @@ export function AssetsPage() {
           <Field label={t('assets.purchaseDateLabel')}><TextInput name="purchaseDate" type="date" defaultValue={editing?.purchaseDate ?? ''} /></Field>
           <Field label={t('assets.warrantyUntilLabel')}><TextInput name="warrantyUntil" type="date" defaultValue={editing?.warrantyUntil ?? ''} /></Field>
 
-          <div className="formSectionTitle">{t('assets.reservationSection')}</div>
-          <Field label={t('assets.reservableLabel')}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input type="checkbox" name="isReservable" defaultChecked={editing?.isReservable ?? false} />
-            </label>
-          </Field>
-          <Field label={t('assets.maxReservationDaysLabel')}><TextInput name="maxReservationDays" type="number" min={1} defaultValue={editing?.maxReservationDays ?? ''} /></Field>
-          <Field label={t('assets.reservationInstructionsLabel')}><TextArea name="reservationInstructions" rows={3} defaultValue={editing?.reservationInstructions ?? ''} /></Field>
-
+          <div className="formSectionTitle">{t('assets.customFieldsSection')}</div>
+          <div className="formSectionTitle">{t('assets.customFieldsSection')}</div>
           {selectedCategoryFields.length > 0 && (
             <>
-              <div className="formSectionTitle">{t('assets.customFieldsSection')}</div>
               {selectedCategoryFields.map(field => (
                 <Field key={field.id} label={field.required ? `${field.label} *` : field.label}>
                   {field.fieldType === 'Boolean' ? (

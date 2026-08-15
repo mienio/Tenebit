@@ -54,26 +54,6 @@ public class AssetCategoryServiceTests
     }
 
     [Fact]
-    public async Task UpdateCatalogSettingsAsync_UpdatesFieldsAndWritesActivityLog()
-    {
-        var (service, user, categories, activity) = CreateService();
-        var category = new AssetCategory(user.OrganizationId, "Laptopy", AssetCategoryType.Physical, null);
-        categories.Add(category);
-
-        var catalogName = "Laptop sluzbowy";
-        var request = new UpdateAssetCategoryCatalogSettingsRequest(true, catalogName, "Dostepny do rezerwacji", "https://cdn.acme.test/laptop.png", ReservationMode.SelectExactAsset);
-        var result = await service.UpdateCatalogSettingsAsync(category.Id, request, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.VisibleInEmployeeCatalog);
-        Assert.Equal(catalogName, result.Value!.CatalogName);
-        Assert.Equal("Dostepny do rezerwacji", result.Value!.CatalogDescription);
-        Assert.Equal("https://cdn.acme.test/laptop.png", result.Value!.CatalogImageUrl);
-        Assert.Equal(ReservationMode.SelectExactAsset, result.Value!.ReservationMode);
-        Assert.Contains(activity.Logs, x => x.Action == "asset_category.catalog_settings_updated");
-    }
-
-    [Fact]
     public async Task UpdateReturnPolicyAsync_RejectsNonAdminRole()
     {
         var (service, user, categories, _) = CreateService();

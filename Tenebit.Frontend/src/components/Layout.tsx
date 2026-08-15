@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, CalendarRange, ChevronDown, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X } from 'lucide-react';
+import { BarChart3, Boxes, ChevronDown, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from './BrandMark';
@@ -19,7 +19,6 @@ export const nav = [
   { to: '/assets', labelKey: 'nav.assets', icon: Boxes, roles: ['owner', 'admin', 'asset_operator', 'technician', 'manager', 'hr', 'license_manager', 'finance', 'auditor'], group: 'assets' },
   { to: '/licenses', labelKey: 'nav.licenses', icon: KeyRound, roles: ['owner', 'admin', 'license_manager', 'finance', 'auditor'], group: 'assets' },
   { to: '/assignments', labelKey: 'nav.assignments', icon: PackageCheck, roles: ['owner', 'admin', 'asset_operator', 'hr', 'manager'], group: 'assets' },
-  { to: '/reservations', labelKey: 'nav.reservations', icon: CalendarRange, roles: ['owner', 'admin', 'asset_operator', 'manager'], group: 'assets' },
   { to: '/asset-audits', labelKey: 'nav.assetAudits', icon: ClipboardList, roles: ['owner', 'admin', 'asset_operator', 'auditor'], group: 'assets' },
   { to: '/people', labelKey: 'nav.people', icon: Users, roles: ['owner', 'admin', 'manager', 'hr', 'asset_operator', 'auditor'], group: 'employment' },
   { to: '/onboarding', labelKey: 'nav.onboarding', icon: FileText, roles: ['owner', 'admin', 'hr', 'asset_operator'], group: 'employment' },

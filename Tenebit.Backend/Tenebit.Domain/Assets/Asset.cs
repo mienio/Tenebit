@@ -37,22 +37,6 @@ public sealed class Asset
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public List<AssetFieldValue> FieldValues { get; private set; } = [];
-    public bool IsReservable { get; private set; }
-    public string? ReservationInstructions { get; private set; }
-    public int? MaxReservationDays { get; private set; }
-
-    public void SetReservationSettings(bool isReservable, string? instructions, int? maxDays)
-    {
-        if (maxDays is <= 0)
-        {
-            throw new DomainException("Maksymalna liczba dni rezerwacji musi być większa od zera.");
-        }
-
-        IsReservable = isReservable;
-        ReservationInstructions = Normalize(instructions);
-        MaxReservationDays = maxDays;
-        UpdatedAt = DateTimeOffset.UtcNow;
-    }
 
     public void SetFieldValues(IReadOnlyDictionary<string, string> values)
     {

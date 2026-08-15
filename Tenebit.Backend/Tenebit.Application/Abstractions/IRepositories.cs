@@ -290,13 +290,6 @@ public interface IRolePermissionRepository
     void Remove(RolePermission permission);
 }
 
-public interface IEquipmentKitDefinitionRepository
-{
-    Task<IReadOnlyList<EquipmentKitDefinition>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
-    Task<EquipmentKitDefinition?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
-    void Add(EquipmentKitDefinition kitDefinition);
-}
-
 public interface IEquipmentReservationRepository
 {
     Task<IReadOnlyList<EquipmentReservation>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken);

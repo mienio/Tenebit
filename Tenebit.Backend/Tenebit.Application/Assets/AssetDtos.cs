@@ -5,11 +5,10 @@ namespace Tenebit.Application.Assets;
 public sealed record AssetFieldDefinitionResponse(Guid Id, string Key, string Label, AssetFieldType FieldType, IReadOnlyList<string> Options, bool Required);
 public sealed record SaveAssetFieldDefinitionRequest(string Key, string Label, AssetFieldType FieldType, string? Options, bool Required);
 
-public sealed record AssetCategoryResponse(Guid Id, string Name, AssetCategoryType Type, string? Description, string? Icon, bool IsSystem, IReadOnlyList<AssetFieldDefinitionResponse> FieldDefinitions, ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn, bool VisibleInEmployeeCatalog, string? CatalogName, string? CatalogDescription, string? CatalogImageUrl, ReservationMode ReservationMode);
+public sealed record AssetCategoryResponse(Guid Id, string Name, AssetCategoryType Type, string? Description, string? Icon, bool IsSystem, IReadOnlyList<AssetFieldDefinitionResponse> FieldDefinitions, ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
 public sealed record CreateAssetCategoryRequest(string Name, AssetCategoryType Type, string? Description, string? Icon);
 public sealed record UpdateAssetCategoryRequest(string Name, AssetCategoryType Type, string? Description, string? Icon);
 public sealed record UpdateAssetCategoryReturnPolicyRequest(ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
-public sealed record UpdateAssetCategoryCatalogSettingsRequest(bool VisibleInEmployeeCatalog, string? CatalogName, string? CatalogDescription, string? CatalogImageUrl, ReservationMode ReservationMode);
 
 public sealed record AssetResponse(
     Guid Id,
@@ -33,10 +32,7 @@ public sealed record AssetResponse(
     IReadOnlyDictionary<string, string> CustomFields,
     IReadOnlyList<AssetFieldDefinitionResponse> CategoryFieldDefinitions,
     Guid? TeamId,
-    string? TeamName,
-    bool IsReservable,
-    int? MaxReservationDays,
-    string? ReservationInstructions);
+    string? TeamName);
 
 public sealed record CreateAssetRequest(
     string Name,
@@ -51,9 +47,6 @@ public sealed record CreateAssetRequest(
     DateOnly? PurchaseDate,
     DateOnly? WarrantyUntil,
     Guid? TeamId,
-    bool IsReservable,
-    int? MaxReservationDays,
-    string? ReservationInstructions,
     IReadOnlyDictionary<string, string>? CustomFields);
 
 public sealed record PublicAssetScanResponse(string OrganizationName);
@@ -73,7 +66,4 @@ public sealed record UpdateAssetRequest(
     DateOnly? PurchaseDate,
     DateOnly? WarrantyUntil,
     Guid? TeamId,
-    bool IsReservable,
-    int? MaxReservationDays,
-    string? ReservationInstructions,
     IReadOnlyDictionary<string, string>? CustomFields);

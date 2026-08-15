@@ -43,7 +43,7 @@ public class AssetServiceTests
     }
 
     private static CreateAssetRequest BuildRequest(Guid categoryId, string tag = "AT-001") =>
-        new("Laptop Dell", tag, null, categoryId, null, null, null, null, null, null, null, null, false, null, null, null);
+        new("Laptop Dell", tag, null, categoryId, null, null, null, null, null, null, null, null, null);
 
     [Fact]
     public async Task CreateAsync_RejectsUserWithoutAssetManagementRole()
@@ -135,42 +135,5 @@ public class AssetServiceTests
         Assert.True(result.IsSuccess);
         var afterDelete = await service.GetAsync(created.Value!.Id, CancellationToken.None);
         Assert.True(afterDelete.IsFailure);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_SavesReservationSettings()
-    {
-        var (service, user, _, categories, _) = CreateService();
-        var category = AddCategory(user, categories);
-        var created = await service.CreateAsync(BuildRequest(category.Id), CancellationToken.None);
-
-        var update = new UpdateAssetRequest(
-            "Laptop Dell", "AT-001", null, category.Id, AssetStatus.InStock,
-            null, null, null, null, null, null, null, null,
-            true, 7, "Zarezerwuj tylko w dni robocze.", null);
-
-        var result = await service.UpdateAsync(created.Value!.Id, update, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.IsReservable);
-        Assert.Equal(7, result.Value.MaxReservationDays);
-        Assert.Equal("Zarezerwuj tylko w dni robocze.", result.Value.ReservationInstructions);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_RejectsNegativeMaxReservationDays()
-    {
-        var (service, user, _, categories, _) = CreateService();
-        var category = AddCategory(user, categories);
-        var created = await service.CreateAsync(BuildRequest(category.Id), CancellationToken.None);
-
-        var update = new UpdateAssetRequest(
-            "Laptop Dell", "AT-001", null, category.Id, AssetStatus.InStock,
-            null, null, null, null, null, null, null, null,
-            true, -1, null, null);
-
-        var result = await service.UpdateAsync(created.Value!.Id, update, CancellationToken.None);
-
-        Assert.True(result.IsFailure);
     }
 }

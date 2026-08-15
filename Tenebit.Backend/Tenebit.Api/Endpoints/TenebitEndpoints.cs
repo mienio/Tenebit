@@ -74,7 +74,6 @@ public static class TenebitEndpoints
         MapAuth(api);
         api.MapExternalAuthEndpoints();
         MapWorkspace(api);
-        MapReservations(api);
         MapDashboard(api);
         MapOrganization(api);
         MapOnboarding(api);
@@ -323,89 +322,6 @@ public static class TenebitEndpoints
             .WithOpenApi();
     }
 
-    private static void MapReservations(RouteGroupBuilder api)
-    {
-        api.MapGet("/reservation-catalog", async (DateTimeOffset? from, DateTimeOffset? to, string? search, string? location, ReservationCatalogService service, CancellationToken cancellationToken) =>
-            {
-                // Domyślny tydzień od dziś, gdy pracownik jeszcze nie wybrał terminu (spec 8.6 krok 1).
-                var start = from ?? DateTimeOffset.UtcNow;
-                var end = to ?? start.AddDays(7);
-                return Results.Ok(await service.GetAsync(start, end, search, location, cancellationToken));
-            })
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/my/reservations", async (CreateReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(r => $"/api/my/reservations/{r.Reservation.Id}"))
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapGet("/my/reservations", async (ReservationService service, CancellationToken cancellationToken) =>
-                (await service.ListMyAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapGet("/my/reservations/{id:guid}", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.GetMyAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPut("/my/reservations/{id:guid}", async (Guid id, UpdateReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.UpdateMyAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/my/reservations/{id:guid}/submit", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.SubmitMyAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/my/reservations/{id:guid}/cancel", async (Guid id, CancelReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.CancelMyAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapGet("/reservations", async (EquipmentReservationStatus? status, int? page, int? pageSize, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapGet("/reservations/calendar", async (DateTimeOffset from, DateTimeOffset to, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.GetCalendarAsync(from, to, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapGet("/reservations/{id:guid}", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/reservations/{id:guid}/approve", async (Guid id, ApproveReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.ApproveAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/reservations/{id:guid}/reject", async (Guid id, RejectReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.RejectAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/reservations/{id:guid}/substitute", async (Guid id, SubstituteReservationItemRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.SubstituteAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/reservations/{id:guid}/cancel", async (Guid id, CancelReservationRequest request, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-
-        api.MapPost("/reservations/{id:guid}/checkout", async (Guid id, ReservationService service, CancellationToken cancellationToken) =>
-                (await service.CheckoutAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Reservations")
-            .WithOpenApi();
-    }
-
     private static void MapDashboard(RouteGroupBuilder api)
     {
         api.MapGet("/dashboard", async (DashboardService service, CancellationToken cancellationToken) =>
@@ -534,11 +450,6 @@ public static class TenebitEndpoints
 
         api.MapPut("/asset-categories/{id:guid}/return-policy", async (Guid id, UpdateAssetCategoryReturnPolicyRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
                 (await service.UpdateReturnPolicyAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Asset categories")
-            .WithOpenApi();
-
-        api.MapPut("/asset-categories/{id:guid}/catalog-settings", async (Guid id, UpdateAssetCategoryCatalogSettingsRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
-                (await service.UpdateCatalogSettingsAsync(id, request, cancellationToken)).ToHttpResult())
             .WithTags("Asset categories")
             .WithOpenApi();
 

@@ -56,16 +56,7 @@ import type {
   OffboardingCaseSummary,
   OffboardingPreview,
   SaveAssetFieldDefinitionRequest,
-  Team,
-  EquipmentReservationStatus,
-  ReservationCatalogResponse,
-  ReservationMode,
-  ReservationResponse,
-  ReservationDetailsResponse,
-  CreateReservationRequest,
-  UpdateReservationRequest,
-  ApproveReservationRequest,
-  ReservationCalendarItem
+  Team
 } from '../types/domain';
 
 export interface EvidencePhoto {
@@ -114,7 +105,6 @@ export const api = {
   updateCategory: (id: string, body: { name: string; type: AssetCategoryType; description?: string | null; icon?: string | null }) => apiRequest<AssetCategory>(`/api/asset-categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteCategory: (id: string) => apiRequest<void>(`/api/asset-categories/${id}`, { method: 'DELETE' }),
   saveCategoryFields: (categoryId: string, body: SaveAssetFieldDefinitionRequest[]) => apiRequest<AssetFieldDefinition[]>(`/api/asset-categories/${categoryId}/fields`, { method: 'PUT', body: JSON.stringify(body) }),
-  updateCategoryCatalogSettings: (id: string, body: { visibleInEmployeeCatalog: boolean; catalogName?: string | null; catalogDescription?: string | null; catalogImageUrl?: string | null; reservationMode: ReservationMode }) => apiRequest<AssetCategory>(`/api/asset-categories/${id}/catalog-settings`, { method: 'PUT', body: JSON.stringify(body) }),
 
   assetStatuses: () => apiRequest<AssetStatusSetting[]>('/api/asset-statuses'),
   saveAssetStatuses: (body: AssetStatusSetting[]) => apiRequest<AssetStatusSetting[]>('/api/asset-statuses', { method: 'PUT', body: JSON.stringify(body) }),
@@ -358,36 +348,6 @@ export const api = {
   publicAssignmentEvidence: (organizationId: string, assignmentId: string, id: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/evidence/${id}`),
 
   myWorkspace: () => apiRequest<MyWorkspace>('/api/my/workspace'),
-
-  reservationCatalog: (params?: { from?: string; to?: string; search?: string; location?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.from) query.set('from', params.from);
-    if (params?.to) query.set('to', params.to);
-    if (params?.search) query.set('search', params.search);
-    if (params?.location) query.set('location', params.location);
-    const suffix = query.toString() ? `?${query.toString()}` : '';
-    return apiRequest<ReservationCatalogResponse>(`/api/reservation-catalog${suffix}`);
-  },
-  myReservations: () => apiRequest<ReservationResponse[]>('/api/my/reservations'),
-  myReservation: (id: string) => apiRequest<ReservationDetailsResponse>(`/api/my/reservations/${id}`),
-  createReservation: (body: CreateReservationRequest) => apiRequest<ReservationDetailsResponse>('/api/my/reservations', { method: 'POST', body: JSON.stringify(body) }),
-  updateReservation: (id: string, body: UpdateReservationRequest) => apiRequest<ReservationDetailsResponse>(`/api/my/reservations/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  submitReservation: (id: string) => apiRequest<ReservationDetailsResponse>(`/api/my/reservations/${id}/submit`, { method: 'POST' }),
-  cancelMyReservation: (id: string, body: { reason?: string | null }) => apiRequest<ReservationDetailsResponse>(`/api/my/reservations/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
-  reservationsPaged: (params: { status?: EquipmentReservationStatus | ''; page: number; pageSize: number }) => {
-    const query = new URLSearchParams();
-    if (params.status) query.set('status', params.status);
-    query.set('page', String(params.page));
-    query.set('pageSize', String(params.pageSize));
-    return apiRequest<Paged<ReservationResponse>>(`/api/reservations?${query.toString()}`);
-  },
-  reservationsCalendar: (from: string, to: string) => apiRequest<ReservationCalendarItem[]>(`/api/reservations/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-  reservation: (id: string) => apiRequest<ReservationDetailsResponse>(`/api/reservations/${id}`),
-  approveReservation: (id: string, body: ApproveReservationRequest) => apiRequest<ReservationDetailsResponse>(`/api/reservations/${id}/approve`, { method: 'POST', body: JSON.stringify(body) }),
-  rejectReservation: (id: string, body: { reason: string }) => apiRequest<ReservationDetailsResponse>(`/api/reservations/${id}/reject`, { method: 'POST', body: JSON.stringify(body) }),
-  substituteReservation: (id: string, body: { itemId: string; newAssetId: string; reason: string }) => apiRequest<ReservationDetailsResponse>(`/api/reservations/${id}/substitute`, { method: 'POST', body: JSON.stringify(body) }),
-  cancelReservation: (id: string, body: { reason?: string | null }) => apiRequest<ReservationDetailsResponse>(`/api/reservations/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
-  checkoutReservation: (id: string) => apiRequest<ReservationDetailsResponse>(`/api/reservations/${id}/checkout`, { method: 'POST' }),
 
   activityLog: (params?: { page?: number; pageSize?: number; entityType?: string; entityId?: string; search?: string; dateFrom?: string; dateTo?: string; actor?: string; action?: string }) => {
     const query = new URLSearchParams();

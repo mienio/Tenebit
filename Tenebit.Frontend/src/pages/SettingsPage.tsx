@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, GripVertical, Plus, Save, Search, Trash2 } from 'lucide-react';
+import { GripVertical, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -18,8 +18,8 @@ import { TwoFactorCard } from '../components/TwoFactorCard';
 import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, ReservationMode, RolePermission, Team } from '../types/domain';
-import { categoryTypeValues, reservationModeValues } from '../utils/labels';
+import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, RolePermission, Team } from '../types/domain';
+import { categoryTypeValues } from '../utils/labels';
 import { toNullable } from '../utils/format';
 import { CategoryIcon } from '../utils/categoryIcons';
 import { useAuth } from '../auth/AuthProvider';
@@ -40,7 +40,6 @@ export function SettingsPage() {
   // organization-wide tabs below need owner/admin, so this page stays reachable for everyone.
   const canManageOrganization = auth.roles.includes('owner') || auth.roles.includes('admin');
   const categoryTypeLabels: Record<AssetCategoryType, string> = Object.fromEntries(categoryTypeValues.map(value => [value, t(`categoryType.${value}`)])) as Record<AssetCategoryType, string>;
-  const reservationModeLabels: Record<ReservationMode, string> = Object.fromEntries(reservationModeValues.map(value => [value, t(`reservationMode.${value}`)])) as Record<ReservationMode, string>;
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') as Tab | null;
   const initialTabAllowed = initialTab && validTabs.includes(initialTab) && (canManageOrganization || !organizationOnlyTabs.includes(initialTab));
@@ -73,9 +72,6 @@ export function SettingsPage() {
   const [message, setMessage] = useState<SettingsMessage>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; type: AssetCategoryType; description: string }>>({});
-  const [catalogSettingsDrafts, setCatalogSettingsDrafts] = useState<Record<string, { visibleInEmployeeCatalog: boolean; catalogName: string; catalogDescription: string; catalogImageUrl: string; reservationMode: ReservationMode }>>({});
-  const [catalogSettingsExpanded, setCatalogSettingsExpanded] = useState<string | null>(null);
-  const [savingCatalogSettings, setSavingCatalogSettings] = useState<string | null>(null);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [justCreatedCategoryId, setJustCreatedCategoryId] = useState<string | null>(null);
   const [relationTypeDrafts, setRelationTypeDrafts] = useState<Record<string, string>>({});
@@ -224,26 +220,6 @@ export function SettingsPage() {
       success(t('settings.categorySaved'));
       await categories.reload();
     } catch (error) { failure(error, t('settings.categorySaveFailed')); }
-  }
-
-  function updateCatalogSettingsDraft(id: string, patch: Partial<{ visibleInEmployeeCatalog: boolean; catalogName: string; catalogDescription: string; catalogImageUrl: string; reservationMode: ReservationMode }>) {
-    const original = categories.data?.find(item => item.id === id);
-    if (!original) return;
-    const defaults = { visibleInEmployeeCatalog: original.visibleInEmployeeCatalog ?? false, catalogName: original.catalogName ?? '', catalogDescription: original.catalogDescription ?? '', catalogImageUrl: original.catalogImageUrl ?? '', reservationMode: original.reservationMode ?? 'RequestByCategory' as ReservationMode };
-    setCatalogSettingsDrafts(current => ({ ...current, [id]: { ...defaults, ...current[id], ...patch } }));
-  }
-
-  async function saveCategoryCatalogSettings(id: string) {
-    const draft = catalogSettingsDrafts[id];
-    const original = categories.data?.find(item => item.id === id);
-    if (!draft || !original) return;
-    setSavingCatalogSettings(id);
-    try {
-      await api.updateCategoryCatalogSettings(id, { visibleInEmployeeCatalog: draft.visibleInEmployeeCatalog, catalogName: toNullable(draft.catalogName), catalogDescription: toNullable(draft.catalogDescription), catalogImageUrl: toNullable(draft.catalogImageUrl), reservationMode: draft.reservationMode });
-      success(t('settings.catalogSettingsSaved'));
-      await categories.reload();
-      setCatalogSettingsExpanded(null);
-    } catch (error) { failure(error, t('settings.catalogSettingsSaveFailed')); } finally { setSavingCatalogSettings(null); }
   }
 
   function updateRelationTypeDraft(id: string, name: string) {
@@ -480,7 +456,6 @@ export function SettingsPage() {
               <div className="statusList">
                 {filteredCategories.map(category => {
                   const draft = categoryDrafts[category.id] ?? { name: category.name, type: category.type, description: category.description ?? '' };
-                  const cs = catalogSettingsDrafts[category.id] ?? { visibleInEmployeeCatalog: category.visibleInEmployeeCatalog ?? false, catalogName: category.catalogName ?? '', catalogDescription: category.catalogDescription ?? '', catalogImageUrl: category.catalogImageUrl ?? '', reservationMode: category.reservationMode ?? 'RequestByCategory' as ReservationMode };
                   return (
                     <div className="statusTile categoryTile" key={category.id}>
                       <button type="button" className="iconButton" aria-label={t('settings.iconLabel')} title={t('settings.iconLabel')} onClick={() => setIconPickerFor(category.id)}>
@@ -505,38 +480,7 @@ export function SettingsPage() {
                         onChange={event => updateCategoryDraft(category.id, { description: event.target.value })}
                         onBlur={() => saveCategoryDraft(category.id)}
                       />
-                      <button type="button" className="iconButton" aria-label={t('settings.catalogSettingsToggle', { name: category.name })} title={t('settings.catalogSettingsToggle', { name: category.name })} onClick={() => { if (catalogSettingsExpanded === category.id) { setCatalogSettingsExpanded(null); } else { setCatalogSettingsExpanded(category.id); updateCatalogSettingsDraft(category.id, {}); } }}><ChevronDown size={16} style={{ transform: catalogSettingsExpanded === category.id ? 'rotate(180deg)' : 'none' }} /></button>
                       <button type="button" className="iconButton" aria-label={t('settings.deleteCategoryAria', { name: category.name })} onClick={() => setDeleteTarget({ kind: 'category', item: category })}><Trash2 size={16} /></button>
-                      {catalogSettingsExpanded === category.id && (
-                        <div className="catalogSettingsPanel">
-                          <div className="formGrid">
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              <Field label={t('settings.visibleInCatalogLabel')} info={t('settings.visibleInCatalogHint')}>
-                                <label className="toggleSwitch">
-                                  <input type="checkbox" checked={cs.visibleInEmployeeCatalog} onChange={event => updateCatalogSettingsDraft(category.id, { visibleInEmployeeCatalog: event.target.checked })} />
-                                  <span className="toggleSwitch__track" />
-                                  <span className="toggleSwitch__thumb" />
-                                </label>
-                              </Field>
-                            </div>
-                            <Field label={t('settings.catalogNameLabel')} info={t('settings.catalogNameHint')}>
-                              <TextInput value={cs.catalogName} onChange={event => updateCatalogSettingsDraft(category.id, { catalogName: event.target.value })} onBlur={() => saveCategoryCatalogSettings(category.id)} />
-                            </Field>
-                            <Field label={t('settings.catalogDescriptionLabel')} info={t('settings.catalogDescriptionHint')}>
-                              <TextArea value={cs.catalogDescription} onChange={event => updateCatalogSettingsDraft(category.id, { catalogDescription: event.target.value })} onBlur={() => saveCategoryCatalogSettings(category.id)} />
-                            </Field>
-                            <Field label={t('settings.catalogImageUrlLabel')}>
-                              <TextInput value={cs.catalogImageUrl} placeholder="https://..." onChange={event => updateCatalogSettingsDraft(category.id, { catalogImageUrl: event.target.value })} onBlur={() => saveCategoryCatalogSettings(category.id)} />
-                            </Field>
-                            <Field label={t('settings.reservationModeLabel')}>
-                              <SelectInput value={cs.reservationMode} onChange={event => updateCatalogSettingsDraft(category.id, { reservationMode: event.target.value as ReservationMode })}>
-                                {reservationModeValues.map(mode => <option key={mode} value={mode}>{reservationModeLabels[mode]}</option>)}
-                              </SelectInput>
-                            </Field>
-                          </div>
-                          <div className="formActions"><Button type="button" disabled={savingCatalogSettings === category.id} onClick={() => saveCategoryCatalogSettings(category.id)} icon={<Save size={16} />}>{savingCatalogSettings === category.id ? t('common.saving') : t('settings.catalogSettingsSave')}</Button></div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}

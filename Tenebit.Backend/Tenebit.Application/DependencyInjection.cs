@@ -55,9 +55,6 @@ services.AddScoped<AlertSettingsService>();
         services.AddScoped<OffboardingScheduledActionsService>();
         services.AddScoped<OffboardingService>();
         services.AddScoped<AssetAuditCampaignService>();
-        services.AddScoped<AssetAvailabilityService>();
-        services.AddScoped<ReservationCatalogService>();
-        services.AddScoped<ReservationService>();
         return services;
     }
 }

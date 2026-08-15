@@ -32,11 +32,6 @@ public sealed class AssetCategory
     public string? ReturnChecklistTemplate { get; private set; }
     public PhotoRequirement PhotoOnIssue { get; private set; } = PhotoRequirement.Disabled;
     public PhotoRequirement PhotoOnReturn { get; private set; } = PhotoRequirement.Disabled;
-    public bool VisibleInEmployeeCatalog { get; private set; }
-    public string? CatalogName { get; private set; }
-    public string? CatalogDescription { get; private set; }
-    public string? CatalogImageUrl { get; private set; }
-    public ReservationMode ReservationMode { get; private set; } = ReservationMode.RequestByCategory;
 
     public void Update(string name, AssetCategoryType type, string? description, string? icon)
     {
@@ -58,15 +53,6 @@ public sealed class AssetCategory
         ReturnChecklistTemplate = string.IsNullOrWhiteSpace(returnChecklistTemplate) ? null : returnChecklistTemplate.Trim();
         PhotoOnIssue = photoOnIssue;
         PhotoOnReturn = photoOnReturn;
-    }
-
-    public void UpdateCatalogSettings(bool visibleInEmployeeCatalog, string? catalogName, string? catalogDescription, string? catalogImageUrl, ReservationMode reservationMode)
-    {
-        VisibleInEmployeeCatalog = visibleInEmployeeCatalog;
-        CatalogName = string.IsNullOrWhiteSpace(catalogName) ? null : catalogName.Trim();
-        CatalogDescription = string.IsNullOrWhiteSpace(catalogDescription) ? null : catalogDescription.Trim();
-        CatalogImageUrl = string.IsNullOrWhiteSpace(catalogImageUrl) ? null : catalogImageUrl.Trim();
-        ReservationMode = reservationMode;
     }
 
     public void ReplaceFieldDefinitions(IEnumerable<(string Key, string Label, AssetFieldType FieldType, string? Options, bool Required)> definitions)

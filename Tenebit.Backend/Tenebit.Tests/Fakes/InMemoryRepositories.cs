@@ -65,19 +65,6 @@ public sealed class InMemoryAssetCategoryRepository : IAssetCategoryRepository
     public void Remove(AssetCategory category) => Categories.Remove(category);
 }
 
-public sealed class InMemoryEquipmentKitDefinitionRepository : IEquipmentKitDefinitionRepository
-{
-    public List<EquipmentKitDefinition> KitDefinitions { get; } = [];
-
-    public Task<IReadOnlyList<EquipmentKitDefinition>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<EquipmentKitDefinition>>(KitDefinitions.Where(x => x.OrganizationId == organizationId).ToList());
-
-    public Task<EquipmentKitDefinition?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
-        Task.FromResult(KitDefinitions.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
-
-    public void Add(EquipmentKitDefinition kitDefinition) => KitDefinitions.Add(kitDefinition);
-}
-
 public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservationRepository
 {
     private static readonly EquipmentReservationStatus[] HoldingStatuses =

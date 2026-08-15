@@ -98,11 +98,6 @@ export interface AssetCategory {
   icon?: string | null;
   isSystem: boolean;
   fieldDefinitions: AssetFieldDefinition[];
-  visibleInEmployeeCatalog?: boolean;
-  catalogName?: string | null;
-  catalogDescription?: string | null;
-  catalogImageUrl?: string | null;
-  reservationMode?: ReservationMode;
 }
 
 export interface Asset {
@@ -128,9 +123,6 @@ export interface Asset {
   categoryFieldDefinitions: AssetFieldDefinition[];
   teamId?: string | null;
   teamName?: string | null;
-  isReservable: boolean;
-  maxReservationDays?: number | null;
-  reservationInstructions?: string | null;
 }
 
 export interface CreateAssetRequest {
@@ -146,9 +138,6 @@ export interface CreateAssetRequest {
   purchaseDate?: string | null;
   warrantyUntil?: string | null;
   teamId?: string | null;
-  isReservable: boolean;
-  maxReservationDays?: number | null;
-  reservationInstructions?: string | null;
   customFields?: Record<string, string> | null;
 }
 
@@ -846,55 +835,6 @@ export interface Subscription {
 }
 
 export type EquipmentReservationStatus = 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected' | 'Cancelled' | 'ReadyForPickup' | 'CheckedOut' | 'Completed' | 'Expired';
-export type EquipmentReservationItemStatus = 'Requested' | 'Allocated' | 'Approved' | 'Rejected' | 'Substituted' | 'CheckedOut' | 'Returned';
-export type ReservationMode = 'RequestByCategory' | 'SelectExactAsset';
-
-export interface ReservationCatalogCategory {
-  id: string;
-  name: string;
-  description?: string | null;
-  imageUrl?: string | null;
-  icon?: string | null;
-  reservationMode: ReservationMode;
-  availableCount: number;
-}
-
-export interface ReservationCatalogKitItem {
-  categoryId: string;
-  categoryName: string;
-  requiredQuantity: number;
-}
-
-export interface ReservationCatalogKit {
-  id: string;
-  name: string;
-  description?: string | null;
-  availableCount: number;
-  items: ReservationCatalogKitItem[];
-}
-
-export interface ReservationCatalogResponse {
-  hasPersonRecord: boolean;
-  categories: ReservationCatalogCategory[];
-  kits: ReservationCatalogKit[];
-}
-
-export interface ReservationItemRequest {
-  categoryId?: string | null;
-  kitDefinitionId?: string | null;
-  quantity: number;
-}
-
-export interface CreateReservationRequest {
-  startAt: string;
-  endAt: string;
-  purpose: string;
-  pickupLocation?: string | null;
-  notes?: string | null;
-  items: ReservationItemRequest[];
-}
-
-export type UpdateReservationRequest = CreateReservationRequest;
 
 export interface ReservationResponse {
   id: string;
@@ -915,43 +855,4 @@ export interface ReservationResponse {
   cancelledBy?: string | null;
   cancellationReason?: string | null;
   createdAt: string;
-}
-
-export interface ReservationItemResponse {
-  id: string;
-  requestedCategoryId: string;
-  requestedQuantity: number;
-  kitDefinitionId?: string | null;
-  assetId?: string | null;
-  originalAssetId?: string | null;
-  substitutionReason?: string | null;
-  status: EquipmentReservationItemStatus;
-}
-
-export interface ReservationDetailsResponse {
-  reservation: ReservationResponse;
-  items: ReservationItemResponse[];
-}
-
-export interface ReservationAllocationRequest {
-  itemId: string;
-  assetId: string;
-}
-
-export interface ApproveReservationRequest {
-  allocations: ReservationAllocationRequest[];
-}
-
-export interface ReservationCalendarItem {
-  id: string;
-  requesterPersonId: string;
-  status: EquipmentReservationStatus;
-  startAt: string;
-  endAt: string;
-  purpose: string;
-  pickupLocation?: string | null;
-  assetIds: string[];
-  isConflicting: boolean;
-  isDueToday: boolean;
-  isOverdue: boolean;
 }
