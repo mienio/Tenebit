@@ -43,6 +43,11 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .brand strong { display: block; font-family: var(--font-serif); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
 .brand small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.35; }
 .nav { display: grid; gap: 4px; }
+.navGroup { border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px; }
+.navGroup:last-child { border-bottom: 0; }
+.navGroup__header { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; background: none; border: none; cursor: pointer; transition: color .16s ease; }
+.navGroup__header:hover { color: var(--text); }
+.navGroup__label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav a { min-height: 42px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); color: var(--muted); border: 1px solid transparent; font-family: var(--font-mono); font-size: 13px; font-weight: 600; transition: background .16s ease, color .16s ease, border-color .16s ease; }
 .nav a:hover, .nav a:focus-visible { background: var(--brand-soft); color: var(--text); outline: none; border-color: var(--border); }
 .nav a.active { background: var(--brand); color: #fff; border-color: var(--brand); }
@@ -167,6 +172,9 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .categoryTile__description { flex: 1 1 200px; min-width: 0; border: 1px solid var(--border); border-radius: 3px; padding: 7px 9px; font: inherit; color: var(--muted); background: #fff; }
 .categoryTile select { border: 1px solid var(--border); border-radius: 3px; padding: 7px 9px; font: inherit; background: #fff; flex: 0 0 auto; }
 
+.catalogSettingsPanel { padding: 10px 0 0 0; }
+.statusList > .catalogSettingsPanel { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 14px; }
+
 .iconGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; max-height: 220px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 3px; }
 .iconGridButton { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 3px; background: transparent; cursor: pointer; color: var(--muted); }
 .iconGridButton:hover { color: var(--text); background: var(--surface-strong); }
@@ -192,6 +200,9 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 
 .barList, .listRows, .cardsList, .stepsList { display: grid; gap: 10px; }
 .cardsList--grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.reservationCategoryCard { display: flex; flex-direction: column; gap: 10px; }
+.reservationCategoryCard__img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 3px; }
+.reservationCategoryCard__icon { display: flex; justify-content: center; padding: 6px 0; }
 .barItem { color: inherit; text-decoration: none; padding: 11px; border: 1px solid var(--border); border-radius: 3px; background: #fff; display: grid; gap: 8px; }
 .barItem:hover { border-color: var(--border-strong); background: var(--accent-soft); }
 .barItem div, .listRow, .procedureCard div, .assignmentCard div { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

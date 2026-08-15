@@ -98,6 +98,11 @@ export interface AssetCategory {
   icon?: string | null;
   isSystem: boolean;
   fieldDefinitions: AssetFieldDefinition[];
+  visibleInEmployeeCatalog?: boolean;
+  catalogName?: string | null;
+  catalogDescription?: string | null;
+  catalogImageUrl?: string | null;
+  reservationMode?: ReservationMode;
 }
 
 export interface Asset {
@@ -811,6 +816,7 @@ export interface ReservationCatalogCategory {
   name: string;
   description?: string | null;
   imageUrl?: string | null;
+  icon?: string | null;
   reservationMode: ReservationMode;
   availableCount: number;
 }

@@ -58,6 +58,7 @@ import type {
   Team,
   EquipmentReservationStatus,
   ReservationCatalogResponse,
+  ReservationMode,
   ReservationResponse,
   ReservationDetailsResponse,
   CreateReservationRequest,
@@ -112,6 +113,7 @@ export const api = {
   updateCategory: (id: string, body: { name: string; type: AssetCategoryType; description?: string | null; icon?: string | null }) => apiRequest<AssetCategory>(`/api/asset-categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteCategory: (id: string) => apiRequest<void>(`/api/asset-categories/${id}`, { method: 'DELETE' }),
   saveCategoryFields: (categoryId: string, body: SaveAssetFieldDefinitionRequest[]) => apiRequest<AssetFieldDefinition[]>(`/api/asset-categories/${categoryId}/fields`, { method: 'PUT', body: JSON.stringify(body) }),
+  updateCategoryCatalogSettings: (id: string, body: { visibleInEmployeeCatalog: boolean; catalogName?: string | null; catalogDescription?: string | null; catalogImageUrl?: string | null; reservationMode: ReservationMode }) => apiRequest<AssetCategory>(`/api/asset-categories/${id}/catalog-settings`, { method: 'PUT', body: JSON.stringify(body) }),
 
   assetStatuses: () => apiRequest<AssetStatusSetting[]>('/api/asset-statuses'),
   saveAssetStatuses: (body: AssetStatusSetting[]) => apiRequest<AssetStatusSetting[]>('/api/asset-statuses', { method: 'PUT', body: JSON.stringify(body) }),

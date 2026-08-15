@@ -335,32 +335,43 @@ function OrderEquipmentTab({ onMessage }: { onMessage: (message: { type: 'succes
           <Field label={t('myWorkspace.reservationFrom')}><TextInput type="datetime-local" value={from} onChange={event => setFrom(event.target.value)} /></Field>
           <Field label={t('myWorkspace.reservationTo')}><TextInput type="datetime-local" value={to} onChange={event => setTo(event.target.value)} /></Field>
         </div>
-        <div className="listRows" style={{ marginTop: '12px' }}>
+        <div className="cardsList cardsList--grid" style={{ marginTop: '12px' }}>
           {catalog.data.categories.map(category => (
-            <div className="listRow" key={category.id}>
-              <div>
+            <Card key={category.id} className="reservationCategoryCard">
+              {category.imageUrl ? (
+                <img src={category.imageUrl} alt={category.name} className="reservationCategoryCard__img" loading="lazy" />
+              ) : (
+                <span className="reservationCategoryCard__icon"><CategoryIcon icon={category.icon} size={48} /></span>
+              )}
+              <div className="reservationCategoryCard__body">
                 <strong>{category.name}</strong>
                 {category.description ? <small>{category.description}</small> : null}
-              </div>
-              <div className="rowActions">
+                <span className="muted" style={{ fontSize: '13px' }}>{t(`reservationMode.${category.reservationMode}`)}</span>
                 <span>{t('myWorkspace.reservationAvailable', { count: category.availableCount })}</span>
-                <Button variant="secondary" onClick={() => addCategory(category.id, category.name)} icon={<Plus size={16} />} disabled={category.availableCount <= 0}>{t('myWorkspace.reservationAdd')}</Button>
               </div>
-            </div>
-          ))}
-          {catalog.data.kits.map(kit => (
-            <div className="listRow" key={kit.id}>
-              <div>
-                <strong>{kit.name}</strong>
-                {kit.description ? <small>{kit.description}</small> : null}
-              </div>
-              <div className="rowActions">
-                <span>{t('myWorkspace.reservationAvailable', { count: kit.availableCount })}</span>
-                <Button variant="secondary" onClick={() => addKit(kit.id, kit.name)} icon={<Plus size={16} />} disabled={kit.availableCount <= 0}>{t('myWorkspace.reservationAdd')}</Button>
-              </div>
-            </div>
+              <Button variant="secondary" onClick={() => addCategory(category.id, category.name)} icon={<Plus size={16} />} disabled={category.availableCount <= 0}>{t('myWorkspace.reservationAdd')}</Button>
+            </Card>
           ))}
         </div>
+        {catalog.data.kits.length > 0 ? (
+          <div style={{ marginTop: '20px' }}>
+            <h3 style={{ margin: '0 0 10px 0' }}>{t('myWorkspace.reservationKitsTitle')}</h3>
+            <div className="listRows">
+              {catalog.data.kits.map(kit => (
+                <div className="listRow" key={kit.id}>
+                  <div>
+                    <strong>{kit.name}</strong>
+                    {kit.description ? <small>{kit.description}</small> : null}
+                  </div>
+                  <div className="rowActions">
+                    <span>{t('myWorkspace.reservationAvailable', { count: kit.availableCount })}</span>
+                    <Button variant="secondary" onClick={() => addKit(kit.id, kit.name)} icon={<Plus size={16} />} disabled={kit.availableCount <= 0}>{t('myWorkspace.reservationAdd')}</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <Card>

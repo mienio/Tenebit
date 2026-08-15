@@ -537,6 +537,11 @@ public static class TenebitEndpoints
             .WithTags("Asset categories")
             .WithOpenApi();
 
+        api.MapPut("/asset-categories/{id:guid}/catalog-settings", async (Guid id, UpdateAssetCategoryCatalogSettingsRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
+                (await service.UpdateCatalogSettingsAsync(id, request, cancellationToken)).ToHttpResult())
+            .WithTags("Asset categories")
+            .WithOpenApi();
+
         api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, string? owner, string? warranty, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
                 page.HasValue
                     ? (await service.ListPagedAsync(search, status, location, teamId, owner == "none", warranty == "expiring", sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()

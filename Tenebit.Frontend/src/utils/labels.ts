@@ -1,10 +1,12 @@
-import type { AlertDeliveryMode, AlertDigestFrequency, AlertRecipientMode, AlertType, AssetCategoryType, AssetStatus, AssignmentStatus, LocationType } from '../types/domain';
+import type { AlertDeliveryMode, AlertDigestFrequency, AlertRecipientMode, AlertType, AssetCategoryType, AssetStatus, AssignmentStatus, LocationType, ReservationMode } from '../types/domain';
 
 export const assetStatusValues: AssetStatus[] = ['Draft', 'InStock', 'Reserved', 'Assigned', 'PendingReturn', 'InTransit', 'InService', 'Damaged', 'Lost', 'Retired', 'Disposed'];
 
 export const assignmentStatusValues: AssignmentStatus[] = ['Draft', 'AwaitingAcceptance', 'Accepted', 'Returned', 'Cancelled', 'Overdue'];
 
 export const categoryTypeValues: AssetCategoryType[] = ['Physical', 'Digital', 'License', 'Account', 'Document', 'Location', 'Vehicle', 'Key', 'Consumable', 'Other'];
+
+export const reservationModeValues: ReservationMode[] = ['RequestByCategory', 'SelectExactAsset'];
 
 export const locationTypeValues: LocationType[] = ['Address', 'Building', 'Floor', 'Room', 'Warehouse', 'Zone', 'Shelf', 'Other'];
 

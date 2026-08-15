@@ -1,4 +1,4 @@
-using Tenebit.Application.Assets;
+﻿using Tenebit.Application.Assets;
 using Tenebit.Domain.Assets;
 using Tenebit.Tests.Fakes;
 
@@ -41,16 +41,36 @@ public class AssetCategoryServiceTests
         var category = new AssetCategory(user.OrganizationId, "Laptopy", AssetCategoryType.Physical, null);
         categories.Add(category);
 
-        var request = new UpdateAssetCategoryReturnPolicyRequest(ReturnHandlingMode.InspectionRequired, PostReturnDisposition.ReturnToVendor, "Sprawdź obudowę i akcesoria", PhotoRequirement.Required, PhotoRequirement.Optional);
+        var request = new UpdateAssetCategoryReturnPolicyRequest(ReturnHandlingMode.InspectionRequired, PostReturnDisposition.ReturnToVendor, "SprawdĹş obudowÄ™ i akcesoria", PhotoRequirement.Required, PhotoRequirement.Optional);
         var result = await service.UpdateReturnPolicyAsync(category.Id, request, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(ReturnHandlingMode.InspectionRequired, result.Value!.ReturnHandlingMode);
         Assert.Equal(PostReturnDisposition.ReturnToVendor, result.Value!.PostReturnDisposition);
-        Assert.Equal("Sprawdź obudowę i akcesoria", result.Value!.ReturnChecklistTemplate);
+        Assert.Equal("SprawdĹş obudowÄ™ i akcesoria", result.Value!.ReturnChecklistTemplate);
         Assert.Equal(PhotoRequirement.Required, result.Value!.PhotoOnIssue);
         Assert.Equal(PhotoRequirement.Optional, result.Value!.PhotoOnReturn);
         Assert.Contains(activity.Logs, x => x.Action == "asset_category.return_policy_updated");
+    }
+
+    [Fact]
+    public async Task UpdateCatalogSettingsAsync_UpdatesFieldsAndWritesActivityLog()
+    {
+        var (service, user, categories, activity) = CreateService();
+        var category = new AssetCategory(user.OrganizationId, "Laptopy", AssetCategoryType.Physical, null);
+        categories.Add(category);
+
+        var catalogName = "Laptop sluzbowy";
+        var request = new UpdateAssetCategoryCatalogSettingsRequest(true, catalogName, "Dostepny do rezerwacji", "https://cdn.acme.test/laptop.png", ReservationMode.SelectExactAsset);
+        var result = await service.UpdateCatalogSettingsAsync(category.Id, request, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.VisibleInEmployeeCatalog);
+        Assert.Equal(catalogName, result.Value!.CatalogName);
+        Assert.Equal("Dostepny do rezerwacji", result.Value!.CatalogDescription);
+        Assert.Equal("https://cdn.acme.test/laptop.png", result.Value!.CatalogImageUrl);
+        Assert.Equal(ReservationMode.SelectExactAsset, result.Value!.ReservationMode);
+        Assert.Contains(activity.Logs, x => x.Action == "asset_category.catalog_settings_updated");
     }
 
     [Fact]

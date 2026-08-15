@@ -39,7 +39,7 @@ public sealed class ReservationCatalogService
         foreach (var category in allCategories.Where(c => c.VisibleInEmployeeCatalog && MatchesSearch(c.CatalogName ?? c.Name, c.CatalogDescription, search)))
         {
             var available = await _availability.CountAvailableAsync(organizationId, category.Id, from, to, location, cancellationToken);
-            categories.Add(new ReservationCatalogCategoryResponse(category.Id, category.CatalogName ?? category.Name, category.CatalogDescription, category.CatalogImageUrl, category.ReservationMode, available));
+            categories.Add(new ReservationCatalogCategoryResponse(category.Id, category.CatalogName ?? category.Name, category.CatalogDescription, category.CatalogImageUrl, category.Icon, category.ReservationMode, available));
         }
 
         var kitDefinitions = await _kits.ListAsync(organizationId, cancellationToken);
