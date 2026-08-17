@@ -59,7 +59,6 @@ import type {
   OffboardingPreview,
   SaveAssetFieldDefinitionRequest,
   ServiceTicket,
-  ServiceTicketStatus,
   OpenServiceTicketRequest,
   CompleteServiceTicketRequest,
   CancelServiceTicketRequest,

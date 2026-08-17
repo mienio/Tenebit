@@ -408,14 +408,14 @@ function AssetAuditDetailsView({
     try {
       const blob = await api.downloadAssetAuditCsv(campaign.id);
       saveBlob(blob, `audyt-${campaign.id}.csv`);
-    } catch {}
+    } catch { /* download failed — no explicit error UI for this action */ }
   }
 
   async function downloadReport() {
     try {
       const blob = await api.downloadAssetAuditReport(campaign.id);
       saveBlob(blob, `raport-audytu-${campaign.id}.pdf`);
-    } catch {}
+    } catch { /* download failed — no explicit error UI for this action */ }
   }
 
   return (

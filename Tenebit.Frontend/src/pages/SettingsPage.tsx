@@ -18,7 +18,7 @@ import { TwoFactorCard } from '../components/TwoFactorCard';
 import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, QrLabelSettings, RolePermission, Team } from '../types/domain';
+import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, QrLabelSettings, Team } from '../types/domain';
 import { categoryTypeValues } from '../utils/labels';
 import { toNullable } from '../utils/format';
 import { CategoryIcon } from '../utils/categoryIcons';
@@ -356,7 +356,7 @@ export function SettingsPage() {
     if (!body.name) return setMessage({ type: 'error', text: t('settings.profileNameRequired') });
     setProfileSaving(true);
     try {
-      editingProfile ? await api.updateJobProfile(editingProfile.id, body) : await api.createJobProfile(body);
+      if (editingProfile) { await api.updateJobProfile(editingProfile.id, body); } else { await api.createJobProfile(body); }
       success(t('settings.profileSaved'));
       setModal(null);
       setEditingProfile(null);
@@ -379,7 +379,7 @@ export function SettingsPage() {
     }
     setUserSaving(true);
     try {
-      editingUser ? await api.updateUser(editingUser.id, body) : await api.createUser(body);
+      if (editingUser) { await api.updateUser(editingUser.id, body); } else { await api.createUser(body); }
       success(editingUser ? t('settings.userSaved') : t('settings.userInvited'));
       setModal(null);
       setEditingUser(null);

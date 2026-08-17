@@ -122,7 +122,7 @@ function buildTemplate(entity: Entity, language: Language): string {
 }
 
 function downloadText(fileName: string, content: string, type: string) {
-  const blob = new Blob(['﻿' + content], { type });
+  const blob = new Blob(['\uFEFF' + content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -179,7 +179,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
       return;
     }
     const rawText = await file.text();
-    const text = rawText.replace(/^﻿/, '');
+    const text = rawText.replace(/^\uFEFF/, '');
     const delimiter = detectDelimiter(text);
     const parsed = parseCsv(text, delimiter);
     if (parsed.length < 2) {

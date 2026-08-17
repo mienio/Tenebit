@@ -68,7 +68,7 @@ export function LicensesPage() {
     if (!body.name) return setMessage({ type: 'error', text: t('licenses.nameRequired') });
     setSaving(true);
     try {
-      editing ? await api.updateLicense(editing.id, body) : await api.createLicense(body);
+      if (editing) { await api.updateLicense(editing.id, body); } else { await api.createLicense(body); }
       success(editing ? t('licenses.saved') : t('licenses.created'));
       setModalOpen(false);
       setEditing(null);

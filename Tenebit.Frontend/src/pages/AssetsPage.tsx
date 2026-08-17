@@ -168,7 +168,7 @@ export function AssetsPage() {
     try {
       const asset = await api.getAsset(assetId);
       setSelected(asset);
-    } catch {}
+    } catch { /* asset lookup failed — selection just stays unchanged */ }
   }
 
   function toggleSort(key: SortKey) {

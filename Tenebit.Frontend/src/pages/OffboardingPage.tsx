@@ -392,7 +392,7 @@ function OffboardingDetailsView({
     try {
       const blob = await api.downloadOffboardingProtocol(caseItem.id);
       saveBlob(blob, `${caseItem.finalProtocolNumber ?? `offboarding-${caseItem.id}`}.pdf`);
-    } catch {}
+    } catch { /* download failed — no explicit error UI for this action */ }
   }
 
   return (
