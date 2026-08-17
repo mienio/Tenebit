@@ -233,7 +233,7 @@ public class AssetServiceTests
 
         Assert.True(first.IsSuccess);
         Assert.True(second.IsFailure);
-        Assert.Equal("TOO_MANY_REQUESTS", second.Error!.Code);
+        Assert.Equal("ASSET_REPORT_RATE_LIMITED", second.Error!.Code);
     }
 
     [Fact]

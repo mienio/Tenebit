@@ -111,7 +111,7 @@ public class AssignmentServiceTests
         var result = await service.CreateAsync(new CreateAssignmentRequest(person.Id, [new AssignmentAssetRequest(asset.Id, "ok")], [], null, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("ASSIGNMENT_PERSON_NOT_ACTIVE", result.Error!.Code);
     }
 
     [Fact]
@@ -445,7 +445,7 @@ public class AssignmentServiceTests
         var result = await service.ReturnAssetAsync(created.Value!.Id, otherAsset.Id, new ReturnAssignmentAssetItemRequest(ReturnResolution.Returned, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("ASSIGNMENT_ASSET_NOT_IN_ASSIGNMENT", result.Error!.Code);
     }
 
     [Fact]

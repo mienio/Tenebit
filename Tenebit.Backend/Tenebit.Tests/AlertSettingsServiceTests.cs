@@ -217,7 +217,7 @@ public class AlertSettingsServiceTests
         var result = await service.UpsertAlertDigestAsync(request, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("ALERT_DIGEST_WEEKDAY_REQUIRED", result.Error!.Code);
     }
 
     [Fact]

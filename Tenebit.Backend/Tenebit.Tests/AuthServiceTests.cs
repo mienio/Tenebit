@@ -71,7 +71,7 @@ public class AuthServiceTests
 
         var second = await service.RegisterAsync(request with { OrganizationName = "Acme 2" }, CancellationToken.None);
         Assert.True(second.IsFailure);
-        Assert.Equal("CONFLICT", second.Error!.Code);
+        Assert.Equal("USER_EMAIL_EXISTS", second.Error!.Code);
     }
 
     [Fact]

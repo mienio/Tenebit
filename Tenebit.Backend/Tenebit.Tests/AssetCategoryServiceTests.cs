@@ -76,7 +76,7 @@ public class AssetCategoryServiceTests
         var result = await service.UpdateReturnPolicyAsync(Guid.NewGuid(), request, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("ASSET_CATEGORY_NOT_FOUND", result.Error!.Code);
     }
 
     [Fact]

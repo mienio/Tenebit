@@ -74,7 +74,7 @@ public class AssetEvidenceServiceTests
         var result = await service.UploadAsync(asset.Id, new UploadAssetEvidenceRequest(EvidencePhase.Issue, null, null), "file.pdf", "application/pdf", JpegBytes(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("EVIDENCE_UNSUPPORTED_IMAGE_FORMAT", result.Error!.Code);
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class AssetEvidenceServiceTests
         var result = await service.UploadAsync(asset.Id, new UploadAssetEvidenceRequest(EvidencePhase.Issue, null, null), "file.jpg", "image/jpeg", bogus, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("EVIDENCE_INVALID_IMAGE_FILE", result.Error!.Code);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class AssetEvidenceServiceTests
         var result = await service.UploadAsync(asset.Id, new UploadAssetEvidenceRequest(EvidencePhase.Issue, null, null), "photo.jpg", "image/jpeg", big, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("EVIDENCE_PHOTO_TOO_LARGE", result.Error!.Code);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class AssetEvidenceServiceTests
         var result = await service.UploadAsync(asset.Id, new UploadAssetEvidenceRequest(EvidencePhase.Issue, null, null), "photo6.jpg", "image/jpeg", JpegBytes(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("EVIDENCE_PHOTO_LIMIT_REACHED", result.Error!.Code);
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class AssetEvidenceServiceTests
         var result = await service.UploadAsync(otherAsset.Id, new UploadAssetEvidenceRequest(EvidencePhase.Issue, null, null), "photo.jpg", "image/jpeg", JpegBytes(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("ASSET_NOT_FOUND", result.Error!.Code);
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class AssetEvidenceServiceTests
         var result = await service.UploadAsync(asset.Id, new UploadAssetEvidenceRequest(EvidencePhase.Issue, foreignAssignment.Id, null), "photo.jpg", "image/jpeg", JpegBytes(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("ASSIGNMENT_NOT_FOUND", result.Error!.Code);
     }
 
     [Fact]
@@ -238,7 +238,7 @@ public class AssetEvidenceServiceTests
         var result = await service.DeleteAsync(item.Id, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("EVIDENCE_LOCKED_CANNOT_DELETE", result.Error!.Code);
         Assert.Single(evidence.Items);
     }
 

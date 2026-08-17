@@ -126,7 +126,7 @@ public class OffboardingCaseTests
         var preview = await service.GetPreviewAsync(Guid.NewGuid(), CancellationToken.None);
 
         Assert.True(preview.IsFailure);
-        Assert.Equal("NOT_FOUND", preview.Error!.Code);
+        Assert.Equal("PERSON_NOT_FOUND", preview.Error!.Code);
     }
 
     [Fact]

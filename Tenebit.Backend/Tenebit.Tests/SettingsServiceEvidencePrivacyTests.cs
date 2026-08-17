@@ -60,7 +60,7 @@ public class SettingsServiceEvidencePrivacyTests
         var result = await service.SaveEvidencePrivacyAsync(new SaveEvidencePrivacySettingsRequest(PublicIpCaptureMode.Truncated, null, null, null, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("PRIVACY_IP_RETENTION_REQUIRED", result.Error!.Code);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class SettingsServiceEvidencePrivacyTests
         var result = await service.SaveEvidencePrivacyAsync(new SaveEvidencePrivacySettingsRequest(PublicIpCaptureMode.Off, null, 0, null, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("PRIVACY_EVIDENCE_RETENTION_MUST_BE_POSITIVE", result.Error!.Code);
     }
 
     [Fact]

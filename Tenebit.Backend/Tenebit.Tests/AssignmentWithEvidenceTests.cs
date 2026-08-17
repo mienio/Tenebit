@@ -236,11 +236,11 @@ public class AssignmentWithEvidenceTests
 
         var wrongAssignment = await service.GetPublicAssignmentEvidenceAsync(orgId, assignmentB.Id, item.Id, CancellationToken.None);
         Assert.True(wrongAssignment.IsFailure);
-        Assert.Equal("NOT_FOUND", wrongAssignment.Error!.Code);
+        Assert.Equal("EVIDENCE_NOT_FOUND", wrongAssignment.Error!.Code);
 
         var wrongOrganization = await service.GetPublicAssignmentEvidenceAsync(Guid.NewGuid(), assignmentA.Id, item.Id, CancellationToken.None);
         Assert.True(wrongOrganization.IsFailure);
-        Assert.Equal("NOT_FOUND", wrongOrganization.Error!.Code);
+        Assert.Equal("ASSIGNMENT_NOT_FOUND", wrongOrganization.Error!.Code);
     }
 
     [Fact]
@@ -263,6 +263,6 @@ public class AssignmentWithEvidenceTests
         var result = await service.GetPublicAssignmentEvidenceAsync(orgId, assignment.Id, returnItem.Id, CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("EVIDENCE_NOT_FOUND", result.Error!.Code);
     }
 }

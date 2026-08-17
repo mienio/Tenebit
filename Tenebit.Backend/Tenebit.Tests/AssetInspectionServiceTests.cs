@@ -116,6 +116,6 @@ public class AssetInspectionServiceTests
         var result = await service.GetPendingForAssetAsync(Guid.NewGuid(), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("ASSET_INSPECTION_NOT_PENDING", result.Error!.Code);
     }
 }

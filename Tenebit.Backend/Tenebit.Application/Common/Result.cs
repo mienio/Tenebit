@@ -2,12 +2,16 @@ namespace Tenebit.Application.Common;
 
 public sealed record Error(string Code, string Message, int StatusCode)
 {
-    public static Error Validation(string message) => new("VALIDATION_ERROR", message, 400);
-    public static Error Unauthorized(string message = "Wymagane uwierzytelnienie.") => new("UNAUTHORIZED", message, 401);
-    public static Error Forbidden(string message = "Brak uprawnień do tej operacji.") => new("FORBIDDEN", message, 403);
-    public static Error NotFound(string message) => new("NOT_FOUND", message, 404);
-    public static Error Conflict(string message) => new("CONFLICT", message, 409);
-    public static Error TooManyRequests(string message) => new("TOO_MANY_REQUESTS", message, 429);
+    // Audit P2 #7: each factory resolves a stable, message-specific code (e.g. "ASSET_NOT_FOUND")
+    // via ErrorCodeResolver instead of a generic per-status code, so API consumers can branch on the
+    // error without matching translated text. Falls back to the old generic code for any message not
+    // (yet) in the resolver's table, so unmapped call sites keep working unchanged.
+    public static Error Validation(string message) => new(ErrorCodeResolver.Resolve(message) ?? "VALIDATION_ERROR", message, 400);
+    public static Error Unauthorized(string message = "Wymagane uwierzytelnienie.") => new(ErrorCodeResolver.Resolve(message) ?? "UNAUTHORIZED", message, 401);
+    public static Error Forbidden(string message = "Brak uprawnień do tej operacji.") => new(ErrorCodeResolver.Resolve(message) ?? "FORBIDDEN", message, 403);
+    public static Error NotFound(string message) => new(ErrorCodeResolver.Resolve(message) ?? "NOT_FOUND", message, 404);
+    public static Error Conflict(string message) => new(ErrorCodeResolver.Resolve(message) ?? "CONFLICT", message, 409);
+    public static Error TooManyRequests(string message) => new(ErrorCodeResolver.Resolve(message) ?? "TOO_MANY_REQUESTS", message, 429);
 }
 
 public class Result

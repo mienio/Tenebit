@@ -99,7 +99,7 @@ public class OffboardingServiceTests
         var second = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(30), DateTimeOffset.UtcNow.AddDays(37), null, null, null, false, false, false), CancellationToken.None);
 
         Assert.True(second.IsFailure);
-        Assert.Equal("CONFLICT", second.Error!.Code);
+        Assert.Equal("OFFBOARDING_CASE_ALREADY_ACTIVE", second.Error!.Code);
     }
 
     [Fact]

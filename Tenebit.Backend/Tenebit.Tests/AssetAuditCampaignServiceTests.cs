@@ -165,7 +165,7 @@ public class AssetAuditCampaignServiceTests
         var getResult = await service.GetAsync(created.Value!.Campaign.Id, CancellationToken.None);
 
         Assert.True(getResult.IsFailure);
-        Assert.Equal("NOT_FOUND", getResult.Error!.Code);
+        Assert.Equal("AUDIT_CAMPAIGN_NOT_FOUND", getResult.Error!.Code);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class AssetAuditCampaignServiceTests
         var update = await service.UpdateAsync(created.Value!.Campaign.Id, new UpdateAssetAuditCampaignRequest("Nowa nazwa", null, DateTimeOffset.UtcNow.AddDays(30), new AssetAuditScope(AssetAuditScopeType.Organization)), CancellationToken.None);
 
         Assert.True(update.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", update.Error!.Code);
+        Assert.Equal("AUDIT_CAMPAIGN_EDIT_INVALID_STATE", update.Error!.Code);
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class AssetAuditCampaignServiceTests
         var result = await service.RecordItemResponseAsync(tokenA, itemOfB.Id, new SubmitPublicAssetAuditItemRequest(AssetAuditResponse.Confirmed, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("ITEM_NOT_FOUND", result.Error!.Code);
     }
 
     [Fact]
@@ -222,7 +222,7 @@ public class AssetAuditCampaignServiceTests
         var result = await service.RecordItemResponseAsync(token, item.Id, new SubmitPublicAssetAuditItemRequest(AssetAuditResponse.Missing, "zgubione"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("AUDIT_RESPONSES_ALREADY_SUBMITTED_LOCKED", result.Error!.Code);
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public class AssetAuditCampaignServiceTests
         var result = await service.GetPublicAsync("does-not-exist", CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("NOT_FOUND", result.Error!.Code);
+        Assert.Equal("PUBLIC_LINK_INVALID_OR_EXPIRED", result.Error!.Code);
     }
 
     [Fact]
@@ -367,7 +367,7 @@ public class AssetAuditCampaignServiceTests
             new ResolveAssetAuditItemRequest(resolution, null, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("AUDIT_RESOLUTION_NOTES_REQUIRED", result.Error!.Code);
     }
 
     [Fact]
@@ -384,7 +384,7 @@ public class AssetAuditCampaignServiceTests
             new ResolveAssetAuditItemRequest(AssetAuditResolution.OwnershipCorrected, "Notatka", null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", result.Error!.Code);
+        Assert.Equal("AUDIT_NEW_OWNER_REQUIRED", result.Error!.Code);
     }
 
     [Fact]
@@ -399,7 +399,7 @@ public class AssetAuditCampaignServiceTests
 
         var beforeSubmit = await service.ReopenParticipantAsync(created.Value!.Campaign.Id, participant.Id, CancellationToken.None);
         Assert.True(beforeSubmit.IsFailure);
-        Assert.Equal("VALIDATION_ERROR", beforeSubmit.Error!.Code);
+        Assert.Equal("AUDIT_REOPEN_INVALID_STATE", beforeSubmit.Error!.Code);
 
         var token = ExtractRawTokenFromEmail(emailSender, person.Email);
         await service.SubmitAsync(token, CancellationToken.None);
