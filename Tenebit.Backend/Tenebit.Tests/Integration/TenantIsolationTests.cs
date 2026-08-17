@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Tenebit.Application.Assets;
 using Tenebit.Domain.Assets;
 
@@ -10,6 +12,14 @@ namespace Tenebit.Tests.Integration;
 /// role bez uprawnień dostają 403 z prawdziwego middleware auth/authz, nie tylko z Application-layer mocka.</summary>
 public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
 {
+    // Serwer serializuje enumy jako stringi (Program.cs: JsonStringEnumConverter na JsonOptions Minimal API),
+    // ale HttpClient.ReadFromJsonAsync<T>() bez jawnych opcji używa domyślnego JsonSerializerOptions, który
+    // tego nie wie — bez tego AssetCategoryResponse.Type/AssetResponse.Status rzucają JsonException.
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private readonly TenebitApiFactory _factory;
 
     public TenantIsolationTests(TenebitApiFactory factory) => _factory = factory;
@@ -20,7 +30,7 @@ public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
         var client = _factory.CreateAuthenticatedClient(token);
         var categoryResponse = await client.PostAsJsonAsync("/api/asset-categories", new CreateAssetCategoryRequest($"Kategoria {prefix}", AssetCategoryType.Physical, null, null));
         categoryResponse.EnsureSuccessStatusCode();
-        var category = await categoryResponse.Content.ReadFromJsonAsync<AssetCategoryResponse>();
+        var category = await categoryResponse.Content.ReadFromJsonAsync<AssetCategoryResponse>(JsonOptions);
         return (client, category!.Id);
     }
 
@@ -28,7 +38,7 @@ public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
     {
         var response = await client.PostAsJsonAsync("/api/assets", new CreateAssetRequest($"Laptop {tag}", tag, null, categoryId, null, null, null, null, null, null, null, null, null));
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadFromJsonAsync<AssetResponse>())!;
+        return (await response.Content.ReadFromJsonAsync<AssetResponse>(JsonOptions))!;
     }
 
     [Fact]
@@ -54,7 +64,7 @@ public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
             new UpdateAssetRequest("Przejęty laptop", asset.AssetTag, null, categoryB, asset.Status, null, null, null, null, null, null, null, null, null));
         Assert.Equal(HttpStatusCode.NotFound, updateResponse.StatusCode);
 
-        var stillOwnedByA = await clientA.GetFromJsonAsync<AssetResponse>($"/api/assets/{asset.Id}");
+        var stillOwnedByA = await clientA.GetFromJsonAsync<AssetResponse>($"/api/assets/{asset.Id}", JsonOptions);
         Assert.Equal("Laptop " + asset.AssetTag, stillOwnedByA!.Name);
     }
 
@@ -81,7 +91,7 @@ public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
         await CreateAssetAsync(clientA, categoryA, $"TAG-{Guid.NewGuid():N}"[..12]);
         await CreateAssetAsync(clientB, categoryB, tagB);
 
-        var listA = await clientA.GetFromJsonAsync<List<AssetResponse>>("/api/assets");
+        var listA = await clientA.GetFromJsonAsync<List<AssetResponse>>("/api/assets", JsonOptions);
 
         Assert.DoesNotContain(listA!, x => x.AssetTag == tagB);
     }
