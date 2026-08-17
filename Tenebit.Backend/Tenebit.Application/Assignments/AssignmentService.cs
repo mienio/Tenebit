@@ -33,8 +33,10 @@ public sealed class AssignmentService
     private readonly IAssetEvidenceRepository _evidence;
     private readonly AssetEvidenceService _evidenceService;
     private readonly Assets.AssetReturnDispositionService _disposition;
+    private readonly AssignmentResponseBuilder _responseBuilder;
+    private readonly AssignmentProtocolModelBuilder _protocolModelBuilder;
 
-    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations, IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService)
+    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations, IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, Assets.AssetReturnDispositionService disposition, AssignmentResponseBuilder responseBuilder, AssignmentProtocolModelBuilder protocolModelBuilder)
     {
         _assignments = assignments;
         _assets = assets;
@@ -54,7 +56,9 @@ public sealed class AssignmentService
         _reservations = reservations;
         _evidence = evidence;
         _evidenceService = evidenceService;
-        _disposition = new Assets.AssetReturnDispositionService(inspections);
+        _disposition = disposition;
+        _responseBuilder = responseBuilder;
+        _protocolModelBuilder = protocolModelBuilder;
     }
 
     public async Task<Result<IReadOnlyList<AssignmentResponse>>> ListAsync(CancellationToken cancellationToken)
@@ -68,7 +72,7 @@ public sealed class AssignmentService
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
         var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
-        return Result<IReadOnlyList<AssignmentResponse>>.Success(assignments.Select(x => Map(x, people, assets, procedures, evidence)).ToList());
+        return Result<IReadOnlyList<AssignmentResponse>>.Success(assignments.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList());
     }
 
     public async Task<Result<PagedResult<AssignmentResponse>>> ListPagedAsync(string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken)
@@ -82,7 +86,7 @@ public sealed class AssignmentService
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
         var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
-        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
+        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<AssignmentResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -90,22 +94,7 @@ public sealed class AssignmentService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
-        return await BuildResponseAsync(id, cancellationToken);
-    }
-
-    // Used after a mutation (create/accept/return) that already ran its own, narrower role check —
-    // building the response here must not re-apply the broader read-role gate from GetAsync, or an
-    // "employee" accepting their own assignment would succeed the accept but then get a 403 back.
-    private async Task<Result<AssignmentResponse>> BuildResponseAsync(Guid id, CancellationToken cancellationToken)
-    {
-        var organizationId = _currentUser.OrganizationId;
-        var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
-        if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
-        var evidence = await _evidence.ListByAssignmentAsync(organizationId, id, cancellationToken);
-        return Result<AssignmentResponse>.Success(Map(assignment, people, assets, procedures, evidence));
+        return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, id, cancellationToken);
     }
 
     public async Task<Result<AssignmentResponse>> CreateAsync(CreateAssignmentRequest request, CancellationToken cancellationToken)
@@ -128,7 +117,7 @@ public sealed class AssignmentService
 
             await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, rawToken, cancellationToken);
 
-            return await BuildResponseAsync(assignment.Id, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignment.Id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -192,7 +181,7 @@ public sealed class AssignmentService
 
             await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, rawToken, cancellationToken);
 
-            return await BuildResponseAsync(assignment.Id, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignment.Id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -222,7 +211,7 @@ public sealed class AssignmentService
         var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
         if (procedures.Count != procedureIds.Length) return Result<PreparedAssignment>.Failure(Error.Validation("Niektóre procedury nie istnieją."));
 
-        var assignment = new Assignment(organizationId, person.Id, CreateProtocolNumber(_clock.UtcNow), _clock.UtcNow, request.DueDate, request.Notes, _currentUser.Subject);
+        var assignment = new Assignment(organizationId, person.Id, AssignmentProtocolModelBuilder.CreateProtocolNumber(_clock.UtcNow), _clock.UtcNow, request.DueDate, request.Notes, _currentUser.Subject);
         foreach (var requestedAsset in request.Assets)
         {
             assignment.AddAsset(requestedAsset.AssetId, requestedAsset.IssueCondition);
@@ -296,7 +285,7 @@ public sealed class AssignmentService
             assignment.Accept(_clock.UtcNow, _currentUser.IpAddress, evidence);
             _activity.Add(new ActivityLog(organizationId, "assignment.accepted", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildResponseAsync(id, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -333,7 +322,7 @@ public sealed class AssignmentService
             _activity.Add(new ActivityLog(organizationId, "assignment.returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
             await CompleteLinkedReservationAsync(organizationId, assignment, now, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildResponseAsync(id, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -370,7 +359,7 @@ public sealed class AssignmentService
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildResponseAsync(assignmentId, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignmentId, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -403,7 +392,7 @@ public sealed class AssignmentService
             // Idempotencja: aktywo już rozliczone — nie zmieniamy stanu ani nie dodajemy zdjęć.
             if (assignment.Assets.First(x => x.AssetId == assetId).ReturnResolution is not null)
             {
-                return await BuildResponseAsync(assignmentId, cancellationToken);
+                return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignmentId, cancellationToken);
             }
 
             var uploads = new List<EvidenceUploadInput>(files.Count);
@@ -429,7 +418,7 @@ public sealed class AssignmentService
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildResponseAsync(assignmentId, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignmentId, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -485,12 +474,12 @@ public sealed class AssignmentService
         }
     }
 
-    public Task<Result<byte[]>> GetProtocolPdfAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result<byte[]>> GetProtocolPdfAsync(Guid id, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
-        if (access.IsFailure) return Task.FromResult(Result<byte[]>.Failure(access.Error!));
+        if (access.IsFailure) return Result<byte[]>.Failure(access.Error!);
 
-        return BuildProtocolPdfAsync(_currentUser.OrganizationId, id, cancellationToken);
+        return await GeneratePdfAsync(_currentUser.OrganizationId, id, cancellationToken);
     }
 
     /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów wydania — ten sam wzorzec co
@@ -520,7 +509,7 @@ public sealed class AssignmentService
     {
         var resolved = await ResolveByTokenAsync(token, cancellationToken);
         if (resolved.IsFailure) return Result<byte[]>.Failure(resolved.Error!);
-        return await BuildProtocolPdfAsync(resolved.Value!.OrganizationId, resolved.Value!.Id, cancellationToken);
+        return await GeneratePdfAsync(resolved.Value!.OrganizationId, resolved.Value!.Id, cancellationToken);
     }
 
     public async Task<Result<PublicAssignmentResponse>> GetPublicAsync(string token, CancellationToken cancellationToken)
@@ -528,7 +517,7 @@ public sealed class AssignmentService
         var resolved = await ResolveByTokenAsync(token, cancellationToken);
         if (resolved.IsFailure) return Result<PublicAssignmentResponse>.Failure(resolved.Error!);
         var assignment = resolved.Value!;
-        return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
+        return Result<PublicAssignmentResponse>.Success(await _responseBuilder.MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
     }
 
     public async Task<Result<PublicAssignmentResponse>> AcceptPublicAsync(string token, CancellationToken cancellationToken)
@@ -543,52 +532,12 @@ public sealed class AssignmentService
             assignment.Accept(_clock.UtcNow, _currentUser.IpAddress, evidence);
             _activity.Add(new ActivityLog(assignment.OrganizationId, "assignment.accepted", "assignment", assignment.Id, "public-link", assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
+            return Result<PublicAssignmentResponse>.Success(await _responseBuilder.MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
         }
         catch (DomainException ex)
         {
             return Result<PublicAssignmentResponse>.Failure(Error.Validation(ex.Message));
         }
-    }
-
-    private async Task<PublicAssignmentResponse> MapPublicAsync(Guid organizationId, Assignment assignment, CancellationToken cancellationToken)
-    {
-        var person = await _people.GetAsync(organizationId, assignment.PersonId, cancellationToken);
-        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-        var assetIds = assignment.Assets.Select(x => x.AssetId).ToArray();
-        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
-        var procedureIds = assignment.ProcedureAcceptances.Select(x => x.ProcedureId).ToArray();
-        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
-
-        // Zdjęcia wydania są pokazywane pracownikowi przed potwierdzeniem (spec 6.2/6.7) — wyłącznie faza Issue.
-        var evidence = await _evidence.ListByAssignmentAsync(organizationId, assignment.Id, cancellationToken);
-        var issueEvidenceByAsset = evidence
-            .Where(x => x.Phase == EvidencePhase.Issue)
-            .GroupBy(x => x.AssetId)
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).Select(x => x.Id).ToList());
-
-        var assetRows = assignment.Assets.Select(item =>
-        {
-            var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-            var evidenceIds = issueEvidenceByAsset.TryGetValue(item.AssetId, out var ids) ? ids : [];
-            return new PublicAssignmentAssetResponse(asset?.Name ?? "—", asset?.AssetTag ?? "—", item.IssueCondition, item.AssetId, evidenceIds);
-        }).ToList();
-        var procedureRows = procedures
-            .Where(x => x.RequiresAcceptance)
-            .Select(x => new PublicAssignmentProcedureResponse(
-                x.Id,
-                x.Title,
-                x.Version,
-                x.Documents.Select(doc => new PublicAssignmentDocumentResponse(doc.Id, doc.FileName)).ToList()))
-            .ToList();
-
-        return new PublicAssignmentResponse(
-            organization?.Name ?? "Tenebit",
-            assignment.ProtocolNumber,
-            assignment.Status,
-            person?.FirstName ?? "—",
-            assetRows,
-            procedureRows);
     }
 
     public async Task<Result<ProcedureDocument>> GetPublicProcedureDocumentAsync(string token, Guid procedureId, Guid documentId, CancellationToken cancellationToken)
@@ -607,67 +556,12 @@ public sealed class AssignmentService
             : Result<ProcedureDocument>.Success(document);
     }
 
-    private async Task<Result<byte[]>> BuildProtocolPdfAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken)
+    private async Task<Result<byte[]>> GeneratePdfAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken)
     {
-        var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
-        if (assignment is null) return Result<byte[]>.Failure(Error.NotFound("Wydanie nie istnieje."));
-
-        var person = await _people.GetAsync(organizationId, assignment.PersonId, cancellationToken);
-        var team = person?.TeamId.HasValue == true ? await _teams.GetAsync(organizationId, person.TeamId!.Value, cancellationToken) : null;
-        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-
-        var assetIds = assignment.Assets.Select(x => x.AssetId).ToArray();
-        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
-        var procedureIds = assignment.ProcedureAcceptances.Select(x => x.ProcedureId).ToArray();
-        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
-
-        var assetRows = assignment.Assets.Select(item =>
-        {
-            var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-            return new ProtocolPdfAssetRow(asset?.Name ?? "—", asset?.AssetTag ?? "—", asset?.SerialNumber, item.IssueCondition, item.ReturnCondition);
-        }).ToList();
-
-        var procedureTitles = procedures.Where(x => x.RequiresAcceptance).Select(x => x.Title).ToList();
-
-        var model = new ProtocolPdfModel(
-            organization?.Name ?? "Tenebit",
-            organization?.LogoUrl,
-            organization?.Country ?? "PL",
-            assignment.ProtocolNumber,
-            assignment.IssuedAt,
-            assignment.DueDate,
-            assignment.AcceptedAt,
-            assignment.ReturnedAt,
-            person?.FullName ?? "—",
-            person?.JobTitle,
-            team?.Name,
-            assetRows,
-            procedureTitles,
-            assignment.Notes);
-
-        return Result<byte[]>.Success(_pdfGenerator.GenerateHandoverProtocol(model));
+        var model = await _protocolModelBuilder.BuildAsync(organizationId, assignmentId, cancellationToken);
+        if (model.IsFailure) return Result<byte[]>.Failure(model.Error!);
+        return Result<byte[]>.Success(_pdfGenerator.GenerateHandoverProtocol(model.Value!));
     }
-
-    private AssignmentResponse Map(Assignment assignment, IReadOnlyList<Domain.People.Person> people, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, IReadOnlyList<AssetEvidence>? evidence = null)
-    {
-        var person = people.FirstOrDefault(x => x.Id == assignment.PersonId);
-        var items = assignment.Assets.Select(item =>
-        {
-            var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-            return new AssignmentAssetResponse(item.AssetId, asset?.Name, asset?.AssetTag, item.IssueCondition, item.ReturnCondition, item.ReturnedAt, item.ReturnLocation, item.ReturnedBy, item.ReturnResolution, item.ReturnNotes);
-        }).ToList();
-
-        var acceptances = assignment.ProcedureAcceptances.Select(acceptance =>
-        {
-            var procedure = procedures.FirstOrDefault(x => x.Id == acceptance.ProcedureId);
-            return new ProcedureAcceptanceResponse(acceptance.Id, acceptance.ProcedureId, procedure?.Title, acceptance.Status, acceptance.SentAt, acceptance.AcceptedAt, acceptance.ConfirmedIp, acceptance.ConfirmationHash, acceptance.VerifyIntegrity());
-        }).ToList();
-
-        var assignmentEvidence = evidence?.Where(x => x.AssignmentId == assignment.Id).ToList();
-        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, assignment.AcceptedIp, assignment.AcceptanceHash, assignment.VerifyIntegrity(assignmentEvidence));
-    }
-
-    private static string CreateProtocolNumber(DateTimeOffset now) => $"TEN-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
 
     private sealed record PreparedAssignment(Assignment Assignment, Domain.People.Person Person, IReadOnlyList<Asset> Assets, IReadOnlyList<Procedure> Procedures);
 }

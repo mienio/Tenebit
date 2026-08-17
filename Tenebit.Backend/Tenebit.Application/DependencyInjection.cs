@@ -37,6 +37,8 @@ public static class DependencyInjection
         services.AddScoped<LicenseService>();
         services.AddScoped<RolePermissionService>();
         services.AddScoped<ProcedureService>();
+        services.AddScoped<AssignmentResponseBuilder>();
+        services.AddScoped<AssignmentProtocolModelBuilder>();
         services.AddScoped<AssignmentService>();
         services.AddScoped<DashboardService>();
         services.AddScoped<DashboardSnapshotService>();

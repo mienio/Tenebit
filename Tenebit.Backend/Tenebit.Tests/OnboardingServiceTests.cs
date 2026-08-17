@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Evidence;
 using Tenebit.Application.Onboarding;
@@ -28,7 +29,10 @@ public class OnboardingServiceTests
         var unitOfWork = new FakeUnitOfWork();
         var evidence = new InMemoryAssetEvidenceRepository();
         var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork);
-        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService);
+        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
+            new AssetReturnDispositionService(inspections),
+            new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
+            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures));
         var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService);
         return (service, user, people);
     }
@@ -108,7 +112,10 @@ public class OnboardingServiceTests
         var unitOfWork = new FakeUnitOfWork();
         var evidence = new InMemoryAssetEvidenceRepository();
         var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork);
-        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService);
+        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
+            new AssetReturnDispositionService(inspections),
+            new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
+            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures));
         var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService);
         return (service, user, assets, people, assignments, evidence);
     }

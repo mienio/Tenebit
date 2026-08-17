@@ -1,3 +1,4 @@
+using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
@@ -28,6 +29,9 @@ public class AssignmentServiceTests
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
         var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork);
+        var disposition = new AssetReturnDispositionService(inspections);
+        var responseBuilder = new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations);
+        var protocolModelBuilder = new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures);
 
         var service = new AssignmentService(
             assignments,
@@ -47,7 +51,10 @@ public class AssignmentServiceTests
             new FakeAppLinkBuilder(),
             reservations,
             evidence,
-            evidenceService);
+            evidenceService,
+            disposition,
+            responseBuilder,
+            protocolModelBuilder);
 
         return (service, currentUser, assets, people, procedures, categories, inspections, assignments, activity, reservations);
     }
