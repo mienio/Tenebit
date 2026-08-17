@@ -89,9 +89,12 @@ static string PartitionKey(HttpContext context) => context.Connection.RemoteIpAd
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Configurable so E2E test runs (many page loads => many /auth/refresh calls in a short
+    // window) don't need to weaken the production default of 10/min to make the suite runnable.
+    var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
     options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => new FixedWindowRateLimiterOptions
     {
-        PermitLimit = 10,
+        PermitLimit = authPermitLimit,
         Window = TimeSpan.FromMinutes(1),
         QueueLimit = 0
     }));
