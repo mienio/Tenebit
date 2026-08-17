@@ -424,7 +424,7 @@ public class AssetAuditCampaignServiceTests
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);
         Assert.Equal(AssetAuditCampaignStatus.Completed, campaigns.Campaigns.Single().Status);
-        Assert.Single(activity.Logs.Where(x => x.Action == "asset_audit.completed"));
+        Assert.Single(activity.Logs, x => x.Action == "asset_audit.completed");
     }
 
     [Fact]

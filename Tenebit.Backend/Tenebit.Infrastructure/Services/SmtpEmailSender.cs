@@ -43,7 +43,7 @@ public sealed class SmtpEmailSender : IEmailSender
         var username = _configuration["Email:Username"];
         if (!string.IsNullOrWhiteSpace(username))
         {
-            await client.AuthenticateAsync(username, _configuration["Email:Password"], cancellationToken);
+            await client.AuthenticateAsync(username, _configuration["Email:Password"] ?? string.Empty, cancellationToken);
         }
 
         await client.SendAsync(message, cancellationToken);

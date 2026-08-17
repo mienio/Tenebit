@@ -23,7 +23,7 @@ public static class LocationEndpoints
             var assets = await db.Assets.AsNoTracking().Where(x => x.OrganizationId == currentUser.OrganizationId).ToListAsync(cancellationToken);
             var people = await db.People.AsNoTracking().Where(x => x.OrganizationId == currentUser.OrganizationId).ToListAsync(cancellationToken);
             return Results.Ok(MapLocations(rows, assets, people));
-        }).WithTags("Locations").WithOpenApi();
+        }).WithTags("Locations");
 
         api.MapPost("/locations", async (CreateLocationRequest request, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
@@ -64,7 +64,7 @@ public static class LocationEndpoints
             var locations = await LoadLocationsAsync(db, currentUser.OrganizationId, cancellationToken);
             var response = MapLocations(locations, [], []).First(x => x.Id == id);
             return Results.Created($"/api/locations/{id}", response);
-        }).WithTags("Locations").WithOpenApi();
+        }).WithTags("Locations");
 
         api.MapPut("/locations/{id:guid}", async (Guid id, UpdateLocationRequest request, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
@@ -130,7 +130,7 @@ public static class LocationEndpoints
             var locations = await LoadLocationsAsync(db, currentUser.OrganizationId, cancellationToken);
             var response = MapLocations(locations, [], []).First(x => x.Id == id);
             return Results.Ok(response);
-        }).WithTags("Locations").WithOpenApi();
+        }).WithTags("Locations");
 
         api.MapDelete("/locations/{id:guid}", async (Guid id, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
@@ -183,7 +183,7 @@ public static class LocationEndpoints
             Add(command, "organizationId", currentUser.OrganizationId);
             await command.ExecuteNonQueryAsync(cancellationToken);
             return Results.NoContent();
-        }).WithTags("Locations").WithOpenApi();
+        }).WithTags("Locations");
 
         api.MapGet("/locations/{id:guid}/inventory", async (Guid id, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
@@ -200,7 +200,7 @@ public static class LocationEndpoints
             var locationAssets = assets.Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase)).Select(MapAsset).ToList();
             var locationPeople = people.Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase)).Select(MapPerson).ToList();
             return Results.Ok(new LocationInventoryResponse(location, locationAssets, locationPeople));
-        }).WithTags("Locations").WithOpenApi();
+        }).WithTags("Locations");
 
         return api;
     }

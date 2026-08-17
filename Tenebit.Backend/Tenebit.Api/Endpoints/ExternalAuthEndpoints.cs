@@ -15,8 +15,7 @@ public static class ExternalAuthEndpoints
         api.MapGet("/auth/external/providers", (ExternalAuthService service) =>
                 Results.Ok(new { providers = service.EnabledProviders() }))
             .AllowAnonymous()
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapGet("/auth/external/links", async (ICurrentUser currentUser, AuthService authService, CancellationToken cancellationToken) =>
             {
@@ -28,8 +27,7 @@ public static class ExternalAuthEndpoints
                 var result = await authService.ListLinkedProvidersAsync(userId, cancellationToken);
                 return Results.Ok(new { providers = result.Value });
             })
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/external/{provider}/unlink", async (string provider, ICurrentUser currentUser, AuthService authService, CancellationToken cancellationToken) =>
             {
@@ -41,20 +39,17 @@ public static class ExternalAuthEndpoints
                 var result = await authService.UnlinkProviderAsync(userId, provider, cancellationToken);
                 return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Konto zostało odłączone." });
             })
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapGet("/auth/external/{provider}/start", (string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore) =>
                 StartExternalLogin(provider, returnUrl, service, stateStore))
             .AllowAnonymous()
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapGet("/auth/external/{provider}/callback", (string provider, string? code, string? state, string? error, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
                 HandleCallbackAsync(provider, code, state, error, service, stateStore, authService, tokens, response, env, configuration, cancellationToken))
             .AllowAnonymous()
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/external/{provider}/callback", async (HttpRequest request, HttpResponse response, string provider, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
             {
@@ -65,8 +60,7 @@ public static class ExternalAuthEndpoints
                 return await HandleCallbackAsync(provider, code, state, error, service, stateStore, authService, tokens, response, env, configuration, cancellationToken);
             })
             .AllowAnonymous()
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
     }
 
     private static IResult StartExternalLogin(string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore)

@@ -190,7 +190,7 @@ public sealed class AlertCheckService
 
         foreach (var assignment in assignments.Where(a => a.DueDate.HasValue && a.Status is AssignmentStatus.AwaitingAcceptance or AssignmentStatus.Accepted))
         {
-            var due = assignment.DueDate.Value;
+            var due = assignment.DueDate!.Value;
             var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
             foreach (var (thresholdDays, _) in DueDateThresholds(rule, today, due))
             {

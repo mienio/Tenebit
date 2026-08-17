@@ -123,7 +123,7 @@ public sealed class AssetCategoryService
     private static AssetCategoryResponse Map(AssetCategory category, string language)
     {
         var name = StarterAssetCategoryTranslations.TranslateName(category.IsSystem, language, category.Name);
-        var description = StarterAssetCategoryTranslations.TranslateDescription(category.IsSystem, language, category.Name, category.Description);
+        var description = StarterAssetCategoryTranslations.TranslateDescription(category.IsSystem, language, category.Name, category.Description ?? string.Empty);
         return new(category.Id, name, category.Type, description, category.Icon, category.IsSystem, MapFieldDefinitions(category), category.ReturnHandlingMode, category.PostReturnDisposition, category.ReturnChecklistTemplate, category.PhotoOnIssue, category.PhotoOnReturn);
     }
 

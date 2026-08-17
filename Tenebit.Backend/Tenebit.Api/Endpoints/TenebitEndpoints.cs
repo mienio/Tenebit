@@ -52,8 +52,7 @@ public static class TenebitEndpoints
 
         api.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Tenebit" }))
             .AllowAnonymous()
-            .WithName("Health")
-            .WithOpenApi();
+            .WithName("Health");
 
         api.MapGet("/health/ready", async (TenebitDbContext db, ILogger<Program> logger, CancellationToken cancellationToken) =>
             {
@@ -73,8 +72,7 @@ public static class TenebitEndpoints
                 }
             })
             .AllowAnonymous()
-            .WithName("HealthReady")
-            .WithOpenApi();
+            .WithName("HealthReady");
 
         MapAuth(api);
         api.MapExternalAuthEndpoints();
@@ -116,8 +114,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/login", async (LoginRequest request, HttpRequest httpRequest, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
@@ -138,8 +135,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/login/2fa", async (TwoFactorLoginRequest request, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
@@ -165,8 +161,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/refresh", async (HttpRequest request, HttpResponse response, AuthService service, TokenIssuer tokens, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
@@ -188,8 +183,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/logout", async (HttpRequest request, HttpResponse response, AuthService service, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
@@ -203,8 +197,7 @@ public static class TenebitEndpoints
                 return Results.NoContent();
             })
             .AllowAnonymous()
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/password/forgot", async (ForgotPasswordRequest request, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -213,8 +206,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/password/reset", async (ResetPasswordRequest request, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -223,8 +215,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/verify-email", async (VerifyEmailRequest request, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -233,8 +224,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/resend-verification", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -246,8 +236,7 @@ public static class TenebitEndpoints
                 return Results.Ok(new { message = "Jeśli Twój e-mail nie jest jeszcze potwierdzony, wysłaliśmy nową wiadomość." });
             })
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/2fa/setup", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -260,8 +249,7 @@ public static class TenebitEndpoints
                 return result.ToHttpResult();
             })
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/2fa/enable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -274,8 +262,7 @@ public static class TenebitEndpoints
                 return result.ToHttpResult();
             })
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/2fa/disable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -288,8 +275,7 @@ public static class TenebitEndpoints
                 return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone." });
             })
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapPost("/auth/2fa/recovery-codes/regenerate", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -302,8 +288,7 @@ public static class TenebitEndpoints
                 return result.ToHttpResult();
             })
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
 
         api.MapGet("/auth/2fa/recovery-codes/status", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
@@ -316,78 +301,66 @@ public static class TenebitEndpoints
                 return result.ToHttpResult();
             })
             .RequireRateLimiting("auth")
-            .WithTags("Auth")
-            .WithOpenApi();
+            .WithTags("Auth");
     }
 
     private static void MapWorkspace(RouteGroupBuilder api)
     {
         api.MapGet("/my/workspace", async (MyWorkspaceService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.GetAsync(cancellationToken)))
-            .WithTags("Workspace")
-            .WithOpenApi();
+            .WithTags("Workspace");
     }
 
     private static void MapDashboard(RouteGroupBuilder api)
     {
         api.MapGet("/dashboard", async (DashboardService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.GetSummaryAsync(cancellationToken)))
-            .WithTags("Dashboard")
-            .WithOpenApi();
+            .WithTags("Dashboard");
 
         api.MapGet("/dashboard/layout", async (DashboardService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.GetLayoutAsync(cancellationToken)))
-            .WithTags("Dashboard")
-            .WithOpenApi();
+            .WithTags("Dashboard");
 
         api.MapPut("/dashboard/layout", async (SaveDashboardLayoutRequest request, DashboardService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.SaveLayoutAsync(request, cancellationToken)))
-            .WithTags("Dashboard")
-            .WithOpenApi();
+            .WithTags("Dashboard");
 
         api.MapGet("/dashboard/comparison", async (int? daysAgo, DashboardService service, CancellationToken cancellationToken) =>
                 (await service.GetComparisonAsync(daysAgo ?? 7, cancellationToken)).ToHttpResult())
-            .WithTags("Dashboard")
-            .WithOpenApi();
+            .WithTags("Dashboard");
     }
 
     private static void MapActivityLog(RouteGroupBuilder api)
     {
         api.MapGet("/activity-log", async (int? page, int? pageSize, string? entityType, Guid? entityId, string? search, DateOnly? dateFrom, DateOnly? dateTo, string? actor, string? action, ActivityLogService service, CancellationToken cancellationToken) =>
                 (await service.ListAsync(page ?? 1, pageSize ?? 25, entityType, entityId, search, dateFrom, dateTo, actor, action, cancellationToken)).ToHttpResult())
-            .WithTags("Audit")
-            .WithOpenApi();
+            .WithTags("Audit");
     }
 
     private static void MapOrganization(RouteGroupBuilder api)
     {
         api.MapGet("/organization", async (OrganizationService service, CancellationToken cancellationToken) =>
                 (await service.GetCurrentAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Organization")
-            .WithOpenApi();
+            .WithTags("Organization");
 
         api.MapPut("/organization", async (UpdateOrganizationRequest request, OrganizationService service, CancellationToken cancellationToken) =>
                 (await service.UpdateCurrentAsync(request, cancellationToken)).ToHttpResult())
-            .WithTags("Organization")
-            .WithOpenApi();
+            .WithTags("Organization");
     }
 
     private static void MapOnboarding(RouteGroupBuilder api)
     {
         api.MapGet("/onboarding/status", async (OnboardingService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.GetStatusAsync(cancellationToken)))
-            .WithTags("Onboarding")
-            .WithOpenApi();
+            .WithTags("Onboarding");
 
         api.MapPost("/onboarding/starter-package", async (CreateStarterPackageRequest request, OnboardingService service, CancellationToken cancellationToken) =>
                 (await service.CreateStarterPackageAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}"))
-            .WithTags("Onboarding")
-            .WithOpenApi();
+            .WithTags("Onboarding");
 
         api.MapPost("/onboarding/employee-package", async (CreateEmployeePackageRequest request, OnboardingService service, CancellationToken cancellationToken) =>
                 (await service.CreateEmployeePackageAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}"))
-            .WithTags("Onboarding")
-            .WithOpenApi();
+            .WithTags("Onboarding");
 
         api.MapPost("/onboarding/employee-package/with-evidence", async (HttpRequest request, OnboardingService service, CancellationToken cancellationToken) =>
         {
@@ -419,58 +392,48 @@ public static class TenebitEndpoints
             return (await service.CreateEmployeePackageWithEvidenceAsync(createRequest, manifest, files, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}");
         })
             .DisableAntiforgery()
-            .WithTags("Onboarding")
-            .WithOpenApi();
+            .WithTags("Onboarding");
 
         api.MapGet("/onboarding/checklist/{personId:guid}", async (Guid personId, OnboardingService service, CancellationToken cancellationToken) =>
                 (await service.GetChecklistAsync(personId, cancellationToken)).ToHttpResult())
-            .WithTags("Onboarding")
-            .WithOpenApi();
+            .WithTags("Onboarding");
     }
 
     private static void MapAssets(RouteGroupBuilder api)
     {
         api.MapGet("/asset-categories", async (AssetCategoryService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.ListAsync(cancellationToken)))
-            .WithTags("Asset categories")
-            .WithOpenApi();
+            .WithTags("Asset categories");
 
         api.MapPost("/asset-categories", async (CreateAssetCategoryRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/asset-categories/{response.Id}"))
-            .WithTags("Asset categories")
-            .WithOpenApi();
+            .WithTags("Asset categories");
 
         api.MapPut("/asset-categories/{id:guid}", async (Guid id, UpdateAssetCategoryRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Asset categories")
-            .WithOpenApi();
+            .WithTags("Asset categories");
 
         api.MapDelete("/asset-categories/{id:guid}", async (Guid id, AssetCategoryService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("Asset categories")
-            .WithOpenApi();
+            .WithTags("Asset categories");
 
         api.MapPut("/asset-categories/{id:guid}/fields", async (Guid id, IReadOnlyList<SaveAssetFieldDefinitionRequest> request, AssetCategoryService service, CancellationToken cancellationToken) =>
                 (await service.SaveFieldDefinitionsAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Asset categories")
-            .WithOpenApi();
+            .WithTags("Asset categories");
 
         api.MapPut("/asset-categories/{id:guid}/return-policy", async (Guid id, UpdateAssetCategoryReturnPolicyRequest request, AssetCategoryService service, CancellationToken cancellationToken) =>
                 (await service.UpdateReturnPolicyAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Asset categories")
-            .WithOpenApi();
+            .WithTags("Asset categories");
 
         api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, string? owner, string? warranty, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
                 page.HasValue
                     ? (await service.ListPagedAsync(search, status, location, teamId, categoryId, owner == "none", warranty == "expiring", sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
                     : (await service.ListAsync(search, status, location, cancellationToken)).ToHttpResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapGet("/assets/group-counts", async (AssetService service, CancellationToken cancellationToken) =>
                 (await service.GetGroupCountsAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapGet("/assets/export.csv", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
         {
@@ -479,8 +442,7 @@ public static class TenebitEndpoints
                 ? result.ToHttpResult()
                 : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "text/csv", "assets.csv");
         })
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapGet("/assets/export.json", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
         {
@@ -489,29 +451,24 @@ public static class TenebitEndpoints
                 ? result.ToHttpResult()
                 : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "application/json", "assets.json");
         })
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapGet("/assets/{id:guid}", async (Guid id, AssetService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
             .WithName("GetAsset")
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapPost("/assets", async (CreateAssetRequest request, AssetService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assets/{response.Id}"))
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapPut("/assets/{id:guid}", async (Guid id, UpdateAssetRequest request, AssetService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapDelete("/assets/{id:guid}", async (Guid id, AssetService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapGet("/assets/{id:guid}/qr", async (Guid id, AssetService service, CancellationToken cancellationToken) =>
         {
@@ -520,31 +477,26 @@ public static class TenebitEndpoints
                 ? Results.Text(result.Value, "image/svg+xml")
                 : result.ToHttpResult();
         })
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapPost("/assets/{id:guid}/fields/{fieldKey}/reveal", async (Guid id, string fieldKey, AssetService service, CancellationToken cancellationToken) =>
                 (await service.RevealSensitiveFieldAsync(id, fieldKey, cancellationToken)).ToHttpResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapGet("/assets/{id:guid}/inspection", async (Guid id, AssetInspectionService service, CancellationToken cancellationToken) =>
                 (await service.GetPendingForAssetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
 
         api.MapPost("/assets/inspections/{id:guid}/complete", async (Guid id, CompleteAssetInspectionRequest request, AssetInspectionService service, CancellationToken cancellationToken) =>
                 (await service.CompleteAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Assets")
-            .WithOpenApi();
+            .WithTags("Assets");
     }
 
     private static void MapAssetEvidence(RouteGroupBuilder api)
     {
         api.MapGet("/assets/{assetId:guid}/evidence", async (Guid assetId, AssetEvidenceService service, CancellationToken cancellationToken) =>
                 (await service.ListByAssetAsync(assetId, cancellationToken)).ToHttpResult())
-            .WithTags("Asset evidence")
-            .WithOpenApi();
+            .WithTags("Asset evidence");
 
         api.MapPost("/assets/{assetId:guid}/evidence", async (Guid assetId, HttpRequest request, AssetEvidenceService service, CancellationToken cancellationToken) =>
         {
@@ -594,18 +546,15 @@ public static class TenebitEndpoints
 
         api.MapPost("/evidence/{id:guid}/lock", async (Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
                 (await service.LockAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset evidence")
-            .WithOpenApi();
+            .WithTags("Asset evidence");
 
         api.MapPut("/evidence/{id:guid}/legal-hold", async (Guid id, SetEvidenceLegalHoldRequest request, AssetEvidenceService service, CancellationToken cancellationToken) =>
                 (await service.SetLegalHoldAsync(id, request.Enabled, cancellationToken)).ToHttpResult())
-            .WithTags("Asset evidence")
-            .WithOpenApi();
+            .WithTags("Asset evidence");
 
         api.MapDelete("/evidence/{id:guid}", async (Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("Asset evidence")
-            .WithOpenApi();
+            .WithTags("Asset evidence");
     }
 
     private static void MapSettings(RouteGroupBuilder api)
@@ -617,293 +566,237 @@ public static class TenebitEndpoints
             (await service.SaveAssetStatusesAsync(request, cancellationToken)).ToHttpResult();
 
         api.MapGet("/asset-statuses", ListAssetStatuses)
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapGet("/settings/asset-statuses", ListAssetStatuses)
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPut("/asset-statuses", SaveAssetStatuses)
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPut("/settings/asset-statuses", SaveAssetStatuses)
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapGet("/settings/evidence-privacy", async (SettingsService service, CancellationToken cancellationToken) =>
                 (await service.GetEvidencePrivacyAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPut("/settings/evidence-privacy", async (SaveEvidencePrivacySettingsRequest request, SettingsService service, CancellationToken cancellationToken) =>
                 (await service.SaveEvidencePrivacyAsync(request, cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapGet("/settings/qr-label", async (SettingsService service, CancellationToken cancellationToken) =>
                 (await service.GetQrLabelSettingsAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPut("/settings/qr-label", async (SaveQrLabelSettingsRequest request, SettingsService service, CancellationToken cancellationToken) =>
                 (await service.SaveQrLabelSettingsAsync(request, cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapGet("/settings/alerts", async (AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.ListAlertRulesAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPut("/settings/alerts/{type}", async (AlertType type, SaveAlertRuleRequest request, AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.UpsertAlertRuleAsync(type, request, cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapGet("/settings/alert-digest", async (AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.GetAlertDigestAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPut("/settings/alert-digest", async (SaveAlertDigestSettingsRequest request, AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.UpsertAlertDigestAsync(request, cancellationToken)).ToHttpResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapPost("/settings/alerts/test", async (AlertTestRequest? request, AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.SendTestAlertAsync(request, cancellationToken)).ToNoContentResult())
-            .WithTags("Settings")
-            .WithOpenApi();
+            .WithTags("Settings");
 
         api.MapGet("/alerts/history", async (int? page, int? pageSize, AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.ListSentAlertHistoryAsync(page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
-            .WithTags("Alerts")
-            .WithOpenApi();
+            .WithTags("Alerts");
 
         static async Task<IResult> ListJobProfiles(JobProfileService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.ListAsync(cancellationToken));
 
         api.MapGet("/job-profiles", ListJobProfiles)
-            .WithTags("Job profiles")
-            .WithOpenApi();
+            .WithTags("Job profiles");
 
         api.MapGet("/settings/job-profiles", ListJobProfiles)
-            .WithTags("Job profiles")
-            .WithOpenApi();
+            .WithTags("Job profiles");
 
         api.MapPost("/job-profiles", async (SaveJobProfileRequest request, JobProfileService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/job-profiles/{response.Id}"))
-            .WithTags("Job profiles")
-            .WithOpenApi();
+            .WithTags("Job profiles");
 
         api.MapPut("/job-profiles/{id:guid}", async (Guid id, SaveJobProfileRequest request, JobProfileService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Job profiles")
-            .WithOpenApi();
+            .WithTags("Job profiles");
 
         api.MapDelete("/job-profiles/{id:guid}", async (Guid id, JobProfileService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("Job profiles")
-            .WithOpenApi();
+            .WithTags("Job profiles");
 
         static async Task<IResult> ListUsers(UserAccessService service, CancellationToken cancellationToken) =>
             (await service.ListAsync(cancellationToken)).ToHttpResult();
 
         api.MapGet("/organization-users", ListUsers)
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         api.MapGet("/settings/users", ListUsers)
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         api.MapPost("/organization-users", async (SaveOrganizationUserRequest request, UserAccessService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/organization-users/{response.Id}"))
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         api.MapPut("/organization-users/{id:guid}", async (Guid id, SaveOrganizationUserRequest request, UserAccessService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         static IResult ListRoles(UserAccessService service) => Results.Ok(service.Roles());
 
         api.MapGet("/roles", ListRoles)
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         api.MapGet("/settings/roles", ListRoles)
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         api.MapGet("/role-permissions", async (RolePermissionService service, CancellationToken cancellationToken) =>
                 (await service.ListAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
 
         api.MapPut("/role-permissions", async (SetRolePermissionRequest request, RolePermissionService service, CancellationToken cancellationToken) =>
                 (await service.SetAsync(request, cancellationToken)).ToNoContentResult())
-            .WithTags("Users")
-            .WithOpenApi();
+            .WithTags("Users");
     }
 
     private static void MapLicenses(RouteGroupBuilder api)
     {
         api.MapGet("/licenses", async (LicenseService service, CancellationToken cancellationToken) =>
                 (await service.ListAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Licenses")
-            .WithOpenApi();
+            .WithTags("Licenses");
 
         api.MapPost("/licenses", async (CreateLicenseRequest request, LicenseService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/licenses/{response.Id}"))
-            .WithTags("Licenses")
-            .WithOpenApi();
+            .WithTags("Licenses");
 
         api.MapPut("/licenses/{id:guid}", async (Guid id, UpdateLicenseRequest request, LicenseService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Licenses")
-            .WithOpenApi();
+            .WithTags("Licenses");
 
         api.MapDelete("/licenses/{id:guid}", async (Guid id, LicenseService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("Licenses")
-            .WithOpenApi();
+            .WithTags("Licenses");
 
         api.MapPost("/licenses/{id:guid}/seats", async (Guid id, AssignLicenseSeatRequest request, LicenseService service, CancellationToken cancellationToken) =>
                 (await service.AssignSeatAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Licenses")
-            .WithOpenApi();
+            .WithTags("Licenses");
 
         api.MapDelete("/licenses/{id:guid}/seats/{personId:guid}", async (Guid id, Guid personId, LicenseService service, CancellationToken cancellationToken) =>
                 (await service.UnassignSeatAsync(id, personId, cancellationToken)).ToHttpResult())
-            .WithTags("Licenses")
-            .WithOpenApi();
+            .WithTags("Licenses");
     }
 
     private static void MapServiceTickets(RouteGroupBuilder api)
     {
         api.MapGet("/assets/{assetId:guid}/service-tickets", async (Guid assetId, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.ListByAssetAsync(assetId, cancellationToken)).ToHttpResult())
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
 
         api.MapGet("/service-tickets", async (ServiceTicketStatus? status, int? page, int? pageSize, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
 
         api.MapGet("/service-tickets/{id:guid}", async (Guid id, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
 
         api.MapPost("/service-tickets", async (OpenServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.OpenAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/service-tickets/{response.Id}"))
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
 
         api.MapPut("/service-tickets/{id:guid}", async (Guid id, UpdateServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
 
         api.MapPost("/service-tickets/{id:guid}/complete", async (Guid id, CompleteServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.CompleteAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
 
         api.MapPost("/service-tickets/{id:guid}/cancel", async (Guid id, CancelServiceTicketRequest request, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Service tickets")
-            .WithOpenApi();
+            .WithTags("Service tickets");
     }
 
     private static void MapPeople(RouteGroupBuilder api)
     {
         api.MapGet("/teams", async (TeamService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.ListAsync(cancellationToken)))
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPost("/teams", async (CreateTeamRequest request, TeamService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/teams/{response.Id}"))
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPut("/teams/{id:guid}", async (Guid id, UpdateTeamRequest request, TeamService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapDelete("/teams/{id:guid}", async (Guid id, TeamService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapGet("/person-relation-types", async (PersonRelationTypeService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.ListAsync(cancellationToken)))
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPost("/person-relation-types", async (CreatePersonRelationTypeRequest request, PersonRelationTypeService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/person-relation-types/{response.Id}"))
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPut("/person-relation-types/{id:guid}", async (Guid id, UpdatePersonRelationTypeRequest request, PersonRelationTypeService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapDelete("/person-relation-types/{id:guid}", async (Guid id, PersonRelationTypeService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapGet("/people", async (PeopleService service, string? search, int? page, int? pageSize, CancellationToken cancellationToken) =>
                 page.HasValue
                     ? (await service.ListPagedAsync(search, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
                     : (await service.ListAsync(search, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapGet("/people/{id:guid}", async (Guid id, PeopleService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPost("/people", async (CreatePersonRequest request, PeopleService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/people/{response.Id}"))
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPut("/people/{id:guid}", async (Guid id, UpdatePersonRequest request, PeopleService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapDelete("/people/{id:guid}", async (Guid id, PeopleService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapPost("/people/{id:guid}/offboarding", async (Guid id, StartOffboardingRequest request, PeopleService service, CancellationToken cancellationToken) =>
                 (await service.StartOffboardingAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapGet("/people/{id:guid}/workspace", async (Guid id, MyWorkspaceService service, CancellationToken cancellationToken) =>
                 (await service.GetForPersonAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
 
         api.MapGet("/people/{id:guid}/offboarding-preview", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.GetPreviewAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("People")
-            .WithOpenApi();
+            .WithTags("People");
     }
 
     private static void MapProcedures(RouteGroupBuilder api)
@@ -912,23 +805,19 @@ public static class TenebitEndpoints
                 page.HasValue
                     ? (await service.ListPagedAsync(search, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
                     : (await service.ListAsync(search, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapGet("/procedures/{id:guid}", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapPost("/procedures", async (CreateProcedureRequest request, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/procedures/{response.Id}"))
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapPut("/procedures/{id:guid}", async (Guid id, UpdateProcedureRequest request, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapPost("/procedures/{id:guid}/documents", async (Guid id, HttpRequest request, ProcedureService service, CancellationToken cancellationToken) =>
         {
@@ -973,23 +862,19 @@ public static class TenebitEndpoints
 
         api.MapDelete("/procedures/{id:guid}/documents/{documentId:guid}", async (Guid id, Guid documentId, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.RemoveDocumentAsync(id, documentId, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapPost("/procedures/{id:guid}/publish", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.PublishAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapPost("/procedures/{id:guid}/archive", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.ArchiveAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
 
         api.MapGet("/procedures/{id:guid}/acceptances", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.GetAcceptanceStatusAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Procedures")
-            .WithOpenApi();
+            .WithTags("Procedures");
     }
 
     private static void MapAssignments(RouteGroupBuilder api)
@@ -998,38 +883,31 @@ public static class TenebitEndpoints
                 page.HasValue
                     ? (await service.ListPagedAsync(search, status, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
                     : (await service.ListAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapGet("/assignments/{id:guid}", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapPost("/assignments", async (CreateAssignmentRequest request, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.Id}"))
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapPost("/assignments/{id:guid}/accept", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.AcceptAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapPost("/assignments/{id:guid}/acceptance-link", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.RegenerateAcceptanceLinkAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapPost("/assignments/{id:guid}/return", async (Guid id, ReturnAssignmentRequest request, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.ReturnAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapPost("/assignments/{assignmentId:guid}/assets/{assetId:guid}/return", async (Guid assignmentId, Guid assetId, ReturnAssignmentAssetItemRequest request, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.ReturnAssetAsync(assignmentId, assetId, request, cancellationToken)).ToHttpResult())
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
 
         api.MapPost("/assignments/with-evidence", async (HttpRequest request, AssignmentService service, CancellationToken cancellationToken) =>
         {
@@ -1091,91 +969,74 @@ public static class TenebitEndpoints
                 ? result.ToHttpResult()
                 : Results.File(result.Value, "application/pdf", $"protokol-{id}.pdf");
         })
-            .WithTags("Assignments")
-            .WithOpenApi();
+            .WithTags("Assignments");
     }
 
     private static void MapOffboarding(RouteGroupBuilder api)
     {
         api.MapGet("/offboarding", async (OffboardingCaseStatus? status, int? page, int? pageSize, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapGet("/offboarding/{id:guid}", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding", async (CreateOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/offboarding/{response.Case.Id}"))
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPut("/offboarding/{id:guid}", async (Guid id, UpdateOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/start", async (Guid id, StartOffboardingCaseRequest? request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.StartAsync(id, request ?? new StartOffboardingCaseRequest(), cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/resend", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.ResendLinkAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/regenerate-link", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.RegenerateLinkAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/execute-scheduled-actions", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.ExecuteScheduledActionsAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/confirm-return", async (Guid id, Guid itemId, ConfirmOffboardingItemReturnRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.ConfirmItemReturnAsync(id, itemId, request, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/complete-inspection", async (Guid id, Guid itemId, CompleteAssetInspectionRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.CompleteItemInspectionAsync(id, itemId, request, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/release-license", async (Guid id, Guid itemId, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.ReleaseItemLicenseAsync(id, itemId, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/resolve", async (Guid id, Guid itemId, ResolveOffboardingItemRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.ResolveItemAsync(id, itemId, request, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/items/{itemId:guid}/waive", async (Guid id, Guid itemId, WaiveOffboardingItemRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.WaiveItemAsync(id, itemId, request, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/complete", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.CompleteAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/cancel", async (Guid id, CancelOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapPost("/offboarding/{id:guid}/restore-employment", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.RestoreEmploymentAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
 
         api.MapGet("/offboarding/{id:guid}/protocol", async (Guid id, OffboardingService service, CancellationToken cancellationToken) =>
         {
@@ -1184,66 +1045,54 @@ public static class TenebitEndpoints
                 ? result.ToHttpResult()
                 : Results.File(result.Value, "application/pdf", $"protokol-offboarding-{id}.pdf");
         })
-            .WithTags("Offboarding")
-            .WithOpenApi();
+            .WithTags("Offboarding");
     }
 
     private static void MapAssetAudits(RouteGroupBuilder api)
     {
         api.MapGet("/asset-audits", async (AssetAuditCampaignStatus? status, int? page, int? pageSize, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapGet("/asset-audits/{id:guid}", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits", async (CreateAssetAuditCampaignRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/asset-audits/{response.Campaign.Id}"))
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPut("/asset-audits/{id:guid}", async (Guid id, UpdateAssetAuditCampaignRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/preview", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.PreviewAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/start", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.StartAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/remind", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.RemindParticipantsAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/participants/{participantId:guid}/reopen", async (Guid id, Guid participantId, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.ReopenParticipantAsync(id, participantId, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/items/{itemId:guid}/resolve", async (Guid id, Guid itemId, ResolveAssetAuditItemRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.ResolveItemAsync(id, itemId, request, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/complete", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.CompleteAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapPost("/asset-audits/{id:guid}/cancel", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.CancelAsync(id, cancellationToken)).ToHttpResult())
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapGet("/asset-audits/{id:guid}/export.csv", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
         {
@@ -1252,8 +1101,7 @@ public static class TenebitEndpoints
                 ? result.ToHttpResult()
                 : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "text/csv", $"audyt-{id}.csv");
         })
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
 
         api.MapGet("/asset-audits/{id:guid}/report.pdf", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
         {
@@ -1262,8 +1110,7 @@ public static class TenebitEndpoints
                 ? result.ToHttpResult()
                 : Results.File(result.Value, "application/pdf", $"raport-audytu-{id}.pdf");
         })
-            .WithTags("Asset audits")
-            .WithOpenApi();
+            .WithTags("Asset audits");
     }
 
     private static void MapPublicAssignments(RouteGroupBuilder api)
@@ -1272,15 +1119,13 @@ public static class TenebitEndpoints
                 (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assignments")
-            .WithOpenApi();
+            .WithTags("Public assignments");
 
         api.MapPost("/public/assignments/{token}/accept", async (string token, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.AcceptPublicAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assignments")
-            .WithOpenApi();
+            .WithTags("Public assignments");
 
         api.MapGet("/public/assignments/{token}/protocol", async (string token, AssignmentService service, CancellationToken cancellationToken) =>
         {
@@ -1291,8 +1136,7 @@ public static class TenebitEndpoints
         })
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assignments")
-            .WithOpenApi();
+            .WithTags("Public assignments");
 
         api.MapGet("/public/assignments/{token}/procedures/{procedureId:guid}/documents/{documentId:guid}", async (string token, Guid procedureId, Guid documentId, AssignmentService service, CancellationToken cancellationToken) =>
         {
@@ -1307,8 +1151,7 @@ public static class TenebitEndpoints
         })
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assignments")
-            .WithOpenApi();
+            .WithTags("Public assignments");
 
         api.MapGet("/public/assignments/{token}/evidence/{id:guid}", async (string token, Guid id, AssignmentService assignmentService, AssetEvidenceService evidenceService, CancellationToken cancellationToken) =>
         {
@@ -1327,8 +1170,7 @@ public static class TenebitEndpoints
         })
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assignments")
-            .WithOpenApi();
+            .WithTags("Public assignments");
     }
 
     private static void MapPublicOffboarding(RouteGroupBuilder api)
@@ -1337,15 +1179,13 @@ public static class TenebitEndpoints
                 (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public offboarding")
-            .WithOpenApi();
+            .WithTags("Public offboarding");
 
         api.MapPost("/public/offboarding/{token}/response", async (string token, SubmitPublicOffboardingResponseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.RecordEmployeeResponsesAsync(token, request, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public offboarding")
-            .WithOpenApi();
+            .WithTags("Public offboarding");
 
         api.MapPost("/public/offboarding/{token}/items/{itemId:guid}/evidence", async (string token, Guid itemId, HttpRequest request, OffboardingService service, CancellationToken cancellationToken) =>
         {
@@ -1381,22 +1221,19 @@ public static class TenebitEndpoints
                 (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public asset audits")
-            .WithOpenApi();
+            .WithTags("Public asset audits");
 
         api.MapPut("/public/asset-audits/{token}/items/{itemId:guid}", async (string token, Guid itemId, SubmitPublicAssetAuditItemRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.RecordItemResponseAsync(token, itemId, request, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public asset audits")
-            .WithOpenApi();
+            .WithTags("Public asset audits");
 
         api.MapPost("/public/asset-audits/{token}/submit", async (string token, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
                 (await service.SubmitAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public asset audits")
-            .WithOpenApi();
+            .WithTags("Public asset audits");
 
         api.MapPost("/public/asset-audits/{token}/items/{itemId:guid}/evidence", async (string token, Guid itemId, HttpRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
         {
@@ -1432,38 +1269,32 @@ public static class TenebitEndpoints
                 (await service.GetPublicScanAsync(organizationId, assetId, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assets")
-            .WithOpenApi();
+            .WithTags("Public assets");
 
         api.MapPost("/public/assets/{organizationId:guid}/{assetId:guid}/report", async (Guid organizationId, Guid assetId, ReportAssetIssueRequest request, AssetService service, CancellationToken cancellationToken) =>
                 (await service.ReportPublicIssueAsync(organizationId, assetId, request, cancellationToken)).ToNoContentResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Public assets")
-            .WithOpenApi();
+            .WithTags("Public assets");
     }
 
     private static void MapSubscription(RouteGroupBuilder api)
     {
         api.MapGet("/subscription", async (SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.GetCurrentAsync(cancellationToken)).ToHttpResult())
-            .WithTags("Subscription")
-            .WithOpenApi();
+            .WithTags("Subscription");
 
         api.MapPost("/subscription/upgrade", async (UpgradeRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.UpgradeAsync(request.PlanKey, cancellationToken)).ToHttpResult())
-            .WithTags("Subscription")
-            .WithOpenApi();
+            .WithTags("Subscription");
 
         api.MapPost("/subscription/checkout", async (CheckoutSessionRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.CreateCheckoutSessionAsync(request.SuccessUrl, request.CancelUrl, cancellationToken)).ToHttpResult())
-            .WithTags("Subscription")
-            .WithOpenApi();
+            .WithTags("Subscription");
 
         api.MapPost("/subscription/billing-portal", async (BillingPortalRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.CreateBillingPortalSessionAsync(request.ReturnUrl, cancellationToken)).ToHttpResult())
-            .WithTags("Subscription")
-            .WithOpenApi();
+            .WithTags("Subscription");
 
         api.MapPost("/subscription/webhook", async (HttpRequest httpRequest, SubscriptionService service, CancellationToken cancellationToken) =>
             {
@@ -1474,8 +1305,7 @@ public static class TenebitEndpoints
             })
             .AllowAnonymous()
             .RequireRateLimiting("public")
-            .WithTags("Subscription")
-            .WithOpenApi();
+            .WithTags("Subscription");
     }
 
     private static T? DeserializePart<T>(IFormCollection form, string name)
