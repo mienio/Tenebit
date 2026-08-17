@@ -54,6 +54,8 @@ services.AddScoped<AlertSettingsService>();
         services.AddScoped<AssetEvidenceService>();
         services.AddScoped<EvidenceRetentionService>();
         services.AddScoped<OffboardingScheduledActionsService>();
+        services.AddScoped<OffboardingResponseBuilder>();
+        services.AddScoped<OffboardingProtocolModelBuilder>();
         services.AddScoped<OffboardingService>();
         services.AddScoped<AssetAuditCampaignService>();
         services.AddScoped<ServiceTicketService>();

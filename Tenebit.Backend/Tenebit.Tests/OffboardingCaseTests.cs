@@ -38,11 +38,14 @@ public class OffboardingCaseTests
         var disposition = new AssetReturnDispositionService(inspections);
         var evidence = new InMemoryAssetEvidenceRepository();
         var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork);
+        var organizations = new InMemoryOrganizationRepository();
+        var responseBuilder = new OffboardingResponseBuilder(cases, items, people, organizations, assets, evidence, reservations, clock);
+        var protocolModelBuilder = new OffboardingProtocolModelBuilder(organizations, people, items, assets, evidence, licenses);
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, clock, unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            new InMemoryOrganizationRepository(), new FakeEmailSender(), new FakeAppLinkBuilder(), evidence, evidenceService, new FakePdfProtocolGenerator(),
-            reservations, auditCampaigns, auditItems);
+            organizations, new FakeEmailSender(), new FakeAppLinkBuilder(), evidenceService, new FakePdfProtocolGenerator(),
+            reservations, auditCampaigns, auditItems, responseBuilder, protocolModelBuilder);
 
         return (service, currentUser, people, assets, assignments, licenses, reservations, auditCampaigns, auditItems, clock);
     }

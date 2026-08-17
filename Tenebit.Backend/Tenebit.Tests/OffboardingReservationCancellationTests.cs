@@ -32,11 +32,13 @@ public class OffboardingReservationCancellationTests
         var linkBuilder = new FakeAppLinkBuilder();
         var evidence = new InMemoryAssetEvidenceRepository();
         var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork);
+        var responseBuilder = new OffboardingResponseBuilder(cases, items, people, organizations, assets, evidence, reservations, clock);
+        var protocolModelBuilder = new OffboardingProtocolModelBuilder(organizations, people, items, assets, evidence, licenses);
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, clock, unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            organizations, emailSender, linkBuilder, evidence, evidenceService, new FakePdfProtocolGenerator(), reservations,
-            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository());
+            organizations, emailSender, linkBuilder, evidenceService, new FakePdfProtocolGenerator(), reservations,
+            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository(), responseBuilder, protocolModelBuilder);
 
         return (service, currentUser, reservations, people, clock);
     }

@@ -42,20 +42,22 @@ public sealed class OffboardingService
     private readonly IOrganizationRepository _organizations;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _linkBuilder;
-    private readonly IAssetEvidenceRepository _evidence;
     private readonly AssetEvidenceService _evidenceService;
     private readonly IPdfProtocolGenerator _pdfGenerator;
     private readonly IEquipmentReservationRepository _reservations;
     private readonly IAssetAuditCampaignRepository _auditCampaigns;
     private readonly IAssetAuditItemRepository _auditItems;
+    private readonly OffboardingResponseBuilder _responseBuilder;
+    private readonly OffboardingProtocolModelBuilder _protocolModelBuilder;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
         IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork,
         OffboardingScheduledActionsService scheduledActions, AssetReturnDispositionService disposition, AssetInspectionService inspectionService,
         IAssetInspectionRepository inspections, IOrganizationRepository organizations, IEmailSender emailSender, IAppLinkBuilder linkBuilder,
-        IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator, IEquipmentReservationRepository reservations,
-        IAssetAuditCampaignRepository auditCampaigns, IAssetAuditItemRepository auditItems)
+        AssetEvidenceService evidenceService, IPdfProtocolGenerator pdfGenerator, IEquipmentReservationRepository reservations,
+        IAssetAuditCampaignRepository auditCampaigns, IAssetAuditItemRepository auditItems,
+        OffboardingResponseBuilder responseBuilder, OffboardingProtocolModelBuilder protocolModelBuilder)
     {
         _cases = cases;
         _items = items;
@@ -75,12 +77,13 @@ public sealed class OffboardingService
         _organizations = organizations;
         _emailSender = emailSender;
         _linkBuilder = linkBuilder;
-        _evidence = evidence;
         _evidenceService = evidenceService;
         _pdfGenerator = pdfGenerator;
         _reservations = reservations;
         _auditCampaigns = auditCampaigns;
         _auditItems = auditItems;
+        _responseBuilder = responseBuilder;
+        _protocolModelBuilder = protocolModelBuilder;
     }
 
 
@@ -93,7 +96,7 @@ public sealed class OffboardingService
         var (cases, total) = await _cases.ListPagedAsync(organizationId, status, page, pageSize, cancellationToken);
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var names = people.ToDictionary(x => x.Id, x => x.FullName);
-        return Result<PagedResult<OffboardingCaseResponse>>.Success(new PagedResult<OffboardingCaseResponse>(cases.Select(x => Map(x, names)).ToList(), total, page, pageSize));
+        return Result<PagedResult<OffboardingCaseResponse>>.Success(new PagedResult<OffboardingCaseResponse>(cases.Select(x => OffboardingResponseBuilder.Map(x, names)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<OffboardingCaseDetailsResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -101,25 +104,7 @@ public sealed class OffboardingService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
-        return await BuildDetailsAsync(id, cancellationToken);
-    }
-
-    private async Task<Result<OffboardingCaseDetailsResponse>> BuildDetailsAsync(Guid id, CancellationToken cancellationToken)
-    {
-        var organizationId = _currentUser.OrganizationId;
-        var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
-        if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
-
-        return Result<OffboardingCaseDetailsResponse>.Success(await BuildDetailsAsync(offboardingCase, cancellationToken));
-    }
-
-    private async Task<OffboardingCaseDetailsResponse> BuildDetailsAsync(OffboardingCase offboardingCase, CancellationToken cancellationToken)
-    {
-        var person = await _people.GetAsync(offboardingCase.OrganizationId, offboardingCase.PersonId, cancellationToken);
-        var items = await _items.ListByCaseAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
-        var names = person is null ? new Dictionary<Guid, string>() : new Dictionary<Guid, string> { [person.Id] = person.FullName };
-        var reservations = await ListRelevantReservationsAsync(offboardingCase.OrganizationId, offboardingCase.PersonId, cancellationToken);
-        return new OffboardingCaseDetailsResponse(Map(offboardingCase, names), items.Select(MapItem).ToList(), reservations);
+        return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
     }
 
     /// <summary>Podsumowanie przed uruchomieniem sprawy (spec 4.5 krok 2) — wyłącznie odczyt, bez efektów ubocznych.</summary>
@@ -147,7 +132,7 @@ public sealed class OffboardingService
             .Select(l => new OffboardingPreviewLicenseResponse(l.Id, l.Name))
             .ToList();
 
-        var reservations = await ListRelevantReservationsAsync(organizationId, person.Id, cancellationToken);
+        var reservations = await _responseBuilder.ListRelevantReservationsAsync(organizationId, person.Id, cancellationToken);
 
         var unresolvedAuditItems = new List<OffboardingPreviewAuditItemResponse>();
         var (campaigns, _) = await _auditCampaigns.ListPagedAsync(organizationId, null, 1, int.MaxValue, cancellationToken);
@@ -168,23 +153,6 @@ public sealed class OffboardingService
 
     /// <summary>Rezerwacje osoby istotne dla offboardingu: oczekujące na decyzję oraz zatwierdzone/nieodebrane/w trakcie
     /// z przyszłym końcem (te same kryteria, których używa StartAsync przy anulowaniu — spec 4.5/8.12).</summary>
-    private async Task<IReadOnlyList<ReservationResponse>> ListRelevantReservationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken)
-    {
-        var now = _clock.UtcNow;
-        return (await _reservations.ListByRequesterAsync(organizationId, personId, cancellationToken))
-            .Where(r => r.Status == EquipmentReservationStatus.PendingApproval
-                || (r.Status is EquipmentReservationStatus.Approved or EquipmentReservationStatus.ReadyForPickup
-                    or EquipmentReservationStatus.CheckedOut && r.EndAt > now))
-            .Select(MapReservation)
-            .ToList();
-    }
-
-    private static ReservationResponse MapReservation(EquipmentReservation reservation) => new(
-        reservation.Id, reservation.RequesterPersonId, reservation.Status, reservation.StartAt, reservation.EndAt,
-        reservation.Purpose, reservation.PickupLocation, reservation.Notes, reservation.RequestedAt, reservation.ApprovedAt,
-        reservation.ApprovedBy, reservation.RejectedAt, reservation.RejectedBy, reservation.DecisionNotes,
-        reservation.CancelledAt, reservation.CancelledBy, reservation.CancellationReason, reservation.CreatedAt);
-
     public async Task<Result<OffboardingCaseDetailsResponse>> CreateAsync(CreateOffboardingCaseRequest request, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
@@ -219,7 +187,7 @@ public sealed class OffboardingService
             _activity.Add(new ActivityLog(organizationId, "offboarding.created", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return await BuildDetailsAsync(offboardingCase.Id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -246,7 +214,7 @@ public sealed class OffboardingService
             offboardingCase.UpdateDraft(request.EmploymentEndsAt, request.ReturnDueDate, request.DefaultReturnLocation, request.Notes,
                 request.ProcessOwnerId, request.BlockNewReservations, request.CancelFutureReservations, request.AutoReleaseLicenses);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -348,7 +316,7 @@ public sealed class OffboardingService
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(offboardingCase.Id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -373,7 +341,7 @@ public sealed class OffboardingService
         if (person is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Osoba przypisana do sprawy nie istnieje."));
 
         await _scheduledActions.ExecuteAsync(organizationId, person, _clock.UtcNow, _currentUser.Subject, cancellationToken);
-        return await BuildDetailsAsync(id, cancellationToken);
+        return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
     }
 
     /// <summary>Fizyczne przyjęcie zwrotu pozycji AssetReturn (spec 4.5 krok 10). Stosuje politykę zwrotu kategorii
@@ -424,7 +392,7 @@ public sealed class OffboardingService
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -445,7 +413,7 @@ public sealed class OffboardingService
 
         var item = await _items.GetAsync(organizationId, id, itemId, cancellationToken);
         if (item is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Pozycja nie istnieje."));
-        if (item.IsResolved) return await BuildDetailsAsync(id, cancellationToken);
+        if (item.IsResolved) return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         if (item.AssetId is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Ta pozycja nie dotyczy aktywa."));
 
         var inspection = await _inspections.GetPendingByAssetAsync(organizationId, item.AssetId.Value, cancellationToken);
@@ -477,7 +445,7 @@ public sealed class OffboardingService
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -503,7 +471,7 @@ public sealed class OffboardingService
             return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Ta pozycja nie dotyczy zwolnienia licencji."));
         }
 
-        if (item.IsResolved) return await BuildDetailsAsync(id, cancellationToken);
+        if (item.IsResolved) return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
 
         var license = await _licenses.GetAsync(organizationId, item.LicenseId.Value, cancellationToken);
         if (license is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Licencja nie istnieje."));
@@ -519,7 +487,7 @@ public sealed class OffboardingService
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -573,7 +541,7 @@ public sealed class OffboardingService
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -603,7 +571,7 @@ public sealed class OffboardingService
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -624,7 +592,7 @@ public sealed class OffboardingService
         {
             var now = _clock.UtcNow;
             var alreadyCompleted = offboardingCase.Status == OffboardingCaseStatus.Completed;
-            var protocolNumber = offboardingCase.FinalProtocolNumber ?? CreateProtocolNumber(now);
+            var protocolNumber = offboardingCase.FinalProtocolNumber ?? OffboardingProtocolModelBuilder.CreateProtocolNumber(now);
             offboardingCase.Complete(now, _currentUser.Subject, protocolNumber);
 
             // Complete(...) jest no-op na już zakończonej sprawie (domena) — analogicznie nie duplikujemy wpisu
@@ -635,7 +603,7 @@ public sealed class OffboardingService
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -659,79 +627,8 @@ public sealed class OffboardingService
 
         // Budowany na bieżąco z aktualnych (już niezmiennych po zamknięciu) danych sprawy — brak cache'u w bazie,
         // więc wielokrotne pobranie daje identyczną zawartość biznesową (spec 4.12).
-        var model = await BuildProtocolModelAsync(offboardingCase, cancellationToken);
+        var model = await _protocolModelBuilder.BuildAsync(offboardingCase, cancellationToken);
         return Result<byte[]>.Success(_pdfGenerator.GenerateOffboardingProtocol(model));
-    }
-
-    private async Task<OffboardingProtocolPdfModel> BuildProtocolModelAsync(OffboardingCase offboardingCase, CancellationToken cancellationToken)
-    {
-        var organizationId = offboardingCase.OrganizationId;
-        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-        var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
-        var items = await _items.ListByCaseAsync(organizationId, offboardingCase.Id, cancellationToken);
-
-        var assetItems = items.Where(x => x.Type == OffboardingItemType.AssetReturn).ToList();
-        var licenseItems = items.Where(x => x.Type == OffboardingItemType.LicenseRelease).ToList();
-
-        var assetRows = new List<OffboardingProtocolAssetRow>();
-        var photos = new List<OffboardingProtocolPhoto>();
-        foreach (var item in assetItems)
-        {
-            var asset = item.AssetId.HasValue ? await _assets.GetAsync(organizationId, item.AssetId.Value, cancellationToken) : null;
-            assetRows.Add(new OffboardingProtocolAssetRow(asset?.Name ?? item.Label, asset?.AssetTag ?? "—", item.Status.ToString(),
-                item.ResolutionNotes, item.CompletedBy, item.CompletedAt));
-
-            if (item.AssetId.HasValue)
-            {
-                var evidenceForAsset = await _evidence.ListByAssetAsync(organizationId, item.AssetId.Value, cancellationToken);
-                photos.AddRange(evidenceForAsset
-                    .Where(e => e.OffboardingItemId == item.Id && e.Content.Length > 0)
-                    .Select(e => new OffboardingProtocolPhoto(e.FileName, e.ContentType, e.Content, e.Sha256)));
-            }
-        }
-
-        var licenseRows = new List<OffboardingProtocolLicenseRow>();
-        foreach (var item in licenseItems.Where(x => x.Status == OffboardingItemStatus.Released))
-        {
-            var license = item.LicenseId.HasValue ? await _licenses.GetAsync(organizationId, item.LicenseId.Value, cancellationToken) : null;
-            licenseRows.Add(new OffboardingProtocolLicenseRow(license?.Name ?? item.Label, item.CompletedAt, item.CompletedBy));
-        }
-
-        var exceptionStatuses = new[] { OffboardingItemStatus.Missing, OffboardingItemStatus.Damaged, OffboardingItemStatus.Retained, OffboardingItemStatus.Waived };
-        var exceptions = items
-            .Where(x => exceptionStatuses.Contains(x.Status))
-            .Select(x => new OffboardingProtocolExceptionRow(x.Label, x.Status.ToString(), x.ResolutionNotes, ResolveActorKind(x), x.CompletedAt))
-            .ToList();
-
-        var requiredItems = items.Where(x => x.Required).ToList();
-        var hasExceptions = requiredItems.Any(x => exceptionStatuses.Contains(x.Status));
-        var outcome = hasExceptions ? "Rozliczony z wyjątkami" : "Rozliczony";
-
-        return new OffboardingProtocolPdfModel(
-            organization?.Name ?? "Tenebit",
-            organization?.LogoUrl,
-            organization?.Country ?? "PL",
-            offboardingCase.FinalProtocolNumber ?? string.Empty,
-            person?.FullName ?? "—",
-            offboardingCase.StartedAt,
-            offboardingCase.ReturnDueDate,
-            offboardingCase.CompletedAt ?? offboardingCase.ReturnDueDate,
-            assetRows,
-            licenseRows,
-            exceptions,
-            photos,
-            outcome,
-            offboardingCase.Notes);
-    }
-
-    /// <summary>Kto rozstrzygnął pozycję — jeśli sam pracownik zgłosił odpowiedź (EmployeeResponse) i nikt inny
-    /// jej nie nadpisał, uznajemy rozstrzygnięcie za pochodzące od pracownika; "system" jako CompletedBy oznacza
-    /// automatyzację; w pozostałych przypadkach rozstrzygnął administrator/operator.</summary>
-    private static string ResolveActorKind(OffboardingItem item)
-    {
-        if (item.CompletedBy == "system") return "automatyzacja";
-        if (!string.IsNullOrWhiteSpace(item.EmployeeResponse) && string.IsNullOrWhiteSpace(item.ResolutionNotes)) return "pracownik";
-        return item.CompletedBy ?? "administrator";
     }
 
     /// <summary>Anuluje sprawę i — dla nieodebranych pozycji AssetReturn — przywraca aktywo do statusu Assigned
@@ -768,7 +665,7 @@ public sealed class OffboardingService
             _activity.Add(new ActivityLog(organizationId, "offboarding.cancelled", "offboarding_case", offboardingCase.Id, _currentUser.Subject, request.Reason, now));
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -795,15 +692,13 @@ public sealed class OffboardingService
             _activity.Add(new ActivityLog(organizationId, "offboarding.restored", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person?.FullName, now));
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await BuildDetailsAsync(id, cancellationToken);
+            return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
         }
         catch (DomainException ex)
         {
             return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(ex.Message));
         }
     }
-
-    private static string CreateProtocolNumber(DateTimeOffset now) => $"OFF-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
 
     // --- Publiczny kanał pracownika (spec 4.6) ---
 
@@ -901,35 +796,7 @@ public sealed class OffboardingService
         var resolved = await ResolveByTokenAsync(token, cancellationToken);
         if (resolved.IsFailure) return Result<PublicOffboardingResponse>.Failure(resolved.Error!);
 
-        return Result<PublicOffboardingResponse>.Success(await BuildPublicResponseAsync(resolved.Value!, cancellationToken));
-    }
-
-    private async Task<PublicOffboardingResponse> BuildPublicResponseAsync(OffboardingCase offboardingCase, CancellationToken cancellationToken)
-    {
-        var organization = await _organizations.GetAsync(offboardingCase.OrganizationId, cancellationToken);
-        var items = await _items.ListByCaseAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
-        var assetItems = items.Where(x => x.Type == OffboardingItemType.AssetReturn).ToList();
-
-        var assetTags = new Dictionary<Guid, string>();
-        var issuePhotos = new Dictionary<Guid, Guid>();
-        foreach (var item in assetItems.Where(x => x.AssetId is not null))
-        {
-            var asset = await _assets.GetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken);
-            if (asset is not null) assetTags[item.Id] = asset.AssetTag;
-
-            var evidence = (await _evidence.ListByAssetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken))
-                .Where(x => x.Phase == EvidencePhase.Issue)
-                .OrderByDescending(x => x.UploadedAt)
-                .FirstOrDefault();
-            if (evidence is not null) issuePhotos[item.Id] = evidence.Id;
-        }
-
-        var itemResponses = assetItems.Select(item => new PublicOffboardingItemResponse(
-            item.Id, item.Label, assetTags.GetValueOrDefault(item.Id), item.Status, item.EmployeeResponse, item.EmployeeComment,
-            issuePhotos.GetValueOrDefault(item.Id))).ToList();
-
-        return new PublicOffboardingResponse(organization?.Name ?? string.Empty, offboardingCase.ReturnDueDate,
-            offboardingCase.DefaultReturnLocation, offboardingCase.Notes, itemResponses);
+        return Result<PublicOffboardingResponse>.Success(await _responseBuilder.BuildPublicResponseAsync(resolved.Value!, cancellationToken));
     }
 
     public async Task<Result<PublicOffboardingResponse>> RecordEmployeeResponsesAsync(string token, SubmitPublicOffboardingResponseRequest request, CancellationToken cancellationToken)
@@ -961,7 +828,7 @@ public sealed class OffboardingService
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<PublicOffboardingResponse>.Success(await BuildPublicResponseAsync(offboardingCase, cancellationToken));
+        return Result<PublicOffboardingResponse>.Success(await _responseBuilder.BuildPublicResponseAsync(offboardingCase, cancellationToken));
     }
 
     public async Task<Result<Guid>> UploadPublicEvidenceAsync(string token, Guid itemId, string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
@@ -981,53 +848,4 @@ public sealed class OffboardingService
 
         return Result<Guid>.Success(uploadResult.Value!.Id);
     }
-
-    private static OffboardingCaseResponse Map(OffboardingCase offboardingCase, IReadOnlyDictionary<Guid, string> personNames) =>
-        new(
-            offboardingCase.Id,
-            offboardingCase.PersonId,
-            personNames.GetValueOrDefault(offboardingCase.PersonId),
-            offboardingCase.Status,
-            offboardingCase.EmploymentEndsAt,
-            offboardingCase.ReturnDueDate,
-            offboardingCase.DefaultReturnLocation,
-            offboardingCase.Notes,
-            offboardingCase.ProcessOwnerId,
-            offboardingCase.BlockNewReservations,
-            offboardingCase.CancelFutureReservations,
-            offboardingCase.AutoReleaseLicenses,
-            offboardingCase.PersonDeactivatedAt,
-            offboardingCase.ScheduledActionsCompletedAt,
-            offboardingCase.CreatedAt,
-            offboardingCase.CreatedBy,
-            offboardingCase.StartedAt,
-            offboardingCase.CompletedAt,
-            offboardingCase.CompletedBy,
-            offboardingCase.CancelledAt,
-            offboardingCase.CancellationReason,
-            offboardingCase.FinalProtocolNumber);
-
-    private static OffboardingItemResponse MapItem(OffboardingItem item) =>
-        new(
-            item.Id,
-            item.Type,
-            item.AssetId,
-            item.AssignmentId,
-            item.LicenseId,
-            item.Label,
-            item.Required,
-            item.Status,
-            item.EmployeeResponse,
-            item.EmployeeComment,
-            item.AutomationMode,
-            item.AutomationLastAttemptAt,
-            item.AutomationError,
-            item.ReceivedAt,
-            item.ReceivedBy,
-            item.InspectionCompletedAt,
-            item.InspectionCompletedBy,
-            item.ResolutionNotes,
-            item.CompletedAt,
-            item.CompletedBy,
-            item.SortOrder);
 }
