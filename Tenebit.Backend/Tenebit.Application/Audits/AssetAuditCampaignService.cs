@@ -632,11 +632,10 @@ public sealed class AssetAuditCampaignService
         var participantsById = participants.ToDictionary(p => p.Id);
 
         var csv = new System.Text.StringBuilder();
-        csv.AppendLine(string.Join(',', new[]
-        {
+        CsvWriter.WriteRow(csv, [
             "Uczestnik", "E-mail", "Status uczestnika", "Aktywo", "Tag", "Oczekiwany właściciel", "Oczekiwana lokalizacja",
             "Odpowiedź", "Komentarz", "Rozstrzygnięcie", "Notatki rozstrzygnięcia", "Data odpowiedzi"
-        }.Select(CsvField)));
+        ]);
 
         foreach (var item in items)
         {
@@ -659,24 +658,10 @@ public sealed class AssetAuditCampaignService
                 item.RespondedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""
             };
 
-            csv.AppendLine(string.Join(',', row.Select(CsvField)));
+            CsvWriter.WriteRow(csv, row);
         }
 
         return Result<string>.Success(csv.ToString());
-    }
-
-    /// <summary>Escapuje pole wg RFC4180 — cudzysłów wokół pola zawierającego przecinek, cudzysłów lub nową linię,
-    /// z podwojeniem wewnętrznych cudzysłowów. Pola zaczynające się od =, +, -, @ dostają wiodący apostrof,
-    /// żeby Excel/Sheets nie interpretowały danych użytkownika jako formuły (CSV/formula injection, CWE-1236).</summary>
-    private static string CsvField(string value)
-    {
-        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
-        {
-            value = "'" + value;
-        }
-
-        if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
-        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 
     public async Task<Result<byte[]>> GetReportPdfAsync(Guid id, CancellationToken cancellationToken)

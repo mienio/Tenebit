@@ -49,7 +49,7 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var assets = await _assets.ListAsync(_currentUser.OrganizationId, null, null, null, cancellationToken);
+        var assetCount = await _assets.CountAsync(_currentUser.OrganizationId, cancellationToken);
         var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
 
         return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
@@ -59,7 +59,7 @@ public sealed class SubscriptionService
             plan.AssetLimit,
             plan.MonthlyPrice,
             plan.Currency,
-            assets.Count,
+            assetCount,
             subscription.Status.ToString(),
             subscription.CurrentPeriodEnd
         ));
@@ -117,7 +117,7 @@ public sealed class SubscriptionService
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            var assets = await _assets.ListAsync(_currentUser.OrganizationId, null, null, null, cancellationToken);
+            var assetCount = await _assets.CountAsync(_currentUser.OrganizationId, cancellationToken);
 
             return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
                 subscription.Id,
@@ -126,7 +126,7 @@ public sealed class SubscriptionService
                 newPlan.AssetLimit,
                 newPlan.MonthlyPrice,
                 newPlan.Currency,
-                assets.Count,
+                assetCount,
                 subscription.Status.ToString(),
                 subscription.CurrentPeriodEnd
             ));
@@ -263,10 +263,10 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var assets = await _assets.ListAsync(_currentUser.OrganizationId, null, null, null, cancellationToken);
+        var assetCount = await _assets.CountAsync(_currentUser.OrganizationId, cancellationToken);
         var limit = subscription.GetAssetLimit();
 
-        return Result<bool>.Success(assets.Count < limit);
+        return Result<bool>.Success(assetCount < limit);
     }
 }
 
