@@ -30,6 +30,28 @@ public class DashboardServiceTests
     }
 
     [Fact]
+    public async Task GetSummaryAsync_RejectsEmployeeRole()
+    {
+        var (service, _, _, _, currentUser) = CreateService();
+        currentUser.Roles = ["employee"];
+
+        var result = await service.GetSummaryAsync(CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_AllowsManagerRole()
+    {
+        var (service, _, _, _, currentUser) = CreateService();
+        currentUser.Roles = ["manager"];
+
+        var result = await service.GetSummaryAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
     public async Task GetComparisonAsync_ReturnsNotFound_WhenNoSnapshotExistsYet()
     {
         var (service, _, _, clock, _) = CreateService();

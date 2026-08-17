@@ -25,8 +25,7 @@ export function PricingPage() {
     setConfirmOpen(false);
     setUpgrading(true);
     try {
-      const returnBase = window.location.origin;
-      const checkoutUrl = await api.createCheckoutSession(`${returnBase}/dashboard?checkout=success`, `${returnBase}/pricing?checkout=cancelled`);
+      const checkoutUrl = await api.createCheckoutSession('/dashboard?checkout=success', '/pricing?checkout=cancelled');
       window.location.assign(checkoutUrl);
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });

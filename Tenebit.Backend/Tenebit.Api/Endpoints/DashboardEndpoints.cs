@@ -42,7 +42,7 @@ public static class DashboardEndpoints
     public static RouteGroupBuilder MapDashboardEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/dashboard", async (DashboardService service, CancellationToken cancellationToken) =>
-                Results.Ok(await service.GetSummaryAsync(cancellationToken)))
+                (await service.GetSummaryAsync(cancellationToken)).ToHttpResult())
             .WithTags("Dashboard");
 
         api.MapGet("/dashboard/layout", async (DashboardService service, CancellationToken cancellationToken) =>

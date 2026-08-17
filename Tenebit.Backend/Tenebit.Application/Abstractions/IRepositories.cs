@@ -162,6 +162,11 @@ public interface IEmailVerificationTokenRepository
 public interface IRefreshTokenRepository
 {
     Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+
+    // Atomically claims the token (UPDATE ... WHERE RevokedAt IS NULL) and returns it only to the one
+    // caller that won the race — two concurrent refresh requests for the same token must not both
+    // succeed and mint two successor tokens (audyt AUD3-012).
+    Task<RefreshToken?> TryConsumeAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
     Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken);
     void Add(RefreshToken token);
 }
@@ -282,7 +287,7 @@ public interface IAssetAuditParticipantRepository
 {
     Task<IReadOnlyList<AssetAuditParticipant>> ListByCampaignAsync(Guid organizationId, Guid campaignId, CancellationToken cancellationToken);
     Task<AssetAuditParticipant?> GetAsync(Guid organizationId, Guid campaignId, Guid participantId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<AssetAuditParticipant>> ListWithActiveTokenAsync(CancellationToken cancellationToken);
+    Task<AssetAuditParticipant?> FindByTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
     void Add(AssetAuditParticipant participant);
 }
 

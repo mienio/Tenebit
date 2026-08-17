@@ -15,7 +15,7 @@ public class SubscriptionServiceTests
         var subscriptions = new InMemorySubscriptionRepository();
         var paymentGateway = new FakePaymentGateway();
         var processedEvents = new InMemoryProcessedStripeEventRepository();
-        var service = new SubscriptionService(subscriptions, processedEvents, assets, new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), paymentGateway);
+        var service = new SubscriptionService(subscriptions, processedEvents, assets, new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), paymentGateway, new FakeAppLinkBuilder());
         return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents);
     }
 
@@ -81,7 +81,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, paymentGateway, _) = CreateService();
         paymentGateway.IsConfigured = false;
 
-        var result = await service.CreateCheckoutSessionAsync("https://app/success", "https://app/cancel", CancellationToken.None);
+        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -93,7 +93,7 @@ public class SubscriptionServiceTests
         paymentGateway.NextCustomerId = "cus_new";
         paymentGateway.NextCheckoutUrl = "https://checkout.stripe.com/session-abc";
 
-        var result = await service.CreateCheckoutSessionAsync("https://app/success", "https://app/cancel", CancellationToken.None);
+        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("https://checkout.stripe.com/session-abc", result.Value);
@@ -204,6 +204,48 @@ public class SubscriptionServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(SubscriptionPlan.Pro.Key, subscriptions.Subscriptions.Single().PlanKey);
         Assert.Equal(SubscriptionStatus.Active, subscriptions.Subscriptions.Single().Status);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_UnknownStatus_DoesNotGrantProPlan()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
+        existing.AttachStripeCustomer("cus_123");
+        subscriptions.Add(existing);
+
+        paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_unknown_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Pro.Key,
+            SubscriptionStatus.Unknown, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), null);
+
+        var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var subscription = subscriptions.Subscriptions.Single();
+        Assert.Equal(SubscriptionPlan.Free.Key, subscription.PlanKey);
+        Assert.False(subscription.HasActiveStripeSubscription);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_MetadataOrganizationMismatch_IsRejected()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
+        existing.AttachStripeCustomer("cus_owned_by_this_org");
+        subscriptions.Add(existing);
+
+        // Metadata routes the event straight to this organization, but the event's actual Stripe
+        // customer does not match the customer already attached to it.
+        paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_mismatch_1", "customer.subscription.created", "cus_belongs_to_another_org", "sub_999", SubscriptionPlan.Pro.Key,
+            SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), user.OrganizationId);
+
+        var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var subscription = subscriptions.Subscriptions.Single();
+        Assert.Equal(SubscriptionPlan.Free.Key, subscription.PlanKey);
+        Assert.Equal("cus_owned_by_this_org", subscription.StripeCustomerId);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Tenebit.Application.Assets;
+using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Subscriptions;
@@ -15,12 +16,14 @@ public class AssetServiceTests
         var assets = new InMemoryAssetRepository();
         var categories = new InMemoryAssetCategoryRepository();
         var subscriptions = new InMemorySubscriptionRepository();
+        var people = new InMemoryPersonRepository();
+        var teams = new InMemoryTeamRepository();
 
         var service = new AssetService(
             assets,
             categories,
-            new InMemoryPersonRepository(),
-            new InMemoryTeamRepository(),
+            people,
+            teams,
             new InMemoryActivityLogRepository(),
             subscriptions,
             new InMemoryOrganizationRepository(),
@@ -32,7 +35,8 @@ public class AssetServiceTests
             new FakeAppLinkBuilder(),
             new FakeEmailSender(),
             NullLogger<AssetService>.Instance,
-            new FakeFieldEncryptor());
+            new FakeFieldEncryptor(),
+            new ManagerScopeService(people, teams));
 
         return (service, currentUser, assets, categories, subscriptions);
     }
@@ -43,11 +47,12 @@ public class AssetServiceTests
         var assets = new InMemoryAssetRepository();
         var categories = new InMemoryAssetCategoryRepository();
         var teams = new InMemoryTeamRepository();
+        var people = new InMemoryPersonRepository();
 
         var service = new AssetService(
             assets,
             categories,
-            new InMemoryPersonRepository(),
+            people,
             teams,
             new InMemoryActivityLogRepository(),
             new InMemorySubscriptionRepository(),
@@ -60,7 +65,8 @@ public class AssetServiceTests
             new FakeAppLinkBuilder(),
             new FakeEmailSender(),
             NullLogger<AssetService>.Instance,
-            new FakeFieldEncryptor());
+            new FakeFieldEncryptor(),
+            new ManagerScopeService(people, teams));
 
         return (service, currentUser, categories, teams);
     }

@@ -35,8 +35,13 @@ public sealed class AssignmentService
     private readonly Assets.AssetReturnDispositionService _disposition;
     private readonly AssignmentResponseBuilder _responseBuilder;
     private readonly AssignmentProtocolModelBuilder _protocolModelBuilder;
+    private readonly ManagerScopeService _managerScope;
 
-    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations, IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, Assets.AssetReturnDispositionService disposition, AssignmentResponseBuilder responseBuilder, AssignmentProtocolModelBuilder protocolModelBuilder)
+    // Roles in TenebitRoles.AssignmentViewers that see the whole organization; Manager alone is
+    // scoped to its own team's assignments by ManagerScopeService (audyt AUD3-006).
+    private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr];
+
+    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPdfProtocolGenerator pdfGenerator, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations, IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, Assets.AssetReturnDispositionService disposition, AssignmentResponseBuilder responseBuilder, AssignmentProtocolModelBuilder protocolModelBuilder, ManagerScopeService managerScope)
     {
         _assignments = assignments;
         _assets = assets;
@@ -59,6 +64,7 @@ public sealed class AssignmentService
         _disposition = disposition;
         _responseBuilder = responseBuilder;
         _protocolModelBuilder = protocolModelBuilder;
+        _managerScope = managerScope;
     }
 
     public async Task<Result<IReadOnlyList<AssignmentResponse>>> ListAsync(CancellationToken cancellationToken)
@@ -68,6 +74,8 @@ public sealed class AssignmentService
 
         var organizationId = _currentUser.OrganizationId;
         var assignments = await _assignments.ListAsync(organizationId, cancellationToken);
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is not null) assignments = assignments.Where(a => visibleIds.Contains(a.PersonId)).ToList();
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
@@ -81,12 +89,21 @@ public sealed class AssignmentService
         if (access.IsFailure) return Result<PagedResult<AssignmentResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var (items, total) = await _assignments.ListPagedAsync(organizationId, search, status, page, pageSize, cancellationToken);
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
         var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
-        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
+
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is null)
+        {
+            var (items, total) = await _assignments.ListPagedAsync(organizationId, search, status, page, pageSize, cancellationToken);
+            return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
+        }
+
+        var all = (await _assignments.ListAsync(organizationId, cancellationToken)).Where(a => visibleIds.Contains(a.PersonId)).ToList();
+        var page1 = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(page1.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), all.Count, page, pageSize));
     }
 
     public async Task<Result<AssignmentResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -94,7 +111,18 @@ public sealed class AssignmentService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
-        return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, id, cancellationToken);
+        var organizationId = _currentUser.OrganizationId;
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is not null)
+        {
+            var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
+            if (assignment is null || !visibleIds.Contains(assignment.PersonId))
+            {
+                return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+            }
+        }
+
+        return await _responseBuilder.BuildResponseAsync(organizationId, id, cancellationToken);
     }
 
     public async Task<Result<AssignmentResponse>> CreateAsync(CreateAssignmentRequest request, CancellationToken cancellationToken)
@@ -281,6 +309,19 @@ public sealed class AssignmentService
             var organizationId = _currentUser.OrganizationId;
             var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
             if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+
+            // Employee has no elevated visibility here — it may only accept its own assignment.
+            // Privileged roles (Owner/Admin/AssetOperator/Hr) may accept on behalf of someone else
+            // (audyt AUD3-004: employee could accept another employee's assignment given only its GUID).
+            if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr))
+            {
+                var currentPerson = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
+                if (currentPerson is null || assignment.PersonId != currentPerson.Id)
+                {
+                    return Result<AssignmentResponse>.Failure(Error.Forbidden("Nie możesz zaakceptować cudzego wydania."));
+                }
+            }
+
             var evidence = assignment.IntegrityVersion >= 2 ? await _evidence.ListByAssignmentAsync(organizationId, id, cancellationToken) : null;
             assignment.Accept(_clock.UtcNow, _currentUser.IpAddress, evidence);
             _activity.Add(new ActivityLog(organizationId, "assignment.accepted", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));

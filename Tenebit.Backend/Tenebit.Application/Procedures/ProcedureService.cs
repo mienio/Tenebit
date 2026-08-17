@@ -141,7 +141,26 @@ public sealed class ProcedureService
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.Employee, TenebitRoles.Auditor, TenebitRoles.ProcedureManager);
         if (access.IsFailure) return Result<ProcedureDocument>.Failure(access.Error!);
-        var document = await _procedures.GetDocumentAsync(_currentUser.OrganizationId, procedureId, documentId, cancellationToken);
+
+        var organizationId = _currentUser.OrganizationId;
+
+        // Employee has no organization-wide procedure visibility — it may only fetch a document for a
+        // procedure actually assigned to it (audyt AUD3-006: Employee mógł pobrać dowolny dokument
+        // procedury w organizacji, bez sprawdzenia przypisania).
+        if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.Auditor, TenebitRoles.ProcedureManager))
+        {
+            var currentPerson = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
+            var isAssigned = currentPerson is not null && (await _assignments.ListAsync(organizationId, cancellationToken))
+                .Where(a => a.PersonId == currentPerson.Id)
+                .SelectMany(a => a.ProcedureAcceptances)
+                .Any(acceptance => acceptance.ProcedureId == procedureId);
+            if (!isAssigned)
+            {
+                return Result<ProcedureDocument>.Failure(Error.NotFound("Plik procedury nie istnieje."));
+            }
+        }
+
+        var document = await _procedures.GetDocumentAsync(organizationId, procedureId, documentId, cancellationToken);
         return document is null ? Result<ProcedureDocument>.Failure(Error.NotFound("Plik procedury nie istnieje.")) : Result<ProcedureDocument>.Success(document);
     }
 

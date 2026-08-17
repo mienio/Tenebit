@@ -146,6 +146,13 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Email).HasMaxLength(320).IsRequired();
             entity.Property(x => x.TokenHash).HasMaxLength(128);
             entity.HasIndex(x => new { x.OrganizationId, x.CampaignId, x.PersonId }).IsUnique();
+            // Indexed lookup for the public audit link — without it ResolveByTokenAsync had to load every
+            // participant with a live token and verify each one in turn (audyt AUD3-009: O(N) koszt
+            // rosnący z liczbą uczestników, wykorzystywalny jako publiczny DoS).
+            entity.HasIndex(x => x.TokenHash)
+                .IsUnique()
+                .HasFilter("\"TokenHash\" IS NOT NULL")
+                .HasDatabaseName("IX_asset_audit_participants_TokenHash");
             entity.HasOne<AssetAuditCampaign>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.CampaignId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })

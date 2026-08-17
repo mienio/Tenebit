@@ -202,7 +202,7 @@ public static class AuthEndpoints
             .RequireRateLimiting("auth")
             .WithTags("Auth");
 
-        api.MapPost("/auth/2fa/disable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/2fa/disable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
@@ -210,7 +210,10 @@ public static class AuthEndpoints
                 }
 
                 var result = await service.DisableTwoFactorAsync(userId, request.Code, cancellationToken);
-                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone." });
+                if (result.IsFailure) return result.ToNoContentResult();
+
+                DeviceTrustCookie.Delete(response, env.IsDevelopment());
+                return Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone." });
             })
             .RequireRateLimiting("auth")
             .WithTags("Auth");

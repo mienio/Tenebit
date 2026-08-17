@@ -6,6 +6,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Audits;
 using Tenebit.Domain.Common;
+using Tenebit.Application.Identity;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.People;
 
@@ -307,10 +308,16 @@ public sealed class AssetAuditCampaignService
     private async Task<Result<AssetAuditParticipant>> ResolveByTokenAsync(string token, CancellationToken cancellationToken)
     {
         var now = _clock.UtcNow;
-        var candidates = await _participants.ListWithActiveTokenAsync(cancellationToken);
-        foreach (var candidate in candidates)
+        // Indexed exact-hash lookup instead of scanning every participant with a live token — the old
+        // approach did O(N) crypto verifications per request, an unauthenticated cost that grew with
+        // campaign size (audyt AUD3-009). Campaign status is also rechecked directly, mirroring
+        // OffboardingService.ResolveByTokenAsync, so a terminal campaign rejects even a token whose
+        // revoke somehow didn't fire.
+        var candidate = await _participants.FindByTokenHashAsync(TokenHasher.Hash(token), cancellationToken);
+        if (candidate is not null && PublicTokenService.Verify(token, candidate.TokenHash, candidate.TokenExpiresAt ?? DateTimeOffset.MinValue, candidate.TokenRevokedAt, now))
         {
-            if (PublicTokenService.Verify(token, candidate.TokenHash, candidate.TokenExpiresAt ?? DateTimeOffset.MinValue, candidate.TokenRevokedAt, now))
+            var campaign = await _campaigns.GetAsync(candidate.OrganizationId, candidate.CampaignId, cancellationToken);
+            if (campaign is not null && campaign.Status is not (AssetAuditCampaignStatus.Completed or AssetAuditCampaignStatus.Cancelled))
             {
                 return Result<AssetAuditParticipant>.Success(candidate);
             }
@@ -590,6 +597,11 @@ public sealed class AssetAuditCampaignService
             _activity.Add(new ActivityLog(organizationId, "asset_audit.completed", "asset_audit_campaign", campaign.Id, _currentUser.Subject, campaign.Name, now));
         }
 
+        // Every participant link must stop working once the campaign is terminal — otherwise a
+        // finished participant's still-live token could keep reading/answering/uploading into a
+        // closed campaign (audyt AUD3-009).
+        await RevokeAllParticipantTokensAsync(organizationId, campaign.Id, now, cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<bool>.Success(true);
     }
@@ -615,8 +627,19 @@ public sealed class AssetAuditCampaignService
 
         _activity.Add(new ActivityLog(organizationId, "asset_audit.cancelled", "asset_audit_campaign", campaign.Id, _currentUser.Subject, campaign.Name, now));
 
+        await RevokeAllParticipantTokensAsync(organizationId, campaign.Id, now, cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<bool>.Success(true);
+    }
+
+    private async Task RevokeAllParticipantTokensAsync(Guid organizationId, Guid campaignId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var participants = await _participants.ListByCampaignAsync(organizationId, campaignId, cancellationToken);
+        foreach (var participant in participants)
+        {
+            participant.RevokeToken(now);
+        }
     }
 
     public async Task<Result<string>> ExportCsvAsync(Guid id, CancellationToken cancellationToken)

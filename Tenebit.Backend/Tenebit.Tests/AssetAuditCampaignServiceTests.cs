@@ -263,6 +263,44 @@ public class AssetAuditCampaignServiceTests
     }
 
     [Fact]
+    public async Task CompleteAsync_RevokesAllParticipantTokens()
+    {
+        var (service, user, _, _, _, people, assets, _, emailSender, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var token = ExtractRawTokenFromEmail(emailSender, person.Email);
+
+        var complete = await service.CompleteAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        Assert.True(complete.IsSuccess);
+
+        var result = await service.GetPublicAsync(token, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CancelAsync_RevokesAllParticipantTokens()
+    {
+        var (service, user, _, _, _, people, assets, _, emailSender, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var token = ExtractRawTokenFromEmail(emailSender, person.Email);
+
+        var cancel = await service.CancelAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        Assert.True(cancel.IsSuccess);
+
+        var result = await service.GetPublicAsync(token, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
     public async Task GetPublicAsync_ExpiredOrRevokedOrUnknownToken_ReturnsNotFound()
     {
         var (service, _, _, _, _, _, _, _, _, _) = CreateService();

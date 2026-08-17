@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Tenebit.Application.Abstractions;
 using Tenebit.Infrastructure.Services;
 
@@ -6,7 +7,7 @@ namespace Tenebit.Tests;
 
 public class FieldEncryptorTests
 {
-    private static FieldEncryptor CreateEncryptor() => new(new ConfigurationBuilder().Build());
+    private static FieldEncryptor CreateEncryptor() => new(new ConfigurationBuilder().Build(), NullLogger<FieldEncryptor>.Instance);
 
     [Fact]
     public void Encrypt_ThenDecrypt_RoundTripsToOriginalPlaintext()
@@ -19,13 +20,24 @@ public class FieldEncryptorTests
     }
 
     [Fact]
-    public void Decrypt_WithWrongPurpose_DoesNotReturnOriginalPlaintext()
+    public void Decrypt_WithWrongPurpose_ThrowsControlledError()
     {
         var encryptor = CreateEncryptor();
         var ciphertext = encryptor.Encrypt(FieldEncryptionPurposes.TotpSecret, "SECRET-VALUE");
 
-        Assert.Throws<System.Security.Cryptography.AuthenticationTagMismatchException>(
+        // Wrapped into a controlled, alertable exception instead of the raw crypto exception leaking out
+        // as an unhandled 500 (audyt AUD3-011).
+        Assert.Throws<InvalidOperationException>(
             () => encryptor.Decrypt(FieldEncryptionPurposes.LicenseKey, ciphertext));
+    }
+
+    [Fact]
+    public void Decrypt_CorruptedCiphertext_ThrowsControlledError()
+    {
+        var encryptor = CreateEncryptor();
+
+        Assert.Throws<InvalidOperationException>(
+            () => encryptor.Decrypt(FieldEncryptionPurposes.TotpSecret, "v1:not-valid-base64!!"));
     }
 
     [Fact]

@@ -145,8 +145,11 @@ export const api = {
 
   subscription: () => apiRequest<import('../types/domain').Subscription>('/api/subscription'),
   upgradeSubscription: (planKey: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/upgrade', { method: 'POST', body: JSON.stringify({ planKey }) }),
-  createCheckoutSession: (successUrl: string, cancelUrl: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ successUrl, cancelUrl }) }),
-  createBillingPortalSession: (returnUrl: string) => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST', body: JSON.stringify({ returnUrl }) }),
+  // successPath/cancelPath/returnPath are relative paths (e.g. "/dashboard?checkout=success") — the
+  // backend builds the actual absolute redirect URL from its own configured origin, never from a
+  // client-supplied full URL (audit AUD3-010, open redirect).
+  createCheckoutSession: (successPath: string, cancelPath: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ successUrl: successPath, cancelUrl: cancelPath }) }),
+  createBillingPortalSession: (returnPath: string) => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST', body: JSON.stringify({ returnUrl: returnPath }) }),
 
   assets: (params?: { search?: string; status?: AssetStatus | ''; location?: string | '' }) => {
     const query = new URLSearchParams();

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Auth.OAuth;
 using Tenebit.Api.Http;
@@ -41,29 +42,32 @@ public static class ExternalAuthEndpoints
             })
             .WithTags("Auth");
 
-        api.MapGet("/auth/external/{provider}/start", (string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore) =>
-                StartExternalLogin(provider, returnUrl, service, stateStore))
+        api.MapGet("/auth/external/{provider}/start", (string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore, HttpResponse response, IWebHostEnvironment env) =>
+                StartExternalLogin(provider, returnUrl, service, stateStore, response, env))
             .AllowAnonymous()
+            .RequireRateLimiting("auth")
             .WithTags("Auth");
 
-        api.MapGet("/auth/external/{provider}/callback", (string provider, string? code, string? state, string? error, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
-                HandleCallbackAsync(provider, code, state, error, service, stateStore, authService, tokens, response, env, configuration, cancellationToken))
+        api.MapGet("/auth/external/{provider}/callback", (string provider, string? code, string? state, string? error, HttpRequest request, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
+                HandleCallbackAsync(provider, code, state, error, request, service, stateStore, authService, tokens, challenges, response, env, configuration, cancellationToken))
             .AllowAnonymous()
+            .RequireRateLimiting("auth")
             .WithTags("Auth");
 
-        api.MapPost("/auth/external/{provider}/callback", async (HttpRequest request, HttpResponse response, string provider, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/external/{provider}/callback", async (HttpRequest request, HttpResponse response, string provider, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, TwoFactorChallengeStore challenges, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
             {
                 var form = await request.ReadFormAsync(cancellationToken);
                 var code = form["code"].FirstOrDefault();
                 var state = form["state"].FirstOrDefault();
                 var error = form["error"].FirstOrDefault();
-                return await HandleCallbackAsync(provider, code, state, error, service, stateStore, authService, tokens, response, env, configuration, cancellationToken);
+                return await HandleCallbackAsync(provider, code, state, error, request, service, stateStore, authService, tokens, challenges, response, env, configuration, cancellationToken);
             })
             .AllowAnonymous()
+            .RequireRateLimiting("auth")
             .WithTags("Auth");
     }
 
-    private static IResult StartExternalLogin(string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore)
+    private static IResult StartExternalLogin(string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore, HttpResponse response, IWebHostEnvironment env)
     {
         if (!service.IsKnownProvider(provider) || !service.IsEnabled(provider))
         {
@@ -73,14 +77,21 @@ public static class ExternalAuthEndpoints
         var safeReturnPath = IsSafeReturnPath(returnUrl) ? returnUrl! : "/dashboard";
         var verifier = PkceHelper.NewCodeVerifier();
         var challenge = PkceHelper.ChallengeFor(verifier);
-        var state = stateStore.Create(provider, verifier, safeReturnPath);
+        var nonce = PkceHelper.NewState();
 
-        return Results.Redirect(service.BuildAuthorizationUrl(provider, state, challenge));
+        var correlationRaw = TokenHasher.NewRawToken();
+        var correlationHash = TokenHasher.Hash(correlationRaw);
+        var state = stateStore.Create(provider, verifier, safeReturnPath, correlationHash, nonce);
+
+        OAuthCorrelationCookie.Append(response, correlationRaw, env.IsDevelopment(), crossSitePost: provider == OAuthProviders.Apple);
+
+        return Results.Redirect(service.BuildAuthorizationUrl(provider, state, challenge, nonce));
     }
 
-    private static async Task<IResult> HandleCallbackAsync(string provider, string? code, string? state, string? error, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken)
+    private static async Task<IResult> HandleCallbackAsync(string provider, string? code, string? state, string? error, HttpRequest request, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken)
     {
         var publicUrl = (configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        OAuthCorrelationCookie.Delete(response, env.IsDevelopment());
 
         if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
         {
@@ -93,22 +104,39 @@ public static class ExternalAuthEndpoints
             return Results.Redirect($"{publicUrl}/auth/callback#error=oauth_expired");
         }
 
-        var profile = await service.ExchangeAndFetchProfileAsync(provider, code, entry.CodeVerifier, cancellationToken);
+        // The transaction was started in this exact browser only if it still carries the correlation
+        // cookie we set at /start — a stolen/replayed callback URL opened in a different browser has
+        // no matching cookie and is rejected here (audyt AUD3-005: login-CSRF / session swapping).
+        var correlationRaw = request.Cookies[OAuthCorrelationCookie.CookieName];
+        if (string.IsNullOrEmpty(correlationRaw) || TokenHasher.Hash(correlationRaw) != entry.CorrelationHash)
+        {
+            return Results.Redirect($"{publicUrl}/auth/callback#error=oauth_expired");
+        }
+
+        var profile = await service.ExchangeAndFetchProfileAsync(provider, code, entry.CodeVerifier, entry.Nonce, cancellationToken);
         if (profile is null)
         {
             return Results.Redirect($"{publicUrl}/auth/callback#error=oauth_failed");
         }
 
-        var result = await authService.ExternalLoginAsync(profile, cancellationToken);
+        var deviceTrustToken = request.Cookies[DeviceTrustCookie.CookieName];
+        var result = await authService.ExternalLoginAsync(profile, deviceTrustToken, cancellationToken);
         if (result.IsFailure)
         {
             return Results.Redirect($"{publicUrl}/auth/callback#error=oauth_rejected&message={Uri.EscapeDataString(result.Error!.Message)}");
         }
 
-        var refreshToken = await authService.IssueRefreshTokenAsync(result.Value!.Id, cancellationToken);
+        if (result.Value!.RequiresTwoFactor)
+        {
+            var challengeToken = challenges.Create(result.Value!.PendingUserId!.Value);
+            return Results.Redirect($"{publicUrl}/auth/callback#requiresTwoFactor=true&challengeToken={Uri.EscapeDataString(challengeToken)}&returnUrl={Uri.EscapeDataString(entry.ReturnPath)}");
+        }
+
+        var user = result.Value!.User!;
+        var refreshToken = await authService.IssueRefreshTokenAsync(user.Id, cancellationToken);
         RefreshTokenCookie.Append(response, refreshToken, env.IsDevelopment());
 
-        var token = tokens.Issue(result.Value!);
+        var token = tokens.Issue(user);
         return Results.Redirect($"{publicUrl}/auth/callback#token={Uri.EscapeDataString(token)}&returnUrl={Uri.EscapeDataString(entry.ReturnPath)}");
     }
 

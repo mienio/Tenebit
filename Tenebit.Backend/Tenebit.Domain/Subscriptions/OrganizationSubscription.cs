@@ -93,6 +93,12 @@ public sealed class OrganizationSubscription
             PlanKey = SubscriptionPlan.Free.Key;
             CancelledAt ??= DateTimeOffset.UtcNow;
         }
+        else if (status == SubscriptionStatus.Unknown)
+        {
+            // Fail-closed: quarantine the event without touching PlanKey — an unrecognized status must
+            // never grant a paid plan, and GetAssetLimit() reads PlanKey directly regardless of Status
+            // (audyt AUD3-010).
+        }
         else
         {
             var plan = SubscriptionPlan.FromKey(planKey);

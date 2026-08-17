@@ -141,17 +141,17 @@ public sealed class StripePaymentGateway : IPaymentGateway
             "active" or "trialing" => SubscriptionStatus.Active,
             "past_due" or "incomplete" => SubscriptionStatus.PastDue,
             "canceled" or "unpaid" or "incomplete_expired" => SubscriptionStatus.Cancelled,
-            // Nieznany status Stripe nie może po cichu odblokować płatnego planu (fail-open) — traktujemy go
-            // konserwatywnie jak PastDue (nie odbiera już przyznanego dostępu, ale i nie potwierdza nowego)
-            // i logujemy do przeglądu (audyt P0.6).
-            _ => LogUnknownStatusAndFallBack(stripeStatus)
+            // Nieznany status Stripe nie może po cichu odblokować płatnego planu — poprzedni fallback na
+            // PastDue był fail-open, bo PastDue jest traktowany jako uprawniający. Unknown jest jawnie
+            // nie-uprawniającym stanem kwarantanny do przeglądu (audyt AUD3-010).
+            _ => LogUnknownStatusAndQuarantine(stripeStatus)
         };
     }
 
-    private SubscriptionStatus LogUnknownStatusAndFallBack(string? stripeStatus)
+    private SubscriptionStatus LogUnknownStatusAndQuarantine(string? stripeStatus)
     {
-        _logger.LogWarning("Nieznany status subskrypcji Stripe {StripeStatus} — zastosowano konserwatywny fallback PastDue.", stripeStatus);
-        return SubscriptionStatus.PastDue;
+        _logger.LogWarning("Nieznany status subskrypcji Stripe {StripeStatus} — zdarzenie zakwarantannowane, bez zmiany planu.", stripeStatus);
+        return SubscriptionStatus.Unknown;
     }
 
     private void VerifySignature(string payload, string signatureHeader)

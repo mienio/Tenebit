@@ -9,6 +9,24 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    # Tenant-isolation and other security regression tests (Tenebit.Tests/Integration) run against a
+    # real PostgreSQL, not the in-memory fakes — a fake repository can't catch a missing query filter,
+    # bad FK, or broken auth middleware wiring (audyt AUD3-023: brak security regression suite na
+    # realnym PostgreSQL blokującej release).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tenebit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: Tenebit.Backend
@@ -20,6 +38,8 @@ jobs:
       - run: dotnet restore Tenebit.sln
       - run: dotnet build Tenebit.sln --no-restore -c Release
       - run: dotnet test Tenebit.Tests/Tenebit.Tests.csproj --no-build -c Release
+        env:
+          TENEBIT_TEST_DB_CONNECTION: Host=localhost;Port=5432;Database=tenebit_test;Username=postgres;Password=postgres
 
   frontend:
     runs-on: ubuntu-latest

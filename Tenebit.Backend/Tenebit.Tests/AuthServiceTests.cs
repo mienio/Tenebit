@@ -113,11 +113,12 @@ public class AuthServiceTests
         var (service, organizations, _) = CreateService();
         var info = new ExternalUserInfo("google", "google-sub-1", "new.user@example.com", true, "New User");
 
-        var result = await service.ExternalLoginAsync(info, CancellationToken.None);
+        var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Contains("owner", result.Value!.Roles);
-        Assert.True(result.Value!.IsEmailVerified);
+        Assert.False(result.Value!.RequiresTwoFactor);
+        Assert.Contains("owner", result.Value!.User!.Roles);
+        Assert.True(result.Value!.User!.IsEmailVerified);
         Assert.Single(organizations.Organizations);
     }
 
@@ -127,10 +128,10 @@ public class AuthServiceTests
         var (service, organizations, _) = CreateService();
         var info = new ExternalUserInfo("google", "google-sub-1", "new.user@example.com", true, "New User");
 
-        var first = await service.ExternalLoginAsync(info, CancellationToken.None);
-        var second = await service.ExternalLoginAsync(info, CancellationToken.None);
+        var first = await service.ExternalLoginAsync(info, null, CancellationToken.None);
+        var second = await service.ExternalLoginAsync(info, null, CancellationToken.None);
 
-        Assert.Equal(first.Value!.Id, second.Value!.Id);
+        Assert.Equal(first.Value!.User!.Id, second.Value!.User!.Id);
         Assert.Single(organizations.Organizations);
     }
 
@@ -141,7 +142,7 @@ public class AuthServiceTests
         await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
 
         var info = new ExternalUserInfo("facebook", "fb-sub-1", "owner@acme.test", false, "Owner");
-        var result = await service.ExternalLoginAsync(info, CancellationToken.None);
+        var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -153,11 +154,44 @@ public class AuthServiceTests
         var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
 
         var info = new ExternalUserInfo("google", "google-sub-2", "owner@acme.test", true, "Owner");
-        var result = await service.ExternalLoginAsync(info, CancellationToken.None);
+        var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(registered.Value!.Id, result.Value!.Id);
+        Assert.False(result.Value!.RequiresTwoFactor);
+        Assert.Equal(registered.Value!.Id, result.Value!.User!.Id);
         Assert.Single(organizations.Organizations);
+    }
+
+    [Fact]
+    public async Task ExternalLoginAsync_RejectsInactiveLinkedAccount()
+    {
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var info = new ExternalUserInfo("google", "google-sub-3", "owner@acme.test", true, "Owner");
+        await service.ExternalLoginAsync(info, null, CancellationToken.None);
+
+        var user = await users.GetByIdAsync(registered.Value!.Id, CancellationToken.None);
+        user!.Update(user.Email, user.DisplayName, false, user.Roles.Select(x => x.Role));
+
+        var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task ExternalLoginAsync_RequiresTwoFactorWhenEnabledAndNoTrustedDevicePresented()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        var info = new ExternalUserInfo("google", "google-sub-4", "owner@acme.test", true, "Owner");
+        var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.RequiresTwoFactor);
+        Assert.Null(result.Value!.User);
     }
 
     [Fact]
@@ -312,5 +346,40 @@ public class AuthServiceTests
         var now = DateTimeOffset.UtcNow;
         Assert.Null(await refreshTokens.FindValidAsync(TokenHasher.Hash("existing-refresh"), now, CancellationToken.None));
         Assert.Null(await deviceTrustTokens.FindValidAsync(userId, TokenHasher.Hash("existing-device"), now, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DisableTwoFactorAsync_RevokesTrustedDevices()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        var deviceTrustToken = await service.IssueDeviceTrustTokenAsync(registered.Value!.Id, CancellationToken.None);
+
+        await service.DisableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        // Re-enable with a fresh secret and present the OLD trust cookie — it must not be honored,
+        // otherwise a device trusted under the previous TOTP secret would silently skip the new one.
+        var newSetup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(newSetup.Value!.Secret), CancellationToken.None);
+        var afterReEnable = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), deviceTrustToken, CancellationToken.None);
+
+        Assert.True(afterReEnable.IsSuccess);
+        Assert.True(afterReEnable.Value!.RequiresTwoFactor);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ConcurrentUseOfSameToken_OnlyOneSucceeds()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var rawToken = await service.IssueRefreshTokenAsync(registered.Value!.Id, CancellationToken.None);
+
+        var first = await service.RefreshAsync(rawToken, CancellationToken.None);
+        var second = await service.RefreshAsync(rawToken, CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsFailure);
     }
 }

@@ -13,8 +13,14 @@ public sealed class MyWorkspaceService
     private readonly IAssignmentRepository _assignments;
     private readonly IProcedureRepository _procedures;
     private readonly ICurrentUser _currentUser;
+    private readonly ManagerScopeService _managerScope;
 
-    public MyWorkspaceService(IPersonRepository people, IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, IProcedureRepository procedures, ICurrentUser currentUser)
+    // Roles allowed to open GetForPersonAsync that see the whole organization; Manager alone is
+    // scoped to its own team by ManagerScopeService (audyt AUD3-006: Manager mógł podać dowolny
+    // personId w organizacji, bez sprawdzenia zarządzanego zespołu).
+    private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator];
+
+    public MyWorkspaceService(IPersonRepository people, IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, IProcedureRepository procedures, ICurrentUser currentUser, ManagerScopeService managerScope)
     {
         _people = people;
         _assets = assets;
@@ -22,6 +28,7 @@ public sealed class MyWorkspaceService
         _assignments = assignments;
         _procedures = procedures;
         _currentUser = currentUser;
+        _managerScope = managerScope;
     }
 
     public async Task<MyWorkspaceResponse> GetAsync(CancellationToken cancellationToken)
@@ -44,6 +51,12 @@ public sealed class MyWorkspaceService
         var organizationId = _currentUser.OrganizationId;
         var person = await _people.GetAsync(organizationId, personId, cancellationToken);
         if (person is null) return Result<MyWorkspaceResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is not null && !visibleIds.Contains(person.Id))
+        {
+            return Result<MyWorkspaceResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+        }
 
         return Result<MyWorkspaceResponse>.Success(await BuildAsync(organizationId, person, cancellationToken));
     }

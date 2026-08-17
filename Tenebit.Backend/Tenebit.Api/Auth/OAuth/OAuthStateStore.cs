@@ -2,7 +2,10 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Tenebit.Api.Auth.OAuth;
 
-public sealed record OAuthStateEntry(string Provider, string CodeVerifier, string ReturnPath);
+// CorrelationHash and Nonce bind this transaction to the browser that started it and to the
+// specific id_token that must come back — the state alone only proves single-use, not same-browser
+// (audyt AUD3-005: OAuth state nie jest związany z przeglądarką).
+public sealed record OAuthStateEntry(string Provider, string CodeVerifier, string ReturnPath, string CorrelationHash, string Nonce);
 
 public sealed class OAuthStateStore
 {
@@ -11,10 +14,10 @@ public sealed class OAuthStateStore
 
     public OAuthStateStore(IMemoryCache cache) => _cache = cache;
 
-    public string Create(string provider, string codeVerifier, string returnPath)
+    public string Create(string provider, string codeVerifier, string returnPath, string correlationHash, string nonce)
     {
         var state = PkceHelper.NewState();
-        _cache.Set(CacheKey(state), new OAuthStateEntry(provider, codeVerifier, returnPath), Ttl);
+        _cache.Set(CacheKey(state), new OAuthStateEntry(provider, codeVerifier, returnPath, correlationHash, nonce), Ttl);
         return state;
     }
 

@@ -1,5 +1,6 @@
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
+using Tenebit.Application.Common;
 using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
@@ -54,7 +55,8 @@ public class AssignmentServiceTests
             evidenceService,
             disposition,
             responseBuilder,
-            protocolModelBuilder);
+            protocolModelBuilder,
+            new ManagerScopeService(people, teams));
 
         return (service, currentUser, assets, people, procedures, categories, inspections, assignments, activity, reservations);
     }
@@ -203,6 +205,42 @@ public class AssignmentServiceTests
         Assert.Equal(user.IpAddress, accepted.Value!.AcceptedIp);
         Assert.False(string.IsNullOrWhiteSpace(accepted.Value!.AcceptanceHash));
         Assert.True(accepted.Value!.IsIntegrityVerified);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_EmployeeCannotAcceptAnotherPersonsAssignment()
+    {
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets);
+
+        var created = await service.CreateAsync(new CreateAssignmentRequest(person.Id, [new AssignmentAssetRequest(asset.Id, "ok")], [], null, null), CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        user.Roles = ["employee"];
+        user.Email = "someone.else@acme.test";
+
+        var result = await service.AcceptAsync(created.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_EmployeeCanAcceptOwnAssignment()
+    {
+        var (service, user, assets, people, _, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets);
+
+        var created = await service.CreateAsync(new CreateAssignmentRequest(person.Id, [new AssignmentAssetRequest(asset.Id, "ok")], [], null, null), CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        user.Roles = ["employee"];
+        user.Email = person.Email;
+
+        var result = await service.AcceptAsync(created.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]

@@ -25,6 +25,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        services.AddScoped<Common.ManagerScopeService>();
         services.AddScoped<AssetService>();
         services.AddScoped<LocationService>();
         services.AddScoped<AssetCategoryService>();

@@ -47,20 +47,20 @@ public sealed class ExternalAuthService
 
     public IReadOnlyList<string> EnabledProviders() => OAuthProviders.All.Where(IsEnabled).ToArray();
 
-    public string BuildAuthorizationUrl(string provider, string state, string codeChallenge)
+    public string BuildAuthorizationUrl(string provider, string state, string codeChallenge, string nonce)
     {
         var redirectUri = RedirectUriFor(provider);
         return provider switch
         {
-            OAuthProviders.Google => $"https://accounts.google.com/o/oauth2/v2/auth?client_id={Uri.EscapeDataString(_options.Google.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("openid email profile")}&state={state}&code_challenge={codeChallenge}&code_challenge_method=S256&prompt=select_account",
-            OAuthProviders.Microsoft => $"https://login.microsoftonline.com/{_options.Microsoft.TenantId}/oauth2/v2.0/authorize?client_id={Uri.EscapeDataString(_options.Microsoft.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("openid email profile")}&state={state}&code_challenge={codeChallenge}&code_challenge_method=S256",
+            OAuthProviders.Google => $"https://accounts.google.com/o/oauth2/v2/auth?client_id={Uri.EscapeDataString(_options.Google.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("openid email profile")}&state={state}&nonce={nonce}&code_challenge={codeChallenge}&code_challenge_method=S256&prompt=select_account",
+            OAuthProviders.Microsoft => $"https://login.microsoftonline.com/{_options.Microsoft.TenantId}/oauth2/v2.0/authorize?client_id={Uri.EscapeDataString(_options.Microsoft.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("openid email profile")}&state={state}&nonce={nonce}&code_challenge={codeChallenge}&code_challenge_method=S256",
             OAuthProviders.Facebook => $"https://www.facebook.com/v19.0/dialog/oauth?client_id={Uri.EscapeDataString(_options.Facebook.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("email public_profile")}&state={state}&code_challenge={codeChallenge}&code_challenge_method=S256",
-            OAuthProviders.Apple => $"https://appleid.apple.com/auth/authorize?client_id={Uri.EscapeDataString(_options.Apple.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("name email")}&response_mode=form_post&state={state}&code_challenge={codeChallenge}&code_challenge_method=S256",
+            OAuthProviders.Apple => $"https://appleid.apple.com/auth/authorize?client_id={Uri.EscapeDataString(_options.Apple.ClientId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&scope={Uri.EscapeDataString("name email")}&response_mode=form_post&state={state}&nonce={nonce}&code_challenge={codeChallenge}&code_challenge_method=S256",
             _ => throw new InvalidOperationException($"Nieznany dostawca logowania: {provider}")
         };
     }
 
-    public async Task<ExternalUserInfo?> ExchangeAndFetchProfileAsync(string provider, string code, string codeVerifier, CancellationToken cancellationToken)
+    public async Task<ExternalUserInfo?> ExchangeAndFetchProfileAsync(string provider, string code, string codeVerifier, string expectedNonce, CancellationToken cancellationToken)
     {
         var redirectUri = RedirectUriFor(provider);
         var client = _httpClientFactory.CreateClient(nameof(ExternalAuthService));
@@ -117,7 +117,7 @@ public sealed class ExternalAuthService
         }
 
         if (!root.TryGetProperty("id_token", out var idTokenElement)) return null;
-        return await ValidateAndParseIdTokenAsync(provider, idTokenElement.GetString()!, cancellationToken);
+        return await ValidateAndParseIdTokenAsync(provider, idTokenElement.GetString()!, expectedNonce, cancellationToken);
     }
 
     private static async Task<ExternalUserInfo?> FetchFacebookProfileAsync(HttpClient client, string accessToken, CancellationToken cancellationToken)
@@ -166,7 +166,7 @@ public sealed class ExternalAuthService
         throw new SecurityTokenInvalidIssuerException("Nieprawidłowy issuer tokenu Microsoft.") { InvalidIssuer = issuer };
     }
 
-    private async Task<ExternalUserInfo?> ValidateAndParseIdTokenAsync(string provider, string idToken, CancellationToken cancellationToken)
+    private async Task<ExternalUserInfo?> ValidateAndParseIdTokenAsync(string provider, string idToken, string expectedNonce, CancellationToken cancellationToken)
     {
         var (metadataAddress, audience, issuerValidator) = OidcSettingsFor(provider);
 
@@ -207,6 +207,11 @@ public sealed class ExternalAuthService
 
         var sub = principal.FindFirst("sub")?.Value;
         if (string.IsNullOrWhiteSpace(sub)) return null;
+
+        // Ties this id_token to the specific authorization request we started — without it, an id_token
+        // obtained through another flow (or replayed) would still pass signature/issuer/audience checks.
+        var nonce = principal.FindFirst("nonce")?.Value;
+        if (!string.Equals(nonce, expectedNonce, StringComparison.Ordinal)) return null;
 
         var email = principal.FindFirst("email")?.Value ?? principal.FindFirst("preferred_username")?.Value;
         var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;

@@ -14,11 +14,14 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useI18n();
-  const fromState = (location.state as { from?: unknown } | null)?.from;
+  const routeState = location.state as { from?: unknown; challengeToken?: unknown } | null;
+  const fromState = routeState?.from;
   const returnTo = typeof fromState === 'string' && fromState.startsWith('/') ? fromState : '/dashboard';
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [challengeToken, setChallengeToken] = useState<string | null>(
+    typeof routeState?.challengeToken === 'string' ? routeState.challengeToken : null
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

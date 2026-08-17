@@ -32,8 +32,9 @@ public class OnboardingServiceTests
         var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
             new AssetReturnDispositionService(inspections),
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
-            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures));
-        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService);
+            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures),
+            new Tenebit.Application.Common.ManagerScopeService(people, teams));
+        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams));
         return (service, user, people);
     }
 
@@ -81,6 +82,36 @@ public class OnboardingServiceTests
         Assert.True(person.CanReceiveNewObligations);
     }
 
+    [Fact]
+    public async Task GetChecklistAsync_EmployeeCannotReadAnotherPersonsChecklist()
+    {
+        var (service, user, people) = CreateService();
+        var self = new Person(user.OrganizationId, "Anna", "Pracownik", user.Email);
+        people.Add(self);
+        var other = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
+        people.Add(other);
+
+        user.Roles = ["employee"];
+
+        var result = await service.GetChecklistAsync(other.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task GetChecklistAsync_EmployeeCanReadOwnChecklist()
+    {
+        var (service, user, people) = CreateService();
+        var self = new Person(user.OrganizationId, "Anna", "Pracownik", user.Email);
+        people.Add(self);
+
+        user.Roles = ["employee"];
+
+        var result = await service.GetChecklistAsync(self.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
+
     private static byte[] JpegBytes(int size = 32)
     {
         var bytes = new byte[Math.Max(size, 3)];
@@ -115,8 +146,9 @@ public class OnboardingServiceTests
         var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
             new AssetReturnDispositionService(inspections),
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
-            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures));
-        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService);
+            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures),
+            new Tenebit.Application.Common.ManagerScopeService(people, teams));
+        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams));
         return (service, user, assets, people, assignments, evidence);
     }
 

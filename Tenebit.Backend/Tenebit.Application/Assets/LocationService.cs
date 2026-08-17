@@ -12,19 +12,23 @@ public sealed class LocationService
     // pozostałe zakładki "organizationOnly" w ustawieniach (patrz SettingsPage.tsx canManageOrganization).
     private static readonly string[] LocationManagers = [TenebitRoles.Owner, TenebitRoles.Admin];
 
+    private static readonly string[] OrgWideInventoryRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Auditor];
+
     private readonly ILocationRepository _locations;
     private readonly IAssetRepository _assets;
     private readonly IPersonRepository _people;
     private readonly ICurrentUser _currentUser;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ManagerScopeService _managerScope;
 
-    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, ICurrentUser currentUser, IUnitOfWork unitOfWork)
+    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope)
     {
         _locations = locations;
         _assets = assets;
         _people = people;
         _currentUser = currentUser;
         _unitOfWork = unitOfWork;
+        _managerScope = managerScope;
     }
 
     public async Task<IReadOnlyList<LocationResponse>> ListAsync(CancellationToken cancellationToken)
@@ -155,6 +159,9 @@ public sealed class LocationService
 
     public async Task<Result<LocationInventoryResponse>> GetInventoryAsync(Guid id, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.LocationInventoryViewers);
+        if (access.IsFailure) return Result<LocationInventoryResponse>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
         var rows = await _locations.ListAsync(organizationId, cancellationToken);
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
@@ -166,8 +173,16 @@ public sealed class LocationService
             return Result<LocationInventoryResponse>.Failure(Error.NotFound("Lokalizacja nie istnieje."));
         }
 
-        var locationAssets = assets.Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase)).Select(MapAsset).ToList();
-        var locationPeople = people.Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase)).Select(MapPerson).ToList();
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideInventoryRoles, cancellationToken);
+
+        var locationAssets = assets
+            .Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase))
+            .Where(x => visibleIds is null || x.AssignedPersonId is null || visibleIds.Contains(x.AssignedPersonId.Value))
+            .Select(MapAsset).ToList();
+        var locationPeople = people
+            .Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase))
+            .Where(x => visibleIds is null || visibleIds.Contains(x.Id))
+            .Select(MapPerson).ToList();
         return Result<LocationInventoryResponse>.Success(new LocationInventoryResponse(location, locationAssets, locationPeople));
     }
 

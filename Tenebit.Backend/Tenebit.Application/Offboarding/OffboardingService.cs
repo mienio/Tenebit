@@ -783,7 +783,13 @@ public sealed class OffboardingService
     {
         var now = _clock.UtcNow;
         var candidate = await _cases.FindByPublicTokenHashAsync(TokenHasher.Hash(token), cancellationToken);
-        if (candidate is not null && PublicTokenService.Verify(token, candidate.PublicTokenHash, candidate.PublicTokenExpiresAt ?? DateTimeOffset.MinValue, candidate.PublicTokenRevokedAt, now))
+        // Cancel/RestoreEmployment/Complete revoke the token atomically, but every public command still
+        // rechecks parent state here directly — a second, independent gate against a terminal case, not
+        // just against token validity (audyt AUD3-008: linki publiczne pozostawały użyteczne po
+        // anulowaniu lub zakończeniu procesu).
+        if (candidate is not null
+            && candidate.Status is not (OffboardingCaseStatus.Cancelled or OffboardingCaseStatus.Completed)
+            && PublicTokenService.Verify(token, candidate.PublicTokenHash, candidate.PublicTokenExpiresAt ?? DateTimeOffset.MinValue, candidate.PublicTokenRevokedAt, now))
         {
             return Result<OffboardingCase>.Success(candidate);
         }

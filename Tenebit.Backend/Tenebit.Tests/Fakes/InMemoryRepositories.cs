@@ -216,6 +216,14 @@ public sealed class InMemoryRefreshTokenRepository : IRefreshTokenRepository
     public Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult(Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.IsValid(now)));
 
+    public Task<RefreshToken?> TryConsumeAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var token = Tokens.FirstOrDefault(x => x.TokenHash == tokenHash);
+        if (token is null || !token.IsValid(now) || token.RevokedAt is not null) return Task.FromResult<RefreshToken?>(null);
+        token.Revoke();
+        return Task.FromResult<RefreshToken?>(token);
+    }
+
     public Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken)
     {
         foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.RevokedAt is null)) token.Revoke();
@@ -340,6 +348,7 @@ public sealed class FakeAppLinkBuilder : IAppLinkBuilder
     public string BuildEmailVerificationLink(string rawToken) => $"https://test/verify-email?token={rawToken}";
     public string BuildOffboardingLink(string rawToken) => $"https://test/exit/{rawToken}";
     public string BuildAssetAuditLink(string rawToken) => $"https://test/audit/{rawToken}";
+    public string BuildAppUrl(string relativePath) => $"https://test{relativePath}";
 }
 
 public sealed class FakeFieldEncryptor : IFieldEncryptor

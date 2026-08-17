@@ -157,6 +157,9 @@ public sealed class OffboardingCase
         Status = OffboardingCaseStatus.Cancelled;
         CancelledAt = cancelledAt;
         CancellationReason = reason.Trim();
+        // A cancelled case's link must stop working immediately — otherwise a stale link can still read,
+        // answer, or upload evidence into a case that no longer exists administratively (audyt AUD3-008).
+        PublicTokenRevokedAt ??= cancelledAt;
     }
 
     /// <summary>Korekta pomyłkowej dezaktywacji. Nie przydziela automatycznie zwolnionych licencji ani zwróconych
@@ -171,6 +174,9 @@ public sealed class OffboardingCase
         Status = OffboardingCaseStatus.Cancelled;
         CancelledAt = restoredAt;
         CancellationReason = "Przywrócenie zatrudnienia";
+        // Same reasoning as Cancel(...) — restoring employment must also kill the outstanding public
+        // link atomically (audyt AUD3-008).
+        PublicTokenRevokedAt ??= restoredAt;
     }
 
     public void MarkPersonDeactivated(DateTimeOffset at)

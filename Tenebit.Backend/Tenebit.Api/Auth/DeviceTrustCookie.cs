@@ -15,4 +15,15 @@ public static class DeviceTrustCookie
             Expires = DateTimeOffset.UtcNow.AddDays(30)
         });
     }
+
+    public static void Delete(HttpResponse response, bool isDevelopment)
+    {
+        response.Cookies.Delete(CookieName, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !isDevelopment,
+            SameSite = SameSiteMode.Lax,
+            Path = "/api/auth"
+        });
+    }
 }

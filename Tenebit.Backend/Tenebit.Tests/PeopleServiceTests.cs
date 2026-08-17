@@ -1,3 +1,4 @@
+using Tenebit.Application.Common;
 using Tenebit.Application.People;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.People;
@@ -11,9 +12,10 @@ public class PeopleServiceTests
     {
         var currentUser = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
+        var teams = new InMemoryTeamRepository();
         var assets = new InMemoryAssetRepository();
         var activity = new InMemoryActivityLogRepository();
-        var service = new PeopleService(people, new InMemoryTeamRepository(), assets, activity, currentUser, new FakeClock(), new FakeUnitOfWork());
+        var service = new PeopleService(people, teams, assets, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams));
         return (service, currentUser, people, assets, activity);
     }
 
@@ -22,7 +24,7 @@ public class PeopleServiceTests
         var currentUser = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
         var teams = new InMemoryTeamRepository();
-        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork());
+        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams));
         return (service, currentUser, people, teams);
     }
 
@@ -63,6 +65,47 @@ public class PeopleServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Jan Kowalski", result.Value!.FullName);
+    }
+
+    [Fact]
+    public async Task ListAsync_ManagerOnlySeesOwnTeamMembers()
+    {
+        var (service, user, people, teams) = CreateServiceWithTeams();
+        var manager = new Person(user.OrganizationId, "Anna", "Kierownik", user.Email);
+        people.Add(manager);
+        var team = new Team(user.OrganizationId, "Zespół A", manager.Id, null);
+        teams.Add(team);
+        var teammate = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
+        teammate.Update(teammate.FirstName, teammate.LastName, teammate.Email, null, null, "Pracownik", null, team.Id, null, null, null);
+        people.Add(teammate);
+        var outsider = new Person(user.OrganizationId, "Ola", "Inna", "ola@acme.test");
+        people.Add(outsider);
+
+        user.Roles = ["manager"];
+
+        var result = await service.ListAsync(null, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var ids = result.Value!.Select(p => p.Id).ToHashSet();
+        Assert.Contains(manager.Id, ids);
+        Assert.Contains(teammate.Id, ids);
+        Assert.DoesNotContain(outsider.Id, ids);
+    }
+
+    [Fact]
+    public async Task GetAsync_ManagerCannotReadPersonOutsideManagedTeam()
+    {
+        var (service, user, people, teams) = CreateServiceWithTeams();
+        var manager = new Person(user.OrganizationId, "Anna", "Kierownik", user.Email);
+        people.Add(manager);
+        var outsider = new Person(user.OrganizationId, "Ola", "Inna", "ola@acme.test");
+        people.Add(outsider);
+
+        user.Roles = ["manager"];
+
+        var result = await service.GetAsync(outsider.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
     }
 
     [Fact]

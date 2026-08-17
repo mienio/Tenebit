@@ -16,8 +16,13 @@ public sealed class PeopleService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ManagerScopeService _managerScope;
 
-    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    // Roles in TenebitRoles.PeopleViewers that see the whole organization; Manager alone is scoped
+    // to its own team by ManagerScopeService (audyt AUD3-006).
+    private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor];
+
+    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope)
     {
         _people = people;
         _teams = teams;
@@ -26,6 +31,7 @@ public sealed class PeopleService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _managerScope = managerScope;
     }
 
     public async Task<Result<IReadOnlyList<PersonResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
@@ -35,6 +41,8 @@ public sealed class PeopleService
 
         var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
         var people = await _people.ListAsync(_currentUser.OrganizationId, search, cancellationToken);
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is not null) people = people.Where(p => visibleIds.Contains(p.Id)).ToList();
         return Result<IReadOnlyList<PersonResponse>>.Success(people.Select(person => Map(person, teams)).ToList());
     }
 
@@ -44,8 +52,18 @@ public sealed class PeopleService
         if (access.IsFailure) return Result<PagedResult<PersonResponse>>.Failure(access.Error!);
 
         var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
-        var (items, total) = await _people.ListPagedAsync(_currentUser.OrganizationId, search, page, pageSize, cancellationToken);
-        return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(items.Select(person => Map(person, teams)).ToList(), total, page, pageSize));
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is null)
+        {
+            var (items, total) = await _people.ListPagedAsync(_currentUser.OrganizationId, search, page, pageSize, cancellationToken);
+            return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(items.Select(person => Map(person, teams)).ToList(), total, page, pageSize));
+        }
+
+        // Manager's team is small by construction — scoping after a full (unpaged) read is an
+        // acceptable trade-off versus adding a person-id filter to every repository implementation.
+        var scoped = (await _people.ListAsync(_currentUser.OrganizationId, search, cancellationToken)).Where(p => visibleIds.Contains(p.Id)).ToList();
+        var page1 = scoped.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(page1.Select(person => Map(person, teams)).ToList(), scoped.Count, page, pageSize));
     }
 
     public async Task<Result<PersonResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -55,6 +73,13 @@ public sealed class PeopleService
 
         var person = await _people.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
         if (person is null) return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+
+        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (visibleIds is not null && !visibleIds.Contains(person.Id))
+        {
+            return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+        }
+
         var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
         return Result<PersonResponse>.Success(Map(person, teams));
     }

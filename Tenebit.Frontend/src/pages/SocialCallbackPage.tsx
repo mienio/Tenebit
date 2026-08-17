@@ -17,10 +17,19 @@ export function SocialCallbackPage() {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const token = params.get('token');
     const returnUrl = params.get('returnUrl') ?? '/dashboard';
+    const safeReturnUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
 
     if (token && auth.loginWithToken(token)) {
-      navigate(returnUrl.startsWith('/') ? returnUrl : '/dashboard', { replace: true });
+      navigate(safeReturnUrl, { replace: true });
       return;
+    }
+
+    if (params.get('requiresTwoFactor') === 'true') {
+      const challengeToken = params.get('challengeToken');
+      if (challengeToken) {
+        navigate('/login', { replace: true, state: { challengeToken, from: safeReturnUrl } });
+        return;
+      }
     }
 
     const message = params.get('message');

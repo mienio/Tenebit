@@ -1,5 +1,6 @@
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
+using Tenebit.Application.Common;
 using Tenebit.Application.Evidence;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
@@ -52,7 +53,8 @@ public class AssignmentWithEvidenceTests
         var service = new AssignmentService(
             assignments, assets, categories, inspections, people, procedures, teams, organizations,
             activity, currentUser, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(),
-            new FakeAppLinkBuilder(), reservations, evidence, evidenceService, disposition, responseBuilder, protocolModelBuilder);
+            new FakeAppLinkBuilder(), reservations, evidence, evidenceService, disposition, responseBuilder, protocolModelBuilder,
+            new ManagerScopeService(people, teams));
 
         return (service, currentUser, assets, people, assignments, evidence);
     }

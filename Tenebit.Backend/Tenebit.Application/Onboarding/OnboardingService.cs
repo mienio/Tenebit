@@ -25,7 +25,9 @@ public sealed class OnboardingService
     private readonly IUnitOfWork _unitOfWork;
     private readonly AssignmentService _assignmentService;
 
-    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService)
+    private readonly ManagerScopeService _managerScope;
+
+    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope)
     {
         _teams = teams;
         _people = people;
@@ -39,6 +41,7 @@ public sealed class OnboardingService
         _clock = clock;
         _unitOfWork = unitOfWork;
         _assignmentService = assignmentService;
+        _managerScope = managerScope;
     }
 
     public async Task<OnboardingStatusResponse> GetStatusAsync(CancellationToken cancellationToken)
@@ -280,6 +283,30 @@ public sealed class OnboardingService
         if (access.IsFailure) return Result<OnboardingChecklistResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
+
+        // Employee only sees its own checklist; Manager only its managed team's — the module gate above
+        // only proves the actor holds one of these roles, not that personId belongs to their scope
+        // (audyt AUD3-006: Employee/Manager mogli podać dowolny personId w tej samej organizacji).
+        if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator))
+        {
+            if (_currentUser.HasAnyRole(TenebitRoles.Manager))
+            {
+                var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator], cancellationToken);
+                if (visibleIds is not null && !visibleIds.Contains(personId))
+                {
+                    return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+                }
+            }
+            else
+            {
+                var currentPerson = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
+                if (currentPerson is null || currentPerson.Id != personId)
+                {
+                    return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
+                }
+            }
+        }
+
         var person = await _people.GetAsync(organizationId, personId, cancellationToken);
         if (person is null) return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
 

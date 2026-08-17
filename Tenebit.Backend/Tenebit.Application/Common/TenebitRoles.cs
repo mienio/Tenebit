@@ -43,6 +43,17 @@ public static class TenebitRoles
     public static readonly string[] AssetAuditManagers = [Owner, Admin, AssetOperator];
     public static readonly string[] ReservationViewers = [Owner, Admin, AssetOperator];
     public static readonly string[] ReservationCheckoutRoles = [Owner, Admin, AssetOperator, Technician];
+
+    // Location inventory names identifiable people (email, job title, manager) alongside asset detail —
+    // restricted to the roles that already see that data through AssetViewers/PeopleViewers, not every
+    // authenticated user (audyt AUD3-007).
+    public static readonly string[] LocationInventoryViewers = [Owner, Admin, AssetOperator, Manager, Hr, Auditor];
+
+    // Every role except Employee — the tenant-wide dashboard and location inventory aggregate cost,
+    // headcount and activity across the whole organization, which Employee's "view only own" role
+    // must never see (audyt AUD3-007: dashboard i inwentarz lokalizacji ujawniały dane każdemu
+    // zalogowanemu użytkownikowi, bo endpointy nie miały żadnej roli poza uwierzytelnieniem).
+    public static readonly string[] TenantWideViewers = All.Select(x => x.Key).Where(x => x != Employee).ToArray();
 }
 
 public sealed record RoleInfo(string Key, string Label, string Description);

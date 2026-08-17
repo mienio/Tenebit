@@ -256,6 +256,19 @@ public class OffboardingCaseTests
     }
 
     [Fact]
+    public void Cancel_RevokesPublicToken()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var offboardingCase = CreateCase(now);
+        offboardingCase.Start(now);
+        offboardingCase.SetPublicToken("hash", now.AddDays(30));
+
+        offboardingCase.Cancel(now, "Rezygnacja z procesu");
+
+        Assert.NotNull(offboardingCase.PublicTokenRevokedAt);
+    }
+
+    [Fact]
     public void Cancel_IsBlockedAfterPersonDeactivation()
     {
         var now = DateTimeOffset.UtcNow;
@@ -329,5 +342,19 @@ public class OffboardingCaseTests
 
         Assert.Equal(OffboardingCaseStatus.Cancelled, offboardingCase.Status);
         Assert.Equal("Przywrócenie zatrudnienia", offboardingCase.CancellationReason);
+    }
+
+    [Fact]
+    public void RestoreEmployment_RevokesPublicToken()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var offboardingCase = CreateCase(now);
+        offboardingCase.Start(now);
+        offboardingCase.SetPublicToken("hash", now.AddDays(30));
+        offboardingCase.MarkPersonDeactivated(now);
+
+        offboardingCase.RestoreEmployment(now);
+
+        Assert.NotNull(offboardingCase.PublicTokenRevokedAt);
     }
 }

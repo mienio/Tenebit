@@ -234,6 +234,12 @@ public sealed class AuthService
         user.DisableTwoFactor();
         var existingCodes = await _recoveryCodes.ListAsync(userId, cancellationToken);
         _recoveryCodes.RemoveAll(existingCodes);
+
+        // A trusted-device cookie only means anything in the context of the TOTP secret that was live
+        // when it was issued — disabling 2FA (and a later re-enable with a fresh secret) must not let an
+        // old trust cookie keep skipping the new second factor (audyt AUD3-012).
+        await _deviceTrustTokens.RevokeAllForUserAsync(userId, cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
@@ -308,31 +314,40 @@ public sealed class AuthService
         return $"{new string(chars, 0, 5)}-{new string(chars, 5, 5)}";
     }
 
-    public async Task<Result<AuthUserResponse>> ExternalLoginAsync(ExternalUserInfo info, CancellationToken cancellationToken)
+    // Generic message for every OAuth rejection that stems from account state (inactive account,
+    // unverified provider email) — the callback must not tell an attacker which reason applied
+    // (audyt AUD3-002: "Zwracaj generyczne oauth_rejected, bez ujawniania statusu konta").
+    private const string OAuthRejectedMessage = "Logowanie nie powiodło się.";
+
+    public async Task<Result<LoginOutcome>> ExternalLoginAsync(ExternalUserInfo info, string? deviceTrustToken, CancellationToken cancellationToken)
     {
         var linkedUser = await _externalLogins.FindLinkedUserAsync(info.Provider, info.ProviderUserId, cancellationToken);
         if (linkedUser is not null)
         {
-            var linkedOrganization = await _organizations.GetAsync(linkedUser.OrganizationId, cancellationToken);
-            if (linkedOrganization is null)
+            if (!linkedUser.IsActive)
             {
-                return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
+                return Result<LoginOutcome>.Failure(Error.Validation(OAuthRejectedMessage));
             }
 
-            return Result<AuthUserResponse>.Success(Map(linkedUser, linkedOrganization));
+            return await BuildLoginOutcomeAsync(linkedUser, deviceTrustToken, cancellationToken);
         }
 
         if (string.IsNullOrWhiteSpace(info.Email))
         {
-            return Result<AuthUserResponse>.Failure(Error.Validation("Dostawca logowania nie udostępnił adresu e-mail. Wyraź zgodę na udostępnienie e-maila i spróbuj ponownie."));
+            return Result<LoginOutcome>.Failure(Error.Validation("Dostawca logowania nie udostępnił adresu e-mail. Wyraź zgodę na udostępnienie e-maila i spróbuj ponownie."));
         }
 
         var existingUser = await _users.FindByEmailAsync(info.Email, cancellationToken);
         if (existingUser is not null)
         {
+            if (!existingUser.IsActive)
+            {
+                return Result<LoginOutcome>.Failure(Error.Validation(OAuthRejectedMessage));
+            }
+
             if (!info.EmailVerified)
             {
-                return Result<AuthUserResponse>.Failure(Error.Validation("E-mail z tego dostawcy nie jest zweryfikowany. Zaloguj się hasłem i połącz konto w ustawieniach."));
+                return Result<LoginOutcome>.Failure(Error.Validation("E-mail z tego dostawcy nie jest zweryfikowany. Zaloguj się hasłem i połącz konto w ustawieniach."));
             }
 
             _externalLogins.Add(new ExternalLogin(existingUser.Id, info.Provider, info.ProviderUserId));
@@ -343,13 +358,7 @@ public sealed class AuthService
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            var existingOrganization = await _organizations.GetAsync(existingUser.OrganizationId, cancellationToken);
-            if (existingOrganization is null)
-            {
-                return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
-            }
-
-            return Result<AuthUserResponse>.Success(Map(existingUser, existingOrganization));
+            return await BuildLoginOutcomeAsync(existingUser, deviceTrustToken, cancellationToken);
         }
 
         try
@@ -383,12 +392,34 @@ public sealed class AuthService
             _activity.Add(new ActivityLog(organization.Id, "organization.registered_via_oauth", "organization", organization.Id, user.Email, organization.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            return Result<AuthUserResponse>.Success(Map(user, organization));
+            return Result<LoginOutcome>.Success(new LoginOutcome(false, null, Map(user, organization)));
         }
         catch (DomainException ex)
         {
-            return Result<AuthUserResponse>.Failure(Error.Validation(ex.Message));
+            return Result<LoginOutcome>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    // Shared by every OAuth account resolution branch so a linked/matched-email account never skips
+    // the same second-factor gate password login enforces (audyt AUD3-003).
+    private async Task<Result<LoginOutcome>> BuildLoginOutcomeAsync(OrganizationUser user, string? deviceTrustToken, CancellationToken cancellationToken)
+    {
+        var trustedDevice = user.IsTwoFactorEnabled
+            && !string.IsNullOrEmpty(deviceTrustToken)
+            && await _deviceTrustTokens.FindValidAsync(user.Id, TokenHasher.Hash(deviceTrustToken), _clock.UtcNow, cancellationToken) is not null;
+
+        if (user.IsTwoFactorEnabled && !trustedDevice)
+        {
+            return Result<LoginOutcome>.Success(new LoginOutcome(true, user.Id, null));
+        }
+
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            return Result<LoginOutcome>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
+        }
+
+        return Result<LoginOutcome>.Success(new LoginOutcome(false, null, Map(user, organization)));
     }
 
     public async Task RequestPasswordResetAsync(ForgotPasswordRequest request, CancellationToken cancellationToken)
@@ -439,13 +470,15 @@ public sealed class AuthService
 
         user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
         token.MarkUsed();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Reset hasła jest często wywołany właśnie DLATEGO, że konto mogło zostać przejęte — stare refresh
-        // sessions i zaufane urządzenia nie mogą przeżyć zmiany hasła (audyt P0.5).
+        // sessions i zaufane urządzenia nie mogą przeżyć zmiany hasła (audyt P0.5). Revoke happens before
+        // the single SaveChangesAsync so it commits atomically with the password change, not as a
+        // separate statement that could succeed/fail independently (audyt AUD3-012).
         await _refreshTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
         await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
 
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
@@ -549,7 +582,9 @@ public sealed class AuthService
     public async Task<Result<RefreshResult>> RefreshAsync(string rawToken, CancellationToken cancellationToken)
     {
         var tokenHash = TokenHasher.Hash(rawToken);
-        var token = await _refreshTokens.FindValidAsync(tokenHash, _clock.UtcNow, cancellationToken);
+        // Atomic claim (audyt AUD3-012: dwa równoległe refresh requesty muszą dać dokładnie jeden
+        // sukces) — a concurrent request for the same token sees it already revoked and fails here.
+        var token = await _refreshTokens.TryConsumeAsync(tokenHash, _clock.UtcNow, cancellationToken);
         if (token is null)
         {
             return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
@@ -567,7 +602,6 @@ public sealed class AuthService
             return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
         }
 
-        token.Revoke();
         var newRawToken = TokenHasher.NewRawToken();
         _refreshTokens.Add(new RefreshToken(user.Id, TokenHasher.Hash(newRawToken), _clock.UtcNow.AddDays(30)));
         await _unitOfWork.SaveChangesAsync(cancellationToken);

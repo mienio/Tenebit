@@ -138,6 +138,16 @@ if (app.Environment.IsProduction())
         throw new InvalidOperationException("Auth:SigningKey nie jest bezpiecznie skonfigurowany. Aplikacja nie może wystartować w Production.");
     }
 
+    // Musi być odrębny od Auth:SigningKey — inaczej rotacja sekretu JWT (rutynowa po incydencie) po cichu
+    // unieważnia klucz szyfrowania pól (TOTP, licencje, custom fields) i dane stają się nieczytelne
+    // (audyt AUD3-011).
+    var fieldEncryptionKey = builder.Configuration["Auth:FieldEncryptionKey"];
+    if (string.IsNullOrWhiteSpace(fieldEncryptionKey) || fieldEncryptionKey == "tenebit-development-field-encryption-key-change-me" || fieldEncryptionKey.Length < 32 || fieldEncryptionKey == signingKey)
+    {
+        app.Logger.LogCritical("BEZPIECZEŃSTWO: Auth:FieldEncryptionKey jest puste, ma domyślną wartość, jest za krótkie albo jest identyczne z Auth:SigningKey. Ustaw odrębny unikalny sekret (min. 32 znaki) przez zmienną środowiskową Auth__FieldEncryptionKey.");
+        throw new InvalidOperationException("Auth:FieldEncryptionKey nie jest bezpiecznie skonfigurowany. Aplikacja nie może wystartować w Production.");
+    }
+
     var connectionString = builder.Configuration.GetConnectionString("TenebitDb") ?? string.Empty;
     if (connectionString.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase))
     {

@@ -62,8 +62,11 @@ public sealed class DashboardService
         return new DashboardLayoutResponse(layout.LayoutJson);
     }
 
-    public async Task<DashboardSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken)
+    public async Task<Result<DashboardSummaryResponse>> GetSummaryAsync(CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.TenantWideViewers);
+        if (access.IsFailure) return Result<DashboardSummaryResponse>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
@@ -113,7 +116,7 @@ public sealed class DashboardService
             .OrderByDescending(item => item.Count)
             .ToList();
 
-        return new DashboardSummaryResponse(
+        return Result<DashboardSummaryResponse>.Success(new DashboardSummaryResponse(
             assets.Count,
             assets.Count(asset => asset.Status == AssetStatus.InStock),
             assets.Count(asset => asset.Status == AssetStatus.Assigned),
@@ -131,11 +134,14 @@ public sealed class DashboardService
             activity,
             byCategory,
             byLocation,
-            byTeam);
+            byTeam));
     }
 
     public async Task<Result<DashboardComparisonResponse>> GetComparisonAsync(int daysAgo, CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.TenantWideViewers);
+        if (access.IsFailure) return Result<DashboardComparisonResponse>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
         var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
         var targetDate = today.AddDays(-Math.Abs(daysAgo));
@@ -146,11 +152,13 @@ public sealed class DashboardService
         }
 
         var current = await GetSummaryAsync(cancellationToken);
+        if (current.IsFailure) return Result<DashboardComparisonResponse>.Failure(current.Error!);
+
         return Result<DashboardComparisonResponse>.Success(new DashboardComparisonResponse(
             snapshot.SnapshotDate,
-            current.TotalAssets, snapshot.TotalAssets,
-            current.AssetsWithoutOwner, snapshot.AssetsWithoutOwner,
-            current.OpenAssignments, snapshot.OpenAssignments,
-            current.VisibleAssetValue, snapshot.VisibleAssetValue));
+            current.Value!.TotalAssets, snapshot.TotalAssets,
+            current.Value!.AssetsWithoutOwner, snapshot.AssetsWithoutOwner,
+            current.Value!.OpenAssignments, snapshot.OpenAssignments,
+            current.Value!.VisibleAssetValue, snapshot.VisibleAssetValue));
     }
 }

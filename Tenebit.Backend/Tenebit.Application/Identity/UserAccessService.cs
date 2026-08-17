@@ -13,6 +13,8 @@ public sealed class UserAccessService
     private readonly IOrganizationRepository _organizations;
     private readonly IActivityLogRepository _activity;
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
+    private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly IDeviceTrustTokenRepository _deviceTrustTokens;
     private readonly IEmailSender _emailSender;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly ICurrentUser _currentUser;
@@ -25,6 +27,8 @@ public sealed class UserAccessService
         IOrganizationRepository organizations,
         IActivityLogRepository activity,
         IPasswordResetTokenRepository passwordResetTokens,
+        IRefreshTokenRepository refreshTokens,
+        IDeviceTrustTokenRepository deviceTrustTokens,
         IEmailSender emailSender,
         IAppLinkBuilder appLinkBuilder,
         ICurrentUser currentUser,
@@ -36,6 +40,8 @@ public sealed class UserAccessService
         _organizations = organizations;
         _activity = activity;
         _passwordResetTokens = passwordResetTokens;
+        _refreshTokens = refreshTokens;
+        _deviceTrustTokens = deviceTrustTokens;
         _emailSender = emailSender;
         _appLinkBuilder = appLinkBuilder;
         _currentUser = currentUser;
@@ -64,6 +70,8 @@ public sealed class UserAccessService
             var organizationId = _currentUser.OrganizationId;
             var roleValidation = ValidateRoles(request.Roles);
             if (roleValidation.IsFailure) return Result<OrganizationUserResponse>.Failure(roleValidation.Error!);
+            if (HasRole(request.Roles, TenebitRoles.Owner) && !_currentUser.HasAnyRole(TenebitRoles.Owner))
+                return Result<OrganizationUserResponse>.Failure(Error.Forbidden("Tylko właściciel może nadać rolę Właściciela."));
             if (await _users.EmailExistsAsync(organizationId, request.Email, null, cancellationToken)) return Result<OrganizationUserResponse>.Failure(Error.Conflict("Użytkownik z tym adresem e-mail już istnieje."));
             var user = new OrganizationUser(organizationId, request.Email, request.DisplayName, request.IsActive);
             user.Update(request.Email, request.DisplayName, request.IsActive, request.Roles);
@@ -92,9 +100,38 @@ public sealed class UserAccessService
             if (user is null) return Result<OrganizationUserResponse>.Failure(Error.NotFound("Użytkownik nie istnieje."));
             var roleValidation = ValidateRoles(request.Roles);
             if (roleValidation.IsFailure) return Result<OrganizationUserResponse>.Failure(roleValidation.Error!);
+
+            var actorHasOwner = _currentUser.HasAnyRole(TenebitRoles.Owner);
+            var targetHadOwner = HasRole(user.Roles.Select(x => x.Role), TenebitRoles.Owner);
+            var requestHasOwner = HasRole(request.Roles, TenebitRoles.Owner);
+
+            if (!actorHasOwner && requestHasOwner && !targetHadOwner)
+                return Result<OrganizationUserResponse>.Failure(Error.Forbidden("Tylko właściciel może nadać rolę Właściciela."));
+            if (!actorHasOwner && targetHadOwner && !requestHasOwner)
+                return Result<OrganizationUserResponse>.Failure(Error.Forbidden("Tylko właściciel może odebrać rolę Właściciela."));
+
+            if (targetHadOwner && (!requestHasOwner || !request.IsActive))
+            {
+                var allUsers = await _users.ListAsync(organizationId, cancellationToken);
+                var remainingActiveOwners = allUsers.Count(u => u.Id != user.Id && u.IsActive && HasRole(u.Roles.Select(x => x.Role), TenebitRoles.Owner));
+                if (remainingActiveOwners == 0)
+                    return Result<OrganizationUserResponse>.Failure(Error.Validation("W firmie musi pozostać co najmniej jeden aktywny właściciel."));
+            }
+
+            var existingRoles = user.Roles.Select(x => x.Role).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var requestedRoles = request.Roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var rolesOrActiveChanged = user.IsActive != request.IsActive || !existingRoles.SetEquals(requestedRoles);
+
             if (await _users.EmailExistsAsync(organizationId, request.Email, id, cancellationToken)) return Result<OrganizationUserResponse>.Failure(Error.Conflict("Użytkownik z tym adresem e-mail już istnieje."));
             user.Update(request.Email, request.DisplayName, request.IsActive, request.Roles);
             _activity.Add(new ActivityLog(organizationId, "user.updated", "organization_user", user.Id, _currentUser.Subject, user.Email, _clock.UtcNow));
+
+            if (rolesOrActiveChanged)
+            {
+                await _refreshTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
+                await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
+            }
+
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<OrganizationUserResponse>.Success(Map(user));
         }
@@ -120,6 +157,8 @@ public sealed class UserAccessService
             _logger.LogWarning(ex, "Nie udało się wysłać e-maila z zaproszeniem do {Email}", user.Email);
         }
     }
+
+    private static bool HasRole(IEnumerable<string> roles, string role) => roles.Contains(role, StringComparer.OrdinalIgnoreCase);
 
     private static Result ValidateRoles(IReadOnlyList<string> roles)
     {
