@@ -60,6 +60,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
     public DbSet<Asset> Assets => Set<Asset>();
+    public DbSet<Location> Locations => Set<Location>();
     public DbSet<AssetInspection> AssetInspections => Set<AssetInspection>();
     public DbSet<ServiceTicket> ServiceTickets => Set<ServiceTicket>();
     public DbSet<Person> People => Set<Person>();
@@ -102,6 +103,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureOrganizations(modelBuilder);
         ConfigureIdentity(modelBuilder);
         ConfigureAssets(modelBuilder);
+        ConfigureLocations(modelBuilder);
         ConfigurePeople(modelBuilder);
         ConfigureProcedures(modelBuilder);
         ConfigureJobProfiles(modelBuilder);
@@ -546,6 +548,18 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasForeignKey(x => new { x.OrganizationId, x.AssetInspectionId })
                 .HasPrincipalKey(i => new { i.OrganizationId, i.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureLocations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Location>(entity =>
+        {
+            entity.ToTable("asset_locations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(40).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.ParentId });
         });
     }
 

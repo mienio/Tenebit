@@ -28,8 +28,17 @@ public interface IAssetRepository
     Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken);
     Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
     void Add(Asset asset);
     void Remove(Asset asset);
+}
+
+public interface ILocationRepository
+{
+    Task<IReadOnlyList<Location>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<Location?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    void Add(Location location);
+    void Remove(Location location);
 }
 
 public interface IAssetCategoryRepository
@@ -57,6 +66,7 @@ public interface IPersonRepository
     Task<Person?> FindByEmailAsync(Guid organizationId, string email, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingPersonId, CancellationToken cancellationToken);
     Task<bool> HasBlockingRelationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
+    Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
     void Add(Person person);
     void Remove(Person person);
 }

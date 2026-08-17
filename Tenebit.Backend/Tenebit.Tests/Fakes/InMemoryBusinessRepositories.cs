@@ -68,6 +68,9 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId));
 
+    public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
+        Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId && x.Location == location));
+
     public void Add(Asset asset) => Assets.Add(asset);
     public void Remove(Asset asset) => Assets.Remove(asset);
 }
@@ -98,6 +101,9 @@ public sealed class InMemoryPersonRepository : IPersonRepository
 
     public Task<bool> HasBlockingRelationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
         Task.FromResult(HasBlockingRelations);
+
+    public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
+        Task.FromResult(People.Count(x => x.OrganizationId == organizationId && x.Location == location));
 
     public void Add(Person person) => People.Add(person);
     public void Remove(Person person) => People.Remove(person);

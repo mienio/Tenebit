@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddDbContext<TenebitDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<TenebitDbContext>());
         services.AddScoped<IAssetRepository, AssetRepository>();
+        services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<IAssetCategoryRepository, AssetCategoryRepository>();
         services.AddScoped<IAssetInspectionRepository, AssetInspectionRepository>();
         services.AddScoped<IPersonRepository, PersonRepository>();

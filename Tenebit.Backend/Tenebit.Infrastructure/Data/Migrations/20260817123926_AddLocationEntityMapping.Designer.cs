@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Tenebit.Infrastructure.Data;
@@ -12,9 +13,11 @@ using Tenebit.Infrastructure.Data;
 namespace Tenebit.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(TenebitDbContext))]
-    partial class TenebitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260817123926_AddLocationEntityMapping")]
+    partial class AddLocationEntityMapping
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

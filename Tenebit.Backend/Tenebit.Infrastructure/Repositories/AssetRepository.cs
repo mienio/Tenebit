@@ -113,6 +113,9 @@ public sealed class AssetRepository : IAssetRepository
     public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
         _db.Assets.CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
 
+    public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
+        _db.Assets.AsNoTracking().CountAsync(x => x.OrganizationId == organizationId && x.Location == location, cancellationToken);
+
     public void Add(Asset asset) => _db.Assets.Add(asset);
     public void Remove(Asset asset) => _db.Assets.Remove(asset);
 }
