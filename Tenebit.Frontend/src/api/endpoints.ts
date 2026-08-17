@@ -8,8 +8,10 @@ import type {
   AssetCategoryType,
   AssetEvidence,
   AssetFieldDefinition,
+  AssetGroupCounts,
   AssetStatus,
   AssetStatusSetting,
+  QrLabelSettings,
   Assignment,
   AssetAuditCampaignDetailsResponse,
   AssetAuditCampaignPreviewResponse,
@@ -113,6 +115,8 @@ export const api = {
 
   assetStatuses: () => apiRequest<AssetStatusSetting[]>('/api/asset-statuses'),
   saveAssetStatuses: (body: AssetStatusSetting[]) => apiRequest<AssetStatusSetting[]>('/api/asset-statuses', { method: 'PUT', body: JSON.stringify(body) }),
+  qrLabelSettings: () => apiRequest<QrLabelSettings>('/api/settings/qr-label'),
+  saveQrLabelSettings: (body: QrLabelSettings) => apiRequest<QrLabelSettings>('/api/settings/qr-label', { method: 'PUT', body: JSON.stringify(body) }),
 
   jobProfiles: () => apiRequest<JobProfile[]>('/api/job-profiles'),
   createJobProfile: (body: { name: string; description?: string | null; defaultManagerId?: string | null; assetCategoryIds: string[]; procedureIds: string[] }) => apiRequest<JobProfile>('/api/job-profiles', { method: 'POST', body: JSON.stringify(body) }),
@@ -153,12 +157,13 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiRequest<Asset[]>(`/api/assets${suffix}`);
   },
-  assetsPaged: (params: { search?: string; status?: AssetStatus | ''; location?: string; teamId?: string; owner?: string; warranty?: string; sort?: string; desc?: boolean; page: number; pageSize: number }) => {
+  assetsPaged: (params: { search?: string; status?: AssetStatus | ''; location?: string; teamId?: string; categoryId?: string; owner?: string; warranty?: string; sort?: string; desc?: boolean; page: number; pageSize: number }) => {
     const query = new URLSearchParams();
     if (params.search) query.set('search', params.search);
     if (params.status) query.set('status', params.status);
     if (params.location) query.set('location', params.location);
     if (params.teamId) query.set('teamId', params.teamId);
+    if (params.categoryId) query.set('categoryId', params.categoryId);
     if (params.owner) query.set('owner', params.owner);
     if (params.warranty) query.set('warranty', params.warranty);
     if (params.sort) query.set('sort', params.sort);
@@ -167,6 +172,7 @@ export const api = {
     query.set('pageSize', String(params.pageSize));
     return apiRequest<Paged<Asset>>(`/api/assets?${query.toString()}`);
   },
+  assetGroupCounts: () => apiRequest<AssetGroupCounts>('/api/assets/group-counts'),
   createAsset: (body: CreateAssetRequest) => apiRequest<Asset>('/api/assets', { method: 'POST', body: JSON.stringify(body) }),
   updateAsset: (id: string, body: CreateAssetRequest & { status: AssetStatus }) => apiRequest<Asset>(`/api/assets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteAsset: (id: string) => apiRequest<void>(`/api/assets/${id}`, { method: 'DELETE' }),
@@ -301,7 +307,7 @@ export const api = {
   updateOffboarding: (id: string, body: Omit<CreateOffboardingCaseRequest, 'personId'>) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   startOffboarding: (id: string, body: { notifyEmployee: boolean }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/start`, { method: 'POST', body: JSON.stringify(body) }),
   resendOffboarding: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/resend`, { method: 'POST' }),
-  regenerateOffboardingLink: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/regenerate-link`, { method: 'POST' }),
+  regenerateOffboardingLink: (id: string) => apiRequest<string>(`/api/offboarding/${id}/regenerate-link`, { method: 'POST' }),
   executeOffboardingScheduledActions: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/execute-scheduled-actions`, { method: 'POST' }),
   confirmOffboardingItemReturn: (id: string, itemId: string, body: { returnCondition?: string | null; returnLocation?: string | null; notes?: string | null }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/confirm-return`, { method: 'POST', body: JSON.stringify(body) }),
   completeOffboardingInspection: (id: string, itemId: string, body: { outcome: string; serialNumberMatched: boolean; accessoriesComplete: boolean; dataWiped: boolean; functionalTestPassed: boolean; damageAssessmentNotes?: string | null; notes?: string | null }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/items/${itemId}/complete-inspection`, { method: 'POST', body: JSON.stringify(body) }),
@@ -366,11 +372,12 @@ export const api = {
     return apiRequest<unknown>(`/api/public/asset-audits/${token}/items/${itemId}/evidence`, { method: 'POST', body });
   },
 
-  publicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}`),
-  acceptPublicAssignment: (organizationId: string, assignmentId: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${organizationId}/${assignmentId}/accept`, { method: 'POST' }),
-  downloadPublicAssignmentProtocol: (organizationId: string, assignmentId: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/protocol`),
-  downloadPublicProcedureDocument: (organizationId: string, assignmentId: string, procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/procedures/${procedureId}/documents/${documentId}`),
-  publicAssignmentEvidence: (organizationId: string, assignmentId: string, id: string) => apiBlob(`/api/public/assignments/${organizationId}/${assignmentId}/evidence/${id}`),
+  publicAssignment: (token: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${token}`),
+  acceptPublicAssignment: (token: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${token}/accept`, { method: 'POST' }),
+  downloadPublicAssignmentProtocol: (token: string) => apiBlob(`/api/public/assignments/${token}/protocol`),
+  downloadPublicProcedureDocument: (token: string, procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/${token}/procedures/${procedureId}/documents/${documentId}`),
+  publicAssignmentEvidence: (token: string, id: string) => apiBlob(`/api/public/assignments/${token}/evidence/${id}`),
+  regenerateAssignmentAcceptanceLink: (id: string) => apiRequest<{ link: string }>(`/api/assignments/${id}/acceptance-link`, { method: 'POST' }),
 
   myWorkspace: () => apiRequest<MyWorkspace>('/api/my/workspace'),
 

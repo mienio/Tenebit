@@ -9,10 +9,10 @@ public sealed class AppLinkBuilder : IAppLinkBuilder
 
     public AppLinkBuilder(IConfiguration configuration) => _configuration = configuration;
 
-    public string BuildAssignmentAcceptanceLink(Guid organizationId, Guid assignmentId)
+    public string BuildAssignmentAcceptanceLink(string rawToken)
     {
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
-        return $"{baseUrl}/accept/{organizationId}/{assignmentId}";
+        return $"{baseUrl}/accept/{Uri.EscapeDataString(rawToken)}";
     }
 
     public string BuildAssetScanLink(Guid organizationId, Guid assetId)

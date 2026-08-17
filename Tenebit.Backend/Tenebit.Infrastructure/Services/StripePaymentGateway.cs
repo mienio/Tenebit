@@ -97,7 +97,12 @@ public sealed class StripePaymentGateway : IPaymentGateway
 
         using var doc = JsonDocument.Parse(payload);
         var root = doc.RootElement;
+        var eventId = root.GetProperty("id").GetString() ?? "";
         var type = root.GetProperty("type").GetString() ?? "";
+        var eventCreatedAt = root.TryGetProperty("created", out var createdProp) && createdProp.TryGetInt64(out var createdUnix)
+            ? DateTimeOffset.FromUnixTimeSeconds(createdUnix)
+            : DateTimeOffset.UtcNow;
+
         if (!HandledEventTypes.Contains(type))
         {
             return null;
@@ -124,10 +129,10 @@ public sealed class StripePaymentGateway : IPaymentGateway
 
         // Only the Pro plan is ever purchased through Checkout, so any subscription object is Pro
         // (a Cancelled status will make OrganizationSubscription.SyncFromStripe revert to Free regardless).
-        return new PaymentWebhookEvent(type, customerId, subscriptionId, SubscriptionPlan.Pro.Key, status, currentPeriodStart, currentPeriodEnd, organizationId);
+        return new PaymentWebhookEvent(eventId, type, customerId, subscriptionId, SubscriptionPlan.Pro.Key, status, eventCreatedAt, currentPeriodStart, currentPeriodEnd, organizationId);
     }
 
-    private static SubscriptionStatus MapStatus(string eventType, string? stripeStatus)
+    private SubscriptionStatus MapStatus(string eventType, string? stripeStatus)
     {
         if (eventType == "customer.subscription.deleted") return SubscriptionStatus.Cancelled;
 
@@ -136,8 +141,17 @@ public sealed class StripePaymentGateway : IPaymentGateway
             "active" or "trialing" => SubscriptionStatus.Active,
             "past_due" or "incomplete" => SubscriptionStatus.PastDue,
             "canceled" or "unpaid" or "incomplete_expired" => SubscriptionStatus.Cancelled,
-            _ => SubscriptionStatus.Active
+            // Nieznany status Stripe nie może po cichu odblokować płatnego planu (fail-open) — traktujemy go
+            // konserwatywnie jak PastDue (nie odbiera już przyznanego dostępu, ale i nie potwierdza nowego)
+            // i logujemy do przeglądu (audyt P0.6).
+            _ => LogUnknownStatusAndFallBack(stripeStatus)
         };
+    }
+
+    private SubscriptionStatus LogUnknownStatusAndFallBack(string? stripeStatus)
+    {
+        _logger.LogWarning("Nieznany status subskrypcji Stripe {StripeStatus} — zastosowano konserwatywny fallback PastDue.", stripeStatus);
+        return SubscriptionStatus.PastDue;
     }
 
     private void VerifySignature(string payload, string signatureHeader)
@@ -166,6 +180,20 @@ public sealed class StripePaymentGateway : IPaymentGateway
         if (timestamp is null || signature is null)
         {
             throw new InvalidOperationException("Malformed Stripe-Signature header.");
+        }
+
+        // Bez tolerancji czasowej ważny podpis pozostaje wiecznie ważny — przechwycony kiedyś payload
+        // dałoby się odtworzyć (replay) w dowolnym momencie w przyszłości (audyt P0.6). 5 minut to
+        // domyślna tolerancja rekomendowana przez Stripe.
+        if (!long.TryParse(timestamp, out var timestampUnix))
+        {
+            throw new InvalidOperationException("Malformed Stripe-Signature timestamp.");
+        }
+
+        var eventTime = DateTimeOffset.FromUnixTimeSeconds(timestampUnix);
+        if ((DateTimeOffset.UtcNow - eventTime).Duration() > TimeSpan.FromMinutes(5))
+        {
+            throw new InvalidOperationException("Stripe webhook signature timestamp is outside the allowed tolerance.");
         }
 
         var signedPayload = $"{timestamp}.{payload}";

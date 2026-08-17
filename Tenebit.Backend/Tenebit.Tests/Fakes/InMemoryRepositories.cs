@@ -151,6 +151,15 @@ public sealed class InMemoryActivityLogRepository : IActivityLogRepository
     public Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, DateTimeOffset? from, DateTimeOffset? to, IReadOnlyCollection<string>? actorSubjects, string? action, CancellationToken cancellationToken) =>
         Task.FromResult<(IReadOnlyList<ActivityLog>, int)>((Logs, Logs.Count));
 
+    public Task<bool> ExistsRecentAsync(Guid organizationId, string entityType, Guid entityId, string actorSubject, string action, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult(Logs.Any(x =>
+            x.OrganizationId == organizationId &&
+            x.EntityType == entityType &&
+            x.EntityId == entityId &&
+            x.ActorSubject == actorSubject &&
+            x.Action == action &&
+            x.CreatedAt >= since));
+
     public void Add(ActivityLog log) => Logs.Add(log);
 }
 
@@ -207,6 +216,12 @@ public sealed class InMemoryRefreshTokenRepository : IRefreshTokenRepository
     public Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult(Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.IsValid(now)));
 
+    public Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken)
+    {
+        foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.RevokedAt is null)) token.Revoke();
+        return Task.CompletedTask;
+    }
+
     public void Add(RefreshToken token) => Tokens.Add(token);
 }
 
@@ -216,6 +231,12 @@ public sealed class InMemoryDeviceTrustTokenRepository : IDeviceTrustTokenReposi
 
     public Task<DeviceTrustToken?> FindValidAsync(Guid organizationUserId, string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult(Tokens.FirstOrDefault(x => x.OrganizationUserId == organizationUserId && x.TokenHash == tokenHash && x.IsValid(now)));
+
+    public Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken)
+    {
+        foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.RevokedAt is null)) token.Revoke();
+        return Task.CompletedTask;
+    }
 
     public void Add(DeviceTrustToken token) => Tokens.Add(token);
 }
@@ -313,7 +334,7 @@ public sealed class FakeEmailSender : IEmailSender
 
 public sealed class FakeAppLinkBuilder : IAppLinkBuilder
 {
-    public string BuildAssignmentAcceptanceLink(Guid organizationId, Guid assignmentId) => $"https://test/accept/{organizationId}/{assignmentId}";
+    public string BuildAssignmentAcceptanceLink(string rawToken) => $"https://test/accept/{rawToken}";
     public string BuildAssetScanLink(Guid organizationId, Guid assetId) => $"https://test/scan/{organizationId}/{assetId}";
     public string BuildPasswordResetLink(string rawToken) => $"https://test/reset-password?token={rawToken}";
     public string BuildEmailVerificationLink(string rawToken) => $"https://test/verify-email?token={rawToken}";
@@ -321,9 +342,21 @@ public sealed class FakeAppLinkBuilder : IAppLinkBuilder
     public string BuildAssetAuditLink(string rawToken) => $"https://test/audit/{rawToken}";
 }
 
+public sealed class FakeFieldEncryptor : IFieldEncryptor
+{
+    public string Encrypt(string purpose, string plaintext) => $"enc:{purpose}:{plaintext}";
+
+    public string Decrypt(string purpose, string ciphertext)
+    {
+        var prefix = $"enc:{purpose}:";
+        return ciphertext.StartsWith(prefix, StringComparison.Ordinal) ? ciphertext[prefix.Length..] : ciphertext;
+    }
+}
+
 public sealed class FakeQrCodeGenerator : IQrCodeGenerator
 {
     public string CreateAssetQrSvg(string payload) => "<svg/>";
+    public string CreateLabelledAssetQrSvg(string payload, IReadOnlyList<string> labelLines) => "<svg/>";
     public string CreateTotpQrSvg(string otpAuthUri) => "<svg/>";
 }
 
@@ -335,4 +368,7 @@ public sealed class FakeClock : IClock
 public sealed class FakeUnitOfWork : IUnitOfWork
 {
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+
+    public Task<T> ExecuteWithOrganizationLockAsync<T>(Guid organizationId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken) =>
+        action(cancellationToken);
 }

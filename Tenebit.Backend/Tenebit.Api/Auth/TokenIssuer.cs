@@ -27,8 +27,10 @@ public sealed class TokenIssuer
 
         var credentials = new SigningCredentials(JwtSigningKey.Get(_configuration), SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
+            issuer: JwtIssuerOptions.GetIssuer(_configuration),
+            audience: JwtIssuerOptions.GetAudience(_configuration),
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(30),
+            expires: DateTime.UtcNow.AddMinutes(JwtIssuerOptions.GetAccessTokenMinutes(_configuration)),
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

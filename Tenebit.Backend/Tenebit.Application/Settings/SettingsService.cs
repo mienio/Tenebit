@@ -98,6 +98,27 @@ public sealed class SettingsService
     private static EvidencePrivacySettingsResponse MapPrivacySettings(Tenebit.Domain.Organizations.Organization organization) =>
         new(organization.CapturePublicIp, organization.PublicIpRetentionDays, organization.DefaultEvidenceRetentionMonths, organization.PrivacyNoticeUrl, organization.PrivacyContactEmail);
 
+    public async Task<Result<QrLabelSettingsResponse>> GetQrLabelSettingsAsync(CancellationToken cancellationToken)
+    {
+        var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
+        if (organization is null) return Result<QrLabelSettingsResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
+        return Result<QrLabelSettingsResponse>.Success(new QrLabelSettingsResponse(organization.QrLabelShowName, organization.QrLabelShowTag));
+    }
+
+    public async Task<Result<QrLabelSettingsResponse>> SaveQrLabelSettingsAsync(SaveQrLabelSettingsRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        if (access.IsFailure) return Result<QrLabelSettingsResponse>.Failure(access.Error!);
+
+        var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
+        if (organization is null) return Result<QrLabelSettingsResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
+
+        organization.UpdateQrLabelSettings(request.ShowName, request.ShowTag);
+        _activity.Add(new ActivityLog(organization.Id, "settings.qr_label.updated", "organization", organization.Id, _currentUser.Subject, null, _clock.UtcNow));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<QrLabelSettingsResponse>.Success(new QrLabelSettingsResponse(organization.QrLabelShowName, organization.QrLabelShowTag));
+    }
+
     private static IReadOnlyList<AssetStatusSettingResponse> BuiltInStatusSettings(string language)
     {
         if (language != "pl")

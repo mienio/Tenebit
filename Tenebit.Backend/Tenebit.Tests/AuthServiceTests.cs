@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Tenebit.Application.Identity;
+using Tenebit.Domain.Identity;
 using Tenebit.Tests.Fakes;
 
 namespace Tenebit.Tests;
@@ -267,5 +268,49 @@ public class AuthServiceTests
 
         var remaining = await service.GetRecoveryCodesRemainingAsync(registered.Value!.Id, CancellationToken.None);
         Assert.Equal(0, remaining.Value);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_RevokesExistingRefreshAndDeviceTrustSessions()
+    {
+        var organizations = new InMemoryOrganizationRepository();
+        var users = new InMemoryOrganizationUserRepository();
+        var refreshTokens = new InMemoryRefreshTokenRepository();
+        var deviceTrustTokens = new InMemoryDeviceTrustTokenRepository();
+        var passwordResetTokens = new InMemoryPasswordResetTokenRepository();
+        var service = new AuthService(
+            organizations,
+            users,
+            new InMemoryAssetCategoryRepository(),
+            new InMemoryPersonRelationTypeRepository(),
+            new InMemoryAlertRuleRepository(),
+            new InMemoryActivityLogRepository(),
+            new InMemoryExternalLoginRepository(users),
+            passwordResetTokens,
+            new InMemoryEmailVerificationTokenRepository(),
+            refreshTokens,
+            deviceTrustTokens,
+            new InMemoryTwoFactorRecoveryCodeRepository(),
+            new FakeEmailSender(),
+            new FakeAppLinkBuilder(),
+            new FakeQrCodeGenerator(),
+            new FakeClock(),
+            new FakeUnitOfWork(),
+            NullLogger<AuthService>.Instance);
+
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        Assert.True(registered.IsSuccess);
+        var userId = registered.Value!.Id;
+
+        refreshTokens.Add(new RefreshToken(userId, TokenHasher.Hash("existing-refresh"), DateTimeOffset.UtcNow.AddDays(30)));
+        deviceTrustTokens.Add(new DeviceTrustToken(userId, TokenHasher.Hash("existing-device"), DateTimeOffset.UtcNow.AddDays(30)));
+        passwordResetTokens.Add(new PasswordResetToken(userId, TokenHasher.Hash("reset-token"), DateTimeOffset.UtcNow.AddHours(1)));
+
+        var result = await service.ResetPasswordAsync(new ResetPasswordRequest("reset-token", "newpassword123"), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+
+        var now = DateTimeOffset.UtcNow;
+        Assert.Null(await refreshTokens.FindValidAsync(TokenHasher.Hash("existing-refresh"), now, CancellationToken.None));
+        Assert.Null(await deviceTrustTokens.FindValidAsync(userId, TokenHasher.Hash("existing-device"), now, CancellationToken.None));
     }
 }

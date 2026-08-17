@@ -29,6 +29,9 @@ public static class ResultExtensions
     public static IResult ToNoContentResult(this Result result) =>
         result.IsSuccess ? Results.NoContent() : ToErrorResult(result.Error!);
 
+    public static IResult? ToHttpResultIfFailure(this Result result) =>
+        result.IsSuccess ? null : ToErrorResult(result.Error!);
+
     private static IResult ToErrorResult(Error error)
     {
         var message = ErrorMessageTranslator.Translate(error.Message, RequestLanguageAccessor.CurrentLanguage);

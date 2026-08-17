@@ -440,6 +440,12 @@ public sealed class AuthService
         user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
         token.MarkUsed();
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Reset hasła jest często wywołany właśnie DLATEGO, że konto mogło zostać przejęte — stare refresh
+        // sessions i zaufane urządzenia nie mogą przeżyć zmiany hasła (audyt P0.5).
+        await _refreshTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
+        await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
+
         return Result.Success();
     }
 

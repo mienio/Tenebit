@@ -53,5 +53,11 @@ public sealed class AssignmentRepository : IAssignmentRepository
             .Include(x => x.ProcedureAcceptances)
             .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 
+    public Task<Assignment?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken) =>
+        _db.Assignments
+            .Include(x => x.Assets)
+            .Include(x => x.ProcedureAcceptances)
+            .FirstOrDefaultAsync(x => x.PublicTokenHash == tokenHash, cancellationToken);
+
     public void Add(Assignment assignment) => _db.Assignments.Add(assignment);
 }

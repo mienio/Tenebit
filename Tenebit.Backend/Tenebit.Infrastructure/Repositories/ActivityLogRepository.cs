@@ -45,5 +45,14 @@ public sealed class ActivityLogRepository : IActivityLogRepository
         return (items, total);
     }
 
+    public Task<bool> ExistsRecentAsync(Guid organizationId, string entityType, Guid entityId, string actorSubject, string action, DateTimeOffset since, CancellationToken cancellationToken) =>
+        _db.ActivityLogs.AsNoTracking().AnyAsync(x =>
+            x.OrganizationId == organizationId &&
+            x.EntityType == entityType &&
+            x.EntityId == entityId &&
+            x.ActorSubject == actorSubject &&
+            x.Action == action &&
+            x.CreatedAt >= since, cancellationToken);
+
     public void Add(ActivityLog log) => _db.ActivityLogs.Add(log);
 }

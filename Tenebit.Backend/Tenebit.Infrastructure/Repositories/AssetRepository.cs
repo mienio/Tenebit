@@ -35,7 +35,7 @@ public sealed class AssetRepository : IAssetRepository
         return await query.OrderBy(x => x.Name).ToListAsync(cancellationToken);
     }
 
-    public async Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
         var query = _db.Assets.AsNoTracking().Include(x => x.FieldValues).Where(x => x.OrganizationId == organizationId);
         if (!string.IsNullOrWhiteSpace(search))
@@ -53,6 +53,7 @@ public sealed class AssetRepository : IAssetRepository
         }
 
         if (teamId.HasValue) query = query.Where(x => x.TeamId == teamId.Value);
+        if (categoryId.HasValue) query = query.Where(x => x.CategoryId == categoryId.Value);
         if (unassignedOnly) query = query.Where(x => x.AssignedPersonId == null);
         if (warrantyFrom.HasValue) query = query.Where(x => x.WarrantyUntil.HasValue && x.WarrantyUntil.Value >= warrantyFrom.Value);
         if (warrantyTo.HasValue) query = query.Where(x => x.WarrantyUntil.HasValue && x.WarrantyUntil.Value <= warrantyTo.Value);
@@ -80,6 +81,26 @@ public sealed class AssetRepository : IAssetRepository
         return (items, total);
     }
 
+    public async Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        var byCategory = await _db.Assets.AsNoTracking().Where(x => x.OrganizationId == organizationId)
+            .GroupBy(x => x.CategoryId)
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Id, g => g.Count, cancellationToken);
+
+        var byStatus = await _db.Assets.AsNoTracking().Where(x => x.OrganizationId == organizationId)
+            .GroupBy(x => x.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Status, g => g.Count, cancellationToken);
+
+        var byPerson = await _db.Assets.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.AssignedPersonId != null)
+            .GroupBy(x => x.AssignedPersonId!.Value)
+            .Select(g => new { Id = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Id, g => g.Count, cancellationToken);
+
+        return (byCategory, byStatus, byPerson);
+    }
+
     public async Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
         await _db.Assets.Include(x => x.FieldValues).Where(x => x.OrganizationId == organizationId && ids.Contains(x.Id)).ToListAsync(cancellationToken);
 
@@ -88,6 +109,9 @@ public sealed class AssetRepository : IAssetRepository
 
     public Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken) =>
         _db.Assets.AnyAsync(x => x.OrganizationId == organizationId && x.AssetTag == assetTag.Trim() && (!excludingAssetId.HasValue || x.Id != excludingAssetId.Value), cancellationToken);
+
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        _db.Assets.CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
 
     public void Add(Asset asset) => _db.Assets.Add(asset);
     public void Remove(Asset asset) => _db.Assets.Remove(asset);

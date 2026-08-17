@@ -1,6 +1,8 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Tenebit.Api.Http;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.People;
 using Tenebit.Infrastructure.Data;
@@ -9,6 +11,10 @@ namespace Tenebit.Api.Endpoints;
 
 public static class LocationEndpoints
 {
+    // Mutacje struktury lokalizacji zmieniają dane całej organizacji — ta sama granica ról co
+    // pozostałe zakładki "organizationOnly" w ustawieniach (patrz SettingsPage.tsx canManageOrganization).
+    private static readonly string[] LocationManagers = [TenebitRoles.Owner, TenebitRoles.Admin];
+
     public static RouteGroupBuilder MapLocationEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/locations", async (TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
@@ -21,6 +27,9 @@ public static class LocationEndpoints
 
         api.MapPost("/locations", async (CreateLocationRequest request, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
+            var access = AccessPolicy.EnsureAnyRole(currentUser, LocationManagers).ToHttpResultIfFailure();
+            if (access is not null) return access;
+
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { message = "Nazwa lokalizacji jest wymagana.", code = "VALIDATION_ERROR" });
@@ -59,6 +68,9 @@ public static class LocationEndpoints
 
         api.MapPut("/locations/{id:guid}", async (Guid id, UpdateLocationRequest request, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
+            var access = AccessPolicy.EnsureAnyRole(currentUser, LocationManagers).ToHttpResultIfFailure();
+            if (access is not null) return access;
+
             if (string.IsNullOrWhiteSpace(request.Name))
             {
                 return Results.BadRequest(new { message = "Nazwa lokalizacji jest wymagana.", code = "VALIDATION_ERROR" });
@@ -122,6 +134,9 @@ public static class LocationEndpoints
 
         api.MapDelete("/locations/{id:guid}", async (Guid id, TenebitDbContext db, ICurrentUser currentUser, CancellationToken cancellationToken) =>
         {
+            var access = AccessPolicy.EnsureAnyRole(currentUser, LocationManagers).ToHttpResultIfFailure();
+            if (access is not null) return access;
+
             var rows = await LoadLocationsAsync(db, currentUser.OrganizationId, cancellationToken);
             var target = rows.FirstOrDefault(x => x.Id == id);
             if (target is null)

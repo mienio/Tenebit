@@ -126,6 +126,12 @@ export interface Asset {
   teamName?: string | null;
 }
 
+export interface AssetGroupCounts {
+  byCategory: Record<string, number>;
+  byStatus: Partial<Record<AssetStatus, number>>;
+  byPerson: Record<string, number>;
+}
+
 export interface CreateAssetRequest {
   name: string;
   assetTag: string;
@@ -287,7 +293,6 @@ export interface Assignment {
   notes?: string | null;
   assets: AssignmentAsset[];
   procedureAcceptances: ProcedureAcceptance[];
-  acceptanceLink: string;
   acceptedIp?: string | null;
   acceptanceHash?: string | null;
   isIntegrityVerified: boolean;
@@ -815,6 +820,11 @@ export interface AssetStatusSetting {
   backgroundColor: string;
   sortOrder: number;
   isEnabled: boolean;
+}
+
+export interface QrLabelSettings {
+  showName: boolean;
+  showTag: boolean;
 }
 
 export interface JobProfile {

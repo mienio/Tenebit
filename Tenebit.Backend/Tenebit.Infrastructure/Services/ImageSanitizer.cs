@@ -11,10 +11,22 @@ namespace Tenebit.Infrastructure.Services;
 
 public sealed class ImageSanitizer : IImageSanitizer
 {
+    // Limit pikseli sprawdzany PRZED pełnym dekodowaniem (Image.Identify nie materializuje bufora pikseli) —
+    // bez tego mały skompresowany plik może rozpakować się do gigabajtów w pamięci (decompression/pixel bomb,
+    // audyt P0.4).
+    private const int MaxDimensionPx = 8000;
+    private const long MaxPixels = 40_000_000L;
+
     public SanitizedImage StripMetadata(DetectedImageFormat format, byte[] content)
     {
         try
         {
+            var info = Image.Identify(content) ?? throw new DomainException("Nieprawidłowy lub uszkodzony plik obrazu.");
+            if (info.Width > MaxDimensionPx || info.Height > MaxDimensionPx || (long)info.Width * info.Height > MaxPixels)
+            {
+                throw new DomainException("Obraz ma zbyt duże wymiary.");
+            }
+
             using var image = Image.Load(content);
 
             image.Metadata.ExifProfile = null;

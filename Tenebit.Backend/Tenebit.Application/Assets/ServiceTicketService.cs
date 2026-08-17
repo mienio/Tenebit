@@ -10,15 +10,17 @@ public sealed class ServiceTicketService
 {
     private readonly IServiceTicketRepository _tickets;
     private readonly IAssetRepository _assets;
+    private readonly IAssetInspectionRepository _inspections;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public ServiceTicketService(IServiceTicketRepository tickets, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public ServiceTicketService(IServiceTicketRepository tickets, IAssetRepository assets, IAssetInspectionRepository inspections, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _tickets = tickets;
         _assets = assets;
+        _inspections = inspections;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -63,6 +65,11 @@ public sealed class ServiceTicketService
             var organizationId = _currentUser.OrganizationId;
             var asset = await _assets.GetAsync(organizationId, request.AssetId, cancellationToken);
             if (asset is null) return Result<ServiceTicketResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+            if (request.AssetInspectionId.HasValue && await _inspections.GetAsync(organizationId, request.AssetInspectionId.Value, cancellationToken) is null)
+            {
+                return Result<ServiceTicketResponse>.Failure(Error.Validation("Wybrana inspekcja aktywa nie istnieje."));
+            }
 
             var ticket = new ServiceTicket(organizationId, request.AssetId, request.Vendor, request.Description, request.AssetInspectionId);
             ticket.UpdateDetails(request.Vendor, request.Description, request.EstimatedCost, request.Currency, request.SlaDueAt);

@@ -18,7 +18,7 @@ import { TwoFactorCard } from '../components/TwoFactorCard';
 import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, RolePermission, Team } from '../types/domain';
+import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, QrLabelSettings, RolePermission, Team } from '../types/domain';
 import { categoryTypeValues } from '../utils/labels';
 import { toNullable } from '../utils/format';
 import { CategoryIcon } from '../utils/categoryIcons';
@@ -53,6 +53,7 @@ export function SettingsPage() {
   const organization = useAsyncData(api.organization, []);
   const categories = useAsyncData(() => (categoriesNeeded ? api.categories() : Promise.resolve(null)), [categoriesNeeded]);
   const statuses = useAsyncData(() => (statusesNeeded ? api.assetStatuses() : Promise.resolve(null)), [statusesNeeded]);
+  const qrLabelSettings = useAsyncData(() => (statusesNeeded ? api.qrLabelSettings() : Promise.resolve(null)), [statusesNeeded]);
   const relationTypeSettings = useAsyncData(() => (statusesNeeded ? api.personRelationTypes() : Promise.resolve(null)), [statusesNeeded]);
   const teamSettings = useAsyncData(() => (statusesNeeded ? api.teams() : Promise.resolve(null)), [statusesNeeded]);
   const procedures = useAsyncData(() => (profilesNeeded ? api.procedures() : Promise.resolve(null)), [profilesNeeded]);
@@ -88,6 +89,8 @@ export function SettingsPage() {
   const [statusDragOver, setStatusDragOver] = useState<number | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
   const statusDragIndex = useRef<number | null>(null);
+  const [qrLabelDraft, setQrLabelDraft] = useState<QrLabelSettings>({ showName: true, showTag: true });
+  const [qrLabelSaving, setQrLabelSaving] = useState(false);
 
   useEffect(() => {
     const inviteEmail = searchParams.get('inviteEmail');
@@ -102,6 +105,7 @@ export function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { if (statuses.data) setStatusRows(statuses.data); }, [statuses.data]);
+  useEffect(() => { if (qrLabelSettings.data) setQrLabelDraft(qrLabelSettings.data); }, [qrLabelSettings.data]);
   useEffect(() => {
     if (!categories.data) return;
     setCategoryDrafts(current => {
@@ -332,6 +336,19 @@ export function SettingsPage() {
     }
   }
 
+  async function saveQrLabelSettings() {
+    setQrLabelSaving(true);
+    try {
+      const saved = await api.saveQrLabelSettings(qrLabelDraft);
+      setQrLabelDraft(saved);
+      success(t('settings.qrLabelSaved'));
+    } catch (error) {
+      failure(error, t('settings.qrLabelSaveFailed'));
+    } finally {
+      setQrLabelSaving(false);
+    }
+  }
+
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -532,6 +549,25 @@ export function SettingsPage() {
                   ))}
                 </div>
                 <div className="formActions"><Button disabled={statusSaving} onClick={saveStatuses} icon={<Save size={16} />}>{statusSaving ? t('common.saving') : t('settings.saveStatuses')}</Button></div>
+              </>
+            )}
+          </Card>
+
+          <Card>
+            <div className="sectionTitle"><div><h2>{t('settings.qrLabel')}</h2><p>{t('settings.qrLabelHint')}</p></div></div>
+            {qrLabelSettings.isLoading ? <p className="muted">{t('common.loading')}</p> : qrLabelSettings.error ? <ErrorState message={qrLabelSettings.error} onRetry={qrLabelSettings.reload} /> : (
+              <>
+                <div className="formGrid">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input type="checkbox" checked={qrLabelDraft.showName} onChange={event => setQrLabelDraft(current => ({ ...current, showName: event.target.checked }))} />
+                    {t('settings.qrLabelShowName')}
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input type="checkbox" checked={qrLabelDraft.showTag} onChange={event => setQrLabelDraft(current => ({ ...current, showTag: event.target.checked }))} />
+                    {t('settings.qrLabelShowTag')}
+                  </label>
+                </div>
+                <div className="formActions"><Button disabled={qrLabelSaving} onClick={saveQrLabelSettings} icon={<Save size={16} />}>{qrLabelSaving ? t('common.saving') : t('settings.save')}</Button></div>
               </>
             )}
           </Card>

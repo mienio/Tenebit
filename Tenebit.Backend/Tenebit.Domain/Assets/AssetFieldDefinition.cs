@@ -40,4 +40,20 @@ public sealed class AssetFieldDefinition
     public IReadOnlyList<string> OptionList => string.IsNullOrWhiteSpace(Options)
         ? []
         : Options.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    // Aktualizacja w miejscu (bez zmiany Id) — pozwala AssetCategory.ReplaceFieldDefinitions robić
+    // diff zamiast Clear()+Add(), żeby niezmienione pola nie generowały DELETE+INSERT przy każdym zapisie.
+    internal void UpdateDetails(string label, AssetFieldType fieldType, string? options, bool required, int sortOrder)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            throw new DomainException("Etykieta pola własnego jest wymagana.");
+        }
+
+        Label = label.Trim();
+        FieldType = fieldType;
+        Options = string.IsNullOrWhiteSpace(options) ? null : options.Trim();
+        Required = required;
+        SortOrder = sortOrder;
+    }
 }

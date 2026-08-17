@@ -30,6 +30,11 @@ public sealed class OrganizationSubscription
     public string? StripeCustomerId { get; private set; }
     public string? StripeSubscriptionId { get; private set; }
 
+    /// <summary>Timestamp (Stripe event `created`) of the last webhook event actually applied to this
+    /// record — Stripe does not guarantee delivery order, so a retried/out-of-order older event must
+    /// never overwrite state a newer event already applied (audyt P0.6).</summary>
+    public DateTimeOffset? LastWebhookEventAt { get; private set; }
+
     /// <summary>True while Stripe still considers there to be a live (billable) subscription behind this plan.</summary>
     public bool HasActiveStripeSubscription =>
         !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status is SubscriptionStatus.Active or SubscriptionStatus.PastDue;
@@ -77,7 +82,7 @@ public sealed class OrganizationSubscription
     /// A Cancelled status always reverts the organization to the Free plan, regardless of what plan the
     /// caller passed in — an org can never keep paid-plan benefits once Stripe says the subscription is gone.
     /// </summary>
-    public void SyncFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? stripeSubscriptionId, string stripeCustomerId)
+    public void SyncFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? stripeSubscriptionId, string stripeCustomerId, DateTimeOffset webhookEventCreatedAt)
     {
         StripeCustomerId = stripeCustomerId;
         StripeSubscriptionId = stripeSubscriptionId;
@@ -97,6 +102,7 @@ public sealed class OrganizationSubscription
 
         CurrentPeriodStart = currentPeriodStart;
         CurrentPeriodEnd = currentPeriodEnd;
+        LastWebhookEventAt = webhookEventCreatedAt;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

@@ -1,6 +1,12 @@
+using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using Tenebit.Application.Identity;
 
 namespace Tenebit.Api.Auth.OAuth;
@@ -111,7 +117,7 @@ public sealed class ExternalAuthService
         }
 
         if (!root.TryGetProperty("id_token", out var idTokenElement)) return null;
-        return ParseIdToken(provider, idTokenElement.GetString()!);
+        return await ValidateAndParseIdTokenAsync(provider, idTokenElement.GetString()!, cancellationToken);
     }
 
     private static async Task<ExternalUserInfo?> FetchFacebookProfileAsync(HttpClient client, string accessToken, CancellationToken cancellationToken)
@@ -131,18 +137,81 @@ public sealed class ExternalAuthService
         return new ExternalUserInfo(OAuthProviders.Facebook, id, email, email is not null, name);
     }
 
-    private static ExternalUserInfo? ParseIdToken(string provider, string idToken)
+    // AUD-006: id_token providerów OIDC musi być kryptograficznie zweryfikowany (podpis przez JWKS, issuer,
+    // audience, lifetime) — samo ReadJwtToken tylko dekoduje payload bez weryfikacji, więc dowolny nadawca
+    // mógłby podrobić email/sub. ConfigurationManager cache'uje JWKS/metadata providera (odświeża wg jego TTL).
+    private static readonly ConcurrentDictionary<string, ConfigurationManager<OpenIdConnectConfiguration>> OidcConfigCache = new();
+
+    private static ConfigurationManager<OpenIdConnectConfiguration> GetConfigManager(string metadataAddress) =>
+        OidcConfigCache.GetOrAdd(metadataAddress, address =>
+            new ConfigurationManager<OpenIdConnectConfiguration>(address, new OpenIdConnectConfigurationRetriever()));
+
+    private (string MetadataAddress, string Audience, IssuerValidator? IssuerValidator) OidcSettingsFor(string provider) => provider switch
     {
-        var handler = new JwtSecurityTokenHandler();
-        var token = handler.ReadJwtToken(idToken);
-        var sub = token.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+        OAuthProviders.Google => ("https://accounts.google.com/.well-known/openid-configuration", _options.Google.ClientId, null),
+        // Microsoft "common"/multi-tenant metadata publikuje szablon issuera z {tenantid} — walidujemy
+        // kształt zamiast pojedynczej stałej wartości.
+        OAuthProviders.Microsoft => ($"https://login.microsoftonline.com/{_options.Microsoft.TenantId}/v2.0/.well-known/openid-configuration", _options.Microsoft.ClientId, ValidateMicrosoftIssuer),
+        OAuthProviders.Apple => ("https://appleid.apple.com/.well-known/openid-configuration", _options.Apple.ClientId, null),
+        _ => throw new InvalidOperationException($"Dostawca {provider} nie obsługuje walidacji id_token OIDC.")
+    };
+
+    private static string ValidateMicrosoftIssuer(string issuer, SecurityToken token, TokenValidationParameters parameters)
+    {
+        if (Regex.IsMatch(issuer, @"^https://login\.microsoftonline\.com/[0-9a-fA-F-]{36}/v2\.0$"))
+        {
+            return issuer;
+        }
+
+        throw new SecurityTokenInvalidIssuerException("Nieprawidłowy issuer tokenu Microsoft.") { InvalidIssuer = issuer };
+    }
+
+    private async Task<ExternalUserInfo?> ValidateAndParseIdTokenAsync(string provider, string idToken, CancellationToken cancellationToken)
+    {
+        var (metadataAddress, audience, issuerValidator) = OidcSettingsFor(provider);
+
+        OpenIdConnectConfiguration config;
+        try
+        {
+            config = await GetConfigManager(metadataAddress).GetConfigurationAsync(cancellationToken);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        var parameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKeys = config.SigningKeys,
+            ValidateIssuer = issuerValidator is null,
+            ValidIssuer = issuerValidator is null ? config.Issuer : null,
+            IssuerValidator = issuerValidator,
+            ValidateAudience = true,
+            ValidAudience = audience,
+            ValidateLifetime = true,
+            RequireExpirationTime = true,
+            RequireSignedTokens = true
+        };
+
+        ClaimsPrincipal principal;
+        try
+        {
+            var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+            principal = handler.ValidateToken(idToken, parameters, out _);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        var sub = principal.FindFirst("sub")?.Value;
         if (string.IsNullOrWhiteSpace(sub)) return null;
 
-        var email = token.Claims.FirstOrDefault(c => c.Type == "email")?.Value
-            ?? token.Claims.FirstOrDefault(c => c.Type == "preferred_username")?.Value;
-        var emailVerifiedClaim = token.Claims.FirstOrDefault(c => c.Type == "email_verified")?.Value;
-        var emailVerified = provider == OAuthProviders.Apple || string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
-        var name = token.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
+        var email = principal.FindFirst("email")?.Value ?? principal.FindFirst("preferred_username")?.Value;
+        var emailVerifiedClaim = principal.FindFirst("email_verified")?.Value;
+        var emailVerified = string.Equals(emailVerifiedClaim, "true", StringComparison.OrdinalIgnoreCase);
+        var name = principal.FindFirst("name")?.Value;
 
         return new ExternalUserInfo(provider, sub, email, emailVerified, name);
     }

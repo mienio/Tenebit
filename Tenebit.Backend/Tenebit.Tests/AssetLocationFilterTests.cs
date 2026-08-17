@@ -55,7 +55,7 @@ public class AssetLocationFilterTests
         AddAsset(user, assets, "Budynek A / Pietro 1 / Pokoj 204");
         AddAsset(user, assets, "Budynek A / Pietro 2");
 
-        var result = await assets.ListPagedAsync(user.OrganizationId, null, null, "Budynek A / Pietro 1", null, false, null, null, null, false, 1, 25, CancellationToken.None);
+        var result = await assets.ListPagedAsync(user.OrganizationId, null, null, "Budynek A / Pietro 1", null, null, false, null, null, null, false, 1, 25, CancellationToken.None);
 
         Assert.Equal(2, result.Total);
     }

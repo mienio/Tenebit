@@ -10,19 +10,19 @@ import { useI18n } from '../i18n/I18nProvider';
 
 export function PublicAssignmentPage() {
   const { t } = useI18n();
-  const { organizationId, assignmentId } = useParams<{ organizationId: string; assignmentId: string }>();
-  const loader = useMemo(() => () => api.publicAssignment(organizationId!, assignmentId!), [organizationId, assignmentId]);
+  const { token } = useParams<{ token: string }>();
+  const loader = useMemo(() => () => api.publicAssignment(token!), [token]);
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [accepting, setAccepting] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   async function accept() {
-    if (!organizationId || !assignmentId) return;
+    if (!token) return;
     setAccepting(true);
     setMessage(null);
     try {
-      await api.acceptPublicAssignment(organizationId, assignmentId);
+      await api.acceptPublicAssignment(token);
       await reload();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.acceptFailed'));
@@ -43,9 +43,9 @@ export function PublicAssignmentPage() {
   }
 
   async function download() {
-    if (!organizationId || !assignmentId) return;
+    if (!token) return;
     try {
-      const blob = await api.downloadPublicAssignmentProtocol(organizationId, assignmentId);
+      const blob = await api.downloadPublicAssignmentProtocol(token);
       saveBlob(blob, `${data?.protocolNumber ?? 'protokol'}.pdf`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
@@ -53,16 +53,16 @@ export function PublicAssignmentPage() {
   }
 
   async function downloadProcedureDocument(procedureId: string, documentId: string, fileName: string) {
-    if (!organizationId || !assignmentId) return;
+    if (!token) return;
     try {
-      const blob = await api.downloadPublicProcedureDocument(organizationId, assignmentId, procedureId, documentId);
+      const blob = await api.downloadPublicProcedureDocument(token, procedureId, documentId);
       saveBlob(blob, fileName);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
     }
   }
 
-  if (!organizationId || !assignmentId) return <ErrorState message={t('publicAssignment.invalidLink')} />;
+  if (!token) return <ErrorState message={t('publicAssignment.invalidLink')} />;
   if (isLoading && !data) return <LoadingState title={t('publicAssignment.loadingTitle')} description={t('publicAssignment.loadingDesc')} />;
   if (error || !data) return <ErrorState message={error ?? t('publicAssignment.invalidLink')} onRetry={reload} />;
 
@@ -94,7 +94,7 @@ export function PublicAssignmentPage() {
             {data.assets.filter(asset => asset.evidenceIds.length > 0).map(asset => (
               <div key={asset.assetId} style={{ marginBottom: '12px' }}>
                 <strong>{asset.name}</strong>
-                <EvidenceGallery ids={asset.evidenceIds} getBlob={id => api.publicAssignmentEvidence(organizationId!, assignmentId!, id)} />
+                <EvidenceGallery ids={asset.evidenceIds} getBlob={id => api.publicAssignmentEvidence(token!, id)} />
               </div>
             ))}
           </>

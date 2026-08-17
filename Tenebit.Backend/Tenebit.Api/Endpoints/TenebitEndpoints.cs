@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
@@ -47,13 +48,14 @@ public static class TenebitEndpoints
     {
         var api = app.MapGroup("/api").WithTags("Tenebit");
         api.RequireAuthorization();
+        api.AddEndpointFilter<ValidationEndpointFilter>();
 
         api.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Tenebit" }))
             .AllowAnonymous()
             .WithName("Health")
             .WithOpenApi();
 
-        api.MapGet("/health/ready", async (TenebitDbContext db, CancellationToken cancellationToken) =>
+        api.MapGet("/health/ready", async (TenebitDbContext db, ILogger<Program> logger, CancellationToken cancellationToken) =>
             {
                 try
                 {
@@ -64,7 +66,10 @@ public static class TenebitEndpoints
                 }
                 catch (Exception ex)
                 {
-                    return Results.Json(new { status = "unready", database = "error", detail = ex.Message }, statusCode: 503);
+                    // AUD-013: nie ujawniamy ex.Message anonimowemu klientowi (nazwa hosta DB, tabeli,
+                    // błąd uwierzytelnienia) — szczegóły trafiają tylko do chronionego logu z correlation id.
+                    logger.LogError(ex, "Health check /health/ready: baza danych nieosiągalna.");
+                    return Results.Json(new { status = "unready", database = "error" }, statusCode: 503);
                 }
             })
             .AllowAnonymous()
@@ -391,6 +396,7 @@ public static class TenebitEndpoints
                 return Results.BadRequest(new { message = "Wyślij żądanie jako multipart/form-data.", code = "VALIDATION_ERROR" });
             }
 
+            LimitRequestBody(request, MaxEvidenceBundleUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var createRequest = DeserializePart<CreateEmployeePackageRequest>(form, "request");
             if (createRequest is null)
@@ -454,10 +460,15 @@ public static class TenebitEndpoints
             .WithTags("Asset categories")
             .WithOpenApi();
 
-        api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, string? owner, string? warranty, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
+        api.MapGet("/assets", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, string? owner, string? warranty, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
                 page.HasValue
-                    ? (await service.ListPagedAsync(search, status, location, teamId, owner == "none", warranty == "expiring", sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
+                    ? (await service.ListPagedAsync(search, status, location, teamId, categoryId, owner == "none", warranty == "expiring", sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
                     : (await service.ListAsync(search, status, location, cancellationToken)).ToHttpResult())
+            .WithTags("Assets")
+            .WithOpenApi();
+
+        api.MapGet("/assets/group-counts", async (AssetService service, CancellationToken cancellationToken) =>
+                (await service.GetGroupCountsAsync(cancellationToken)).ToHttpResult())
             .WithTags("Assets")
             .WithOpenApi();
 
@@ -542,6 +553,7 @@ public static class TenebitEndpoints
                 return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
             }
 
+            LimitRequestBody(request, MaxSingleEvidenceUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
             if (file is null || file.Length == 0)
@@ -630,6 +642,16 @@ public static class TenebitEndpoints
             .WithTags("Settings")
             .WithOpenApi();
 
+        api.MapGet("/settings/qr-label", async (SettingsService service, CancellationToken cancellationToken) =>
+                (await service.GetQrLabelSettingsAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
+        api.MapPut("/settings/qr-label", async (SaveQrLabelSettingsRequest request, SettingsService service, CancellationToken cancellationToken) =>
+                (await service.SaveQrLabelSettingsAsync(request, cancellationToken)).ToHttpResult())
+            .WithTags("Settings")
+            .WithOpenApi();
+
         api.MapGet("/settings/alerts", async (AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.ListAlertRulesAsync(cancellationToken)).ToHttpResult())
             .WithTags("Settings")
@@ -687,7 +709,7 @@ public static class TenebitEndpoints
             .WithOpenApi();
 
         static async Task<IResult> ListUsers(UserAccessService service, CancellationToken cancellationToken) =>
-            Results.Ok(await service.ListAsync(cancellationToken));
+            (await service.ListAsync(cancellationToken)).ToHttpResult();
 
         api.MapGet("/organization-users", ListUsers)
             .WithTags("Users")
@@ -915,6 +937,7 @@ public static class TenebitEndpoints
                 return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
             }
 
+            LimitRequestBody(request, MaxProcedureDocumentUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
             if (file is null)
@@ -993,6 +1016,11 @@ public static class TenebitEndpoints
             .WithTags("Assignments")
             .WithOpenApi();
 
+        api.MapPost("/assignments/{id:guid}/acceptance-link", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
+                (await service.RegenerateAcceptanceLinkAsync(id, cancellationToken)).ToHttpResult())
+            .WithTags("Assignments")
+            .WithOpenApi();
+
         api.MapPost("/assignments/{id:guid}/return", async (Guid id, ReturnAssignmentRequest request, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.ReturnAsync(id, request, cancellationToken)).ToHttpResult())
             .WithTags("Assignments")
@@ -1010,6 +1038,7 @@ public static class TenebitEndpoints
                 return Results.BadRequest(new { message = "Wyślij żądanie jako multipart/form-data.", code = "VALIDATION_ERROR" });
             }
 
+            LimitRequestBody(request, MaxEvidenceBundleUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var createRequest = DeserializePart<CreateAssignmentRequest>(form, "request");
             if (createRequest is null)
@@ -1036,6 +1065,7 @@ public static class TenebitEndpoints
 
         api.MapPost("/assignments/{assignmentId:guid}/assets/{assetId:guid}/return-with-evidence", async (Guid assignmentId, Guid assetId, HttpRequest request, AssignmentService service, CancellationToken cancellationToken) =>
         {
+            LimitRequestBody(request, MaxEvidenceBundleUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var returnRequest = DeserializePart<ReturnAssignmentAssetItemRequest>(form, "request");
             if (returnRequest is null)
@@ -1238,35 +1268,35 @@ public static class TenebitEndpoints
 
     private static void MapPublicAssignments(RouteGroupBuilder api)
     {
-        api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}", async (Guid organizationId, Guid assignmentId, AssignmentService service, CancellationToken cancellationToken) =>
-                (await service.GetPublicAsync(organizationId, assignmentId, cancellationToken)).ToHttpResult())
+        api.MapGet("/public/assignments/{token}", async (string token, AssignmentService service, CancellationToken cancellationToken) =>
+                (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
 
-        api.MapPost("/public/assignments/{organizationId:guid}/{assignmentId:guid}/accept", async (Guid organizationId, Guid assignmentId, AssignmentService service, CancellationToken cancellationToken) =>
-                (await service.AcceptPublicAsync(organizationId, assignmentId, cancellationToken)).ToHttpResult())
+        api.MapPost("/public/assignments/{token}/accept", async (string token, AssignmentService service, CancellationToken cancellationToken) =>
+                (await service.AcceptPublicAsync(token, cancellationToken)).ToHttpResult())
             .AllowAnonymous()
             .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
 
-        api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}/protocol", async (Guid organizationId, Guid assignmentId, AssignmentService service, CancellationToken cancellationToken) =>
+        api.MapGet("/public/assignments/{token}/protocol", async (string token, AssignmentService service, CancellationToken cancellationToken) =>
         {
-            var result = await service.GetPublicProtocolPdfAsync(organizationId, assignmentId, cancellationToken);
+            var result = await service.GetPublicProtocolPdfAsync(token, cancellationToken);
             return result.IsFailure || result.Value is null
                 ? result.ToHttpResult()
-                : Results.File(result.Value, "application/pdf", $"protokol-{assignmentId}.pdf");
+                : Results.File(result.Value, "application/pdf", "protokol.pdf");
         })
             .AllowAnonymous()
             .RequireRateLimiting("public")
             .WithTags("Public assignments")
             .WithOpenApi();
 
-        api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}/procedures/{procedureId:guid}/documents/{documentId:guid}", async (Guid organizationId, Guid assignmentId, Guid procedureId, Guid documentId, AssignmentService service, CancellationToken cancellationToken) =>
+        api.MapGet("/public/assignments/{token}/procedures/{procedureId:guid}/documents/{documentId:guid}", async (string token, Guid procedureId, Guid documentId, AssignmentService service, CancellationToken cancellationToken) =>
         {
-            var result = await service.GetPublicProcedureDocumentAsync(organizationId, assignmentId, procedureId, documentId, cancellationToken);
+            var result = await service.GetPublicProcedureDocumentAsync(token, procedureId, documentId, cancellationToken);
             if (result.IsFailure || result.Value is null)
             {
                 return result.ToHttpResult();
@@ -1280,9 +1310,13 @@ public static class TenebitEndpoints
             .WithTags("Public assignments")
             .WithOpenApi();
 
-        api.MapGet("/public/assignments/{organizationId:guid}/{assignmentId:guid}/evidence/{id:guid}", async (Guid organizationId, Guid assignmentId, Guid id, AssetEvidenceService service, CancellationToken cancellationToken) =>
+        api.MapGet("/public/assignments/{token}/evidence/{id:guid}", async (string token, Guid id, AssignmentService assignmentService, AssetEvidenceService evidenceService, CancellationToken cancellationToken) =>
         {
-            var result = await service.GetPublicAssignmentEvidenceAsync(organizationId, assignmentId, id, cancellationToken);
+            var resolved = await assignmentService.ResolvePublicTokenAsync(token, cancellationToken);
+            if (resolved.IsFailure) return resolved.ToHttpResult();
+
+            var (organizationId, assignmentId) = resolved.Value!;
+            var result = await evidenceService.GetPublicAssignmentEvidenceAsync(organizationId, assignmentId, id, cancellationToken);
             if (result.IsFailure || result.Value is null)
             {
                 return result.ToHttpResult();
@@ -1320,6 +1354,7 @@ public static class TenebitEndpoints
                 return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
             }
 
+            LimitRequestBody(request, MaxSingleEvidenceUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
             if (file is null || file.Length == 0)
@@ -1370,6 +1405,7 @@ public static class TenebitEndpoints
                 return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
             }
 
+            LimitRequestBody(request, MaxSingleEvidenceUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
             if (file is null || file.Length == 0)
@@ -1476,6 +1512,23 @@ public static class TenebitEndpoints
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
         return memory.ToArray();
+    }
+
+    // Limity ustawione tuż przed odczytem body (audyt P0.4) — Kestrel przerywa strumień, gdy przekroczy
+    // limit, zamiast pozwolić handlerowi zbuforować cały upload do pamięci przed walidacją rozmiaru na
+    // poziomie serwisu (AssetEvidenceService: 5 MB/plik, ProcedureDocument: 25 MB). Marginesy uwzględniają
+    // narzut multipart oraz — dla wsadów wieloplikowych — kilka zdjęć naraz.
+    private const long MaxSingleEvidenceUploadBytes = 8L * 1024 * 1024;
+    private const long MaxProcedureDocumentUploadBytes = 27L * 1024 * 1024;
+    private const long MaxEvidenceBundleUploadBytes = 40L * 1024 * 1024;
+
+    private static void LimitRequestBody(HttpRequest request, long maxBytes)
+    {
+        var feature = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (feature is not null && !feature.IsReadOnly)
+        {
+            feature.MaxRequestBodySize = maxBytes;
+        }
     }
 
     private record UpgradeRequest(string PlanKey);

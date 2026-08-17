@@ -6,6 +6,7 @@ using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audits;
 using Tenebit.Domain.Dashboards;
 using Tenebit.Domain.Evidence;
+using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.Licenses;
 using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.People;
@@ -33,7 +34,7 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         return Task.FromResult<IReadOnlyList<Asset>>(rows);
     }
 
-    public Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
+    public Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
         var prefix = string.IsNullOrWhiteSpace(location) ? null : location.Trim() + " / ";
         var normalized = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
@@ -46,6 +47,15 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         return Task.FromResult<(IReadOnlyList<Asset>, int)>((rows, rows.Count));
     }
 
+    public Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        var rows = Assets.Where(x => x.OrganizationId == organizationId).ToList();
+        IReadOnlyDictionary<Guid, int> byCategory = rows.GroupBy(x => x.CategoryId).ToDictionary(g => g.Key, g => g.Count());
+        IReadOnlyDictionary<AssetStatus, int> byStatus = rows.GroupBy(x => x.Status).ToDictionary(g => g.Key, g => g.Count());
+        IReadOnlyDictionary<Guid, int> byPerson = rows.Where(x => x.AssignedPersonId.HasValue).GroupBy(x => x.AssignedPersonId!.Value).ToDictionary(g => g.Key, g => g.Count());
+        return Task.FromResult((byCategory, byStatus, byPerson));
+    }
+
     public Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId && ids.Contains(x.Id)).ToList());
 
@@ -54,6 +64,9 @@ public sealed class InMemoryAssetRepository : IAssetRepository
 
     public Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.Any(x => x.OrganizationId == organizationId && x.AssetTag == assetTag && (!excludingAssetId.HasValue || x.Id != excludingAssetId.Value)));
+
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId));
 
     public void Add(Asset asset) => Assets.Add(asset);
     public void Remove(Asset asset) => Assets.Remove(asset);
@@ -160,6 +173,23 @@ public sealed class InMemoryProcedureRepository : IProcedureRepository
     public void RemoveDocument(ProcedureDocument document) { }
 }
 
+public sealed class InMemoryJobProfileRepository : IJobProfileRepository
+{
+    public List<JobProfile> Profiles { get; } = [];
+
+    public Task<IReadOnlyList<JobProfile>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<JobProfile>>(Profiles.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<JobProfile?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Profiles.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingId, CancellationToken cancellationToken) =>
+        Task.FromResult(Profiles.Any(x => x.OrganizationId == organizationId && x.Name == name && (!excludingId.HasValue || x.Id != excludingId.Value)));
+
+    public void Add(JobProfile profile) => Profiles.Add(profile);
+    public void Remove(JobProfile profile) => Profiles.Remove(profile);
+}
+
 public sealed class InMemoryAssignmentRepository : IAssignmentRepository
 {
     public List<Assignment> Assignments { get; } = [];
@@ -176,6 +206,9 @@ public sealed class InMemoryAssignmentRepository : IAssignmentRepository
     public Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Assignments.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
+    public Task<Assignment?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken) =>
+        Task.FromResult(Assignments.FirstOrDefault(x => x.PublicTokenHash == tokenHash));
+
     public void Add(Assignment assignment) => Assignments.Add(assignment);
 }
 
@@ -190,6 +223,16 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
         Task.FromResult(Subscriptions.FirstOrDefault(x => x.StripeCustomerId == stripeCustomerId));
 
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
+}
+
+public sealed class InMemoryProcessedStripeEventRepository : IProcessedStripeEventRepository
+{
+    public List<ProcessedStripeEvent> Events { get; } = [];
+
+    public Task<bool> ExistsAsync(string eventId, CancellationToken cancellationToken) =>
+        Task.FromResult(Events.Any(x => x.EventId == eventId));
+
+    public void Add(ProcessedStripeEvent processedEvent) => Events.Add(processedEvent);
 }
 
 public sealed class InMemoryDashboardLayoutRepository : IDashboardLayoutRepository
@@ -253,8 +296,8 @@ public sealed class InMemoryOffboardingCaseRepository : IOffboardingCaseReposito
     public Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
         Task.FromResult(Cases.FirstOrDefault(x => x.OrganizationId == organizationId && x.PersonId == personId && !ClosedStatuses.Contains(x.Status)));
 
-    public Task<IReadOnlyList<OffboardingCase>> ListWithPublicTokenAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<OffboardingCase>>(Cases.Where(x => x.PublicTokenHash != null && x.PublicTokenRevokedAt == null).ToList());
+    public Task<OffboardingCase?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken) =>
+        Task.FromResult(Cases.FirstOrDefault(x => x.PublicTokenHash == tokenHash));
 
     public void Add(OffboardingCase offboardingCase) => Cases.Add(offboardingCase);
 }

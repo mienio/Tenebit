@@ -72,6 +72,9 @@ public sealed class PeopleService
                 return Result<PersonResponse>.Failure(Error.Conflict("Osoba z tym adresem e-mail już istnieje."));
             }
 
+            var referenceError = await ValidateReferencesAsync(organizationId, request.TeamId, request.ManagerId, null, cancellationToken);
+            if (referenceError is not null) return Result<PersonResponse>.Failure(referenceError);
+
             var person = new Person(organizationId, request.FirstName, request.LastName, request.Email);
             person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, request.Location, request.CostCenter);
             person.SetPreferredLanguage(request.PreferredLanguage);
@@ -101,6 +104,9 @@ public sealed class PeopleService
             {
                 return Result<PersonResponse>.Failure(Error.Conflict("Osoba z tym adresem e-mail już istnieje."));
             }
+
+            var referenceError = await ValidateReferencesAsync(organizationId, request.TeamId, request.ManagerId, id, cancellationToken);
+            if (referenceError is not null) return Result<PersonResponse>.Failure(referenceError);
 
             person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, request.Location, request.CostCenter);
             person.SetPreferredLanguage(request.PreferredLanguage);
@@ -171,6 +177,29 @@ public sealed class PeopleService
         {
             return Result<PersonResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    private async Task<Error?> ValidateReferencesAsync(Guid organizationId, Guid? teamId, Guid? managerId, Guid? excludingPersonId, CancellationToken cancellationToken)
+    {
+        if (teamId.HasValue && await _teams.GetAsync(organizationId, teamId.Value, cancellationToken) is null)
+        {
+            return Error.Validation("Wybrany zespół nie istnieje.");
+        }
+
+        if (managerId.HasValue)
+        {
+            if (managerId.Value == excludingPersonId)
+            {
+                return Error.Validation("Osoba nie może być swoim własnym przełożonym.");
+            }
+
+            if (await _people.GetAsync(organizationId, managerId.Value, cancellationToken) is null)
+            {
+                return Error.Validation("Wybrany przełożony nie istnieje.");
+            }
+        }
+
+        return null;
     }
 
     private static PersonResponse Map(Person person, IReadOnlyList<Team> teams)

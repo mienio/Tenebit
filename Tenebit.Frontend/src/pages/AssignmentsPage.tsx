@@ -282,7 +282,10 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
   const [linkCopyFailed, setLinkCopyFailed] = useState(false);
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(assignment.acceptanceLink);
+      // Link niesie jednorazowy token (nie jest odtwarzalny z danych wydania) — trzeba go
+      // wygenerować na żądanie; poprzedni link przestaje działać (patrz AssignmentService.RegenerateAcceptanceLinkAsync).
+      const { link } = await api.regenerateAssignmentAcceptanceLink(assignment.id);
+      await navigator.clipboard.writeText(link);
       setLinkCopyFailed(false);
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2500);

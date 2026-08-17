@@ -55,7 +55,7 @@ export function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/accept/:organizationId/:assignmentId" element={<PublicAssignmentPage />} />
+        <Route path="/accept/:token" element={<PublicAssignmentPage />} />
         <Route path="/exit/:token" element={<PublicOffboardingPage />} />
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
         <Route path="/audit/:token" element={<PublicAssetAuditPage />} />

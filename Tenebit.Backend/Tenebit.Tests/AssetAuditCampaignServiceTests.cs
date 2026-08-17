@@ -331,6 +331,26 @@ public class AssetAuditCampaignServiceTests
         Assert.Equal(newOwner.Id, updated.AssignedPersonId);
     }
 
+    [Fact]
+    public async Task ResolveItemAsync_OwnershipCorrected_RejectsCrossOrganizationNewOwnerPersonId()
+    {
+        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var oldOwner = AddPerson(user, people, "old@acme.test");
+        var otherOrgPerson = new Person(Guid.NewGuid(), "Anna", "Nowak", "anna@other.test");
+        people.Add(otherOrgPerson);
+        var asset = AddAsset(user, assets, oldOwner.Id);
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var item = items.Items.Single();
+
+        var result = await service.ResolveItemAsync(created.Value!.Campaign.Id, item.Id,
+            new ResolveAssetAuditItemRequest(AssetAuditResolution.OwnershipCorrected, "Błąd ewidencji", otherOrgPerson.Id), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        var untouched = assets.Assets.Single(x => x.Id == asset.Id);
+        Assert.Equal(oldOwner.Id, untouched.AssignedPersonId);
+    }
+
     [Theory]
     [InlineData(AssetAuditResolution.AssetMarkedLost)]
     [InlineData(AssetAuditResolution.AssetMarkedDamaged)]

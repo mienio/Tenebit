@@ -36,6 +36,14 @@ public sealed class Organization
     public int? DefaultEvidenceRetentionMonths { get; private set; }
     public string? PrivacyNoticeUrl { get; private set; }
     public string? PrivacyContactEmail { get; private set; }
+    public bool QrLabelShowName { get; private set; } = true;
+    public bool QrLabelShowTag { get; private set; } = true;
+
+    public void UpdateQrLabelSettings(bool showName, bool showTag)
+    {
+        QrLabelShowName = showName;
+        QrLabelShowTag = showTag;
+    }
 
     public void UpdatePrivacySettings(PublicIpCaptureMode capturePublicIp, int? publicIpRetentionDays, int? defaultEvidenceRetentionMonths, string? privacyNoticeUrl, string? privacyContactEmail)
     {

@@ -46,10 +46,13 @@ public sealed class UserAccessService
 
     public IReadOnlyList<RoleResponse> Roles() => TenebitRoles.All.Select(x => new RoleResponse(x.Key, x.Label, x.Description)).ToArray();
 
-    public async Task<IReadOnlyList<OrganizationUserResponse>> ListAsync(CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<OrganizationUserResponse>>> ListAsync(CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        if (access.IsFailure) return Result<IReadOnlyList<OrganizationUserResponse>>.Failure(access.Error!);
+
         var users = await _users.ListAsync(_currentUser.OrganizationId, cancellationToken);
-        return users.Select(Map).ToList();
+        return Result<IReadOnlyList<OrganizationUserResponse>>.Success(users.Select(Map).ToList());
     }
 
     public async Task<Result<OrganizationUserResponse>> CreateAsync(SaveOrganizationUserRequest request, CancellationToken cancellationToken)

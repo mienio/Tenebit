@@ -517,6 +517,12 @@ public sealed class AssetAuditCampaignService
             return Result<bool>.Failure(Error.Validation("Nowy właściciel jest wymagany dla tego rozstrzygnięcia."));
         }
 
+        if (request.Resolution == AssetAuditResolution.OwnershipCorrected
+            && await _people.GetAsync(organizationId, request.NewOwnerPersonId!.Value, cancellationToken) is null)
+        {
+            return Result<bool>.Failure(Error.Validation("Wybrany nowy właściciel nie istnieje."));
+        }
+
         var asset = await _assets.GetAsync(organizationId, item.AssetId, cancellationToken);
         if (asset is null) return Result<bool>.Failure(Error.NotFound("Aktywo nie istnieje."));
 

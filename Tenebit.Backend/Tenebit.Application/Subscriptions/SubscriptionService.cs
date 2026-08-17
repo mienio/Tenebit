@@ -9,6 +9,7 @@ namespace Tenebit.Application.Subscriptions;
 public sealed class SubscriptionService
 {
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly IProcessedStripeEventRepository _processedEvents;
     private readonly IAssetRepository _assets;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
@@ -18,6 +19,7 @@ public sealed class SubscriptionService
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
+        IProcessedStripeEventRepository processedEvents,
         IAssetRepository assets,
         IActivityLogRepository activity,
         ICurrentUser currentUser,
@@ -26,6 +28,7 @@ public sealed class SubscriptionService
         IPaymentGateway paymentGateway)
     {
         _subscriptions = subscriptions;
+        _processedEvents = processedEvents;
         _assets = assets;
         _activity = activity;
         _currentUser = currentUser;
@@ -206,13 +209,34 @@ public sealed class SubscriptionService
 
         if (webhookEvent is null) return Result.Success();
 
+        // Stripe retries webhook delivery on timeout/5xx — replaying the same EventId must be a no-op
+        // instead of reapplying (and re-logging) the same state change twice (audyt P0.6).
+        if (await _processedEvents.ExistsAsync(webhookEvent.EventId, cancellationToken))
+        {
+            return Result.Success();
+        }
+
+        _processedEvents.Add(new ProcessedStripeEvent(webhookEvent.EventId, _clock.UtcNow));
+
         var subscription = webhookEvent.OrganizationId.HasValue
             ? await _subscriptions.GetByOrganizationAsync(webhookEvent.OrganizationId.Value, cancellationToken)
             : await _subscriptions.GetByStripeCustomerAsync(webhookEvent.CustomerId, cancellationToken);
 
-        if (subscription is null) return Result.Success();
+        if (subscription is null)
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
 
-        subscription.SyncFromStripe(webhookEvent.PlanKey, webhookEvent.Status, webhookEvent.CurrentPeriodStart, webhookEvent.CurrentPeriodEnd, webhookEvent.SubscriptionId, webhookEvent.CustomerId);
+        // Stripe does not guarantee delivery order — an older event arriving after a newer one (e.g. a
+        // delayed retry) must never overwrite state the newer event already applied (audyt P0.6).
+        if (subscription.LastWebhookEventAt is { } lastEventAt && webhookEvent.EventCreatedAt <= lastEventAt)
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success();
+        }
+
+        subscription.SyncFromStripe(webhookEvent.PlanKey, webhookEvent.Status, webhookEvent.CurrentPeriodStart, webhookEvent.CurrentPeriodEnd, webhookEvent.SubscriptionId, webhookEvent.CustomerId, webhookEvent.EventCreatedAt);
 
         _activity.Add(new ActivityLog(
             subscription.OrganizationId,

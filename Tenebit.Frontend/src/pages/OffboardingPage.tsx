@@ -377,8 +377,8 @@ function OffboardingDetailsView({
   const tasks = details.items.filter(item => item.type === 'ManualTask');
 
   async function copyLink() {
-    const url = `${window.location.origin}/exit/${caseItem.id}`;
     try {
+      const url = await api.regenerateOffboardingLink(caseItem.id);
       await navigator.clipboard.writeText(url);
       setLinkState('copied');
     } catch {

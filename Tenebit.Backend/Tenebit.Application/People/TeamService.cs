@@ -9,14 +9,16 @@ namespace Tenebit.Application.People;
 public sealed class TeamService
 {
     private readonly ITeamRepository _teams;
+    private readonly IPersonRepository _people;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public TeamService(ITeamRepository teams, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public TeamService(ITeamRepository teams, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _teams = teams;
+        _people = people;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -37,6 +39,10 @@ public sealed class TeamService
         {
             var organizationId = _currentUser.OrganizationId;
             if (await _teams.NameExistsAsync(organizationId, request.Name, null, cancellationToken)) return Result<TeamResponse>.Failure(Error.Conflict("Zespół o tej nazwie już istnieje."));
+            if (request.ManagerId.HasValue && await _people.GetAsync(organizationId, request.ManagerId.Value, cancellationToken) is null)
+            {
+                return Result<TeamResponse>.Failure(Error.Validation("Wybrany przełożony nie istnieje."));
+            }
             var team = new Team(organizationId, request.Name, request.ManagerId, request.CostCenter);
             _teams.Add(team);
             _activity.Add(new ActivityLog(organizationId, "team.created", "team", team.Id, _currentUser.Subject, team.Name, _clock.UtcNow));
@@ -56,6 +62,10 @@ public sealed class TeamService
             var team = await _teams.GetAsync(organizationId, id, cancellationToken);
             if (team is null) return Result<TeamResponse>.Failure(Error.NotFound("Zespół nie istnieje."));
             if (await _teams.NameExistsAsync(organizationId, request.Name, id, cancellationToken)) return Result<TeamResponse>.Failure(Error.Conflict("Zespół o tej nazwie już istnieje."));
+            if (request.ManagerId.HasValue && await _people.GetAsync(organizationId, request.ManagerId.Value, cancellationToken) is null)
+            {
+                return Result<TeamResponse>.Failure(Error.Validation("Wybrany przełożony nie istnieje."));
+            }
             team.Update(request.Name, request.ManagerId, request.CostCenter);
             _activity.Add(new ActivityLog(organizationId, "team.updated", "team", team.Id, _currentUser.Subject, team.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);

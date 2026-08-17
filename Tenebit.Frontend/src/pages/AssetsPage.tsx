@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Building2, Download, Eye, FileSpreadsheet, Pencil, Plus, Printer, QrCode, RefreshCw, Trash2, Upload, X } from 'lucide-react';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Building2, CircleDot, Download, Eye, FileSpreadsheet, List, Pencil, Plus, Printer, QrCode, RefreshCw, Tag, Trash2, Upload, Users, X } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
@@ -7,6 +7,7 @@ import { Card } from '../components/Card';
 import { EvidenceGallery } from '../components/Evidence';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
+import { GroupedAssetBrowser, type AssetGroup } from '../components/GroupedAssetBrowser';
 import { IconPicker } from '../components/IconPicker';
 import { ImportModal } from '../components/ImportModal';
 import { LocationInventoryModal } from '../components/LocationInventoryModal';
@@ -26,8 +27,11 @@ import { activityLabel, assetStatusValues, categoryTypeValues, locationTypeValue
 import { CategoryIcon } from '../utils/categoryIcons';
 import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
+import { useAuth } from '../auth/AuthProvider';
 
 const pageSize = 25;
+type ViewMode = 'list' | 'location' | 'person' | 'status' | 'category';
+const assetsViewStorageKey = (email: string) => `tenebit_assets_view_${email}`;
 
 type SortKey = 'name' | 'assetTag' | 'status' | 'person' | 'location' | 'value' | 'warranty';
 
@@ -52,6 +56,14 @@ function saveBlob(blob: Blob, fileName: string) {
 export function AssetsPage() {
   const { t, tPlural } = useI18n();
   const { celebrate } = useCelebration();
+  const { userEmail } = useAuth();
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = window.localStorage.getItem(assetsViewStorageKey(userEmail));
+    return stored === 'location' || stored === 'person' || stored === 'status' || stored === 'category' ? stored : 'list';
+  });
+  useEffect(() => {
+    window.localStorage.setItem(assetsViewStorageKey(userEmail), viewMode);
+  }, [viewMode, userEmail]);
   const statusSettings = useAsyncData(api.assetStatuses, []);
   const statusSettingByKey = useMemo(() => {
     const map = new Map<string, { label: string; color: string; backgroundColor: string }>();
@@ -68,7 +80,6 @@ export function AssetsPage() {
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState<AssetStatus | ''>((searchParams.get('status') as AssetStatus | null) ?? '');
   const [location, setLocation] = useState(searchParams.get('location') ?? '');
-  const [locationTreeOpen, setLocationTreeOpen] = useState(false);
   const [team, setTeam] = useState(searchParams.get('team') ?? '');
   const [owner, setOwner] = useState(searchParams.get('owner') ?? '');
   const [warranty, setWarranty] = useState(searchParams.get('warranty') ?? '');
@@ -110,8 +121,48 @@ export function AssetsPage() {
   const categories = useAsyncData(api.categories, []);
   const locations = useAsyncData(api.locations, []);
   const teams = useAsyncData(api.teams, []);
+  const people = useAsyncData(() => api.people(), []);
+  const groupCounts = useAsyncData(api.assetGroupCounts, []);
   const rows = useMemo(() => assets.data?.items ?? [], [assets.data]);
   const totalAssets = assets.data?.total ?? 0;
+  const reloadAssets = useCallback(async () => { await Promise.all([assets.reload(), groupCounts.reload()]); }, [assets, groupCounts]);
+
+  const personGroups = useMemo<AssetGroup[]>(() => {
+    const counts = groupCounts.data?.byPerson ?? {};
+    return (people.data ?? [])
+      .filter(person => counts[person.id] > 0)
+      .map(person => ({ id: person.id, label: person.fullName, sublabel: [[person.jobTitle, person.teamName].filter(Boolean).join(' · '), t('assets.groupCount', { count: counts[person.id], noun: tPlural('count.assets', counts[person.id]) })].filter(Boolean).join(' · ') }))
+      .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
+  }, [people.data, groupCounts.data, t, tPlural]);
+  const fetchPersonAssets = useCallback(async (personId: string) => {
+    const workspace = await api.personWorkspace(personId);
+    const items = (workspace?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, assetTag: asset.assetTag, categoryName: asset.categoryName }));
+    return { items, total: items.length };
+  }, []);
+
+  const categoryGroups = useMemo<AssetGroup[]>(() => {
+    const counts = groupCounts.data?.byCategory ?? {};
+    return (categories.data ?? [])
+      .filter(cat => counts[cat.id] > 0)
+      .map(cat => ({ id: cat.id, label: cat.name, sublabel: t('assets.groupCount', { count: counts[cat.id], noun: tPlural('count.assets', counts[cat.id]) }) }))
+      .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
+  }, [categories.data, groupCounts.data, t, tPlural]);
+  const fetchCategoryAssets = useCallback(async (categoryId: string) => {
+    const result = await api.assetsPaged({ categoryId, page: 1, pageSize: 100 });
+    return { items: result.items.map(asset => ({ id: asset.id, name: asset.name, assetTag: asset.assetTag, status: asset.status })), total: result.total };
+  }, []);
+
+  const statusGroups = useMemo<AssetGroup[]>(() => {
+    const counts = groupCounts.data?.byStatus ?? {};
+    return statuses
+      .filter(item => item.value && (counts[item.value as AssetStatus] ?? 0) > 0)
+      .map(item => ({ id: item.value, label: item.label, sublabel: t('assets.groupCount', { count: counts[item.value as AssetStatus] ?? 0, noun: tPlural('count.assets', counts[item.value as AssetStatus] ?? 0) }) }))
+      .sort((a, b) => (counts[b.id as AssetStatus] ?? 0) - (counts[a.id as AssetStatus] ?? 0));
+  }, [statuses, groupCounts.data, t, tPlural]);
+  const fetchStatusAssets = useCallback(async (statusValue: string) => {
+    const result = await api.assetsPaged({ status: statusValue as AssetStatus, page: 1, pageSize: 100 });
+    return { items: result.items.map(asset => ({ id: asset.id, name: asset.name, assetTag: asset.assetTag, categoryName: asset.categoryName })), total: result.total };
+  }, []);
 
   async function handleSelectAssetFromTree(assetId: string) {
     try {
@@ -191,7 +242,7 @@ export function AssetsPage() {
       });
       setServiceTicketModalOpen(false);
       setMessage({ type: 'success', text: t('serviceTickets.title') });
-      await Promise.all([serviceTickets.reload(), assets.reload()]);
+      await Promise.all([serviceTickets.reload(), reloadAssets()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
     } finally {
@@ -215,7 +266,7 @@ export function AssetsPage() {
         resultStatus
       });
       setCompletingTicket(null);
-      await Promise.all([serviceTickets.reload(), assets.reload()]);
+      await Promise.all([serviceTickets.reload(), reloadAssets()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
     } finally {
@@ -229,7 +280,7 @@ export function AssetsPage() {
     try {
       await api.cancelServiceTicket(cancellingTicket.id, { resolution: null });
       setCancellingTicket(null);
-      await Promise.all([serviceTickets.reload(), assets.reload()]);
+      await Promise.all([serviceTickets.reload(), reloadAssets()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
     } finally {
@@ -333,7 +384,7 @@ export function AssetsPage() {
     const failed = failedIds.length;
     setMessage({ type: failed ? 'error' : 'success', text: t(failed ? 'assets.bulkFailedKept' : 'assets.bulkResult', { success, failed }) });
     setSelectedIds(new Set(failedIds));
-    await assets.reload();
+    await reloadAssets();
   }
 
   function exportSelectedCsv() {
@@ -496,7 +547,7 @@ export function AssetsPage() {
         setPage(1);
         celebrate(t('celebration.assetAdded'));
       }
-      await assets.reload();
+      await reloadAssets();
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assets.saveFailed') });
     } finally {
@@ -561,17 +612,40 @@ export function AssetsPage() {
     }
   }
 
-  function downloadQr() {
+  function svgToRasterBlob(svgString: string, mimeType: 'image/png' | 'image/jpeg'): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const svgUrl = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' }));
+      const img = new Image();
+      img.onload = () => {
+        const scale = 4;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext('2d');
+        URL.revokeObjectURL(svgUrl);
+        if (!ctx) { reject(new Error('canvas unavailable')); return; }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('toBlob failed'))), mimeType, mimeType === 'image/jpeg' ? 0.92 : undefined);
+      };
+      img.onerror = () => { URL.revokeObjectURL(svgUrl); reject(new Error('svg load failed')); };
+      img.src = svgUrl;
+    });
+  }
+
+  async function downloadQr(format: 'svg' | 'png' | 'jpg') {
     if (!qrSvg || !qrTarget) return;
-    const blob = new Blob([qrSvg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${qrTarget.assetTag}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    if (format === 'svg') {
+      saveBlob(new Blob([qrSvg], { type: 'image/svg+xml' }), `${qrTarget.assetTag}.svg`);
+      return;
+    }
+    try {
+      const blob = await svgToRasterBlob(qrSvg, format === 'png' ? 'image/png' : 'image/jpeg');
+      saveBlob(blob, `${qrTarget.assetTag}.${format}`);
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assets.qrFailed') });
+    }
   }
 
   async function deleteAsset() {
@@ -582,7 +656,7 @@ export function AssetsPage() {
       setSelected(current => current?.id === deleteTarget.id ? null : current);
       setEditing(current => current?.id === deleteTarget.id ? null : current);
       setDeleteTarget(null);
-      await assets.reload();
+      await reloadAssets();
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assets.deleteFailed') });
       setDeleteTarget(null);
@@ -590,7 +664,7 @@ export function AssetsPage() {
   }
 
   if ((assets.isLoading && !assets.data) || categories.isLoading || locations.isLoading) return <LoadingState title={t('assets.loadingTitle')} description={t('assets.loadingDesc')} />;
-  if (assets.error) return <ErrorState message={assets.error} onRetry={assets.reload} />;
+  if (assets.error) return <ErrorState message={assets.error} onRetry={reloadAssets} />;
 
   const category = selected ? categories.data?.find(c => c.id === selected.categoryId) : null;
 
@@ -601,7 +675,7 @@ export function AssetsPage() {
         title={t('page.assets.title')}
         actions={
           <>
-            <Button variant="secondary" onClick={assets.reload} icon={<RefreshCw size={16} />}>
+            <Button variant="secondary" onClick={reloadAssets} icon={<RefreshCw size={16} />}>
               {t('common.refresh')}
             </Button>
             <Button variant="secondary" disabled={exporting} onClick={() => void downloadCsv()} icon={<Download size={16} />}>
@@ -659,15 +733,10 @@ export function AssetsPage() {
             </SelectInput>
           </Field>
           <Field label={t('assets.locationLabel')}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <SelectInput value={location} onChange={event => setLocation(event.target.value)} style={{ flex: 1 }}>
-                <option value="">{t('assets.allLocations')}</option>
-                {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
-              </SelectInput>
-              <Button variant="secondary" type="button" onClick={() => setLocationTreeOpen(current => !current)} icon={<Building2 size={16} />}>
-                {t('assets.browseByLocation')}
-              </Button>
-            </div>
+            <SelectInput value={location} onChange={event => setLocation(event.target.value)}>
+              <option value="">{t('assets.allLocations')}</option>
+              {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
+            </SelectInput>
           </Field>
           <Field label={t('assets.teamLabel')}>
             <SelectInput value={team} onChange={event => setTeam(event.target.value)}>
@@ -678,17 +747,63 @@ export function AssetsPage() {
         </form>
       </Card>
 
-      <div style={{ display: locationTreeOpen ? undefined : 'none' }}>
+      <Card className="toolbarCard">
+        <div className="tabs" role="tablist" aria-label={t('assets.listTitle')}>
+          <button type="button" role="tab" aria-selected={viewMode === 'list'} className={viewMode === 'list' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('list')}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><List size={16} />{t('assets.viewList')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={viewMode === 'location'} className={viewMode === 'location' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('location')}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Building2 size={16} />{t('assets.browseByLocation')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={viewMode === 'person'} className={viewMode === 'person' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('person')}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Users size={16} />{t('assets.viewPerson')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={viewMode === 'status'} className={viewMode === 'status' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('status')}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><CircleDot size={16} />{t('assets.viewStatus')}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={viewMode === 'category'} className={viewMode === 'category' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('category')}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Tag size={16} />{t('assets.viewCategory')}</span>
+          </button>
+        </div>
+      </Card>
+
+      <div style={{ display: viewMode === 'location' ? undefined : 'none' }}>
         <Card>
           <div className="sectionTitle">
             <div><h2>{t('assets.locationTreeTitle')}</h2></div>
-            <Button variant="ghost" type="button" onClick={() => setLocationTreeOpen(false)} icon={<X size={16} />}>{t('common.close')}</Button>
           </div>
           <LocationAssetBrowser locations={locations.data ?? []} onSelectAsset={handleSelectAssetFromTree} />
         </Card>
       </div>
 
-      {!locationTreeOpen && (
+      <div style={{ display: viewMode === 'person' ? undefined : 'none' }}>
+        <Card>
+          <div className="sectionTitle">
+            <div><h2>{t('assets.viewPerson')}</h2></div>
+          </div>
+          <GroupedAssetBrowser groups={personGroups} icon={<Users size={16} />} fetchGroupAssets={fetchPersonAssets} onSelectAsset={handleSelectAssetFromTree} />
+        </Card>
+      </div>
+
+      <div style={{ display: viewMode === 'status' ? undefined : 'none' }}>
+        <Card>
+          <div className="sectionTitle">
+            <div><h2>{t('assets.viewStatus')}</h2></div>
+          </div>
+          <GroupedAssetBrowser groups={statusGroups} icon={<CircleDot size={16} />} fetchGroupAssets={fetchStatusAssets} onSelectAsset={handleSelectAssetFromTree} />
+        </Card>
+      </div>
+
+      <div style={{ display: viewMode === 'category' ? undefined : 'none' }}>
+        <Card>
+          <div className="sectionTitle">
+            <div><h2>{t('assets.viewCategory')}</h2></div>
+          </div>
+          <GroupedAssetBrowser groups={categoryGroups} icon={<Tag size={16} />} fetchGroupAssets={fetchCategoryAssets} onSelectAsset={handleSelectAssetFromTree} />
+        </Card>
+      </div>
+
+      <div style={{ display: viewMode === 'list' ? undefined : 'none' }}>
         <Card>
           <div className="sectionTitle">
             <div>
@@ -775,7 +890,7 @@ export function AssetsPage() {
           </>
         )}
         </Card>
-      )}
+      </div>
 
       <SlidePanel open={!!selected} title={selected?.name ?? t('assets.colName')} onClose={() => setSelected(null)} width="wide">
         {selected && (
@@ -1095,7 +1210,11 @@ export function AssetsPage() {
         {qrLoading ? <p className="muted">{t('assets.generatingQr')}</p> : qrSvg ? (
           <div className="qrPreview">
             <div className="qrPreview__image" dangerouslySetInnerHTML={{ __html: qrSvg }} />
-            <Button onClick={downloadQr} icon={<Download size={16} />}>{t('assets.downloadSvg')}</Button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Button onClick={() => void downloadQr('png')} icon={<Download size={16} />}>{t('assets.downloadPng')}</Button>
+              <Button onClick={() => void downloadQr('jpg')} icon={<Download size={16} />}>{t('assets.downloadJpg')}</Button>
+              <Button onClick={() => void downloadQr('svg')} icon={<Download size={16} />}>{t('assets.downloadSvg')}</Button>
+            </div>
           </div>
         ) : null}
       </Modal>
@@ -1124,7 +1243,7 @@ export function AssetsPage() {
         categories={categories.data ?? []}
         locations={locations.data ?? []}
         onClose={() => setImportOpen(false)}
-        onDone={assets.reload}
+        onDone={reloadAssets}
       />
 
       {viewLocation && <LocationInventoryModal locationPath={viewLocation} onClose={() => setViewLocation(null)} />}
@@ -1175,8 +1294,6 @@ export function AssetsPage() {
               {batchQr.map(item => (
                 <div className="qrPrintCard" key={item.asset.id}>
                   <div dangerouslySetInnerHTML={{ __html: item.svg }} />
-                  <strong>{item.asset.name}</strong>
-                  <small>{item.asset.assetTag}</small>
                 </div>
               ))}
             </div>

@@ -39,6 +39,9 @@ public sealed class Assignment
     public string? AcceptedIp { get; private set; }
     public string? AcceptanceHash { get; private set; }
     public int IntegrityVersion { get; private set; } = 1;
+    public string? PublicTokenHash { get; private set; }
+    public DateTimeOffset? PublicTokenExpiresAt { get; private set; }
+    public DateTimeOffset? PublicTokenRevokedAt { get; private set; }
     public List<AssignmentAsset> Assets { get; private set; } = [];
     public List<ProcedureAcceptance> ProcedureAcceptances { get; private set; } = [];
 
@@ -99,6 +102,25 @@ public sealed class Assignment
     public void EnableEvidenceIntegrity()
     {
         IntegrityVersion = 2;
+    }
+
+    // AUD-001: publiczny link akceptacji identyfikuje wydanie tokenem (hash w DB, TTL, revoke),
+    // nie samym OrganizationId+Id — patrz PublicTokenService dla generacji/weryfikacji.
+    public void SetPublicToken(string tokenHash, DateTimeOffset expiresAt)
+    {
+        if (string.IsNullOrWhiteSpace(tokenHash))
+        {
+            throw new DomainException("Hash tokenu jest wymagany.");
+        }
+
+        PublicTokenHash = tokenHash.Trim();
+        PublicTokenExpiresAt = expiresAt;
+        PublicTokenRevokedAt = null;
+    }
+
+    public void RevokePublicToken(DateTimeOffset revokedAt)
+    {
+        PublicTokenRevokedAt ??= revokedAt;
     }
 
     public void MarkOverdue()

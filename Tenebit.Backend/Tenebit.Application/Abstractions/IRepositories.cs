@@ -22,10 +22,12 @@ namespace Tenebit.Application.Abstractions;
 public interface IAssetRepository
 {
     Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken);
-    Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken);
+    Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     void Add(Asset asset);
     void Remove(Asset asset);
 }
@@ -96,6 +98,7 @@ public interface IAssignmentRepository
     Task<IReadOnlyList<Assignment>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken);
     Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<Assignment?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
     void Add(Assignment assignment);
 }
 
@@ -110,6 +113,7 @@ public interface IActivityLogRepository
 {
     Task<IReadOnlyList<ActivityLog>> ListAsync(Guid organizationId, int limit, CancellationToken cancellationToken);
     Task<(IReadOnlyList<ActivityLog> Items, int Total)> ListPagedAsync(Guid organizationId, int page, int pageSize, string? entityType, Guid? entityId, string? search, DateTimeOffset? from, DateTimeOffset? to, IReadOnlyCollection<string>? actorSubjects, string? action, CancellationToken cancellationToken);
+    Task<bool> ExistsRecentAsync(Guid organizationId, string entityType, Guid entityId, string actorSubject, string action, DateTimeOffset since, CancellationToken cancellationToken);
     void Add(ActivityLog log);
 }
 
@@ -148,12 +152,14 @@ public interface IEmailVerificationTokenRepository
 public interface IRefreshTokenRepository
 {
     Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken);
     void Add(RefreshToken token);
 }
 
 public interface IDeviceTrustTokenRepository
 {
     Task<DeviceTrustToken?> FindValidAsync(Guid organizationUserId, string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken);
     void Add(DeviceTrustToken token);
 }
 
@@ -185,6 +191,12 @@ public interface ISubscriptionRepository
     Task<OrganizationSubscription?> GetByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken);
     void Add(OrganizationSubscription subscription);
+}
+
+public interface IProcessedStripeEventRepository
+{
+    Task<bool> ExistsAsync(string eventId, CancellationToken cancellationToken);
+    void Add(ProcessedStripeEvent processedEvent);
 }
 
 public interface ISentAlertRepository
@@ -237,7 +249,7 @@ public interface IOffboardingCaseRepository
     Task<IReadOnlyList<OffboardingCase>> ListOpenAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<OffboardingCase?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<OffboardingCase?> FindOpenByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
-    Task<IReadOnlyList<OffboardingCase>> ListWithPublicTokenAsync(CancellationToken cancellationToken);
+    Task<OffboardingCase?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
     void Add(OffboardingCase offboardingCase);
 }
 

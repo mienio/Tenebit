@@ -11,16 +11,18 @@ public sealed class JobProfileService
     private readonly IJobProfileRepository _profiles;
     private readonly IAssetCategoryRepository _categories;
     private readonly IProcedureRepository _procedures;
+    private readonly IPersonRepository _people;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public JobProfileService(IJobProfileRepository profiles, IAssetCategoryRepository categories, IProcedureRepository procedures, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public JobProfileService(IJobProfileRepository profiles, IAssetCategoryRepository categories, IProcedureRepository procedures, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _profiles = profiles;
         _categories = categories;
         _procedures = procedures;
+        _people = people;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -95,6 +97,10 @@ public sealed class JobProfileService
         if (request.AssetCategoryIds.Any(id => categories.All(x => x.Id != id))) return Result.Failure(Error.Validation("Zestaw zawiera kategorię, która nie istnieje."));
         var procedures = await _procedures.GetByIdsAsync(organizationId, request.ProcedureIds.Distinct().ToArray(), cancellationToken);
         if (procedures.Count != request.ProcedureIds.Distinct().Count()) return Result.Failure(Error.Validation("Zestaw zawiera procedurę, która nie istnieje."));
+        if (request.DefaultManagerId.HasValue && await _people.GetAsync(organizationId, request.DefaultManagerId.Value, cancellationToken) is null)
+        {
+            return Result.Failure(Error.Validation("Wybrany domyślny przełożony nie istnieje."));
+        }
         return Result.Success();
     }
 

@@ -55,13 +55,29 @@ public sealed class AssetCategory
         PhotoOnReturn = photoOnReturn;
     }
 
+    // Diff po Key zamiast Clear()+Add(): niezmienione pola zostają jako te same wiersze (Id bez zmian),
+    // więc zapis dotyka w bazie tylko realnie usuniętych/dodanych/zmienionych pozycji, a nie całej kolekcji
+    // przy każdej edycji (patrz audyt AUD-021 — DbUpdateConcurrencyException przy pełnym replace).
     public void ReplaceFieldDefinitions(IEnumerable<(string Key, string Label, AssetFieldType FieldType, string? Options, bool Required)> definitions)
     {
-        FieldDefinitions.Clear();
+        var incoming = definitions.ToList();
+        var incomingKeys = incoming.Select(x => x.Key).ToHashSet();
+
+        FieldDefinitions.RemoveAll(existing => !incomingKeys.Contains(existing.Key));
+
         var sortOrder = 0;
-        foreach (var definition in definitions)
+        foreach (var definition in incoming)
         {
-            FieldDefinitions.Add(new AssetFieldDefinition(Id, definition.Key, definition.Label, definition.FieldType, definition.Options, definition.Required, sortOrder));
+            var existing = FieldDefinitions.FirstOrDefault(x => x.Key == definition.Key);
+            if (existing is not null)
+            {
+                existing.UpdateDetails(definition.Label, definition.FieldType, definition.Options, definition.Required, sortOrder);
+            }
+            else
+            {
+                FieldDefinitions.Add(new AssetFieldDefinition(Id, definition.Key, definition.Label, definition.FieldType, definition.Options, definition.Required, sortOrder));
+            }
+
             sortOrder++;
         }
     }

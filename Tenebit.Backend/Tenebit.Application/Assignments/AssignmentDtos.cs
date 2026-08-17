@@ -36,10 +36,11 @@ public sealed record AssignmentResponse(
     string? Notes,
     IReadOnlyList<AssignmentAssetResponse> Assets,
     IReadOnlyList<ProcedureAcceptanceResponse> ProcedureAcceptances,
-    string AcceptanceLink,
     string? AcceptedIp,
     string? AcceptanceHash,
     bool IsIntegrityVerified);
+
+public sealed record AssignmentAcceptanceLinkResponse(string Link);
 
 public sealed record PublicAssignmentAssetResponse(string Name, string AssetTag, string IssueCondition, Guid AssetId, IReadOnlyList<Guid> EvidenceIds);
 

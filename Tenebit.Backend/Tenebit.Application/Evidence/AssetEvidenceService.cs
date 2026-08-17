@@ -86,6 +86,10 @@ public sealed class AssetEvidenceService
         {
             var assignment = await _assignments.GetAsync(organizationId, request.AssignmentId.Value, cancellationToken);
             if (assignment is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+            if (assignment.Assets.All(x => x.AssetId != assetId))
+            {
+                return Result<AssetEvidenceResponse>.Failure(Error.Validation("To aktywo nie należy do tego wydania."));
+            }
         }
 
         var existingCount = await _evidence.CountAsync(organizationId, assetId, request.Phase, cancellationToken);

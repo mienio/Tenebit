@@ -7,6 +7,7 @@ public sealed record Error(string Code, string Message, int StatusCode)
     public static Error Forbidden(string message = "Brak uprawnień do tej operacji.") => new("FORBIDDEN", message, 403);
     public static Error NotFound(string message) => new("NOT_FOUND", message, 404);
     public static Error Conflict(string message) => new("CONFLICT", message, 409);
+    public static Error TooManyRequests(string message) => new("TOO_MANY_REQUESTS", message, 429);
 }
 
 public class Result

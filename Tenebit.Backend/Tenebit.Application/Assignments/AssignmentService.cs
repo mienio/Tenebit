@@ -5,6 +5,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
+using Tenebit.Application.Identity;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Procedures;
 using Tenebit.Domain.Reservations;
@@ -67,7 +68,7 @@ public sealed class AssignmentService
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
         var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
-        return Result<IReadOnlyList<AssignmentResponse>>.Success(assignments.Select(x => Map(organizationId, x, people, assets, procedures, evidence)).ToList());
+        return Result<IReadOnlyList<AssignmentResponse>>.Success(assignments.Select(x => Map(x, people, assets, procedures, evidence)).ToList());
     }
 
     public async Task<Result<PagedResult<AssignmentResponse>>> ListPagedAsync(string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken)
@@ -81,7 +82,7 @@ public sealed class AssignmentService
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
         var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
-        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => Map(organizationId, x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
+        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<AssignmentResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -104,7 +105,7 @@ public sealed class AssignmentService
         var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
         var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
         var evidence = await _evidence.ListByAssignmentAsync(organizationId, id, cancellationToken);
-        return Result<AssignmentResponse>.Success(Map(organizationId, assignment, people, assets, procedures, evidence));
+        return Result<AssignmentResponse>.Success(Map(assignment, people, assets, procedures, evidence));
     }
 
     public async Task<Result<AssignmentResponse>> CreateAsync(CreateAssignmentRequest request, CancellationToken cancellationToken)
@@ -119,12 +120,13 @@ public sealed class AssignmentService
 
             var (assignment, person, assets, procedures) = prepared.Value!;
             var organizationId = _currentUser.OrganizationId;
+            var rawToken = IssueAcceptanceToken(assignment, _clock.UtcNow);
 
             _assignments.Add(assignment);
             _activity.Add(new ActivityLog(organizationId, "assignment.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, cancellationToken);
+            await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, rawToken, cancellationToken);
 
             return await BuildResponseAsync(assignment.Id, cancellationToken);
         }
@@ -175,6 +177,7 @@ public sealed class AssignmentService
 
             var (assignment, person, assets, procedures) = prepared.Value!;
             assignment.EnableEvidenceIntegrity();
+            var rawToken = IssueAcceptanceToken(assignment, _clock.UtcNow);
 
             var evidenceResult = await _evidenceService.PrepareEvidenceBatchAsync(organizationId, assignment.Id, EvidencePhase.Issue, uploads, cancellationToken);
             if (evidenceResult.IsFailure) return Result<AssignmentResponse>.Failure(evidenceResult.Error!);
@@ -187,7 +190,7 @@ public sealed class AssignmentService
             _activity.Add(new ActivityLog(organizationId, "assignment.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, cancellationToken);
+            await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, rawToken, cancellationToken);
 
             return await BuildResponseAsync(assignment.Id, cancellationToken);
         }
@@ -234,13 +237,40 @@ public sealed class AssignmentService
         return Result<PreparedAssignment>.Success(new PreparedAssignment(assignment, person, assets, procedures));
     }
 
-    private async Task SendAssignmentNotificationAsync(CreateAssignmentRequest request, Assignment assignment, Domain.People.Person person, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, Guid organizationId, CancellationToken cancellationToken)
+    // AUD-001: identyfikator wydania nie może sam być credentialem — link niesie osobny, losowy token
+    // (hash trzymany na Assignment), z TTL i możliwością odświeżenia przez RegenerateAcceptanceLinkAsync.
+    private string IssueAcceptanceToken(Assignment assignment, DateTimeOffset now)
+    {
+        var generated = PublicTokenService.Generate();
+        var expiresAt = assignment.DueDate.HasValue
+            ? new DateTimeOffset(assignment.DueDate.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).AddDays(30)
+            : now.AddDays(90);
+        assignment.SetPublicToken(generated.TokenHash, expiresAt);
+        return generated.RawToken;
+    }
+
+    public async Task<Result<AssignmentAcceptanceLinkResponse>> RegenerateAcceptanceLinkAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        if (access.IsFailure) return Result<AssignmentAcceptanceLinkResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
+        if (assignment is null) return Result<AssignmentAcceptanceLinkResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+
+        var rawToken = IssueAcceptanceToken(assignment, _clock.UtcNow);
+        _activity.Add(new ActivityLog(organizationId, "assignment.acceptance_link_regenerated", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<AssignmentAcceptanceLinkResponse>.Success(new AssignmentAcceptanceLinkResponse(_linkBuilder.BuildAssignmentAcceptanceLink(rawToken)));
+    }
+
+    private async Task SendAssignmentNotificationAsync(CreateAssignmentRequest request, Assignment assignment, Domain.People.Person person, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, Guid organizationId, string rawToken, CancellationToken cancellationToken)
     {
         try
         {
             var acceptedAssets = assets.Where(x => request.Assets.Any(item => item.AssetId == x.Id)).ToList();
             var requiredProcedures = procedures.Where(x => x.RequiresAcceptance && x.Status == ProcedureStatus.Published).Select(x => x.Title).ToList();
-            var link = _linkBuilder.BuildAssignmentAcceptanceLink(organizationId, assignment.Id);
+            var link = _linkBuilder.BuildAssignmentAcceptanceLink(rawToken);
             var organization = await _organizations.GetAsync(organizationId, cancellationToken);
             var (subject, html) = EmailTemplates.NewAssignmentNotification(organization?.Language, person.FirstName, assignment.ProtocolNumber, acceptedAssets.Select(x => x.Name), requiredProcedures, link);
             await _emailSender.SendAsync(person.Email, subject, html, cancellationToken);
@@ -455,31 +485,65 @@ public sealed class AssignmentService
         }
     }
 
-    public Task<Result<byte[]>> GetProtocolPdfAsync(Guid id, CancellationToken cancellationToken) =>
-        BuildProtocolPdfAsync(_currentUser.OrganizationId, id, cancellationToken);
-
-    public Task<Result<byte[]>> GetPublicProtocolPdfAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
-        BuildProtocolPdfAsync(organizationId, assignmentId, cancellationToken);
-
-    public async Task<Result<PublicAssignmentResponse>> GetPublicAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken)
+    public Task<Result<byte[]>> GetProtocolPdfAsync(Guid id, CancellationToken cancellationToken)
     {
-        var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
-        if (assignment is null) return Result<PublicAssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
-        return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(organizationId, assignment, cancellationToken));
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
+        if (access.IsFailure) return Task.FromResult(Result<byte[]>.Failure(access.Error!));
+
+        return BuildProtocolPdfAsync(_currentUser.OrganizationId, id, cancellationToken);
     }
 
-    public async Task<Result<PublicAssignmentResponse>> AcceptPublicAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken)
+    /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów wydania — ten sam wzorzec co
+    /// OffboardingService.ResolveByTokenAsync: zawsze generyczny NotFound, żeby nie ujawniać czy token
+    /// istniał/wygasł/został odwołany.</summary>
+    private async Task<Result<Assignment>> ResolveByTokenAsync(string token, CancellationToken cancellationToken)
     {
-        var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
-        if (assignment is null) return Result<PublicAssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+        var now = _clock.UtcNow;
+        var candidate = await _assignments.FindByPublicTokenHashAsync(TokenHasher.Hash(token), cancellationToken);
+        if (candidate is not null && PublicTokenService.Verify(token, candidate.PublicTokenHash, candidate.PublicTokenExpiresAt ?? DateTimeOffset.MinValue, candidate.PublicTokenRevokedAt, now))
+        {
+            return Result<Assignment>.Success(candidate);
+        }
+
+        return Result<Assignment>.Failure(Error.NotFound("Wydanie nie istnieje."));
+    }
+
+    public async Task<Result<(Guid OrganizationId, Guid AssignmentId)>> ResolvePublicTokenAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        return resolved.IsFailure
+            ? Result<(Guid, Guid)>.Failure(resolved.Error!)
+            : Result<(Guid, Guid)>.Success((resolved.Value!.OrganizationId, resolved.Value!.Id));
+    }
+
+    public async Task<Result<byte[]>> GetPublicProtocolPdfAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<byte[]>.Failure(resolved.Error!);
+        return await BuildProtocolPdfAsync(resolved.Value!.OrganizationId, resolved.Value!.Id, cancellationToken);
+    }
+
+    public async Task<Result<PublicAssignmentResponse>> GetPublicAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicAssignmentResponse>.Failure(resolved.Error!);
+        var assignment = resolved.Value!;
+        return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
+    }
+
+    public async Task<Result<PublicAssignmentResponse>> AcceptPublicAsync(string token, CancellationToken cancellationToken)
+    {
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<PublicAssignmentResponse>.Failure(resolved.Error!);
+        var assignment = resolved.Value!;
 
         try
         {
-            var evidence = assignment.IntegrityVersion >= 2 ? await _evidence.ListByAssignmentAsync(organizationId, assignmentId, cancellationToken) : null;
+            var evidence = assignment.IntegrityVersion >= 2 ? await _evidence.ListByAssignmentAsync(assignment.OrganizationId, assignment.Id, cancellationToken) : null;
             assignment.Accept(_clock.UtcNow, _currentUser.IpAddress, evidence);
-            _activity.Add(new ActivityLog(organizationId, "assignment.accepted", "assignment", assignment.Id, "public-link", assignment.ProtocolNumber, _clock.UtcNow));
+            _activity.Add(new ActivityLog(assignment.OrganizationId, "assignment.accepted", "assignment", assignment.Id, "public-link", assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(organizationId, assignment, cancellationToken));
+            return Result<PublicAssignmentResponse>.Success(await MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
         }
         catch (DomainException ex)
         {
@@ -527,16 +591,17 @@ public sealed class AssignmentService
             procedureRows);
     }
 
-    public async Task<Result<ProcedureDocument>> GetPublicProcedureDocumentAsync(Guid organizationId, Guid assignmentId, Guid procedureId, Guid documentId, CancellationToken cancellationToken)
+    public async Task<Result<ProcedureDocument>> GetPublicProcedureDocumentAsync(string token, Guid procedureId, Guid documentId, CancellationToken cancellationToken)
     {
-        var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
-        if (assignment is null) return Result<ProcedureDocument>.Failure(Error.NotFound("Wydanie nie istnieje."));
+        var resolved = await ResolveByTokenAsync(token, cancellationToken);
+        if (resolved.IsFailure) return Result<ProcedureDocument>.Failure(resolved.Error!);
+        var assignment = resolved.Value!;
         if (assignment.ProcedureAcceptances.All(x => x.ProcedureId != procedureId))
         {
             return Result<ProcedureDocument>.Failure(Error.NotFound("Plik procedury nie istnieje."));
         }
 
-        var document = await _procedures.GetDocumentAsync(organizationId, procedureId, documentId, cancellationToken);
+        var document = await _procedures.GetDocumentAsync(assignment.OrganizationId, procedureId, documentId, cancellationToken);
         return document is null
             ? Result<ProcedureDocument>.Failure(Error.NotFound("Plik procedury nie istnieje."))
             : Result<ProcedureDocument>.Success(document);
@@ -583,7 +648,7 @@ public sealed class AssignmentService
         return Result<byte[]>.Success(_pdfGenerator.GenerateHandoverProtocol(model));
     }
 
-    private AssignmentResponse Map(Guid organizationId, Assignment assignment, IReadOnlyList<Domain.People.Person> people, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, IReadOnlyList<AssetEvidence>? evidence = null)
+    private AssignmentResponse Map(Assignment assignment, IReadOnlyList<Domain.People.Person> people, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, IReadOnlyList<AssetEvidence>? evidence = null)
     {
         var person = people.FirstOrDefault(x => x.Id == assignment.PersonId);
         var items = assignment.Assets.Select(item =>
@@ -599,8 +664,7 @@ public sealed class AssignmentService
         }).ToList();
 
         var assignmentEvidence = evidence?.Where(x => x.AssignmentId == assignment.Id).ToList();
-        var acceptanceLink = _linkBuilder.BuildAssignmentAcceptanceLink(organizationId, assignment.Id);
-        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, acceptanceLink, assignment.AcceptedIp, assignment.AcceptanceHash, assignment.VerifyIntegrity(assignmentEvidence));
+        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, assignment.AcceptedIp, assignment.AcceptanceHash, assignment.VerifyIntegrity(assignmentEvidence));
     }
 
     private static string CreateProtocolNumber(DateTimeOffset now) => $"TEN-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";

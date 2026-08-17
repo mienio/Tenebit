@@ -11,7 +11,7 @@ namespace Tenebit.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration, bool enableSingleInstanceGuard)
     {
         var connectionString = configuration.GetConnectionString("TenebitDb");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IJobProfileRepository, JobProfileRepository>();
         services.AddScoped<IAssetStatusSettingRepository, AssetStatusSettingRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IProcessedStripeEventRepository, ProcessedStripeEventRepository>();
         services.AddScoped<ISentAlertRepository, SentAlertRepository>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddScoped<IAlertDigestSettingsRepository, AlertDigestSettingsRepository>();
@@ -63,7 +64,18 @@ public static class DependencyInjection
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
         services.AddSingleton<IPaymentGateway, StripePaymentGateway>();
+        services.AddSingleton<IFieldEncryptor, FieldEncryptor>();
         services.AddScoped<DefaultDataSeeder>();
+        if (enableSingleInstanceGuard)
+        {
+            // Musi wystartować przed pozostałymi hosted services — patrz komentarz w SingleInstanceGuardService
+            // (audyt P0.7: deployment jest single-instance, ten guard zamienia przypadkowy drugi proces
+            // w głośny błąd startowy zamiast cichego rozjazdu OAuth/2FA state i zdublowanych background jobów).
+            // Wyłączony poza Production, żeby WebApplicationFactory w testach integracyjnych mogło
+            // uruchamiać kilka równoległych hostów na tej samej bazie testowej.
+            services.AddHostedService<SingleInstanceGuardService>();
+        }
+
         services.AddHostedService<AlertBackgroundService>();
         services.AddHostedService<DashboardSnapshotBackgroundService>();
         services.AddHostedService<OffboardingBackgroundService>();

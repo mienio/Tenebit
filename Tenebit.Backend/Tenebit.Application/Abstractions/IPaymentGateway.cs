@@ -26,11 +26,13 @@ public interface IPaymentGateway
 }
 
 public sealed record PaymentWebhookEvent(
+    string EventId,
     string EventType,
     string CustomerId,
     string? SubscriptionId,
     string PlanKey,
     SubscriptionStatus Status,
+    DateTimeOffset EventCreatedAt,
     DateTimeOffset CurrentPeriodStart,
     DateTimeOffset CurrentPeriodEnd,
     Guid? OrganizationId);

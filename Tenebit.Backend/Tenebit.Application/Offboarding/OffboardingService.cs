@@ -2,6 +2,7 @@ using Tenebit.Application.Abstractions;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Common;
 using Tenebit.Application.Evidence;
+using Tenebit.Application.Identity;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.Audit;
@@ -202,6 +203,11 @@ public sealed class OffboardingService
             return Result<OffboardingCaseDetailsResponse>.Failure(Error.Conflict("Dla tej osoby istnieje już aktywna sprawa offboardingowa."));
         }
 
+        if (request.ProcessOwnerId.HasValue && await _people.GetAsync(organizationId, request.ProcessOwnerId.Value, cancellationToken) is null)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Wybrany właściciel procesu nie istnieje."));
+        }
+
         try
         {
             var offboardingCase = new OffboardingCase(organizationId, person.Id, request.EmploymentEndsAt, request.ReturnDueDate,
@@ -229,6 +235,11 @@ public sealed class OffboardingService
         var organizationId = _currentUser.OrganizationId;
         var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
         if (offboardingCase is null) return Result<OffboardingCaseDetailsResponse>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+
+        if (request.ProcessOwnerId.HasValue && await _people.GetAsync(organizationId, request.ProcessOwnerId.Value, cancellationToken) is null)
+        {
+            return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation("Wybrany właściciel procesu nie istnieje."));
+        }
 
         try
         {
@@ -796,7 +807,7 @@ public sealed class OffboardingService
 
     // --- Publiczny kanał pracownika (spec 4.6) ---
 
-    private async Task IssueTokenAndSendLinkAsync(OffboardingCase offboardingCase, Domain.People.Person person, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<string> IssueTokenAndSendLinkAsync(OffboardingCase offboardingCase, Domain.People.Person person, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var organizationId = offboardingCase.OrganizationId;
         var generated = PublicTokenService.Generate();
@@ -804,10 +815,10 @@ public sealed class OffboardingService
         // nawet jeśli fizyczny zwrot się opóźni; po tym czasie link wygasa samoczynnie bez ręcznej interwencji.
         var expiresAt = offboardingCase.ReturnDueDate.AddDays(30);
         offboardingCase.SetPublicToken(generated.TokenHash, expiresAt);
+        var link = _linkBuilder.BuildOffboardingLink(generated.RawToken);
 
         try
         {
-            var link = _linkBuilder.BuildOffboardingLink(generated.RawToken);
             var organization = await _organizations.GetAsync(organizationId, cancellationToken);
             var (subject, html) = EmailTemplates.OffboardingLink(organization?.Language, person.FirstName, offboardingCase.ReturnDueDate, link);
             await _emailSender.SendAsync(person.Email, subject, html, cancellationToken);
@@ -817,6 +828,8 @@ public sealed class OffboardingService
         {
             _activity.Add(new ActivityLog(organizationId, "offboarding.email_failed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, ex.Message, now));
         }
+
+        return link;
     }
 
     public async Task<Result<bool>> ResendLinkAsync(Guid id, CancellationToken cancellationToken)
@@ -845,27 +858,27 @@ public sealed class OffboardingService
         return Result<bool>.Success(true);
     }
 
-    public async Task<Result<bool>> RegenerateLinkAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<Result<string>> RegenerateLinkAsync(Guid id, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
-        if (access.IsFailure) return Result<bool>.Failure(access.Error!);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
         var offboardingCase = await _cases.GetAsync(organizationId, id, cancellationToken);
-        if (offboardingCase is null) return Result<bool>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
+        if (offboardingCase is null) return Result<string>.Failure(Error.NotFound("Sprawa offboardingowa nie istnieje."));
 
         var person = await _people.GetAsync(organizationId, offboardingCase.PersonId, cancellationToken);
         if (person is null || string.IsNullOrWhiteSpace(person.Email))
         {
-            return Result<bool>.Failure(Error.Validation("Osoba nie ma adresu e-mail — nie można wysłać linku."));
+            return Result<string>.Failure(Error.Validation("Osoba nie ma adresu e-mail — nie można wysłać linku."));
         }
 
         var now = _clock.UtcNow;
-        await IssueTokenAndSendLinkAsync(offboardingCase, person, now, cancellationToken);
+        var link = await IssueTokenAndSendLinkAsync(offboardingCase, person, now, cancellationToken);
         _activity.Add(new ActivityLog(organizationId, "offboarding.link_regenerated", "offboarding_case", offboardingCase.Id, _currentUser.Subject, person.FullName, now));
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<bool>.Success(true);
+        return Result<string>.Success(link);
     }
 
     /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów offboardingu. Zwraca zawsze ten sam
@@ -874,15 +887,10 @@ public sealed class OffboardingService
     private async Task<Result<OffboardingCase>> ResolveByTokenAsync(string token, CancellationToken cancellationToken)
     {
         var now = _clock.UtcNow;
-        var offboardingCase = await _cases.ListWithPublicTokenAsync(cancellationToken);
-        // Repozytorium nie może przeszukiwać po hashu (token jest jednorazowy, porównanie musi być stałoczasowe
-        // per rekord) — pobieramy kandydatów i weryfikujemy każdego, tak jak inne mechanizmy oparte o PublicTokenService.
-        foreach (var candidate in offboardingCase)
+        var candidate = await _cases.FindByPublicTokenHashAsync(TokenHasher.Hash(token), cancellationToken);
+        if (candidate is not null && PublicTokenService.Verify(token, candidate.PublicTokenHash, candidate.PublicTokenExpiresAt ?? DateTimeOffset.MinValue, candidate.PublicTokenRevokedAt, now))
         {
-            if (PublicTokenService.Verify(token, candidate.PublicTokenHash, candidate.PublicTokenExpiresAt ?? DateTimeOffset.MinValue, candidate.PublicTokenRevokedAt, now))
-            {
-                return Result<OffboardingCase>.Success(candidate);
-            }
+            return Result<OffboardingCase>.Success(candidate);
         }
 
         return Result<OffboardingCase>.Failure(Error.NotFound("Link jest nieprawidłowy lub wygasł."));

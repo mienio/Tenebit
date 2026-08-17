@@ -28,8 +28,9 @@ public sealed class AssetService
     private readonly IAppLinkBuilder _linkBuilder;
     private readonly IEmailSender _emailSender;
     private readonly ILogger<AssetService> _logger;
+    private readonly IFieldEncryptor _fieldEncryptor;
 
-    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger)
+    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor)
     {
         _assets = assets;
         _categories = categories;
@@ -46,6 +47,7 @@ public sealed class AssetService
         _linkBuilder = linkBuilder;
         _emailSender = emailSender;
         _logger = logger;
+        _fieldEncryptor = fieldEncryptor;
     }
 
     public async Task<Result<IReadOnlyList<AssetResponse>>> ListAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
@@ -61,7 +63,7 @@ public sealed class AssetService
         return Result<IReadOnlyList<AssetResponse>>.Success(assets.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList());
     }
 
-    public async Task<Result<PagedResult<AssetResponse>>> ListPagedAsync(string? search, AssetStatus? status, string? location, Guid? teamId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<Result<PagedResult<AssetResponse>>> ListPagedAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
         if (access.IsFailure) return Result<PagedResult<AssetResponse>>.Failure(access.Error!);
@@ -76,11 +78,20 @@ public sealed class AssetService
             warrantyTo = today.AddDays(90);
         }
 
-        var (items, total) = await _assets.ListPagedAsync(organizationId, search, status, location, teamId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, cancellationToken);
+        var (items, total) = await _assets.ListPagedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, cancellationToken);
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(items.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList(), total, page, pageSize));
+    }
+
+    public async Task<Result<AssetGroupCountsResponse>> GetGroupCountsAsync(CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<AssetGroupCountsResponse>.Failure(access.Error!);
+
+        var (byCategory, byStatus, byPerson) = await _assets.GetGroupCountsAsync(_currentUser.OrganizationId, cancellationToken);
+        return Result<AssetGroupCountsResponse>.Success(new AssetGroupCountsResponse(byCategory, byStatus, byPerson));
     }
 
     public async Task<Result<AssetResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -119,14 +130,7 @@ public sealed class AssetService
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
-            var currentAssets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
             var limit = subscription.GetAssetLimit();
-
-            if (currentAssets.Count >= limit)
-            {
-                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
-                return Result<AssetResponse>.Failure(Error.Validation($"Limit aktywów przekroczony. Plan {plan.Name} pozwala na {limit} aktywów. Przejdź na wyższy plan."));
-            }
 
             var category = await _categories.GetAsync(organizationId, request.CategoryId, cancellationToken);
             if (category is null) return Result<AssetResponse>.Failure(Error.Validation("Wybrana kategoria nie istnieje."));
@@ -135,16 +139,38 @@ public sealed class AssetService
                 return Result<AssetResponse>.Failure(Error.Conflict("Tag aktywa jest już używany."));
             }
 
+            if (request.TeamId.HasValue && await _teams.GetAsync(organizationId, request.TeamId.Value, cancellationToken) is null)
+            {
+                return Result<AssetResponse>.Failure(Error.Validation("Wybrany zespół nie istnieje."));
+            }
+
             var customFieldsResult = ValidateCustomFields(category, request.CustomFields);
             if (customFieldsResult.IsFailure) return Result<AssetResponse>.Failure(customFieldsResult.Error!);
 
             var asset = new Asset(organizationId, request.CategoryId, request.Name, request.AssetTag);
             asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, request.Location, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
-            asset.SetFieldValues(customFieldsResult.Value!);
+            asset.SetFieldValues(EncryptSensitiveFields(category, customFieldsResult.Value!));
 
-            _assets.Add(asset);
-            _activity.Add(new ActivityLog(organizationId, "asset.created", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            // Limit sprawdzany i egzekwowany atomowo pod blokadą per-organizacja (audyt P1.11) — samo
+            // "policz, porównaj, wstaw" bez blokady pozwalało dwóm równoległym requestom przejść walidację
+            // zanim którykolwiek zapisze wiersz, więc organizacja mogła przekroczyć limit planu.
+            var withinLimit = await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            {
+                var currentCount = await _assets.CountAsync(organizationId, ct);
+                if (currentCount >= limit) return false;
+
+                _assets.Add(asset);
+                _activity.Add(new ActivityLog(organizationId, "asset.created", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<AssetResponse>.Failure(Error.Validation($"Limit aktywów przekroczony. Plan {plan.Name} pozwala na {limit} aktywów. Przejdź na wyższy plan."));
+            }
+
             return await GetAsync(asset.Id, cancellationToken);
         }
         catch (DomainException ex)
@@ -174,13 +200,18 @@ public sealed class AssetService
                 return Result<AssetResponse>.Failure(Error.Conflict("Tag aktywa jest już używany."));
             }
 
+            if (request.TeamId.HasValue && await _teams.GetAsync(organizationId, request.TeamId.Value, cancellationToken) is null)
+            {
+                return Result<AssetResponse>.Failure(Error.Validation("Wybrany zespół nie istnieje."));
+            }
+
             var mergedFields = PreserveUnchangedSensitiveFields(asset, category, request.CustomFields);
             var customFieldsResult = ValidateCustomFields(category, mergedFields);
             if (customFieldsResult.IsFailure) return Result<AssetResponse>.Failure(customFieldsResult.Error!);
 
             asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, request.Location, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
             asset.ChangeStatus(request.Status);
-            asset.SetFieldValues(customFieldsResult.Value!);
+            asset.SetFieldValues(EncryptSensitiveFields(category, customFieldsResult.Value!));
             _activity.Add(new ActivityLog(organizationId, "asset.updated", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await GetAsync(asset.Id, cancellationToken);
@@ -211,8 +242,12 @@ public sealed class AssetService
         var organizationId = _currentUser.OrganizationId;
         var asset = await _assets.GetAsync(organizationId, id, cancellationToken);
         if (asset is null) return Result<string>.Failure(Error.NotFound("Aktywo nie istnieje."));
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
         var scanLink = _linkBuilder.BuildAssetScanLink(organizationId, asset.Id);
-        return Result<string>.Success(_qrCodeGenerator.CreateAssetQrSvg(scanLink));
+        var labelLines = new List<string>();
+        if (organization is null || organization.QrLabelShowName) labelLines.Add(asset.Name);
+        if (organization is null || organization.QrLabelShowTag) labelLines.Add(asset.AssetTag);
+        return Result<string>.Success(_qrCodeGenerator.CreateLabelledAssetQrSvg(scanLink, labelLines));
     }
 
     public async Task<Result<PublicAssetScanResponse>> GetPublicScanAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken)
@@ -224,11 +259,19 @@ public sealed class AssetService
         return Result<PublicAssetScanResponse>.Success(new PublicAssetScanResponse(organization.Name));
     }
 
+    private static readonly TimeSpan PublicIssueReportCooldown = TimeSpan.FromMinutes(10);
+
     public async Task<Result> ReportPublicIssueAsync(Guid organizationId, Guid assetId, ReportAssetIssueRequest request, CancellationToken cancellationToken)
     {
         var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
         if (asset is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
         if (string.IsNullOrWhiteSpace(request.Message)) return Result.Failure(Error.Validation("Treść zgłoszenia jest wymagana."));
+
+        var reporterIp = string.IsNullOrWhiteSpace(_currentUser.IpAddress) ? "unknown" : _currentUser.IpAddress;
+        var actorSubject = $"public-scan:{reporterIp}";
+        var since = _clock.UtcNow - PublicIssueReportCooldown;
+        var reportedRecently = await _activity.ExistsRecentAsync(organizationId, "asset", asset.Id, actorSubject, "asset.scan_reported", since, cancellationToken);
+        if (reportedRecently) return Result.Failure(Error.TooManyRequests("To aktywo zostało już zgłoszone niedawno. Spróbuj ponownie później."));
 
         var users = await _organizationUsers.ListAsync(organizationId, cancellationToken);
         var adminEmails = users
@@ -254,12 +297,15 @@ public sealed class AssetService
             }
         }
 
-        _activity.Add(new ActivityLog(organizationId, "asset.scan_reported", "asset", asset.Id, "public-scan", asset.Name, _clock.UtcNow));
+        _activity.Add(new ActivityLog(organizationId, "asset.scan_reported", "asset", asset.Id, actorSubject, asset.Name, _clock.UtcNow));
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
-    private static IReadOnlyDictionary<string, string> PreserveUnchangedSensitiveFields(Asset asset, AssetCategory category, IReadOnlyDictionary<string, string>? customFields)
+    // Zwraca zawsze plaintext (istniejąca wartość jest odszyfrowywana) — pojedynczy punkt szyfrowania to
+    // EncryptSensitiveFields wołane po ValidateCustomFields, żeby zachowane-bez-zmian wartości nie zostały
+    // zaszyfrowane drugi raz.
+    private IReadOnlyDictionary<string, string> PreserveUnchangedSensitiveFields(Asset asset, AssetCategory category, IReadOnlyDictionary<string, string>? customFields)
     {
         var merged = new Dictionary<string, string>(customFields ?? new Dictionary<string, string>());
         foreach (var definition in category.FieldDefinitions.Where(x => x.FieldType == AssetFieldType.Sensitive))
@@ -268,11 +314,26 @@ public sealed class AssetService
             if (!string.IsNullOrWhiteSpace(provided) && provided != SensitiveMask) continue;
 
             var existing = asset.FieldValues.FirstOrDefault(x => x.FieldKey == definition.Key)?.Value;
-            if (existing is not null) merged[definition.Key] = existing;
+            if (existing is not null) merged[definition.Key] = _fieldEncryptor.Decrypt(FieldEncryptionPurposes.AssetSensitiveField, existing);
             else merged.Remove(definition.Key);
         }
 
         return merged;
+    }
+
+    /// <summary>Szyfruje wartości pól typu Sensitive tuż przed zapisem (audyt P1.5) — wołane po
+    /// ValidateCustomFields, więc operuje na finalnym, przyciętym zbiorze wartości.</summary>
+    private Dictionary<string, string> EncryptSensitiveFields(AssetCategory category, Dictionary<string, string> values)
+    {
+        foreach (var definition in category.FieldDefinitions.Where(x => x.FieldType == AssetFieldType.Sensitive))
+        {
+            if (values.TryGetValue(definition.Key, out var plain))
+            {
+                values[definition.Key] = _fieldEncryptor.Encrypt(FieldEncryptionPurposes.AssetSensitiveField, plain);
+            }
+        }
+
+        return values;
     }
 
     private static Result<Dictionary<string, string>> ValidateCustomFields(AssetCategory category, IReadOnlyDictionary<string, string>? customFields)
@@ -328,7 +389,8 @@ public sealed class AssetService
             return Result<string>.Failure(Error.Validation("Pole nie jest polem wrażliwym."));
         }
 
-        var value = asset.FieldValues.FirstOrDefault(x => x.FieldKey == fieldKey)?.Value ?? string.Empty;
+        var stored = asset.FieldValues.FirstOrDefault(x => x.FieldKey == fieldKey)?.Value ?? string.Empty;
+        var value = stored.Length == 0 ? stored : _fieldEncryptor.Decrypt(FieldEncryptionPurposes.AssetSensitiveField, stored);
         _activity.Add(new ActivityLog(organizationId, "asset.sensitive_field_revealed", "asset", asset.Id, _currentUser.Subject, definition.Label, _clock.UtcNow));
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<string>.Success(value);

@@ -72,6 +72,19 @@ public class OffboardingServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_RejectsCrossOrganizationProcessOwnerId()
+    {
+        var (service, user, _, _, people, _, _, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var otherOrgOwner = new Person(Guid.NewGuid(), "Anna", "Nowak", "anna@other.test");
+        people.Add(otherOrgOwner);
+
+        var result = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, otherOrgOwner.Id, false, false, false), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsSecondOpenCaseForSamePerson_WithConflictNotException()
     {
         var (service, user, _, _, people, _, _, _, _, _, _, _) = CreateService();

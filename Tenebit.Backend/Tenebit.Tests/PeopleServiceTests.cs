@@ -17,6 +17,15 @@ public class PeopleServiceTests
         return (service, currentUser, people, assets, activity);
     }
 
+    private static (PeopleService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryTeamRepository Teams) CreateServiceWithTeams()
+    {
+        var currentUser = new FakeCurrentUser();
+        var people = new InMemoryPersonRepository();
+        var teams = new InMemoryTeamRepository();
+        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork());
+        return (service, currentUser, people, teams);
+    }
+
     private static CreatePersonRequest BuildRequest(string email) =>
         new("Jan", "Kowalski", email, null, null, "Pracownik", null, null, null, null, null);
 
@@ -244,6 +253,32 @@ public class PeopleServiceTests
         await service.StartOffboardingAsync(created.Value!.Id, new StartOffboardingRequest(DateTimeOffset.UtcNow.AddDays(7)), CancellationToken.None);
 
         Assert.Contains(activity.Logs, l => l.Action == "person.offboarding_started" && l.EntityId == created.Value!.Id);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsCrossOrganizationTeamId()
+    {
+        var (service, _, _, teams) = CreateServiceWithTeams();
+        var otherOrgTeam = new Team(Guid.NewGuid(), "Inny zespół", null, null);
+        teams.Add(otherOrgTeam);
+
+        var request = new CreatePersonRequest("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, otherOrgTeam.Id, null, null, null);
+        var result = await service.CreateAsync(request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsCrossOrganizationManagerId()
+    {
+        var (service, _, people, _) = CreateServiceWithTeams();
+        var otherOrgManager = new Person(Guid.NewGuid(), "Anna", "Nowak", "anna@other.test");
+        people.Add(otherOrgManager);
+
+        var request = new CreatePersonRequest("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, null, otherOrgManager.Id, null, null);
+        var result = await service.CreateAsync(request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
