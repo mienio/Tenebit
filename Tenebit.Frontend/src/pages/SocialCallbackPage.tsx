@@ -11,32 +11,40 @@ export function SocialCallbackPage() {
   const handled = useRef(false);
 
   useEffect(() => {
-    if (handled.current) return;
-    handled.current = true;
-
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const token = params.get('token');
     const returnUrl = params.get('returnUrl') ?? '/dashboard';
-    const safeReturnUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
+    const safeReturnUrl = returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/dashboard';
 
-    if (token && auth.loginWithToken(token)) {
-      navigate(safeReturnUrl, { replace: true });
+    // The backend sets only an HttpOnly refresh cookie. Exchange it explicitly so an access token
+    // left by a previously signed-in account can never survive the OAuth callback.
+    if (params.get('oauthSuccess') === 'true') {
+      if (handled.current) return;
+      handled.current = true;
+      window.history.replaceState(null, '', window.location.pathname);
+      void auth.completeExternalLogin().then(success => {
+        if (success) {
+          navigate(safeReturnUrl, { replace: true });
+        } else {
+          setError(t('auth.socialLoginFailed'));
+        }
+      });
       return;
     }
+
+    if (handled.current) return;
+    handled.current = true;
 
     if (params.get('requiresTwoFactor') === 'true') {
       const challengeToken = params.get('challengeToken');
       if (challengeToken) {
+        window.history.replaceState(null, '', window.location.pathname);
         navigate('/login', { replace: true, state: { challengeToken, from: safeReturnUrl } });
         return;
       }
     }
 
-    const message = params.get('message');
     const code = params.get('error');
-    if (message) {
-      setError(message);
-    } else if (code === 'oauth_expired') {
+    if (code === 'oauth_expired') {
       setError(t('auth.socialLoginExpired'));
     } else {
       setError(t('auth.socialLoginFailed'));

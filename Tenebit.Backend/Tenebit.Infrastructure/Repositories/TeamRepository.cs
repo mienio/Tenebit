@@ -13,6 +13,12 @@ public sealed class TeamRepository : ITeamRepository
     public async Task<IReadOnlyList<Team>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         await _db.Teams.Where(x => x.OrganizationId == organizationId).OrderBy(x => x.Name).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Guid>> ListManagedIdsAsync(Guid organizationId, Guid managerPersonId, CancellationToken cancellationToken) =>
+        await _db.Teams.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.ManagerId == managerPersonId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
     public Task<Team?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.Teams.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

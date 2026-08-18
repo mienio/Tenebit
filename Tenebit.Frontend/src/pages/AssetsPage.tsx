@@ -70,12 +70,12 @@ export function AssetsPage() {
     for (const item of statusSettings.data ?? []) map.set(item.statusKey, { label: item.label, color: item.color, backgroundColor: item.backgroundColor });
     return map;
   }, [statusSettings.data]);
-  const statuses: { value: AssetStatus | ''; label: string }[] = [
+  const statuses: { value: AssetStatus | ''; label: string }[] = useMemo(() => [
     { value: '', label: t('assets.allStatuses') },
     ...(statusSettings.data?.length
       ? [...statusSettings.data].filter(item => item.isEnabled).sort((a, b) => a.sortOrder - b.sortOrder).map(item => ({ value: item.statusKey, label: item.label }))
       : assetStatusValues.map(value => ({ value, label: t(`status.${value}`) })))
-  ];
+  ], [statusSettings.data, t]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState<AssetStatus | ''>((searchParams.get('status') as AssetStatus | null) ?? '');
@@ -193,17 +193,17 @@ export function AssetsPage() {
   const allOnPageSelected = rows.length > 0 && rows.every(asset => selectedIds.has(asset.id));
   const historyLoader = useMemo(
     () => () => (selected ? api.activityLog({ entityType: 'asset', entityId: selected.id, pageSize: 10 }) : Promise.resolve(null)),
-    [selected?.id]
+    [selected]
   );
   const history = useAsyncData(historyLoader, [historyLoader]);
   const evidenceLoader = useMemo(
     () => () => (selected ? api.assetEvidence(selected.id) : Promise.resolve(null)),
-    [selected?.id]
+    [selected]
   );
   const evidence = useAsyncData(evidenceLoader, [evidenceLoader]);
   const serviceTicketsLoader = useMemo(
     () => () => (selected ? api.assetServiceTickets(selected.id) : Promise.resolve(null)),
-    [selected?.id]
+    [selected]
   );
   const serviceTickets = useAsyncData(serviceTicketsLoader, [serviceTicketsLoader]);
 
@@ -1209,7 +1209,7 @@ export function AssetsPage() {
       <Modal open={!!qrTarget} title={qrTarget ? `${t('assets.qrCode')} — ${qrTarget.assetTag}` : t('assets.qrCode')} onClose={() => setQrTarget(null)}>
         {qrLoading ? <p className="muted">{t('assets.generatingQr')}</p> : qrSvg ? (
           <div className="qrPreview">
-            <div className="qrPreview__image" dangerouslySetInnerHTML={{ __html: qrSvg }} />
+            <div className="qrPreview__image"><img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvg)}`} alt="QR" /></div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
               <Button onClick={() => void downloadQr('png')} icon={<Download size={16} />}>{t('assets.downloadPng')}</Button>
               <Button onClick={() => void downloadQr('jpg')} icon={<Download size={16} />}>{t('assets.downloadJpg')}</Button>
@@ -1293,7 +1293,7 @@ export function AssetsPage() {
             <div className="qrPrintSheet">
               {batchQr.map(item => (
                 <div className="qrPrintCard" key={item.asset.id}>
-                  <div dangerouslySetInnerHTML={{ __html: item.svg }} />
+                  <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.svg)}`} alt="QR" />
                 </div>
               ))}
             </div>

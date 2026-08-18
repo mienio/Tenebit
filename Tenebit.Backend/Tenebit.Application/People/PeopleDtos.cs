@@ -23,6 +23,7 @@ public sealed record PersonResponse(
     DateTimeOffset? DeactivatedAt,
     string? PreferredLanguage);
 
+[ValidatedRequest]
 public sealed record CreatePersonRequest(
     string FirstName,
     string LastName,
@@ -37,6 +38,7 @@ public sealed record CreatePersonRequest(
     string? CostCenter,
     string? PreferredLanguage = null);
 
+[ValidatedRequest]
 public sealed record UpdatePersonRequest(
     string FirstName,
     string LastName,
@@ -52,12 +54,17 @@ public sealed record UpdatePersonRequest(
     bool IsActive,
     string? PreferredLanguage = null);
 
+[ValidatedRequest]
 public sealed record StartOffboardingRequest(DateTimeOffset EmploymentEndsAt);
 
 public sealed record TeamResponse(Guid Id, string Name, Guid? ManagerId, string? CostCenter);
+[ValidatedRequest]
 public sealed record CreateTeamRequest(string Name, Guid? ManagerId, string? CostCenter);
+[ValidatedRequest]
 public sealed record UpdateTeamRequest(string Name, Guid? ManagerId, string? CostCenter);
 
 public sealed record PersonRelationTypeResponse(Guid Id, string Name);
+[ValidatedRequest]
 public sealed record CreatePersonRelationTypeRequest(string Name);
+[ValidatedRequest]
 public sealed record UpdatePersonRelationTypeRequest(string Name);

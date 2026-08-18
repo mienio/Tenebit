@@ -30,6 +30,7 @@ public sealed record LocationCountResponse(string Location, int Count);
 public sealed record TeamCountResponse(Guid? TeamId, string TeamName, int Count, decimal TotalValue);
 
 public sealed record DashboardLayoutResponse(string? LayoutJson);
+[ValidatedRequest]
 public sealed record SaveDashboardLayoutRequest(string LayoutJson);
 
 public sealed record DashboardComparisonResponse(

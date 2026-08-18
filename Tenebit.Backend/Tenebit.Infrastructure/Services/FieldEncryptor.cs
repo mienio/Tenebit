@@ -3,90 +3,54 @@ using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 
 namespace Tenebit.Infrastructure.Services;
 
-/// <summary>AES-256-GCM z kluczem derywowanym (HKDF) per-purpose z jednego sekretu konfiguracyjnego —
-/// audyt P1.4/P1.5. Format: "v1:" + base64(nonce[12] + tag[16] + ciphertext). Wartości sprzed wdrożenia
-/// szyfrowania (bez prefiksu "v1:") są zwracane bez zmian zamiast rzucać wyjątkiem przy odczycie.
-/// Fallback do Auth:SigningKey/dev-secret jest wyłącznie dla lokalnego developmentu — Program.cs blokuje
-/// start w Production bez odrębnego, silnego Auth:FieldEncryptionKey (audyt AUD3-011).</summary>
 public sealed class FieldEncryptor : IFieldEncryptor
 {
-    private const int NonceSize = 12;
-    private const int TagSize = 16;
-    private const string FormatPrefix = "v1:";
+    private const int NonceSize=12; private const int TagSize=16;
+    private readonly FieldEncryptionKeyRing _ring; private readonly ILogger<FieldEncryptor> _logger;
+    public FieldEncryptor(IConfiguration configuration,ILogger<FieldEncryptor> logger){_ring=FieldEncryptionKeyRing.Load(configuration);_logger=logger;}
 
-    private readonly byte[] _rootKey;
-    private readonly ILogger<FieldEncryptor> _logger;
-
-    public FieldEncryptor(IConfiguration configuration, ILogger<FieldEncryptor> logger)
+    public string Encrypt(string purpose,string plaintext)
     {
-        var secret = configuration["Auth:FieldEncryptionKey"]
-            ?? configuration["Auth:SigningKey"]
-            ?? "tenebit-development-field-encryption-key-change-me";
-        _rootKey = Encoding.UTF8.GetBytes(secret);
-        _logger = logger;
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose); ArgumentNullException.ThrowIfNull(plaintext);
+        var keyId=_ring.ActiveKeyId; var key=Derive(_ring.GetActiveKey(),purpose); var nonce=RandomNumberGenerator.GetBytes(NonceSize);
+        var plain=Encoding.UTF8.GetBytes(plaintext); var cipher=new byte[plain.Length]; var tag=new byte[TagSize];
+        using(var aes=new AesGcm(key,TagSize)) aes.Encrypt(nonce,plain,cipher,tag,Aad(purpose,keyId));
+        var payload=new byte[nonce.Length+tag.Length+cipher.Length]; Buffer.BlockCopy(nonce,0,payload,0,nonce.Length); Buffer.BlockCopy(tag,0,payload,nonce.Length,tag.Length); Buffer.BlockCopy(cipher,0,payload,nonce.Length+tag.Length,cipher.Length);
+        return $"v2:{keyId}:{Convert.ToBase64String(payload)}";
     }
 
-    public string Encrypt(string purpose, string plaintext)
+    public string Decrypt(string purpose,string value)
     {
-        var key = DeriveKey(purpose);
-        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
-        var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
-        var ciphertext = new byte[plaintextBytes.Length];
-        var tag = new byte[TagSize];
-
-        using (var aes = new AesGcm(key, TagSize))
-        {
-            aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
-        }
-
-        var payload = new byte[NonceSize + TagSize + ciphertext.Length];
-        Buffer.BlockCopy(nonce, 0, payload, 0, NonceSize);
-        Buffer.BlockCopy(tag, 0, payload, NonceSize, TagSize);
-        Buffer.BlockCopy(ciphertext, 0, payload, NonceSize + TagSize, ciphertext.Length);
-        return FormatPrefix + Convert.ToBase64String(payload);
-    }
-
-    public string Decrypt(string purpose, string ciphertext)
-    {
-        if (!ciphertext.StartsWith(FormatPrefix, StringComparison.Ordinal))
-        {
-            return ciphertext;
-        }
-
+        ArgumentException.ThrowIfNullOrWhiteSpace(purpose); ArgumentNullException.ThrowIfNull(value);
         try
         {
-            var payload = Convert.FromBase64String(ciphertext[FormatPrefix.Length..]);
-            if (payload.Length < NonceSize + TagSize)
+            if(value.StartsWith("v2:",StringComparison.Ordinal))
             {
-                throw new FormatException("Payload jest za krótki, by zawierać nonce i tag.");
+                var split=value.IndexOf(':',3); if(split<=3) throw new FormatException("Malformed v2 header."); var id=value[3..split];
+                if(!_ring.TryGetKey(id,out var root)) throw new CryptographicException($"Unknown field-encryption key id '{id}'.");
+                return DecryptPayload(Derive(root,purpose),value[(split+1)..],Aad(purpose,id));
             }
-
-            var nonce = payload.AsSpan(0, NonceSize);
-            var tag = payload.AsSpan(NonceSize, TagSize);
-            var cipherBytes = payload.AsSpan(NonceSize + TagSize);
-            var plaintextBytes = new byte[cipherBytes.Length];
-
-            var key = DeriveKey(purpose);
-            using (var aes = new AesGcm(key, TagSize))
+            if(value.StartsWith("v1:",StringComparison.Ordinal))
             {
-                aes.Decrypt(nonce, cipherBytes, tag, plaintextBytes);
+                if(string.IsNullOrWhiteSpace(_ring.LegacyV1KeyId)||!_ring.TryGetKey(_ring.LegacyV1KeyId,out var root)) throw new CryptographicException("Legacy v1 key is unavailable.");
+                return DecryptPayload(Derive(root,purpose),value[3..],null);
             }
-
-            return Encoding.UTF8.GetString(plaintextBytes);
+            if(_ring.AllowLegacyPlaintext) return value;
+            throw new CryptographicException("Legacy plaintext is disabled.");
         }
-        catch (Exception ex) when (ex is FormatException or CryptographicException)
+        catch(Exception ex) when(ex is FormatException or CryptographicException)
         {
-            // Uszkodzony/nieprawidłowy ciphertext (zły klucz po rotacji, ręczna edycja w bazie) musi dać
-            // jawny, alarmowalny błąd zamiast nieobsłużonego wyjątku kryptograficznego wypływającego jako
-            // zwykły 500 bez kontekstu (audyt AUD3-011).
-            _logger.LogError(ex, "Nie udało się odszyfrować pola o przeznaczeniu {Purpose} — ciphertext uszkodzony lub klucz szyfrowania się zmienił.", purpose);
-            throw new InvalidOperationException($"Nie udało się odszyfrować pola '{purpose}'. Dane mogą być uszkodzone albo klucz szyfrowania uległ zmianie.", ex);
+            SecurityTelemetry.EncryptionFailure();
+            _logger.LogError(ex,"Field decryption failed for purpose {Purpose}; ciphertext or key ring requires operator attention.",purpose);
+            throw new FieldDecryptionException(purpose,"Encrypted value cannot be decrypted with the configured key ring.",ex);
         }
     }
 
-    private byte[] DeriveKey(string purpose) =>
-        HKDF.DeriveKey(HashAlgorithmName.SHA256, _rootKey, outputLength: 32, info: Encoding.UTF8.GetBytes(purpose));
+    private static string DecryptPayload(byte[] key,string encoded,byte[]? aad){var payload=Convert.FromBase64String(encoded); if(payload.Length<NonceSize+TagSize)throw new FormatException("Encrypted payload too short."); var plain=new byte[payload.Length-NonceSize-TagSize]; using(var aes=new AesGcm(key,TagSize)) aes.Decrypt(payload.AsSpan(0,NonceSize),payload.AsSpan(NonceSize,TagSize),payload.AsSpan(NonceSize+TagSize),plain,aad); return Encoding.UTF8.GetString(plain);}
+    private static byte[] Derive(byte[] root,string purpose)=>HKDF.DeriveKey(HashAlgorithmName.SHA256,root,32,info:Encoding.UTF8.GetBytes(purpose));
+    private static byte[] Aad(string purpose,string id)=>Encoding.UTF8.GetBytes($"tenebit-field|v2|{id}|{purpose}");
 }

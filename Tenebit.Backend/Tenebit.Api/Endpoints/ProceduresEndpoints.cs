@@ -79,10 +79,8 @@ public static class ProceduresEndpoints
                 return Results.BadRequest(new { message = "Plik procedury jest pusty.", code = "VALIDATION_ERROR" });
             }
 
-            await using var stream = file.OpenReadStream();
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory, cancellationToken);
-            return (await service.AttachDocumentAsync(id, file.FileName, file.ContentType, memory.ToArray(), cancellationToken)).ToHttpResult();
+            var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxProcedureDocumentFileBytes, cancellationToken);
+            return (await service.AttachDocumentAsync(id, file.FileName, file.ContentType, content, cancellationToken)).ToHttpResult();
         })
             .DisableAntiforgery()
             .WithTags("Procedures");

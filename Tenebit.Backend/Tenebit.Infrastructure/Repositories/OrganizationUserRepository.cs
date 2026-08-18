@@ -13,6 +13,9 @@ public sealed class OrganizationUserRepository : IOrganizationUserRepository
     public async Task<IReadOnlyList<OrganizationUser>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         await _db.OrganizationUsers.Include(x => x.Roles).Where(x => x.OrganizationId == organizationId).OrderBy(x => x.Email).ToListAsync(cancellationToken);
 
+    public Task<bool> PersonLinkExistsAsync(Guid organizationId, Guid personId, Guid? excludingId, CancellationToken cancellationToken) =>
+        _db.OrganizationUsers.AnyAsync(x => x.OrganizationId == organizationId && x.PersonId == personId && (!excludingId.HasValue || x.Id != excludingId.Value), cancellationToken);
+
     public Task<OrganizationUser?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.OrganizationUsers.Include(x => x.Roles).FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

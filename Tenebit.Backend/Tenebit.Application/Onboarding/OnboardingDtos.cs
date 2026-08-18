@@ -5,6 +5,7 @@ namespace Tenebit.Application.Onboarding;
 public sealed record OnboardingStepResponse(string Key, string Label, bool Completed, string NextAction);
 public sealed record OnboardingStatusResponse(IReadOnlyList<OnboardingStepResponse> Steps, int CompletionPercent);
 
+[ValidatedRequest]
 public sealed record CreateStarterPackageRequest(
     string TeamName,
     string EmployeeFirstName,
@@ -28,6 +29,7 @@ public sealed record StarterPackageResponse(
     string ProtocolNumber,
     string Message);
 
+[ValidatedRequest]
 public sealed record CreateEmployeePackageRequest(Guid PersonId, Guid? JobProfileId, IReadOnlyList<Guid> AssetIds, IReadOnlyList<Guid> ProcedureIds, DateOnly? DueDate, string? Notes, IReadOnlyDictionary<string, string>? AssetConditions = null);
 public sealed record EmployeePackageResponse(Guid AssignmentId, string ProtocolNumber, AssignmentResponse Assignment, IReadOnlyList<string> Warnings);
 

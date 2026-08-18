@@ -8,6 +8,9 @@ namespace Tenebit.Application.Procedures;
 
 public sealed class ProcedureService
 {
+    private static readonly string[] OrgWideReadRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor, TenebitRoles.ProcedureManager];
+    private static readonly string[] ProcedureEditors = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager];
+
     private readonly IProcedureRepository _procedures;
     private readonly IAssignmentRepository _assignments;
     private readonly IPersonRepository _people;
@@ -15,8 +18,9 @@ public sealed class ProcedureService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ManagerScopeService _managerScope;
 
-    public ProcedureService(IProcedureRepository procedures, IAssignmentRepository assignments, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public ProcedureService(IProcedureRepository procedures, IAssignmentRepository assignments, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope)
     {
         _procedures = procedures;
         _assignments = assignments;
@@ -25,6 +29,7 @@ public sealed class ProcedureService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _managerScope = managerScope;
     }
 
     public async Task<Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>> GetAcceptanceStatusAsync(Guid procedureId, CancellationToken cancellationToken)
@@ -36,8 +41,24 @@ public sealed class ProcedureService
         var procedure = await _procedures.GetAsync(organizationId, procedureId, cancellationToken);
         if (procedure is null) return Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>.Failure(Error.NotFound("Procedura nie istnieje."));
 
-        var assignments = await _assignments.ListAsync(organizationId, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager], cancellationToken);
+        IReadOnlyList<Tenebit.Domain.Assignments.Assignment> assignments;
+        IReadOnlyList<Tenebit.Domain.People.Person> people;
+        if (scope is null)
+        {
+            assignments = await _assignments.ListAsync(organizationId, cancellationToken);
+            people = await _people.ListAsync(organizationId, null, cancellationToken);
+        }
+        else
+        {
+            if (!await _assignments.HasProcedureAssignmentForPeopleAsync(organizationId, scope.PersonIds, procedureId, cancellationToken))
+            {
+                return Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>.Failure(Error.NotFound("Procedura nie istnieje."));
+            }
+
+            assignments = await _assignments.ListByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
+            people = await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
+        }
 
         var rows = assignments
             .SelectMany(assignment => assignment.ProcedureAcceptances
@@ -63,8 +84,17 @@ public sealed class ProcedureService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
         if (access.IsFailure) return Result<IReadOnlyList<ProcedureResponse>>.Failure(access.Error!);
 
-        var procedures = await _procedures.ListAsync(_currentUser.OrganizationId, search, cancellationToken);
-        return Result<IReadOnlyList<ProcedureResponse>>.Success(procedures.Select(Map).ToList());
+        var organizationId = _currentUser.OrganizationId;
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideReadRoles, cancellationToken);
+        if (scope is null)
+        {
+            var all = await _procedures.ListAsync(organizationId, search, cancellationToken);
+            return Result<IReadOnlyList<ProcedureResponse>>.Success(all.Select(Map).ToList());
+        }
+
+        var procedureIds = await _assignments.ListProcedureIdsByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
+        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+        return Result<IReadOnlyList<ProcedureResponse>>.Success(FilterAndOrder(procedures, search).Select(Map).ToList());
     }
 
     public async Task<Result<PagedResult<ProcedureResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
@@ -72,8 +102,20 @@ public sealed class ProcedureService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
         if (access.IsFailure) return Result<PagedResult<ProcedureResponse>>.Failure(access.Error!);
 
-        var (items, total) = await _procedures.ListPagedAsync(_currentUser.OrganizationId, search, page, pageSize, cancellationToken);
-        return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(items.Select(Map).ToList(), total, page, pageSize));
+        var organizationId = _currentUser.OrganizationId;
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideReadRoles, cancellationToken);
+        if (scope is null)
+        {
+            var (items, total) = await _procedures.ListPagedAsync(organizationId, search, page, pageSize, cancellationToken);
+            return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(items.Select(Map).ToList(), total, page, pageSize));
+        }
+
+        var procedureIds = await _assignments.ListProcedureIdsByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
+        var procedures = FilterAndOrder(await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken), search).ToList();
+        var normalizedPage = Math.Max(page, 1);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
+        var itemsForPage = procedures.Skip((normalizedPage - 1) * normalizedPageSize).Take(normalizedPageSize).Select(Map).ToList();
+        return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(itemsForPage, procedures.Count, normalizedPage, normalizedPageSize));
     }
 
     public async Task<Result<ProcedureResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -81,13 +123,20 @@ public sealed class ProcedureService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
-        var procedure = await _procedures.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
+        var organizationId = _currentUser.OrganizationId;
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideReadRoles, cancellationToken);
+        if (scope is not null && !await _assignments.HasProcedureAssignmentForPeopleAsync(organizationId, scope.PersonIds, id, cancellationToken))
+        {
+            return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+        }
+
+        var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
         return procedure is null ? Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje.")) : Result<ProcedureResponse>.Success(Map(procedure));
     }
 
     public async Task<Result<ProcedureResponse>> CreateAsync(CreateProcedureRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         try
         {
@@ -104,7 +153,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> UpdateAsync(Guid id, UpdateProcedureRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         try
         {
@@ -121,7 +170,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> AttachDocumentAsync(Guid id, string fileName, string contentType, byte[] content, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         try
         {
@@ -139,22 +188,21 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureDocument>> GetDocumentAsync(Guid procedureId, Guid documentId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.Employee, TenebitRoles.Auditor, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.Employee, TenebitRoles.AssetOperator, TenebitRoles.Auditor, TenebitRoles.ProcedureManager);
         if (access.IsFailure) return Result<ProcedureDocument>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-
-        // Employee has no organization-wide procedure visibility — it may only fetch a document for a
-        // procedure actually assigned to it (audyt AUD3-006: Employee mógł pobrać dowolny dokument
-        // procedury w organizacji, bez sprawdzenia przypisania).
-        if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.Auditor, TenebitRoles.ProcedureManager))
+        if (!_currentUser.HasAnyRole(OrgWideReadRoles))
         {
-            var currentPerson = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
-            var isAssigned = currentPerson is not null && (await _assignments.ListAsync(organizationId, cancellationToken))
-                .Where(a => a.PersonId == currentPerson.Id)
-                .SelectMany(a => a.ProcedureAcceptances)
-                .Any(acceptance => acceptance.ProcedureId == procedureId);
-            if (!isAssigned)
+            if (_currentUser.HasAnyRole(TenebitRoles.Manager))
+            {
+                var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideReadRoles, cancellationToken);
+                if (scope is null || !await _assignments.HasProcedureAssignmentForPeopleAsync(organizationId, scope.PersonIds, procedureId, cancellationToken))
+                {
+                    return Result<ProcedureDocument>.Failure(Error.NotFound("Plik procedury nie istnieje."));
+                }
+            }
+            else if (_currentUser.PersonId is not { } personId || !await _assignments.HasProcedureAssignmentAsync(organizationId, personId, procedureId, cancellationToken))
             {
                 return Result<ProcedureDocument>.Failure(Error.NotFound("Plik procedury nie istnieje."));
             }
@@ -166,7 +214,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> PublishAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         try
         {
@@ -183,7 +231,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> ArchiveAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         var organizationId = _currentUser.OrganizationId;
         var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
@@ -196,7 +244,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> RemoveDocumentAsync(Guid id, Guid documentId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         try
         {
@@ -210,6 +258,19 @@ public sealed class ProcedureService
             return Result<ProcedureResponse>.Success(Map(procedure));
         }
         catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
+    }
+
+    private static IEnumerable<Procedure> FilterAndOrder(IEnumerable<Procedure> procedures, string? search)
+    {
+        var query = procedures;
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var phrase = search.Trim();
+            query = query.Where(x => x.Title.Contains(phrase, StringComparison.OrdinalIgnoreCase)
+                || x.Owner.Contains(phrase, StringComparison.OrdinalIgnoreCase)
+                || x.Version.Contains(phrase, StringComparison.OrdinalIgnoreCase));
+        }
+        return query.OrderBy(x => x.Title);
     }
 
     private static ProcedureResponse Map(Procedure procedure)

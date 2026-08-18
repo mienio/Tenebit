@@ -8,10 +8,7 @@ namespace Tenebit.Application.Assets;
 
 public sealed class LocationService
 {
-    // Mutacje struktury lokalizacji zmieniają dane całej organizacji — ta sama granica ról co
-    // pozostałe zakładki "organizationOnly" w ustawieniach (patrz SettingsPage.tsx canManageOrganization).
     private static readonly string[] LocationManagers = [TenebitRoles.Owner, TenebitRoles.Admin];
-
     private static readonly string[] OrgWideInventoryRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Auditor];
 
     private readonly ILocationRepository _locations;
@@ -31,13 +28,26 @@ public sealed class LocationService
         _managerScope = managerScope;
     }
 
-    public async Task<IReadOnlyList<LocationResponse>> ListAsync(CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<LocationResponse>>> ListAsync(CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.LocationInventoryViewers);
+        if (access.IsFailure) return Result<IReadOnlyList<LocationResponse>>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
-        var locations = await _locations.ListAsync(organizationId, cancellationToken);
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        return MapLocations(locations, assets, people);
+        var rows = await _locations.ListAsync(organizationId, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideInventoryRoles, cancellationToken);
+        var assets = scope is null
+            ? await _assets.ListAsync(organizationId, null, null, null, cancellationToken)
+            : await _assets.ListScopedAsync(organizationId, null, null, null, scope.PersonIds, scope.TeamIds, cancellationToken);
+        IReadOnlyList<Person> people = [];
+        if (_currentUser.HasAnyRole(TenebitRoles.PeopleViewers))
+        {
+            people = scope is null
+                ? await _people.ListAsync(organizationId, null, cancellationToken)
+                : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
+        }
+
+        return Result<IReadOnlyList<LocationResponse>>.Success(MapLocations(rows, assets, people));
     }
 
     public async Task<Result<LocationResponse>> CreateAsync(CreateLocationRequest request, CancellationToken cancellationToken)
@@ -52,6 +62,11 @@ public sealed class LocationService
 
         var organizationId = _currentUser.OrganizationId;
         var existing = await _locations.ListAsync(organizationId, cancellationToken);
+        var normalizedName = request.Name.Trim().ToUpperInvariant();
+        if (existing.Any(x => x.ParentId == request.ParentId && x.NormalizedName == normalizedName))
+        {
+            return Result<LocationResponse>.Failure(Error.Conflict("Lokalizacja o tej nazwie już istnieje na tym poziomie."));
+        }
         if (request.ParentId.HasValue && existing.All(x => x.Id != request.ParentId.Value))
         {
             return Result<LocationResponse>.Failure(Error.Validation("Lokalizacja nadrzędna nie istnieje."));
@@ -96,6 +111,12 @@ public sealed class LocationService
             return Result<LocationResponse>.Failure(Error.NotFound("Lokalizacja nie istnieje."));
         }
 
+        var normalizedName = request.Name.Trim().ToUpperInvariant();
+        if (existing.Any(x => x.Id != id && x.ParentId == request.ParentId && x.NormalizedName == normalizedName))
+        {
+            return Result<LocationResponse>.Failure(Error.Conflict("Lokalizacja o tej nazwie już istnieje na tym poziomie."));
+        }
+
         if (request.ParentId.HasValue)
         {
             if (!byId.ContainsKey(request.ParentId.Value))
@@ -115,6 +136,16 @@ public sealed class LocationService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var all = await _locations.ListAsync(organizationId, cancellationToken);
+            var allById = all.ToDictionary(x => x.Id);
+            var paths = all.ToDictionary(x => x.Id, x => Location.BuildFullPath(x, allById));
+            var assetsToRefresh = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
+            foreach (var asset in assetsToRefresh.Where(x => x.LocationId.HasValue && paths.ContainsKey(x.LocationId.Value)))
+                asset.SetLocation(asset.LocationId, paths[asset.LocationId!.Value]);
+            var peopleToRefresh = await _people.ListAsync(organizationId, null, cancellationToken);
+            foreach (var person in peopleToRefresh.Where(x => x.LocationId.HasValue && paths.ContainsKey(x.LocationId.Value)))
+                person.SetLocation(person.LocationId, paths[person.LocationId!.Value]);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
             var response = MapLocations(all, [], []).First(x => x.Id == id);
             return Result<LocationResponse>.Success(response);
         }
@@ -142,11 +173,8 @@ public sealed class LocationService
             return Result.Failure(Error.Validation("Najpierw usuń podlokalizacje tej pozycji."));
         }
 
-        var byId = rows.ToDictionary(x => x.Id);
-        var fullPath = Location.BuildFullPath(target, byId);
-
-        var assetCount = await _assets.CountByLocationAsync(organizationId, fullPath, cancellationToken);
-        var personCount = await _people.CountByLocationAsync(organizationId, fullPath, cancellationToken);
+        var assetCount = await _assets.CountByLocationIdAsync(organizationId, id, cancellationToken);
+        var personCount = await _people.CountByLocationIdAsync(organizationId, id, cancellationToken);
         if (assetCount > 0 || personCount > 0)
         {
             return Result.Failure(Error.Validation("Nie można usunąć lokalizacji z przypisanymi aktywami albo osobami."));
@@ -164,25 +192,35 @@ public sealed class LocationService
 
         var organizationId = _currentUser.OrganizationId;
         var rows = await _locations.ListAsync(organizationId, cancellationToken);
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        var mapped = MapLocations(rows, assets, people);
-        var location = mapped.FirstOrDefault(x => x.Id == id);
-        if (location is null)
+        var target = rows.FirstOrDefault(x => x.Id == id);
+        if (target is null)
         {
             return Result<LocationInventoryResponse>.Failure(Error.NotFound("Lokalizacja nie istnieje."));
         }
 
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideInventoryRoles, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideInventoryRoles, cancellationToken);
+        var assets = scope is null
+            ? await _assets.ListAsync(organizationId, null, null, null, cancellationToken)
+            : await _assets.ListScopedAsync(organizationId, null, null, null, scope.PersonIds, scope.TeamIds, cancellationToken);
+        IReadOnlyList<Person> people = [];
+        if (_currentUser.HasAnyRole(TenebitRoles.PeopleViewers))
+        {
+            people = scope is null
+                ? await _people.ListAsync(organizationId, null, cancellationToken)
+                : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
+        }
+        var mapped = MapLocations(rows, assets, people);
+        var location = mapped.First(x => x.Id == id);
 
         var locationAssets = assets
-            .Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase))
-            .Where(x => visibleIds is null || x.AssignedPersonId is null || visibleIds.Contains(x.AssignedPersonId.Value))
-            .Select(MapAsset).ToList();
+            .Where(x => x.LocationId == id)
+            .Select(MapAsset)
+            .ToList();
         var locationPeople = people
-            .Where(x => string.Equals(x.Location, location.FullPath, StringComparison.OrdinalIgnoreCase))
-            .Where(x => visibleIds is null || visibleIds.Contains(x.Id))
-            .Select(MapPerson).ToList();
+            .Where(x => x.LocationId == id)
+            .Select(MapPerson)
+            .ToList();
+
         return Result<LocationInventoryResponse>.Success(new LocationInventoryResponse(location, locationAssets, locationPeople));
     }
 
@@ -192,13 +230,9 @@ public sealed class LocationService
         return rows.Select(row =>
         {
             var path = Location.BuildFullPath(row, byId);
-            var pathPrefix = path + " / ";
-            var assetCount = assets.Count(x =>
-                string.Equals(x.Location, path, StringComparison.OrdinalIgnoreCase)
-                || (x.Location != null && x.Location.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase)));
-            var personCount = people.Count(x =>
-                string.Equals(x.Location, path, StringComparison.OrdinalIgnoreCase)
-                || (x.Location != null && x.Location.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase)));
+            var descendantIds = rows.Where(candidate => IsDescendantOrSelf(candidate, row.Id, byId)).Select(x => x.Id).ToHashSet();
+            var assetCount = assets.Count(x => x.LocationId.HasValue && descendantIds.Contains(x.LocationId.Value));
+            var personCount = people.Count(x => x.LocationId.HasValue && descendantIds.Contains(x.LocationId.Value));
             return new LocationResponse(
                 row.Id,
                 row.Name,
@@ -211,11 +245,25 @@ public sealed class LocationService
         }).OrderBy(x => x.FullPath).ToList();
     }
 
+    private static bool IsDescendantOrSelf(Location candidate, Guid ancestorId, IReadOnlyDictionary<Guid, Location> byId)
+    {
+        Guid? current = candidate.Id;
+        var visited = new HashSet<Guid>();
+        while (current.HasValue && visited.Add(current.Value))
+        {
+            if (current.Value == ancestorId) return true;
+            current = byId.TryGetValue(current.Value, out var node) ? node.ParentId : null;
+        }
+        return false;
+    }
+
     private static AssetListItem MapAsset(Asset asset) => new(asset.Id, asset.Name, asset.AssetTag, asset.Status, asset.AssignedPersonId, asset.Location);
     private static PersonListItem MapPerson(Person person) => new(person.Id, person.FullName, person.Email, person.JobTitle, person.ManagerId, person.Location);
 }
 
+[ValidatedRequest]
 public sealed record CreateLocationRequest(string Name, string? Type, Guid? ParentId);
+[ValidatedRequest]
 public sealed record UpdateLocationRequest(string Name, string? Type, Guid? ParentId, bool IsActive);
 public sealed record LocationResponse(Guid Id, string Name, string Type, Guid? ParentId, string FullPath, int AssetCount, int PersonCount, bool IsActive);
 public sealed record AssetListItem(Guid Id, string Name, string AssetTag, AssetStatus Status, Guid? AssignedPersonId, string? Location);

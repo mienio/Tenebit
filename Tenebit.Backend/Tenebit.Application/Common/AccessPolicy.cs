@@ -16,6 +16,7 @@ public static class AccessPolicy
             return Result.Success();
         }
 
+        SecurityTelemetry.AuthorizationDenied();
         return Result.Failure(Error.Forbidden());
     }
 }

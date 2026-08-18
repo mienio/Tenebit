@@ -18,6 +18,7 @@ public sealed class Location
     public Guid Id { get; private set; }
     public Guid OrganizationId { get; private set; }
     public string Name { get; private set; } = string.Empty;
+    public string NormalizedName { get; private set; } = string.Empty;
     public string Type { get; private set; } = "Room";
     public Guid? ParentId { get; private set; }
     public bool IsActive { get; private set; }
@@ -31,6 +32,7 @@ public sealed class Location
         }
 
         Name = name.Trim();
+        NormalizedName = Name.ToUpperInvariant();
         Type = string.IsNullOrWhiteSpace(type) ? "Room" : type.Trim();
         ParentId = parentId;
         IsActive = isActive;

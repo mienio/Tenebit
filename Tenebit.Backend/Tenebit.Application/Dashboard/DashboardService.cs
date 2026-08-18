@@ -64,7 +64,7 @@ public sealed class DashboardService
 
     public async Task<Result<DashboardSummaryResponse>> GetSummaryAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.TenantWideViewers);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.DashboardViewers);
         if (access.IsFailure) return Result<DashboardSummaryResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -139,7 +139,7 @@ public sealed class DashboardService
 
     public async Task<Result<DashboardComparisonResponse>> GetComparisonAsync(int daysAgo, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.TenantWideViewers);
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.DashboardViewers);
         if (access.IsFailure) return Result<DashboardComparisonResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

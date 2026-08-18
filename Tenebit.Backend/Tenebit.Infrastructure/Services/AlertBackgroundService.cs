@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tenebit.Application.Common;
 using Tenebit.Application.Alerts;
 
 namespace Tenebit.Infrastructure.Services;
@@ -37,11 +38,13 @@ public sealed class AlertBackgroundService : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
+                var gate = scope.ServiceProvider.GetRequiredService<PostgresJobLock>();
                 var alertCheckService = scope.ServiceProvider.GetRequiredService<AlertCheckService>();
-                await alertCheckService.RunAsync(onboardingDeadlineDays, stoppingToken);
+                await gate.TryRunAsync("alerts", interval, ct => alertCheckService.RunAsync(onboardingDeadlineDays, ct), stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                SecurityTelemetry.BackgroundJobFailure();
                 _logger.LogError(ex, "Sprawdzanie alertów zakończyło się błędem — spróbuję ponownie przy kolejnym cyklu.");
             }
         }

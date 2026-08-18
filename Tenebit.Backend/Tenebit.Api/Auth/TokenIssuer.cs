@@ -21,8 +21,13 @@ public sealed class TokenIssuer
             new("name", user.DisplayName),
             new("email", user.Email),
             new("email_verified", user.IsEmailVerified ? "true" : "false"),
-            new("two_factor_enabled", user.IsTwoFactorEnabled ? "true" : "false")
+            new("two_factor_enabled", user.IsTwoFactorEnabled ? "true" : "false"),
+            new("security_stamp", user.SecurityStamp.ToString("N"))
         };
+        if (user.PersonId is { } personId)
+        {
+            claims.Add(new Claim("person_id", personId.ToString()));
+        }
         claims.AddRange(user.Roles.Select(role => new Claim("roles", role)));
 
         var credentials = new SigningCredentials(JwtSigningKey.Get(_configuration), SecurityAlgorithms.HmacSha256);

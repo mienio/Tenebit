@@ -42,7 +42,7 @@ public static class OnboardingEndpoints
     public static RouteGroupBuilder MapOnboardingEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/onboarding/status", async (OnboardingService service, CancellationToken cancellationToken) =>
-                Results.Ok(await service.GetStatusAsync(cancellationToken)))
+                (await service.GetStatusAsync(cancellationToken)).ToHttpResult())
             .WithTags("Onboarding");
 
         api.MapPost("/onboarding/starter-package", async (CreateStarterPackageRequest request, OnboardingService service, CancellationToken cancellationToken) =>
@@ -62,22 +62,23 @@ public static class OnboardingEndpoints
 
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxEvidenceBundleUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
-            var createRequest = MultipartRequestHelpers.DeserializePart<CreateEmployeePackageRequest>(form, "request");
+            MultipartRequestHelpers.ValidateEvidenceBundle(form.Files);
+            var createRequest = MultipartRequestHelpers.DeserializePart<CreateEmployeePackageRequest>(form, "request", out var requestError);
             if (createRequest is null)
             {
-                return Results.BadRequest(new { message = "Pole 'request' musi zawierać poprawny JSON pakietu pracownika.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = requestError ?? "Nieprawidłowe dane pakietu pracownika.", code = "VALIDATION_ERROR" });
             }
 
-            var manifest = MultipartRequestHelpers.DeserializeManifest(form);
+            var manifest = MultipartRequestHelpers.DeserializeManifest(form, out var manifestError);
             if (manifest is null)
             {
-                return Results.BadRequest(new { message = "Pole 'evidenceManifest' musi zawierać poprawny JSON.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = manifestError ?? "Nieprawidłowy manifest zdjęć.", code = "VALIDATION_ERROR" });
             }
 
             var files = new List<EvidenceFileInput>();
             foreach (var file in form.Files)
             {
-                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await MultipartRequestHelpers.ReadFileAsync(file, cancellationToken)));
+                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken)));
             }
 
             return (await service.CreateEmployeePackageWithEvidenceAsync(createRequest, manifest, files, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.AssignmentId}");

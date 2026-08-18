@@ -36,9 +36,12 @@ public sealed class AssignmentResponseBuilder
     {
         var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
         if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
+        var person = await _people.GetAsync(organizationId, assignment.PersonId, cancellationToken);
+        IReadOnlyList<Domain.People.Person> people = person is null ? [] : [person];
+        var assetIds = assignment.Assets.Select(x => x.AssetId).Distinct().ToArray();
+        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
+        var procedureIds = assignment.ProcedureAcceptances.Select(x => x.ProcedureId).Distinct().ToArray();
+        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
         var evidence = await _evidence.ListByAssignmentAsync(organizationId, id, cancellationToken);
         return Result<AssignmentResponse>.Success(Map(assignment, people, assets, procedures, evidence));
     }

@@ -22,13 +22,18 @@ namespace Tenebit.Application.Abstractions;
 public interface IAssetRepository
 {
     Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Asset>> ListScopedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken);
     Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken);
     Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsScopedAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken);
     Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Asset>> ListByAssignedPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
     Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken);
     Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
+    Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken);
     void Add(Asset asset);
     void Remove(Asset asset);
 }
@@ -61,12 +66,16 @@ public interface IAssetInspectionRepository
 public interface IPersonRepository
 {
     Task<IReadOnlyList<Person>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Person>> ListScopedAsync(Guid organizationId, string? search, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
     Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Person> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Guid>> ListManagedScopePersonIdsAsync(Guid organizationId, Guid managerPersonId, IReadOnlyCollection<Guid> managedTeamIds, CancellationToken cancellationToken);
     Task<Person?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<Person?> FindByEmailAsync(Guid organizationId, string email, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingPersonId, CancellationToken cancellationToken);
     Task<bool> HasBlockingRelationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
     Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
+    Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken);
     void Add(Person person);
     void Remove(Person person);
 }
@@ -74,6 +83,7 @@ public interface IPersonRepository
 public interface ITeamRepository
 {
     Task<IReadOnlyList<Team>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Guid>> ListManagedIdsAsync(Guid organizationId, Guid managerPersonId, CancellationToken cancellationToken);
     Task<Team?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> NameExistsAsync(Guid organizationId, string name, Guid? excludingTeamId, CancellationToken cancellationToken);
     Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
@@ -106,7 +116,13 @@ public interface IProcedureRepository
 public interface IAssignmentRepository
 {
     Task<IReadOnlyList<Assignment>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Assignment>> ListByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Assignment>> ListByPersonIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
     Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedByPersonIdsAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Guid>> ListProcedureIdsByPersonIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
+    Task<bool> HasProcedureAssignmentAsync(Guid organizationId, Guid personId, Guid procedureId, CancellationToken cancellationToken);
+    Task<bool> HasProcedureAssignmentForPeopleAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, Guid procedureId, CancellationToken cancellationToken);
     Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<Assignment?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
     void Add(Assignment assignment);
@@ -130,6 +146,7 @@ public interface IActivityLogRepository
 public interface IOrganizationUserRepository
 {
     Task<IReadOnlyList<OrganizationUser>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<bool> PersonLinkExistsAsync(Guid organizationId, Guid personId, Guid? excludingId, CancellationToken cancellationToken);
     Task<OrganizationUser?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<OrganizationUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingId, CancellationToken cancellationToken);
@@ -161,14 +178,24 @@ public interface IEmailVerificationTokenRepository
 
 public interface IRefreshTokenRepository
 {
+    Task<RefreshToken?> FindAsync(string tokenHash, CancellationToken cancellationToken);
     Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
-
-    // Atomically claims the token (UPDATE ... WHERE RevokedAt IS NULL) and returns it only to the one
-    // caller that won the race — two concurrent refresh requests for the same token must not both
-    // succeed and mint two successor tokens (audyt AUD3-012).
-    Task<RefreshToken?> TryConsumeAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> TryMarkRotatedAsync(Guid tokenId, Guid replacementTokenId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task RevokeFamilyAsync(Guid familyId, DateTimeOffset now, string reason, CancellationToken cancellationToken);
     Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken);
     void Add(RefreshToken token);
+}
+
+public interface IOAuthTransactionRepository
+{
+    void Add(OAuthTransaction transaction);
+    Task<OAuthTransaction?> TryConsumeAsync(string stateHash, string provider, string correlationHash, DateTimeOffset now, CancellationToken cancellationToken);
+}
+
+public interface ITwoFactorChallengeRepository
+{
+    void Add(TwoFactorChallenge challenge);
+    Task<TwoFactorChallenge?> TryConsumeAsync(string ticketHash, DateTimeOffset now, CancellationToken cancellationToken);
 }
 
 public interface IDeviceTrustTokenRepository
@@ -205,6 +232,7 @@ public interface ISubscriptionRepository
 {
     Task<OrganizationSubscription?> GetByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OrganizationSubscription>> ListWithStripeSubscriptionAsync(CancellationToken cancellationToken);
     void Add(OrganizationSubscription subscription);
 }
 
@@ -302,6 +330,7 @@ public interface IAssetEvidenceRepository
 {
     Task<IReadOnlyList<AssetEvidence>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken);
     Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AssetEvidence>> ListByAssignmentIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> assignmentIds, CancellationToken cancellationToken);
     Task<IReadOnlyList<AssetEvidence>> ListByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken);
     Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<int> CountAsync(Guid organizationId, Guid assetId, EvidencePhase phase, CancellationToken cancellationToken);

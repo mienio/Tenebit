@@ -4,6 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Tenebit.Application.Assets;
 using Tenebit.Domain.Assets;
+using Tenebit.Domain.People;
+using Tenebit.Application.People;
+using Microsoft.Extensions.DependencyInjection;
+using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Tests.Integration;
 
@@ -125,6 +129,55 @@ public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
         var client = _factory.CreateAuthenticatedClient(employeeToken);
 
         var response = await client.GetAsync("/api/organization-users");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Manager_people_list_is_limited_to_managed_scope()
+    {
+        var (organization, _, manager, token) = await _factory.SeedTenantWithPersonAsync("ManagerRows", "manager");
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<TenebitDbContext>();
+            var team = new Team(organization.Id, "Managed team", manager.Id, null);
+            var teammate = new Person(organization.Id, "Team", "Member", $"{Guid.NewGuid():N}@example.test");
+            teammate.Update(teammate.FirstName, teammate.LastName, teammate.Email, null, null, "Pracownik", null, team.Id, null, null, null);
+            var outsider = new Person(organization.Id, "Outside", "Member", $"{Guid.NewGuid():N}@example.test");
+            db.Teams.Add(team);
+            db.People.AddRange(teammate, outsider);
+            await db.SaveChangesAsync();
+        }
+
+        var client = _factory.CreateAuthenticatedClient(token);
+        var response = await client.GetAsync("/api/people");
+        response.EnsureSuccessStatusCode();
+        var people = await response.Content.ReadFromJsonAsync<List<PersonResponse>>(JsonOptions);
+
+        Assert.NotNull(people);
+        Assert.Contains(people!, x => x.Id == manager.Id);
+        Assert.Contains(people!, x => x.FullName == "Team Member");
+        Assert.DoesNotContain(people!, x => x.FullName == "Outside Member");
+    }
+
+    [Fact]
+    public async Task Employee_cannot_access_tenant_dashboard_location_tree_or_onboarding_status()
+    {
+        var (_, _, employeeToken) = await _factory.SeedTenantAsync("EmpScope", "employee");
+        var client = _factory.CreateAuthenticatedClient(employeeToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/dashboard")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/locations")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/onboarding/status")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Manager_cannot_access_tenant_wide_dashboard()
+    {
+        var (_, _, managerToken) = await _factory.SeedTenantAsync("ManagerScope", "manager");
+        var client = _factory.CreateAuthenticatedClient(managerToken);
+
+        var response = await client.GetAsync("/api/dashboard");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

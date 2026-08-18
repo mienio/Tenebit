@@ -2,8 +2,10 @@ using Tenebit.Domain.Assignments;
 
 namespace Tenebit.Application.Assignments;
 
+[ValidatedRequest]
 public sealed record AssignmentAssetRequest(Guid AssetId, string? IssueCondition);
 
+[ValidatedRequest]
 public sealed record CreateAssignmentRequest(
     Guid PersonId,
     IReadOnlyList<AssignmentAssetRequest> Assets,
@@ -11,11 +13,15 @@ public sealed record CreateAssignmentRequest(
     DateOnly? DueDate,
     string? Notes);
 
+[ValidatedRequest]
 public sealed record ReturnAssignmentAssetRequest(Guid AssetId, string? ReturnCondition);
+[ValidatedRequest]
 public sealed record ReturnAssignmentRequest(string? ReturnCondition, string? DestinationLocation, IReadOnlyList<ReturnAssignmentAssetRequest>? Assets = null);
+[ValidatedRequest]
 public sealed record ReturnAssignmentAssetItemRequest(ReturnResolution Resolution, string? ReturnCondition, string? ReturnLocation, string? Notes);
 
 // Multipart "evidenceManifest": mapuje nazwę części pliku na aktywo i podpis zdjęcia.
+[ValidatedRequest]
 public sealed record EvidenceManifestEntry(Guid AssetId, string? Caption);
 
 // Multipart "files": pojedynczy plik wraz z nazwą części formularza, do której należy.

@@ -212,36 +212,57 @@ public sealed class AuthService
             return Result<TwoFactorEnableResponse>.Failure(Error.Validation("Nieprawidłowy kod. Sprawdź godzinę na urządzeniu i spróbuj ponownie."));
         }
 
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            return Result<TwoFactorEnableResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
+        }
+
         user.EnableTwoFactor();
+        user.RotateSecurityStamp();
         var rawCodes = await ReplaceRecoveryCodesAsync(userId, cancellationToken);
+
+        // A 2FA policy change is a security-boundary change. Revoke every existing refresh/trust
+        // credential and let the endpoint create exactly one replacement session for the browser that
+        // successfully confirmed the TOTP code.
+        await _refreshTokens.RevokeAllForUserAsync(userId, cancellationToken);
+        await _deviceTrustTokens.RevokeAllForUserAsync(userId, cancellationToken);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<TwoFactorEnableResponse>.Success(new TwoFactorEnableResponse(rawCodes));
+        return Result<TwoFactorEnableResponse>.Success(new TwoFactorEnableResponse(rawCodes, Map(user, organization)));
     }
 
-    public async Task<Result> DisableTwoFactorAsync(Guid userId, string code, CancellationToken cancellationToken)
+    public async Task<Result<AuthUserResponse>> DisableTwoFactorAsync(Guid userId, string code, CancellationToken cancellationToken)
     {
         var user = await _users.GetByIdAsync(userId, cancellationToken);
         if (user is null || !user.IsTwoFactorEnabled || string.IsNullOrEmpty(user.TotpSecret))
         {
-            return Result.Failure(Error.Validation("Dwuskładnikowe uwierzytelnianie nie jest włączone."));
+            return Result<AuthUserResponse>.Failure(Error.Validation("Dwuskładnikowe uwierzytelnianie nie jest włączone."));
         }
 
         if (!TotpService.ValidateCode(user.TotpSecret, code))
         {
-            return Result.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
+            return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
+        }
+
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
         }
 
         user.DisableTwoFactor();
+        user.RotateSecurityStamp();
         var existingCodes = await _recoveryCodes.ListAsync(userId, cancellationToken);
         _recoveryCodes.RemoveAll(existingCodes);
 
-        // A trusted-device cookie only means anything in the context of the TOTP secret that was live
-        // when it was issued — disabling 2FA (and a later re-enable with a fresh secret) must not let an
-        // old trust cookie keep skipping the new second factor (audyt AUD3-012).
+        // Trust and refresh credentials issued under the previous 2FA state must never survive the
+        // transition. The caller receives a newly issued current-browser session after this commit.
+        await _refreshTokens.RevokeAllForUserAsync(userId, cancellationToken);
         await _deviceTrustTokens.RevokeAllForUserAsync(userId, cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        return Result<AuthUserResponse>.Success(Map(user, organization));
     }
 
     public async Task<Result<TwoFactorRecoveryCodesResponse>> RegenerateRecoveryCodesAsync(Guid userId, string code, CancellationToken cancellationToken)
@@ -361,6 +382,11 @@ public sealed class AuthService
             return await BuildLoginOutcomeAsync(existingUser, deviceTrustToken, cancellationToken);
         }
 
+        if (!info.EmailVerified)
+        {
+            return Result<LoginOutcome>.Failure(Error.Validation(OAuthRejectedMessage));
+        }
+
         try
         {
             var displayName = string.IsNullOrWhiteSpace(info.DisplayName) ? info.Email.Split('@')[0] : info.DisplayName;
@@ -444,7 +470,7 @@ public sealed class AuthService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Nie udało się wysłać e-maila resetującego hasło do {Email}", user.Email);
+            _logger.LogWarning(ex, "Nie udało się wysłać e-maila resetującego hasło dla użytkownika {UserId}", user.Id);
         }
     }
 
@@ -469,6 +495,7 @@ public sealed class AuthService
         }
 
         user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
+        user.RotateSecurityStamp();
         token.MarkUsed();
 
         // Reset hasła jest często wywołany właśnie DLATEGO, że konto mogło zostać przejęte — stare refresh
@@ -534,7 +561,7 @@ public sealed class AuthService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Nie udało się wysłać e-maila weryfikacyjnego do {Email}", user.Email);
+            _logger.LogWarning(ex, "Nie udało się wysłać e-maila weryfikacyjnego dla użytkownika {UserId}", user.Id);
         }
     }
 
@@ -582,31 +609,61 @@ public sealed class AuthService
     public async Task<Result<RefreshResult>> RefreshAsync(string rawToken, CancellationToken cancellationToken)
     {
         var tokenHash = TokenHasher.Hash(rawToken);
-        // Atomic claim (audyt AUD3-012: dwa równoległe refresh requesty muszą dać dokładnie jeden
-        // sukces) — a concurrent request for the same token sees it already revoked and fails here.
-        var token = await _refreshTokens.TryConsumeAsync(tokenHash, _clock.UtcNow, cancellationToken);
-        if (token is null)
+        var observed = await _refreshTokens.FindAsync(tokenHash, cancellationToken);
+        if (observed is null)
         {
             return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
         }
 
-        var user = await _users.GetByIdAsync(token.OrganizationUserId, cancellationToken);
-        if (user is null || !user.IsActive)
+        var observedUser = await _users.GetByIdAsync(observed.OrganizationUserId, cancellationToken);
+        if (observedUser is null)
         {
             return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
         }
 
-        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
-        if (organization is null)
+        return await _unitOfWork.ExecuteWithOrganizationLockAsync(observedUser.OrganizationId, async ct =>
         {
-            return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
-        }
+            var now = _clock.UtcNow;
+            var token = await _refreshTokens.FindAsync(tokenHash, ct);
+            var user = await _users.GetByIdAsync(observed.OrganizationUserId, ct);
+            if (token is null || user is null || !user.IsActive || token.ExpiresAt <= now)
+            {
+                return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
+            }
 
-        var newRawToken = TokenHasher.NewRawToken();
-        _refreshTokens.Add(new RefreshToken(user.Id, TokenHasher.Hash(newRawToken), _clock.UtcNow.AddDays(30)));
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (token.RevokedAt is not null)
+            {
+                // A rotated token being presented again is a replay signal, not just an expired session.
+                // Revoke every descendant/sibling in the family and invalidate outstanding access JWTs.
+                if (token.ReplacedByTokenId is not null || token.RevocationReason == "rotated")
+                {
+                    SecurityTelemetry.RefreshReuse();
+                    await _refreshTokens.RevokeFamilyAsync(token.FamilyId, now, "refresh_reuse_detected", ct);
+                    await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, ct);
+                    user.RotateSecurityStamp();
+                    await _unitOfWork.SaveChangesAsync(ct);
+                }
+                return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
+            }
 
-        return Result<RefreshResult>.Success(new RefreshResult(Map(user, organization), newRawToken));
+            var organization = await _organizations.GetAsync(user.OrganizationId, ct);
+            if (organization is null)
+            {
+                return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
+            }
+
+            var newRawToken = TokenHasher.NewRawToken();
+            var successor = new RefreshToken(user.Id, TokenHasher.Hash(newRawToken), now.AddDays(30), token.FamilyId, token.Id);
+            _refreshTokens.Add(successor);
+            // Insert successor inside the same transaction first so the self-FK from ReplacedByTokenId is valid.
+            await _unitOfWork.SaveChangesAsync(ct);
+            if (!await _refreshTokens.TryMarkRotatedAsync(token.Id, successor.Id, now, ct))
+            {
+                throw new Tenebit.Domain.Common.ConcurrencyException("Refresh token został zużyty równolegle.");
+            }
+
+            return Result<RefreshResult>.Success(new RefreshResult(Map(user, organization), newRawToken));
+        }, cancellationToken);
     }
 
     public async Task RevokeRefreshTokenAsync(string rawToken, CancellationToken cancellationToken)
@@ -619,5 +676,5 @@ public sealed class AuthService
     }
 
     private static AuthUserResponse Map(OrganizationUser user, Organization organization) =>
-        new(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, user.Roles.Select(x => x.Role).ToArray(), user.IsEmailVerified, user.IsTwoFactorEnabled);
+        new(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, user.Roles.Select(x => x.Role).ToArray(), user.IsEmailVerified, user.IsTwoFactorEnabled, user.SecurityStamp, user.PersonId);
 }

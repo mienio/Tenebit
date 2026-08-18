@@ -34,11 +34,12 @@ public sealed class MyWorkspaceService
     public async Task<MyWorkspaceResponse> GetAsync(CancellationToken cancellationToken)
     {
         var organizationId = _currentUser.OrganizationId;
-        var person = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
-        if (person is null)
-        {
+        if (_currentUser.PersonId is not { } personId)
             return new MyWorkspaceResponse(false, null, [], []);
-        }
+
+        var person = await _people.GetAsync(organizationId, personId, cancellationToken);
+        if (person is null)
+            return new MyWorkspaceResponse(false, null, [], []);
 
         return await BuildAsync(organizationId, person, cancellationToken);
     }
@@ -52,8 +53,8 @@ public sealed class MyWorkspaceService
         var person = await _people.GetAsync(organizationId, personId, cancellationToken);
         if (person is null) return Result<MyWorkspaceResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
 
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null && !visibleIds.Contains(person.Id))
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (scope is not null && !scope.ContainsPerson(person.Id))
         {
             return Result<MyWorkspaceResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
         }
@@ -64,9 +65,8 @@ public sealed class MyWorkspaceService
     private async Task<MyWorkspaceResponse> BuildAsync(Guid organizationId, Person person, CancellationToken cancellationToken)
     {
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var allAssets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var myAssets = allAssets
-            .Where(x => x.AssignedPersonId == person.Id)
+        var assignedAssets = await _assets.ListByAssignedPersonAsync(organizationId, person.Id, cancellationToken);
+        var myAssets = assignedAssets
             .Select(x =>
             {
                 var category = categories.FirstOrDefault(c => c.Id == x.CategoryId);
@@ -74,9 +74,13 @@ public sealed class MyWorkspaceService
             })
             .ToList();
 
-        var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
-        var assignments = (await _assignments.ListAsync(organizationId, cancellationToken))
-            .Where(x => x.PersonId == person.Id)
+        var assignmentRows = await _assignments.ListByPersonAsync(organizationId, person.Id, cancellationToken);
+        var assignmentAssetIds = assignmentRows.SelectMany(x => x.Assets).Select(x => x.AssetId).Distinct().ToArray();
+        var assignmentAssets = await _assets.GetByIdsAsync(organizationId, assignmentAssetIds, cancellationToken);
+        var allAssets = assignedAssets.Concat(assignmentAssets).GroupBy(x => x.Id).Select(x => x.First()).ToList();
+        var procedureIds = assignmentRows.SelectMany(x => x.ProcedureAcceptances).Select(x => x.ProcedureId).Distinct().ToArray();
+        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+        var assignments = assignmentRows
             .OrderByDescending(x => x.IssuedAt)
             .Select(assignment =>
             {

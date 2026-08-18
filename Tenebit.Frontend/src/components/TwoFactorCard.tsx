@@ -1,6 +1,6 @@
 import { Download, KeyRound, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { apiRequest, refreshAccessToken } from '../api/apiClient';
+import { apiRequest } from '../api/apiClient';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { Button } from './Button';
@@ -9,8 +9,9 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Field, TextInput } from './FormFields';
 
 type SetupResponse = { secret: string; otpAuthUri: string; qrSvg: string };
-type EnableResponse = { recoveryCodes: string[] };
+type EnableResponse = { recoveryCodes: string[]; token: string };
 type RecoveryCodesResponse = { recoveryCodes: string[]; remainingUnused: number };
+type SessionResponse = { token: string };
 type Message = { type: 'success' | 'error'; text: string } | null;
 
 function downloadRecoveryCodes(codes: string[], header: string, fileName: string) {
@@ -46,11 +47,6 @@ export function TwoFactorCard() {
       .catch(() => {});
   }, [auth.isTwoFactorEnabled]);
 
-  async function syncSession() {
-    const token = await refreshAccessToken();
-    if (token) auth.loginWithToken(token);
-  }
-
   async function startSetup() {
     setBusy(true);
     setMessage(null);
@@ -71,7 +67,7 @@ export function TwoFactorCard() {
       const response = await apiRequest<EnableResponse>('/api/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) });
       setSetup(null);
       setCode('');
-      await syncSession();
+      auth.loginWithToken(response.token);
       setRecoveryCodes(response.recoveryCodes);
       setRemainingCodes(response.recoveryCodes.length);
     } catch (error) {
@@ -90,10 +86,10 @@ export function TwoFactorCard() {
     setBusy(true);
     setMessage(null);
     try {
-      await apiRequest('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) });
+      const response = await apiRequest<SessionResponse>('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) });
       setShowDisable(false);
       setCode('');
-      await syncSession();
+      auth.loginWithToken(response.token);
       setMessage({ type: 'success', text: t('twoFactor.disabled') });
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('twoFactor.invalidCode') });
@@ -166,7 +162,7 @@ export function TwoFactorCard() {
       ) : setup ? (
         <div className="twoFactorSetup">
           <p>{t('twoFactor.scanPrompt')}</p>
-          <div className="twoFactorSetup__qr" dangerouslySetInnerHTML={{ __html: setup.qrSvg }} />
+          <div className="twoFactorSetup__qr"><img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(setup.qrSvg)}`} alt="TOTP QR" /></div>
           <p className="muted">{t('twoFactor.manualEntry')}</p>
           <code className="twoFactorSetup__secret">{setup.secret}</code>
           <Field label={t('twoFactor.codeLabel')}><TextInput value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" maxLength={6} autoFocus autoComplete="one-time-code" /></Field>

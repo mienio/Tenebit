@@ -74,11 +74,8 @@ public static class PublicAssetAuditsEndpoints
                 return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
             }
 
-            await using var stream = file.OpenReadStream();
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory, cancellationToken);
-
-            var result = await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, memory.ToArray(), cancellationToken);
+            var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken);
+            var result = await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, content, cancellationToken);
             return result.ToHttpResult();
         })
             .DisableAntiforgery()

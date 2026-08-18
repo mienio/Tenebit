@@ -9,6 +9,12 @@ public interface IFieldEncryptor
     string Decrypt(string purpose, string ciphertext);
 }
 
+public sealed class FieldDecryptionException : Exception
+{
+    public FieldDecryptionException(string purpose, string message, Exception? innerException = null) : base(message, innerException) => Purpose = purpose;
+    public string Purpose { get; }
+}
+
 /// <summary>Etykiety "purpose" separujące klucze derywowane dla różnych zastosowań — kompromitacja jednego
 /// nie ujawnia klucza używanego dla pozostałych.</summary>
 public static class FieldEncryptionPurposes

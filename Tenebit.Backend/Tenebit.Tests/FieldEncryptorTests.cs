@@ -5,55 +5,67 @@ using Tenebit.Infrastructure.Services;
 
 namespace Tenebit.Tests;
 
-public class FieldEncryptorTests
+public sealed class FieldEncryptorTests
 {
-    private static FieldEncryptor CreateEncryptor() => new(new ConfigurationBuilder().Build(), NullLogger<FieldEncryptor>.Instance);
+    private static IConfiguration Config(string active, bool allowPlaintext, params (string Id, string Key)[] keys)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Auth:FieldEncryption:ActiveKeyId"] = active,
+            ["Auth:FieldEncryption:LegacyV1KeyId"] = keys[0].Id,
+            ["Auth:FieldEncryption:AllowLegacyPlaintext"] = allowPlaintext.ToString()
+        };
+        foreach (var (id, key) in keys) values[$"Auth:FieldEncryption:Keys:{id}"] = key;
+        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+    }
 
     [Fact]
-    public void Encrypt_ThenDecrypt_RoundTripsToOriginalPlaintext()
+    public void NewWritesUseActiveKeyId_AndRoundTrip()
     {
-        var encryptor = CreateEncryptor();
+        var encryptor = new FieldEncryptor(Config("k2", false,
+            ("k1", "old-field-key-abcdefghijklmnopqrstuvwxyz-123456"),
+            ("k2", "new-field-key-abcdefghijklmnopqrstuvwxyz-123456")), NullLogger<FieldEncryptor>.Instance);
         var ciphertext = encryptor.Encrypt(FieldEncryptionPurposes.TotpSecret, "JBSWY3DPEHPK3PXP");
-
-        Assert.NotEqual("JBSWY3DPEHPK3PXP", ciphertext);
+        Assert.StartsWith("v2:k2:", ciphertext);
         Assert.Equal("JBSWY3DPEHPK3PXP", encryptor.Decrypt(FieldEncryptionPurposes.TotpSecret, ciphertext));
     }
 
     [Fact]
-    public void Decrypt_WithWrongPurpose_ThrowsControlledError()
+    public void OldCiphertextDecryptsAfterKeyRotation()
     {
-        var encryptor = CreateEncryptor();
-        var ciphertext = encryptor.Encrypt(FieldEncryptionPurposes.TotpSecret, "SECRET-VALUE");
-
-        // Wrapped into a controlled, alertable exception instead of the raw crypto exception leaking out
-        // as an unhandled 500 (audyt AUD3-011).
-        Assert.Throws<InvalidOperationException>(
-            () => encryptor.Decrypt(FieldEncryptionPurposes.LicenseKey, ciphertext));
+        const string oldKey = "old-field-key-abcdefghijklmnopqrstuvwxyz-123456";
+        const string newKey = "new-field-key-abcdefghijklmnopqrstuvwxyz-123456";
+        var before = new FieldEncryptor(Config("k1", false, ("k1", oldKey)), NullLogger<FieldEncryptor>.Instance);
+        var ciphertext = before.Encrypt(FieldEncryptionPurposes.LicenseKey, "LICENSE-SECRET");
+        var after = new FieldEncryptor(Config("k2", false, ("k1", oldKey), ("k2", newKey)), NullLogger<FieldEncryptor>.Instance);
+        Assert.Equal("LICENSE-SECRET", after.Decrypt(FieldEncryptionPurposes.LicenseKey, ciphertext));
     }
 
     [Fact]
-    public void Decrypt_CorruptedCiphertext_ThrowsControlledError()
+    public void WrongPurposeAndCorruptedCiphertext_ReturnControlledException()
     {
-        var encryptor = CreateEncryptor();
-
-        Assert.Throws<InvalidOperationException>(
-            () => encryptor.Decrypt(FieldEncryptionPurposes.TotpSecret, "v1:not-valid-base64!!"));
+        var encryptor = new FieldEncryptor(Config("k1", false, ("k1", "field-key-abcdefghijklmnopqrstuvwxyz-123456789")), NullLogger<FieldEncryptor>.Instance);
+        var ciphertext = encryptor.Encrypt(FieldEncryptionPurposes.TotpSecret, "SECRET");
+        Assert.Throws<FieldDecryptionException>(() => encryptor.Decrypt(FieldEncryptionPurposes.LicenseKey, ciphertext));
+        Assert.Throws<FieldDecryptionException>(() => encryptor.Decrypt(FieldEncryptionPurposes.TotpSecret, "v2:k1:not-base64!!"));
     }
 
     [Fact]
-    public void Decrypt_ValuePersistedBeforeEncryptionWasIntroduced_IsReturnedUnchanged()
+    public void LegacyPlaintext_IsOnlyAcceptedWhenExplicitlyEnabled()
     {
-        var encryptor = CreateEncryptor();
-        Assert.Equal("legacy-plaintext-value", encryptor.Decrypt(FieldEncryptionPurposes.AssetSensitiveField, "legacy-plaintext-value"));
+        const string key = "field-key-abcdefghijklmnopqrstuvwxyz-123456789";
+        var migrationMode = new FieldEncryptor(Config("k1", true, ("k1", key)), NullLogger<FieldEncryptor>.Instance);
+        var strictMode = new FieldEncryptor(Config("k1", false, ("k1", key)), NullLogger<FieldEncryptor>.Instance);
+        Assert.Equal("legacy", migrationMode.Decrypt(FieldEncryptionPurposes.AssetSensitiveField, "legacy"));
+        Assert.Throws<FieldDecryptionException>(() => strictMode.Decrypt(FieldEncryptionPurposes.AssetSensitiveField, "legacy"));
     }
 
     [Fact]
-    public void Encrypt_SamePlaintextTwice_ProducesDifferentCiphertext()
+    public void ProductionValidationRejectsSigningKeyReuseAndPlaintextMode()
     {
-        var encryptor = CreateEncryptor();
-        var a = encryptor.Encrypt(FieldEncryptionPurposes.LicenseKey, "SAME-VALUE");
-        var b = encryptor.Encrypt(FieldEncryptionPurposes.LicenseKey, "SAME-VALUE");
-
-        Assert.NotEqual(a, b);
+        const string key = "same-key-abcdefghijklmnopqrstuvwxyz-123456789";
+        var config = Config("k1", true, ("k1", key));
+        var errors = FieldEncryptionKeyRing.ValidateProduction(config, key);
+        Assert.NotEmpty(errors);
     }
 }

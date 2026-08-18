@@ -218,7 +218,8 @@ public class AssignmentServiceTests
         Assert.True(created.IsSuccess);
 
         user.Roles = ["employee"];
-        user.Email = "someone.else@acme.test";
+        user.PersonId = Guid.NewGuid();
+        user.Email = person.Email; // e-mail must not grant ownership
 
         var result = await service.AcceptAsync(created.Value!.Id, CancellationToken.None);
 
@@ -236,7 +237,8 @@ public class AssignmentServiceTests
         Assert.True(created.IsSuccess);
 
         user.Roles = ["employee"];
-        user.Email = person.Email;
+        user.PersonId = person.Id;
+        user.Email = "changed.login@acme.test"; // stable PersonId, not e-mail, authorizes ownership
 
         var result = await service.AcceptAsync(created.Value!.Id, CancellationToken.None);
 

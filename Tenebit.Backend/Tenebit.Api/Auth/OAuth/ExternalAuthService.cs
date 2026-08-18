@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -122,8 +123,9 @@ public sealed class ExternalAuthService
 
     private static async Task<ExternalUserInfo?> FetchFacebookProfileAsync(HttpClient client, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"https://graph.facebook.com/me?fields=id,name,email&access_token={Uri.EscapeDataString(accessToken)}";
-        using var response = await client.GetAsync(url, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.facebook.com/me?fields=id,name,email");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) return null;
 
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -134,7 +136,9 @@ public sealed class ExternalAuthService
         var email = root.TryGetProperty("email", out var emailElement) ? emailElement.GetString() : null;
         var name = root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
 
-        return new ExternalUserInfo(OAuthProviders.Facebook, id, email, email is not null, name);
+        // The basic profile response does not carry a trustworthy e-mail verification signal. It may
+        // identify a previously linked provider account, but it must not auto-link/create by e-mail.
+        return new ExternalUserInfo(OAuthProviders.Facebook, id, email, false, name);
     }
 
     // AUD-006: id_token providerów OIDC musi być kryptograficznie zweryfikowany (podpis przez JWKS, issuer,
@@ -149,21 +153,32 @@ public sealed class ExternalAuthService
     private (string MetadataAddress, string Audience, IssuerValidator? IssuerValidator) OidcSettingsFor(string provider) => provider switch
     {
         OAuthProviders.Google => ("https://accounts.google.com/.well-known/openid-configuration", _options.Google.ClientId, null),
-        // Microsoft "common"/multi-tenant metadata publikuje szablon issuera z {tenantid} — walidujemy
-        // kształt zamiast pojedynczej stałej wartości.
-        OAuthProviders.Microsoft => ($"https://login.microsoftonline.com/{_options.Microsoft.TenantId}/v2.0/.well-known/openid-configuration", _options.Microsoft.ClientId, ValidateMicrosoftIssuer),
+        OAuthProviders.Microsoft => MicrosoftOidcSettings(),
         OAuthProviders.Apple => ("https://appleid.apple.com/.well-known/openid-configuration", _options.Apple.ClientId, null),
         _ => throw new InvalidOperationException($"Dostawca {provider} nie obsługuje walidacji id_token OIDC.")
     };
 
-    private static string ValidateMicrosoftIssuer(string issuer, SecurityToken token, TokenValidationParameters parameters)
+    private (string MetadataAddress, string Audience, IssuerValidator? IssuerValidator) MicrosoftOidcSettings()
     {
-        if (Regex.IsMatch(issuer, @"^https://login\.microsoftonline\.com/[0-9a-fA-F-]{36}/v2\.0$"))
+        var tenant = _options.Microsoft.TenantId.Trim();
+        var metadata = $"https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration";
+
+        // Only explicitly multi-tenant authorities accept the issuer template. For a concrete tenant
+        // GUID or verified domain, normal validation against metadata's exact issuer is used. This
+        // prevents a single-tenant configuration from accepting a valid token from another tenant.
+        var isMultiTenant = string.Equals(tenant, "common", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(tenant, "organizations", StringComparison.OrdinalIgnoreCase);
+        return (metadata, _options.Microsoft.ClientId, isMultiTenant ? ValidateMicrosoftMultiTenantIssuer : null);
+    }
+
+    private static string ValidateMicrosoftMultiTenantIssuer(string issuer, SecurityToken token, TokenValidationParameters parameters)
+    {
+        if (!Regex.IsMatch(issuer, @"^https://login\.microsoftonline\.com/[0-9a-fA-F-]{36}/v2\.0$"))
         {
-            return issuer;
+            throw new SecurityTokenInvalidIssuerException("Nieprawidłowy issuer tokenu Microsoft.") { InvalidIssuer = issuer };
         }
 
-        throw new SecurityTokenInvalidIssuerException("Nieprawidłowy issuer tokenu Microsoft.") { InvalidIssuer = issuer };
+        return issuer;
     }
 
     private async Task<ExternalUserInfo?> ValidateAndParseIdTokenAsync(string provider, string idToken, string expectedNonce, CancellationToken cancellationToken)

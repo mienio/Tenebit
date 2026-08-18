@@ -9,7 +9,9 @@ public sealed record AssetEvidenceResponse(
     EvidenceUploadSource UploadedVia, DateTimeOffset? LockedAt,
     bool LegalHold, DateTimeOffset? RedactedAt);
 
+[ValidatedRequest]
 public sealed record UploadAssetEvidenceRequest(EvidencePhase Phase, Guid? AssignmentId, string? Caption);
+[ValidatedRequest]
 public sealed record SetEvidenceLegalHoldRequest(bool Enabled);
 
 /// <summary>Pojedynczy plik do zapisania jako materiał dowodowy w ramach transakcji zbiorczej

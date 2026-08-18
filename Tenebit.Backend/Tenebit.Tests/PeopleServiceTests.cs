@@ -15,7 +15,7 @@ public class PeopleServiceTests
         var teams = new InMemoryTeamRepository();
         var assets = new InMemoryAssetRepository();
         var activity = new InMemoryActivityLogRepository();
-        var service = new PeopleService(people, teams, assets, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams));
+        var service = new PeopleService(people, teams, assets, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()));
         return (service, currentUser, people, assets, activity);
     }
 
@@ -24,7 +24,7 @@ public class PeopleServiceTests
         var currentUser = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
         var teams = new InMemoryTeamRepository();
-        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams));
+        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()));
         return (service, currentUser, people, teams);
     }
 
@@ -82,6 +82,7 @@ public class PeopleServiceTests
         people.Add(outsider);
 
         user.Roles = ["manager"];
+        user.PersonId = manager.Id;
 
         var result = await service.ListAsync(null, CancellationToken.None);
 
@@ -102,6 +103,7 @@ public class PeopleServiceTests
         people.Add(outsider);
 
         user.Roles = ["manager"];
+        user.PersonId = manager.Id;
 
         var result = await service.GetAsync(outsider.Id, CancellationToken.None);
 

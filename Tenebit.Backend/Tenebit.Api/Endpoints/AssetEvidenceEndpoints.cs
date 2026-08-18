@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
@@ -60,20 +61,32 @@ public static class AssetEvidenceEndpoints
                 return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
             }
 
-            if (!Enum.TryParse<EvidencePhase>(form["phase"], true, out var phase))
+            if (!Enum.TryParse<EvidencePhase>(form["phase"], true, out var phase) || !Enum.IsDefined(typeof(EvidencePhase), phase))
             {
                 return Results.BadRequest(new { message = "Nieprawidłowy etap materiału dowodowego.", code = "VALIDATION_ERROR" });
             }
 
-            Guid? assignmentId = Guid.TryParse(form["assignmentId"], out var aid) ? aid : null;
+            var assignmentRaw = form["assignmentId"].ToString();
+            Guid? assignmentId = null;
+            if (!string.IsNullOrWhiteSpace(assignmentRaw))
+            {
+                if (!Guid.TryParse(assignmentRaw, out var aid) || aid == Guid.Empty)
+                {
+                    return Results.BadRequest(new { message = "Nieprawidłowy identyfikator wydania.", code = "VALIDATION_ERROR" });
+                }
+                assignmentId = aid;
+            }
+
             var caption = form["caption"].ToString();
-
-            await using var stream = file.OpenReadStream();
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory, cancellationToken);
-
             var uploadRequest = new UploadAssetEvidenceRequest(phase, assignmentId, string.IsNullOrWhiteSpace(caption) ? null : caption);
-            return (await service.UploadAsync(assetId, uploadRequest, file.FileName, file.ContentType, memory.ToArray(), cancellationToken)).ToHttpResult();
+            var validationError = RequestObjectValidator.Validate(uploadRequest);
+            if (validationError is not null)
+            {
+                return Results.BadRequest(new { message = validationError, code = "VALIDATION_ERROR" });
+            }
+
+            var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken);
+            return (await service.UploadAsync(assetId, uploadRequest, file.FileName, file.ContentType, content, cancellationToken)).ToHttpResult();
         })
             .DisableAntiforgery()
             .WithTags("Asset evidence");

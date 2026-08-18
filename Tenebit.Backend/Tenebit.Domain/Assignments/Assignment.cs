@@ -53,7 +53,7 @@ public sealed class Assignment
             throw new DomainException("Ten asset jest już dodany do wydania.");
         }
 
-        Assets.Add(new AssignmentAsset(Id, assetId, issueCondition));
+        Assets.Add(new AssignmentAsset(OrganizationId, Id, assetId, issueCondition));
     }
 
     public void AddProcedureAcceptance(Guid organizationId, Guid procedureId, Guid personId, DateTimeOffset sentAt)

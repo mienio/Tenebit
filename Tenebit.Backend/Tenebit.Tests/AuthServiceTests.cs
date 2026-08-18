@@ -26,10 +26,21 @@ public class AuthServiceTests
         return (binaryCode % 1_000_000).ToString().PadLeft(6, '0');
     }
 
-    private static (AuthService Service, InMemoryOrganizationRepository Organizations, InMemoryOrganizationUserRepository Users) CreateService()
+    private sealed record AuthFixture(
+        AuthService Service,
+        InMemoryOrganizationRepository Organizations,
+        InMemoryOrganizationUserRepository Users,
+        InMemoryRefreshTokenRepository RefreshTokens,
+        InMemoryDeviceTrustTokenRepository DeviceTrustTokens,
+        FakeClock Clock);
+
+    private static AuthFixture CreateFullFixture()
     {
         var organizations = new InMemoryOrganizationRepository();
         var users = new InMemoryOrganizationUserRepository();
+        var refreshTokens = new InMemoryRefreshTokenRepository();
+        var deviceTrustTokens = new InMemoryDeviceTrustTokenRepository();
+        var clock = new FakeClock();
         var service = new AuthService(
             organizations,
             users,
@@ -40,17 +51,23 @@ public class AuthServiceTests
             new InMemoryExternalLoginRepository(users),
             new InMemoryPasswordResetTokenRepository(),
             new InMemoryEmailVerificationTokenRepository(),
-            new InMemoryRefreshTokenRepository(),
-            new InMemoryDeviceTrustTokenRepository(),
+            refreshTokens,
+            deviceTrustTokens,
             new InMemoryTwoFactorRecoveryCodeRepository(),
             new FakeEmailSender(),
             new FakeAppLinkBuilder(),
             new FakeQrCodeGenerator(),
-            new FakeClock(),
+            clock,
             new FakeUnitOfWork(),
             NullLogger<AuthService>.Instance);
 
-        return (service, organizations, users);
+        return new AuthFixture(service, organizations, users, refreshTokens, deviceTrustTokens, clock);
+    }
+
+    private static (AuthService Service, InMemoryOrganizationRepository Organizations, InMemoryOrganizationUserRepository Users) CreateService()
+    {
+        var fixture = CreateFullFixture();
+        return (fixture.Service, fixture.Organizations, fixture.Users);
     }
 
     [Fact]
@@ -133,6 +150,19 @@ public class AuthServiceTests
 
         Assert.Equal(first.Value!.User!.Id, second.Value!.User!.Id);
         Assert.Single(organizations.Organizations);
+    }
+
+    [Fact]
+    public async Task ExternalLoginAsync_RejectsUnverifiedEmailForNewAccount()
+    {
+        var (service, organizations, users) = CreateService();
+        var info = new ExternalUserInfo("facebook", "fb-new-user", "new.user@example.com", false, "New User");
+
+        var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(organizations.Organizations);
+        Assert.Empty(users.Users);
     }
 
     [Fact]
@@ -335,6 +365,8 @@ public class AuthServiceTests
         var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
         Assert.True(registered.IsSuccess);
         var userId = registered.Value!.Id;
+        var user = await users.GetByIdAsync(userId, CancellationToken.None);
+        var oldSecurityStamp = user!.SecurityStamp;
 
         refreshTokens.Add(new RefreshToken(userId, TokenHasher.Hash("existing-refresh"), DateTimeOffset.UtcNow.AddDays(30)));
         deviceTrustTokens.Add(new DeviceTrustToken(userId, TokenHasher.Hash("existing-device"), DateTimeOffset.UtcNow.AddDays(30)));
@@ -346,6 +378,7 @@ public class AuthServiceTests
         var now = DateTimeOffset.UtcNow;
         Assert.Null(await refreshTokens.FindValidAsync(TokenHasher.Hash("existing-refresh"), now, CancellationToken.None));
         Assert.Null(await deviceTrustTokens.FindValidAsync(userId, TokenHasher.Hash("existing-device"), now, CancellationToken.None));
+        Assert.NotEqual(oldSecurityStamp, user.SecurityStamp);
     }
 
     [Fact]
@@ -367,6 +400,44 @@ public class AuthServiceTests
 
         Assert.True(afterReEnable.IsSuccess);
         Assert.True(afterReEnable.Value!.RequiresTwoFactor);
+    }
+
+
+    [Fact]
+    public async Task TwoFactorStateChanges_RotateStampAndRevokeExistingSessions()
+    {
+        var fixture = CreateFullFixture();
+        var registered = await fixture.Service.RegisterAsync(
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"),
+            CancellationToken.None);
+        var user = await fixture.Users.GetByIdAsync(registered.Value!.Id, CancellationToken.None);
+        var setup = await fixture.Service.SetupTwoFactorAsync(user!.Id, CancellationToken.None);
+
+        const string refreshBeforeEnable = "refresh-before-enable";
+        const string deviceBeforeEnable = "device-before-enable";
+        fixture.RefreshTokens.Add(new RefreshToken(user.Id, TokenHasher.Hash(refreshBeforeEnable), fixture.Clock.UtcNow.AddDays(30)));
+        fixture.DeviceTrustTokens.Add(new DeviceTrustToken(user.Id, TokenHasher.Hash(deviceBeforeEnable), fixture.Clock.UtcNow.AddDays(30)));
+        var stampBeforeEnable = user.SecurityStamp;
+
+        var enabled = await fixture.Service.EnableTwoFactorAsync(user.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+
+        Assert.True(enabled.IsSuccess);
+        Assert.NotEqual(stampBeforeEnable, user.SecurityStamp);
+        Assert.Null(await fixture.RefreshTokens.FindValidAsync(TokenHasher.Hash(refreshBeforeEnable), fixture.Clock.UtcNow, CancellationToken.None));
+        Assert.Null(await fixture.DeviceTrustTokens.FindValidAsync(user.Id, TokenHasher.Hash(deviceBeforeEnable), fixture.Clock.UtcNow, CancellationToken.None));
+
+        const string refreshBeforeDisable = "refresh-before-disable";
+        const string deviceBeforeDisable = "device-before-disable";
+        fixture.RefreshTokens.Add(new RefreshToken(user.Id, TokenHasher.Hash(refreshBeforeDisable), fixture.Clock.UtcNow.AddDays(30)));
+        fixture.DeviceTrustTokens.Add(new DeviceTrustToken(user.Id, TokenHasher.Hash(deviceBeforeDisable), fixture.Clock.UtcNow.AddDays(30)));
+        var stampBeforeDisable = user.SecurityStamp;
+
+        var disabled = await fixture.Service.DisableTwoFactorAsync(user.Id, ComputeTotpCode(setup.Value.Secret), CancellationToken.None);
+
+        Assert.True(disabled.IsSuccess);
+        Assert.NotEqual(stampBeforeDisable, user.SecurityStamp);
+        Assert.Null(await fixture.RefreshTokens.FindValidAsync(TokenHasher.Hash(refreshBeforeDisable), fixture.Clock.UtcNow, CancellationToken.None));
+        Assert.Null(await fixture.DeviceTrustTokens.FindValidAsync(user.Id, TokenHasher.Hash(deviceBeforeDisable), fixture.Clock.UtcNow, CancellationToken.None));
     }
 
     [Fact]

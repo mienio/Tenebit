@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiRequest, refreshAccessToken, setAccessTokenProvider } from '../api/apiClient';
 import { clearStoredToken, decodeToken, getStoredToken, isTokenExpired, setStoredToken } from './authConfig';
 
@@ -30,7 +30,8 @@ type AuthContextValue = {
   completeTwoFactorLogin: (challengeToken: string, code: string, rememberDevice: boolean) => Promise<void>;
   register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string) => Promise<void>;
   loginWithToken: (token: string) => boolean;
-  logout: () => void;
+  completeExternalLogin: () => Promise<boolean>;
+  logout: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -61,23 +62,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!fromToken) { clearStoredToken(); return null; }
     return fromToken;
   });
-  const [isLoading, setIsLoading] = useState(user === null);
+  const initialUser = useRef(user).current;
+  const [isLoading, setIsLoading] = useState(initialUser === null);
   const bootstrapRefresh = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     const onSessionExpired = () => {
       clearStoredToken();
       setUser(null);
+      setIsLoading(false);
     };
     window.addEventListener('tenebit:session-expired', onSessionExpired);
     return () => window.removeEventListener('tenebit:session-expired', onSessionExpired);
   }, []);
 
   useEffect(() => {
-    if (user) { setIsLoading(false); return; }
-    // Shared via ref (not per-invocation state) so React StrictMode's dev-mode double-invoke
-    // of this effect can't race: both invocations await the same promise, and only its
-    // resolution ever calls setIsLoading(false), instead of a second invocation doing it early.
+    if (initialUser) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Bootstrap exactly once. A later explicit logout/session-expiry must not trigger an automatic
+    // refresh that could silently log the user back in while the server-side revoke is in flight.
     if (!bootstrapRefresh.current) {
       bootstrapRefresh.current = refreshAccessToken().then(token => {
         const fromToken = token ? userFromToken(token) : null;
@@ -85,12 +91,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       });
     }
-  }, [user]);
+  }, [initialUser]);
 
-  function applySession(response: LoginResponse) {
+  const applySession = useCallback((response: LoginResponse) => {
     setStoredToken(response.token);
     setUser({ ...response.user });
-  }
+    setIsLoading(false);
+  }, []);
+
+  const completeExternalLogin = useCallback(async () => {
+    // The refresh cookie established by the OAuth callback is the only credential accepted here.
+    // Discard any access token from a previously signed-in account before exchanging that cookie.
+    clearStoredToken();
+    setUser(null);
+    setIsLoading(true);
+
+    const token = await refreshAccessToken();
+    const fromToken = token ? userFromToken(token) : null;
+    if (!fromToken) {
+      clearStoredToken();
+      setUser(null);
+      setIsLoading(false);
+      return false;
+    }
+
+    setUser(fromToken);
+    setIsLoading(false);
+    return true;
+  }, []);
+
+  const logout = useCallback(async () => {
+    // Start the revoke while the current bearer token and refresh cookie are still available, but
+    // clear local state immediately. The one-shot bootstrap effect above will not re-login the user.
+    const revoke = apiRequest('/api/auth/logout', { method: 'POST' });
+    clearStoredToken();
+    setUser(null);
+    setIsLoading(false);
+
+    try {
+      await revoke;
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
     isAuthenticated: Boolean(user),
@@ -122,14 +166,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!fromToken) return false;
       setStoredToken(token);
       setUser(fromToken);
+      setIsLoading(false);
       return true;
     },
-    logout: () => {
-      apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
-      clearStoredToken();
-      setUser(null);
-    }
-  }), [user, isLoading]);
+    completeExternalLogin,
+    logout
+  }), [applySession, completeExternalLogin, isLoading, logout, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

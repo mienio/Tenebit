@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tenebit.Application.Common;
 using Tenebit.Application.People;
 
 namespace Tenebit.Infrastructure.Services;
@@ -36,11 +37,13 @@ public sealed class OffboardingBackgroundService : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
+                var gate = scope.ServiceProvider.GetRequiredService<PostgresJobLock>();
                 var schedulerService = scope.ServiceProvider.GetRequiredService<PersonOffboardingSchedulerService>();
-                await schedulerService.RunAsync(stoppingToken);
+                await gate.TryRunAsync("offboarding", interval, schedulerService.RunAsync, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                SecurityTelemetry.BackgroundJobFailure();
                 _logger.LogError(ex, "Zadanie offboardingu zakończyło się błędem — spróbuję ponownie przy kolejnym cyklu.");
             }
         }

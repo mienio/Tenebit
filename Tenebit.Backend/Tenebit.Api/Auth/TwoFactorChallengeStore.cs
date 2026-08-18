@@ -1,33 +1,39 @@
-using Microsoft.Extensions.Caching.Memory;
+using Tenebit.Application.Common;
 using Tenebit.Api.Auth.OAuth;
+using Tenebit.Application.Abstractions;
+using Tenebit.Application.Identity;
+using Tenebit.Domain.Identity;
 
 namespace Tenebit.Api.Auth;
 
+/// <summary>Shared PostgreSQL-backed one-time second-factor challenge store.</summary>
 public sealed class TwoFactorChallengeStore
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
-    private readonly IMemoryCache _cache;
+    private readonly ITwoFactorChallengeRepository _challenges;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IClock _clock;
 
-    public TwoFactorChallengeStore(IMemoryCache cache) => _cache = cache;
+    public TwoFactorChallengeStore(ITwoFactorChallengeRepository challenges, IUnitOfWork unitOfWork, IClock clock)
+    {
+        _challenges = challenges;
+        _unitOfWork = unitOfWork;
+        _clock = clock;
+    }
 
-    public string Create(Guid userId)
+    public async Task<string> CreateAsync(Guid userId, CancellationToken cancellationToken)
     {
         var ticket = PkceHelper.NewState();
-        _cache.Set(CacheKey(ticket), userId, Ttl);
+        _challenges.Add(new TwoFactorChallenge(TokenHasher.Hash(ticket), userId, _clock.UtcNow.Add(Ttl)));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return ticket;
     }
 
-    public Guid? Consume(string ticket)
+    public async Task<Guid?> ConsumeAsync(string ticket, CancellationToken cancellationToken)
     {
-        var key = CacheKey(ticket);
-        if (!_cache.TryGetValue(key, out Guid userId))
-        {
-            return null;
-        }
-
-        _cache.Remove(key);
-        return userId;
+        if (string.IsNullOrWhiteSpace(ticket)) return null;
+        var challenge = await _challenges.TryConsumeAsync(TokenHasher.Hash(ticket), _clock.UtcNow, cancellationToken);
+        if (challenge is null) SecurityTelemetry.TwoFactorRejected();
+        return challenge?.OrganizationUserId;
     }
-
-    private static string CacheKey(string ticket) => $"2fa-challenge:{ticket}";
 }

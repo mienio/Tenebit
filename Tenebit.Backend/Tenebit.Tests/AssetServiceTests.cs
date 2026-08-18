@@ -36,7 +36,7 @@ public class AssetServiceTests
             new FakeEmailSender(),
             NullLogger<AssetService>.Instance,
             new FakeFieldEncryptor(),
-            new ManagerScopeService(people, teams));
+            new ManagerScopeService(people, teams), new LocationReferenceResolver(new InMemoryLocationRepository()));
 
         return (service, currentUser, assets, categories, subscriptions);
     }
@@ -66,7 +66,7 @@ public class AssetServiceTests
             new FakeEmailSender(),
             NullLogger<AssetService>.Instance,
             new FakeFieldEncryptor(),
-            new ManagerScopeService(people, teams));
+            new ManagerScopeService(people, teams), new LocationReferenceResolver(new InMemoryLocationRepository()));
 
         return (service, currentUser, categories, teams);
     }

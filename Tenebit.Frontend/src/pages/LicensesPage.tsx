@@ -38,7 +38,7 @@ export function LicensesPage() {
     if (!selected) return;
     const fresh = licenses.data?.find(item => item.id === selected.id);
     if (fresh) setSelected(fresh);
-  }, [licenses.data, selected?.id]);
+  }, [licenses.data, selected]);
 
   function success(text: string) { setMessage({ type: 'success', text }); }
   function failure(error: unknown, fallback: string) { setMessage({ type: 'error', text: error instanceof Error ? error.message : fallback }); }

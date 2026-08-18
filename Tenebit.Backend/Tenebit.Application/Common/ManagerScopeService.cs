@@ -2,11 +2,18 @@ using Tenebit.Application.Abstractions;
 
 namespace Tenebit.Application.Common;
 
-// Resolves which Person records a Manager may see when they hold no organization-wide viewer role.
-// The declared role model promises Manager "widok zespołu" (own team only), but every list/detail
-// endpoint used to return the whole organization once the Manager role passed the module gate
-// (audyt AUD3-006: brak centralnej autoryzacji zasobowej). Callers stay privileged (org-wide) when
-// the actor also holds any of the module's other viewer roles — this only narrows plain Manager.
+public sealed record ManagerAccessScope(IReadOnlySet<Guid> PersonIds, IReadOnlySet<Guid> TeamIds)
+{
+    public bool ContainsPerson(Guid personId) => PersonIds.Contains(personId);
+    public bool ContainsAsset(Guid? assignedPersonId, Guid? teamId) =>
+        (assignedPersonId.HasValue && PersonIds.Contains(assignedPersonId.Value))
+        || (teamId.HasValue && TeamIds.Contains(teamId.Value));
+}
+
+// Resolves the row-level scope for a plain Manager. The link from the login to Person is stable
+// (OrganizationUser.PersonId -> people(OrganizationId, Id)); e-mail is deliberately not used as an
+// authorization key. Repository methods calculate the managed people/teams in SQL instead of loading
+// the entire tenant and filtering it in application memory (AUD3-006).
 public sealed class ManagerScopeService
 {
     private readonly IPersonRepository _people;
@@ -18,32 +25,20 @@ public sealed class ManagerScopeService
         _teams = teams;
     }
 
-    // Null means "no scoping" (actor is not a plain Manager, e.g. Owner/Admin/Hr/etc — show everything
-    // the module normally allows). A non-null set is the Manager's own person plus their team's members.
-    public async Task<HashSet<Guid>?> ResolveVisiblePersonIdsAsync(ICurrentUser currentUser, IReadOnlyCollection<string> orgWideRoles, CancellationToken cancellationToken)
+    // Null means the actor has an organization-wide role for this module. A non-null, possibly empty,
+    // scope means Manager authorization applies. An unlinked Manager is fail-closed with an empty scope.
+    public async Task<ManagerAccessScope?> ResolveAsync(ICurrentUser currentUser, IReadOnlyCollection<string> orgWideRoles, CancellationToken cancellationToken)
     {
         if (currentUser.HasAnyRole(orgWideRoles.ToArray())) return null;
         if (!currentUser.HasAnyRole(TenebitRoles.Manager)) return null;
-
-        var organizationId = currentUser.OrganizationId;
-        var managerPerson = string.IsNullOrEmpty(currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, currentUser.Email, cancellationToken);
-        var visible = new HashSet<Guid>();
-        if (managerPerson is null) return visible;
-
-        visible.Add(managerPerson.Id);
-
-        var teams = await _teams.ListAsync(organizationId, cancellationToken);
-        var managedTeamIds = teams.Where(t => t.ManagerId == managerPerson.Id).Select(t => t.Id).ToHashSet();
-
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        foreach (var person in people)
+        if (currentUser.PersonId is not { } managerPersonId)
         {
-            if (person.ManagerId == managerPerson.Id || (person.TeamId is { } teamId && managedTeamIds.Contains(teamId)))
-            {
-                visible.Add(person.Id);
-            }
+            return new ManagerAccessScope(new HashSet<Guid>(), new HashSet<Guid>());
         }
 
-        return visible;
+        var organizationId = currentUser.OrganizationId;
+        var teamIds = (await _teams.ListManagedIdsAsync(organizationId, managerPersonId, cancellationToken)).ToHashSet();
+        var personIds = (await _people.ListManagedScopePersonIdsAsync(organizationId, managerPersonId, teamIds, cancellationToken)).ToHashSet();
+        return new ManagerAccessScope(personIds, teamIds);
     }
 }

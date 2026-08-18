@@ -20,8 +20,10 @@ public sealed record AssetAuditScope(
     IReadOnlyList<Guid>? AssetCategoryIds = null,
     IReadOnlyList<Guid>? PersonIds = null);
 
+[ValidatedRequest]
 public sealed record CreateAssetAuditCampaignRequest(string Name, string? Description, DateTimeOffset DueDate, AssetAuditScope Scope);
 
+[ValidatedRequest]
 public sealed record UpdateAssetAuditCampaignRequest(string Name, string? Description, DateTimeOffset DueDate, AssetAuditScope Scope);
 
 public sealed record AssetAuditCampaignPreviewResponse(int ParticipantCount, int AssetCount, IReadOnlyList<string> PeopleWithoutEmail);
@@ -73,8 +75,10 @@ public sealed record PublicAssetAuditItemResponse(Guid Id, string AssetName, str
 
 public sealed record PublicAssetAuditResponse(string OrganizationName, string CampaignName, DateTimeOffset DueDate, bool ReadOnly, IReadOnlyList<PublicAssetAuditItemResponse> Items);
 
+[ValidatedRequest]
 public sealed record SubmitPublicAssetAuditItemRequest(AssetAuditResponse Response, string? Comment);
 
+[ValidatedRequest]
 public sealed record ResolveAssetAuditItemRequest(AssetAuditResolution Resolution, string? Notes, Guid? NewOwnerPersonId);
 
 public sealed record RemindParticipantsResponse(int RemindedCount);

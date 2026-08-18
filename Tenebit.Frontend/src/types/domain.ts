@@ -844,6 +844,7 @@ export interface OrganizationUser {
   isActive: boolean;
   roles: string[];
   createdAt: string;
+  personId?: string | null;
 }
 
 export interface RoleInfo {

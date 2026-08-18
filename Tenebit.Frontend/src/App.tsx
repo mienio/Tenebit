@@ -34,7 +34,9 @@ const LicensesPage = lazy(() => import('./pages/LicensesPage').then(m => ({ defa
 
 function HomeRoute() {
   const auth = useAuth();
-  return auth.isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />;
+  if (!auth.isAuthenticated) return <LandingPage />;
+  const dashboard = nav.find(entry => entry.to === '/dashboard');
+  return <Navigate to={dashboard && canSee(dashboard.roles, auth.roles) ? '/dashboard' : '/my'} replace />;
 }
 
 function RequireRoles({ path, children }: { path: string; children: ReactNode }) {
@@ -60,7 +62,7 @@ export function App() {
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
         <Route path="/audit/:token" element={<PublicAssetAuditPage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="dashboard" element={<RequireRoles path="/dashboard"><DashboardPage /></RequireRoles>} />
           <Route path="my" element={<MyWorkspacePage />} />
           <Route path="assets" element={<RequireRoles path="/assets"><AssetsPage /></RequireRoles>} />
           <Route path="people" element={<RequireRoles path="/people"><PeoplePage /></RequireRoles>} />

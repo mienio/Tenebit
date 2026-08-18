@@ -73,13 +73,18 @@ public sealed class AssignmentService
         if (access.IsFailure) return Result<IReadOnlyList<AssignmentResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var assignments = await _assignments.ListAsync(organizationId, cancellationToken);
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null) assignments = assignments.Where(a => visibleIds.Contains(a.PersonId)).ToList();
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
-        var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var assignments = scope is null
+            ? await _assignments.ListAsync(organizationId, cancellationToken)
+            : await _assignments.ListByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
+        var assignmentIds = assignments.Select(x => x.Id).ToArray();
+        var personIds = assignments.Select(x => x.PersonId).Distinct().ToArray();
+        var assetIds = assignments.SelectMany(x => x.Assets).Select(x => x.AssetId).Distinct().ToArray();
+        var procedureIds = assignments.SelectMany(x => x.ProcedureAcceptances).Select(x => x.ProcedureId).Distinct().ToArray();
+        var people = await _people.ListScopedAsync(organizationId, null, personIds, cancellationToken);
+        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
+        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+        var evidence = await _evidence.ListByAssignmentIdsAsync(organizationId, assignmentIds, cancellationToken);
         return Result<IReadOnlyList<AssignmentResponse>>.Success(assignments.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList());
     }
 
@@ -89,21 +94,20 @@ public sealed class AssignmentService
         if (access.IsFailure) return Result<PagedResult<AssignmentResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var procedures = await _procedures.ListAsync(organizationId, null, cancellationToken);
-        var evidence = await _evidence.ListByOrganizationAsync(organizationId, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var (items, total) = scope is null
+            ? await _assignments.ListPagedAsync(organizationId, search, status, page, pageSize, cancellationToken)
+            : await _assignments.ListPagedByPersonIdsAsync(organizationId, search, status, page, pageSize, scope.PersonIds, cancellationToken);
 
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is null)
-        {
-            var (items, total) = await _assignments.ListPagedAsync(organizationId, search, status, page, pageSize, cancellationToken);
-            return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
-        }
-
-        var all = (await _assignments.ListAsync(organizationId, cancellationToken)).Where(a => visibleIds.Contains(a.PersonId)).ToList();
-        var page1 = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(page1.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), all.Count, page, pageSize));
+        var assignmentIds = items.Select(x => x.Id).ToArray();
+        var personIds = items.Select(x => x.PersonId).Distinct().ToArray();
+        var assetIds = items.SelectMany(x => x.Assets).Select(x => x.AssetId).Distinct().ToArray();
+        var procedureIds = items.SelectMany(x => x.ProcedureAcceptances).Select(x => x.ProcedureId).Distinct().ToArray();
+        var people = await _people.ListScopedAsync(organizationId, null, personIds, cancellationToken);
+        var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
+        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+        var evidence = await _evidence.ListByAssignmentIdsAsync(organizationId, assignmentIds, cancellationToken);
+        return Result<PagedResult<AssignmentResponse>>.Success(new PagedResult<AssignmentResponse>(items.Select(x => AssignmentResponseBuilder.Map(x, people, assets, procedures, evidence)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<AssignmentResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -112,11 +116,11 @@ public sealed class AssignmentService
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null)
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (scope is not null)
         {
             var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
-            if (assignment is null || !visibleIds.Contains(assignment.PersonId))
+            if (assignment is null || !scope.ContainsPerson(assignment.PersonId))
             {
                 return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
             }
@@ -165,51 +169,63 @@ public sealed class AssignmentService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
+        var requestError = RequestObjectValidator.Validate(request);
+        if (requestError is not null) return Result<AssignmentResponse>.Failure(Error.Validation(requestError));
         if (files.Count == 0) return Result<AssignmentResponse>.Failure(Error.Validation("Dodaj co najmniej jedno zdjęcie."));
+        if (files.Count > 25) return Result<AssignmentResponse>.Failure(Error.Validation($"Można przesłać maksymalnie 25 plików."));
+
+        var organizationId = _currentUser.OrganizationId;
+
+        // Manifest/file mapping is pure input validation and does not need to hold a DB lock.
+        var requestedAssetIds = request.Assets.Select(x => x.AssetId).ToHashSet();
+        var uploads = new List<EvidenceUploadInput>(files.Count);
+        foreach (var file in files)
+        {
+            if (!evidenceManifest.TryGetValue(file.FieldName, out var entry))
+            {
+                return Result<AssignmentResponse>.Failure(Error.Validation("Brak wpisu manifestu dla przesłanego pliku."));
+            }
+
+            if (!requestedAssetIds.Contains(entry.AssetId))
+            {
+                return Result<AssignmentResponse>.Failure(Error.Validation("Zdjęcie dotyczy aktywa spoza wydania."));
+            }
+
+            uploads.Add(new EvidenceUploadInput(entry.AssetId, file.FileName, file.ContentType, file.Content, entry.Caption, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser));
+        }
 
         try
         {
-            var organizationId = _currentUser.OrganizationId;
-
-            // Walidacja manifestu przed jakąkolwiek mutacją.
-            var requestedAssetIds = request.Assets.Select(x => x.AssetId).ToHashSet();
-            var uploads = new List<EvidenceUploadInput>(files.Count);
-            foreach (var file in files)
+            var committed = await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
             {
-                if (!evidenceManifest.TryGetValue(file.FieldName, out var entry))
+                var prepared = await PrepareAssignmentAsync(request, ct);
+                if (prepared.IsFailure) return Result<EvidenceAssignmentCommit>.Failure(prepared.Error!);
+
+                var bundle = prepared.Value!;
+                bundle.Assignment.EnableEvidenceIntegrity();
+                var rawToken = IssueAcceptanceToken(bundle.Assignment, _clock.UtcNow);
+
+                // Count + batch insert run under the same transaction/lock as the assignment save. Concurrent
+                // single/public uploads for this tenant use the same lock, so six racing requests cannot all
+                // observe count=4 and exceed the five-photo invariant (AUD3-015).
+                var evidenceResult = await _evidenceService.PrepareEvidenceBatchAsync(organizationId, bundle.Assignment.Id, EvidencePhase.Issue, uploads, ct);
+                if (evidenceResult.IsFailure) return Result<EvidenceAssignmentCommit>.Failure(evidenceResult.Error!);
+
+                _assignments.Add(bundle.Assignment);
+                foreach (var evidence in evidenceResult.Value!)
                 {
-                    return Result<AssignmentResponse>.Failure(Error.Validation("Brak wpisu manifestu dla przesłanego pliku."));
+                    _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", evidence.Id, _currentUser.Subject, evidence.FileName, _clock.UtcNow));
                 }
+                _activity.Add(new ActivityLog(organizationId, "assignment.created", "assignment", bundle.Assignment.Id, _currentUser.Subject, bundle.Person.FullName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<EvidenceAssignmentCommit>.Success(new EvidenceAssignmentCommit(bundle, rawToken));
+            }, cancellationToken);
 
-                if (!requestedAssetIds.Contains(entry.AssetId))
-                {
-                    return Result<AssignmentResponse>.Failure(Error.Validation("Zdjęcie dotyczy aktywa spoza wydania."));
-                }
+            if (committed.IsFailure) return Result<AssignmentResponse>.Failure(committed.Error!);
 
-                uploads.Add(new EvidenceUploadInput(entry.AssetId, file.FileName, file.ContentType, file.Content, entry.Caption, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser));
-            }
-
-            var prepared = await PrepareAssignmentAsync(request, cancellationToken);
-            if (prepared.IsFailure) return Result<AssignmentResponse>.Failure(prepared.Error!);
-
-            var (assignment, person, assets, procedures) = prepared.Value!;
-            assignment.EnableEvidenceIntegrity();
-            var rawToken = IssueAcceptanceToken(assignment, _clock.UtcNow);
-
-            var evidenceResult = await _evidenceService.PrepareEvidenceBatchAsync(organizationId, assignment.Id, EvidencePhase.Issue, uploads, cancellationToken);
-            if (evidenceResult.IsFailure) return Result<AssignmentResponse>.Failure(evidenceResult.Error!);
-
-            _assignments.Add(assignment);
-            foreach (var evidence in evidenceResult.Value!)
-            {
-                _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", evidence.Id, _currentUser.Subject, evidence.FileName, _clock.UtcNow));
-            }
-            _activity.Add(new ActivityLog(organizationId, "assignment.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-            await SendAssignmentNotificationAsync(request, assignment, person, assets, procedures, organizationId, rawToken, cancellationToken);
-
-            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignment.Id, cancellationToken);
+            var saved = committed.Value!;
+            await SendAssignmentNotificationAsync(request, saved.Prepared.Assignment, saved.Prepared.Person, saved.Prepared.Assets, saved.Prepared.Procedures, organizationId, saved.RawToken, cancellationToken);
+            return await _responseBuilder.BuildResponseAsync(organizationId, saved.Prepared.Assignment.Id, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -294,7 +310,7 @@ public sealed class AssignmentService
         }
         catch (Exception ex)
         {
-            _activity.Add(new ActivityLog(organizationId, "assignment.email_failed", "assignment", assignment.Id, _currentUser.Subject, ex.Message, _clock.UtcNow));
+            _activity.Add(new ActivityLog(organizationId, "assignment.email_failed", "assignment", assignment.Id, _currentUser.Subject, "delivery_failed", _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
     }
@@ -315,8 +331,7 @@ public sealed class AssignmentService
             // (audyt AUD3-004: employee could accept another employee's assignment given only its GUID).
             if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr))
             {
-                var currentPerson = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
-                if (currentPerson is null || assignment.PersonId != currentPerson.Id)
+                if (_currentUser.PersonId is not { } personId || assignment.PersonId != personId)
                 {
                     return Result<AssignmentResponse>.Failure(Error.Forbidden("Nie możesz zaakceptować cudzego wydania."));
                 }
@@ -415,51 +430,55 @@ public sealed class AssignmentService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
+        var requestError = RequestObjectValidator.Validate(request);
+        if (requestError is not null) return Result<AssignmentResponse>.Failure(Error.Validation(requestError));
+        if (files.Count > 25) return Result<AssignmentResponse>.Failure(Error.Validation($"Można przesłać maksymalnie 25 plików."));
+
+        var organizationId = _currentUser.OrganizationId;
         try
         {
-            var organizationId = _currentUser.OrganizationId;
-            var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
-            if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
-
-            if (assignment.Assets.All(x => x.AssetId != assetId))
+            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
             {
-                return Result<AssignmentResponse>.Failure(Error.NotFound("To aktywo nie należy do tego wydania."));
-            }
+                var assignment = await _assignments.GetAsync(organizationId, assignmentId, ct);
+                if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
 
-            var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-            if (asset is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
-            var category = await _categories.GetAsync(organizationId, asset.CategoryId, cancellationToken);
+                if (assignment.Assets.All(x => x.AssetId != assetId))
+                {
+                    return Result<AssignmentResponse>.Failure(Error.NotFound("To aktywo nie należy do tego wydania."));
+                }
 
-            // Idempotencja: aktywo już rozliczone — nie zmieniamy stanu ani nie dodajemy zdjęć.
-            if (assignment.Assets.First(x => x.AssetId == assetId).ReturnResolution is not null)
-            {
-                return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignmentId, cancellationToken);
-            }
+                var asset = await _assets.GetAsync(organizationId, assetId, ct);
+                if (asset is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+                var category = await _categories.GetAsync(organizationId, asset.CategoryId, ct);
 
-            var uploads = new List<EvidenceUploadInput>(files.Count);
-            foreach (var file in files)
-            {
-                uploads.Add(new EvidenceUploadInput(assetId, file.FileName, file.ContentType, file.Content, null, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser));
-            }
+                // Idempotencja: aktywo już rozliczone — nie zmieniamy stanu ani nie dodajemy zdjęć.
+                if (assignment.Assets.First(x => x.AssetId == assetId).ReturnResolution is not null)
+                {
+                    return await _responseBuilder.BuildResponseAsync(organizationId, assignmentId, ct);
+                }
 
-            var evidenceResult = await _evidenceService.PrepareEvidenceBatchAsync(organizationId, assignmentId, EvidencePhase.Return, uploads, cancellationToken);
-            if (evidenceResult.IsFailure) return Result<AssignmentResponse>.Failure(evidenceResult.Error!);
+                var uploads = files.Select(file => new EvidenceUploadInput(
+                    assetId, file.FileName, file.ContentType, file.Content, null, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser)).ToList();
 
-            var now = _clock.UtcNow;
-            var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now);
-            if (changed)
-            {
-                _activity.Add(new ActivityLog(organizationId, "assignment.asset_returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
-                await CompleteLinkedReservationAsync(organizationId, assignment, now, cancellationToken);
-            }
+                var evidenceResult = await _evidenceService.PrepareEvidenceBatchAsync(organizationId, assignmentId, EvidencePhase.Return, uploads, ct);
+                if (evidenceResult.IsFailure) return Result<AssignmentResponse>.Failure(evidenceResult.Error!);
 
-            foreach (var evidence in evidenceResult.Value!)
-            {
-                _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", evidence.Id, _currentUser.Subject, evidence.FileName, _clock.UtcNow));
-            }
+                var now = _clock.UtcNow;
+                var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now);
+                if (changed)
+                {
+                    _activity.Add(new ActivityLog(organizationId, "assignment.asset_returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
+                    await CompleteLinkedReservationAsync(organizationId, assignment, now, ct);
+                }
 
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, assignmentId, cancellationToken);
+                foreach (var evidence in evidenceResult.Value!)
+                {
+                    _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", evidence.Id, _currentUser.Subject, evidence.FileName, _clock.UtcNow));
+                }
+
+                await _unitOfWork.SaveChangesAsync(ct);
+                return await _responseBuilder.BuildResponseAsync(organizationId, assignmentId, ct);
+            }, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -520,7 +539,16 @@ public sealed class AssignmentService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
         if (access.IsFailure) return Result<byte[]>.Failure(access.Error!);
 
-        return await GeneratePdfAsync(_currentUser.OrganizationId, id, cancellationToken);
+        var organizationId = _currentUser.OrganizationId;
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (scope is not null)
+        {
+            var assignment = await _assignments.GetAsync(organizationId, id, cancellationToken);
+            if (assignment is null || !scope.ContainsPerson(assignment.PersonId))
+                return Result<byte[]>.Failure(Error.NotFound("Wydanie nie istnieje."));
+        }
+
+        return await GeneratePdfAsync(organizationId, id, cancellationToken);
     }
 
     /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów wydania — ten sam wzorzec co
@@ -535,6 +563,7 @@ public sealed class AssignmentService
             return Result<Assignment>.Success(candidate);
         }
 
+        SecurityTelemetry.PublicTokenRejected();
         return Result<Assignment>.Failure(Error.NotFound("Wydanie nie istnieje."));
     }
 
@@ -603,6 +632,8 @@ public sealed class AssignmentService
         if (model.IsFailure) return Result<byte[]>.Failure(model.Error!);
         return Result<byte[]>.Success(_pdfGenerator.GenerateHandoverProtocol(model.Value!));
     }
+
+    private sealed record EvidenceAssignmentCommit(PreparedAssignment Prepared, string RawToken);
 
     private sealed record PreparedAssignment(Assignment Assignment, Domain.People.Person Person, IReadOnlyList<Asset> Assets, IReadOnlyList<Procedure> Procedures);
 }

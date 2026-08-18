@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tenebit.Application.Common;
 using Tenebit.Application.Evidence;
 
 namespace Tenebit.Infrastructure.Services;
@@ -36,11 +37,13 @@ public sealed class EvidenceRetentionBackgroundService : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
+                var gate = scope.ServiceProvider.GetRequiredService<PostgresJobLock>();
                 var retentionService = scope.ServiceProvider.GetRequiredService<EvidenceRetentionService>();
-                await retentionService.RunAsync(stoppingToken);
+                await gate.TryRunAsync("evidence-retention", interval, retentionService.RunAsync, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                SecurityTelemetry.BackgroundJobFailure();
                 _logger.LogError(ex, "Zadanie retencji materiału dowodowego zakończyło się błędem — spróbuję ponownie przy kolejnym cyklu.");
             }
         }

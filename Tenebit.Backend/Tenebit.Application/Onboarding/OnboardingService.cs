@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
@@ -26,8 +27,9 @@ public sealed class OnboardingService
     private readonly AssignmentService _assignmentService;
 
     private readonly ManagerScopeService _managerScope;
+    private readonly LocationReferenceResolver _locationResolver;
 
-    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope)
+    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope, LocationReferenceResolver locationResolver)
     {
         _teams = teams;
         _people = people;
@@ -42,10 +44,14 @@ public sealed class OnboardingService
         _unitOfWork = unitOfWork;
         _assignmentService = assignmentService;
         _managerScope = managerScope;
+        _locationResolver = locationResolver;
     }
 
-    public async Task<OnboardingStatusResponse> GetStatusAsync(CancellationToken cancellationToken)
+    public async Task<Result<OnboardingStatusResponse>> GetStatusAsync(CancellationToken cancellationToken)
     {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<OnboardingStatusResponse>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         var people = await _people.ListAsync(organizationId, null, cancellationToken);
@@ -65,7 +71,7 @@ public sealed class OnboardingService
         };
 
         var completed = steps.Count(step => step.Completed);
-        return new OnboardingStatusResponse(steps, (int)Math.Round(completed * 100m / steps.Count));
+        return Result<OnboardingStatusResponse>.Success(new OnboardingStatusResponse(steps, (int)Math.Round(completed * 100m / steps.Count)));
     }
 
     public async Task<Result<StarterPackageResponse>> CreateStarterPackageAsync(CreateStarterPackageRequest request, CancellationToken cancellationToken)
@@ -113,13 +119,17 @@ public sealed class OnboardingService
                 _categories.Add(category);
             }
 
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, locationResult.Value!.FullPath, cancellationToken);
+            if (locationResult.IsFailure) return Result<StarterPackageResponse>.Failure(locationResult.Error!);
             var person = new Person(organizationId, request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail);
-            person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, "Pracownik", request.JobTitle, team.Id, null, request.Location, null);
+            person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, "Pracownik", request.JobTitle, team.Id, null, locationResult.Value!.FullPath, null);
             if (!person.CanReceiveNewObligations) return Result<StarterPackageResponse>.Failure(Error.Validation("Pakiet onboardingowy można utworzyć tylko dla aktywnej osoby."));
+            person.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             _people.Add(person);
 
             var asset = new Asset(organizationId, category.Id, request.AssetName, request.AssetTag);
-            asset.UpdateCore(request.AssetName, request.AssetTag, request.SerialNumber, category.Id, request.Location, null, null, null, null, null, null, team.Id);
+            asset.UpdateCore(request.AssetName, request.AssetTag, request.SerialNumber, category.Id, locationResult.Value!.FullPath, null, null, null, null, null, null, team.Id);
+            asset.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             asset.AssignTo(person.Id);
             _assets.Add(asset);
 
@@ -291,16 +301,15 @@ public sealed class OnboardingService
         {
             if (_currentUser.HasAnyRole(TenebitRoles.Manager))
             {
-                var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator], cancellationToken);
-                if (visibleIds is not null && !visibleIds.Contains(personId))
+                var scope = await _managerScope.ResolveAsync(_currentUser, [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator], cancellationToken);
+                if (scope is not null && !scope.ContainsPerson(personId))
                 {
                     return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
                 }
             }
             else
             {
-                var currentPerson = string.IsNullOrEmpty(_currentUser.Email) ? null : await _people.FindByEmailAsync(organizationId, _currentUser.Email, cancellationToken);
-                if (currentPerson is null || currentPerson.Id != personId)
+                if (_currentUser.PersonId is not { } currentPersonId || currentPersonId != personId)
                 {
                     return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
                 }
@@ -310,7 +319,7 @@ public sealed class OnboardingService
         var person = await _people.GetAsync(organizationId, personId, cancellationToken);
         if (person is null) return Result<OnboardingChecklistResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
 
-        var assignments = (await _assignments.ListAsync(organizationId, cancellationToken)).Where(x => x.PersonId == personId).ToList();
+        var assignments = await _assignments.ListByPersonAsync(organizationId, personId, cancellationToken);
         var assetIds = assignments.SelectMany(x => x.Assets.Select(a => a.AssetId)).Distinct().ToArray();
         var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
         var procedureIds = assignments.SelectMany(x => x.ProcedureAcceptances.Select(a => a.ProcedureId)).Distinct().ToArray();

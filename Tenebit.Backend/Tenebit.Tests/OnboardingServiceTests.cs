@@ -13,6 +13,13 @@ namespace Tenebit.Tests;
 
 public class OnboardingServiceTests
 {
+    private static InMemoryLocationRepository CreateLocations(Guid organizationId)
+    {
+        var locations = new InMemoryLocationRepository();
+        locations.Add(new Tenebit.Domain.Assets.Location(organizationId, "Biuro", "Room", null));
+        return locations;
+    }
+
     private static (OnboardingService Service, FakeCurrentUser User, InMemoryPersonRepository People) CreateService()
     {
         var user = new FakeCurrentUser();
@@ -34,7 +41,7 @@ public class OnboardingServiceTests
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
             new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures),
             new Tenebit.Application.Common.ManagerScopeService(people, teams));
-        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams));
+        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)));
         return (service, user, people);
     }
 
@@ -92,6 +99,7 @@ public class OnboardingServiceTests
         people.Add(other);
 
         user.Roles = ["employee"];
+        user.PersonId = self.Id;
 
         var result = await service.GetChecklistAsync(other.Id, CancellationToken.None);
 
@@ -106,6 +114,8 @@ public class OnboardingServiceTests
         people.Add(self);
 
         user.Roles = ["employee"];
+        user.PersonId = self.Id;
+        user.Email = "changed.login@acme.test";
 
         var result = await service.GetChecklistAsync(self.Id, CancellationToken.None);
 
@@ -148,7 +158,7 @@ public class OnboardingServiceTests
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
             new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures),
             new Tenebit.Application.Common.ManagerScopeService(people, teams));
-        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams));
+        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)));
         return (service, user, assets, people, assignments, evidence);
     }
 

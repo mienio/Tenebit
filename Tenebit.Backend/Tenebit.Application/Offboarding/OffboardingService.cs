@@ -721,7 +721,7 @@ public sealed class OffboardingService
         }
         catch (Exception ex)
         {
-            _activity.Add(new ActivityLog(organizationId, "offboarding.email_failed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, ex.Message, now));
+            _activity.Add(new ActivityLog(organizationId, "offboarding.email_failed", "offboarding_case", offboardingCase.Id, _currentUser.Subject, "delivery_failed", now));
         }
 
         return link;
@@ -794,6 +794,7 @@ public sealed class OffboardingService
             return Result<OffboardingCase>.Success(candidate);
         }
 
+        SecurityTelemetry.PublicTokenRejected();
         return Result<OffboardingCase>.Failure(Error.NotFound("Link jest nieprawidłowy lub wygasł."));
     }
 

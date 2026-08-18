@@ -37,7 +37,7 @@ public sealed class OrganizationSubscription
 
     /// <summary>True while Stripe still considers there to be a live (billable) subscription behind this plan.</summary>
     public bool HasActiveStripeSubscription =>
-        !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status is SubscriptionStatus.Active or SubscriptionStatus.PastDue;
+        !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status == SubscriptionStatus.Active;
 
     public void Upgrade(string newPlanKey)
     {
@@ -93,11 +93,10 @@ public sealed class OrganizationSubscription
             PlanKey = SubscriptionPlan.Free.Key;
             CancelledAt ??= DateTimeOffset.UtcNow;
         }
-        else if (status == SubscriptionStatus.Unknown)
+        else if (status is SubscriptionStatus.Unknown or SubscriptionStatus.PastDue)
         {
-            // Fail-closed: quarantine the event without touching PlanKey — an unrecognized status must
-            // never grant a paid plan, and GetAssetLimit() reads PlanKey directly regardless of Status
-            // (audyt AUD3-010).
+            PlanKey = SubscriptionPlan.Free.Key;
+            CancelledAt ??= DateTimeOffset.UtcNow;
         }
         else
         {
@@ -110,5 +109,12 @@ public sealed class OrganizationSubscription
         CurrentPeriodEnd = currentPeriodEnd;
         LastWebhookEventAt = webhookEventCreatedAt;
         UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ReconcileFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string subscriptionId, string stripeCustomerId)
+    {
+        var lastWebhook = LastWebhookEventAt;
+        SyncFromStripe(planKey, status, currentPeriodStart, currentPeriodEnd, subscriptionId, stripeCustomerId, lastWebhook ?? DateTimeOffset.MinValue);
+        LastWebhookEventAt = lastWebhook;
     }
 }

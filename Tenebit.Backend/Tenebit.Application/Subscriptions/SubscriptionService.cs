@@ -212,9 +212,10 @@ public sealed class SubscriptionService
         {
             webhookEvent = _paymentGateway.ParseWebhookEvent(payload, signatureHeader);
         }
-        catch (Exception)
+        catch (PaymentWebhookValidationException)
         {
-            return Result.Failure(Error.Validation("Nieprawidłowy podpis webhooka Stripe."));
+            SecurityTelemetry.WebhookRejected();
+            return Result.Failure(Error.Validation("Nieprawidłowy webhook Stripe."));
         }
 
         if (webhookEvent is null) return Result.Success();
@@ -262,17 +263,33 @@ public sealed class SubscriptionService
             return Result.Success();
         }
 
-        // Stripe does not guarantee delivery order — an older event arriving after a newer one (e.g. a
-        // delayed retry) must never overwrite state the newer event already applied. `created` has only
-        // second resolution, so two distinct events in the same second must both still be allowed to
-        // apply (strict `<`, not `<=`) instead of silently dropping the second one (audyt AUD3-010).
-        if (subscription.LastWebhookEventAt is { } lastEventAt && webhookEvent.EventCreatedAt < lastEventAt)
+        var appliedPlan = webhookEvent.PlanKey;
+        var appliedStatus = webhookEvent.Status;
+        var appliedStart = webhookEvent.CurrentPeriodStart;
+        var appliedEnd = webhookEvent.CurrentPeriodEnd;
+        var appliedSubscriptionId = webhookEvent.SubscriptionId;
+        var appliedCustomerId = webhookEvent.CustomerId;
+
+        if (webhookEvent.EventType != "customer.subscription.deleted" && !string.IsNullOrWhiteSpace(webhookEvent.SubscriptionId))
+        {
+            var canonical = await _paymentGateway.GetSubscriptionAsync(webhookEvent.SubscriptionId, cancellationToken)
+                ?? throw new PaymentGatewayException("Stripe canonical subscription was not found.");
+            if (!string.Equals(canonical.CustomerId, webhookEvent.CustomerId, StringComparison.Ordinal)
+                || !string.Equals(canonical.SubscriptionId, webhookEvent.SubscriptionId, StringComparison.Ordinal)
+                || (canonical.OrganizationId.HasValue && canonical.OrganizationId != subscription.OrganizationId))
+            {
+                throw new PaymentGatewayException("Stripe canonical association mismatch.");
+            }
+            appliedPlan = canonical.PlanKey; appliedStatus = canonical.Status; appliedStart = canonical.CurrentPeriodStart;
+            appliedEnd = canonical.CurrentPeriodEnd; appliedSubscriptionId = canonical.SubscriptionId; appliedCustomerId = canonical.CustomerId;
+        }
+        else if (subscription.LastWebhookEventAt is { } lastEventAt && webhookEvent.EventCreatedAt < lastEventAt)
         {
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Success();
         }
 
-        subscription.SyncFromStripe(webhookEvent.PlanKey, webhookEvent.Status, webhookEvent.CurrentPeriodStart, webhookEvent.CurrentPeriodEnd, webhookEvent.SubscriptionId, webhookEvent.CustomerId, webhookEvent.EventCreatedAt);
+        subscription.SyncFromStripe(appliedPlan, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
 
         _activity.Add(new ActivityLog(
             subscription.OrganizationId,

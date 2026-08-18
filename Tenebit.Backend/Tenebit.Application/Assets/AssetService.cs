@@ -30,12 +30,13 @@ public sealed class AssetService
     private readonly ILogger<AssetService> _logger;
     private readonly IFieldEncryptor _fieldEncryptor;
     private readonly ManagerScopeService _managerScope;
+    private readonly LocationReferenceResolver _locationResolver;
 
     // Roles in TenebitRoles.AssetViewers that see the whole organization; Manager alone is scoped to
     // its own team's assigned assets by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician, TenebitRoles.Hr, TenebitRoles.LicenseManager, TenebitRoles.Finance, TenebitRoles.Auditor];
 
-    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope)
+    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver)
     {
         _assets = assets;
         _categories = categories;
@@ -54,6 +55,7 @@ public sealed class AssetService
         _logger = logger;
         _fieldEncryptor = fieldEncryptor;
         _managerScope = managerScope;
+        _locationResolver = locationResolver;
     }
 
     public async Task<Result<IReadOnlyList<AssetResponse>>> ListAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
@@ -62,11 +64,14 @@ public sealed class AssetService
         if (access.IsFailure) return Result<IReadOnlyList<AssetResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var assets = await _assets.ListAsync(organizationId, search, status, location, cancellationToken);
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null) assets = assets.Where(a => a.AssignedPersonId is null || visibleIds.Contains(a.AssignedPersonId.Value)).ToList();
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var assets = scope is null
+            ? await _assets.ListAsync(organizationId, search, status, location, cancellationToken)
+            : await _assets.ListScopedAsync(organizationId, search, status, location, scope.PersonIds, scope.TeamIds, cancellationToken);
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var people = scope is null
+            ? await _people.ListAsync(organizationId, null, cancellationToken)
+            : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         return Result<IReadOnlyList<AssetResponse>>.Success(assets.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList());
     }
@@ -87,21 +92,15 @@ public sealed class AssetService
         }
 
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
-
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is null)
-        {
-            var (items, total) = await _assets.ListPagedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, cancellationToken);
-            return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(items.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList(), total, page, pageSize));
-        }
-
-        var all = (await _assets.ListAsync(organizationId, search, status, location, cancellationToken))
-            .Where(a => a.AssignedPersonId is null || visibleIds.Contains(a.AssignedPersonId.Value))
-            .ToList();
-        var page1 = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-        return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(page1.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList(), all.Count, page, pageSize));
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var people = scope is null
+            ? await _people.ListAsync(organizationId, null, cancellationToken)
+            : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
+        var (items, total) = scope is null
+            ? await _assets.ListPagedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, cancellationToken)
+            : await _assets.ListPagedScopedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, scope.PersonIds, scope.TeamIds, cancellationToken);
+        return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(items.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<AssetGroupCountsResponse>> GetGroupCountsAsync(CancellationToken cancellationToken)
@@ -109,7 +108,10 @@ public sealed class AssetService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
         if (access.IsFailure) return Result<AssetGroupCountsResponse>.Failure(access.Error!);
 
-        var (byCategory, byStatus, byPerson) = await _assets.GetGroupCountsAsync(_currentUser.OrganizationId, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var (byCategory, byStatus, byPerson) = scope is null
+            ? await _assets.GetGroupCountsAsync(_currentUser.OrganizationId, cancellationToken)
+            : await _assets.GetGroupCountsScopedAsync(_currentUser.OrganizationId, scope.PersonIds, scope.TeamIds, cancellationToken);
         return Result<AssetGroupCountsResponse>.Success(new AssetGroupCountsResponse(byCategory, byStatus, byPerson));
     }
 
@@ -125,14 +127,16 @@ public sealed class AssetService
             return Result<AssetResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
         }
 
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null && asset.AssignedPersonId is { } assignedPersonId && !visibleIds.Contains(assignedPersonId))
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (scope is not null && !scope.ContainsAsset(asset.AssignedPersonId, asset.TeamId))
         {
             return Result<AssetResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
         }
 
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var people = scope is null
+            ? await _people.ListAsync(organizationId, null, cancellationToken)
+            : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         return Result<AssetResponse>.Success(Map(asset, categories, people, teams, _currentUser.Language));
     }
@@ -171,9 +175,12 @@ public sealed class AssetService
 
             var customFieldsResult = ValidateCustomFields(category, request.CustomFields);
             if (customFieldsResult.IsFailure) return Result<AssetResponse>.Failure(customFieldsResult.Error!);
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
+            if (locationResult.IsFailure) return Result<AssetResponse>.Failure(locationResult.Error!);
 
             var asset = new Asset(organizationId, request.CategoryId, request.Name, request.AssetTag);
-            asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, request.Location, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
+            asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, locationResult.Value!.FullPath, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
+            asset.SetLocation(locationResult.Value.Id, locationResult.Value.FullPath);
             asset.SetFieldValues(EncryptSensitiveFields(category, customFieldsResult.Value!));
 
             // Limit sprawdzany i egzekwowany atomowo pod blokadą per-organizacja (audyt P1.11) — samo
@@ -233,8 +240,11 @@ public sealed class AssetService
             var mergedFields = PreserveUnchangedSensitiveFields(asset, category, request.CustomFields);
             var customFieldsResult = ValidateCustomFields(category, mergedFields);
             if (customFieldsResult.IsFailure) return Result<AssetResponse>.Failure(customFieldsResult.Error!);
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
+            if (locationResult.IsFailure) return Result<AssetResponse>.Failure(locationResult.Error!);
 
-            asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, request.Location, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
+            asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, locationResult.Value!.FullPath, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
+            asset.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             asset.ChangeStatus(request.Status);
             asset.SetFieldValues(EncryptSensitiveFields(category, customFieldsResult.Value!));
             _activity.Add(new ActivityLog(organizationId, "asset.updated", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
@@ -318,7 +328,7 @@ public sealed class AssetService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Nie udało się wysłać powiadomienia o zgłoszeniu ze skanu QR do {Email}", email);
+                _logger.LogWarning(ex, "Nie udało się wysłać powiadomienia ze skanu QR dla aktywa {AssetId}", asset.Id);
             }
         }
 
@@ -429,9 +439,14 @@ public sealed class AssetService
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var assets = await _assets.ListAsync(organizationId, search, status, location, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var assets = scope is null
+            ? await _assets.ListAsync(organizationId, search, status, location, cancellationToken)
+            : await _assets.ListScopedAsync(organizationId, search, status, location, scope.PersonIds, scope.TeamIds, cancellationToken);
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var people = scope is null
+            ? await _people.ListAsync(organizationId, null, cancellationToken)
+            : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         var language = _currentUser.Language;
         var payload = assets.Select(asset => Map(asset, categories, people, teams, language)).ToList();
@@ -447,9 +462,14 @@ public sealed class AssetService
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var assets = await _assets.ListAsync(organizationId, search, status, location, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var assets = scope is null
+            ? await _assets.ListAsync(organizationId, search, status, location, cancellationToken)
+            : await _assets.ListScopedAsync(organizationId, search, status, location, scope.PersonIds, scope.TeamIds, cancellationToken);
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
+        var people = scope is null
+            ? await _people.ListAsync(organizationId, null, cancellationToken)
+            : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         var language = _currentUser.Language;
 

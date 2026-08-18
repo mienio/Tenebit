@@ -12,24 +12,41 @@ using Tenebit.Api.Endpoints;
 using Tenebit.Api.Http;
 using Tenebit.Application;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 using Tenebit.Infrastructure;
+using Tenebit.Infrastructure.Services;
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.ValidateProductionSecurityConfiguration(builder.Environment);
+
 const string LogOutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {CorrelationId}{NewLine}{Exception}";
 
-builder.Host.UseSerilog((context, loggerConfig) => loggerConfig
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(outputTemplate: LogOutputTemplate)
-    .WriteTo.File("logs/tenebit-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14, outputTemplate: LogOutputTemplate));
+builder.Host.UseSerilog((context, loggerConfig) =>
+{
+    loggerConfig
+        .MinimumLevel.Information()
+        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .WriteTo.Console(outputTemplate: LogOutputTemplate);
 
-// Mikrus/docker reverse proxy compatibility: old compose configs may point to 5000,
-// newer .NET container defaults use 8080. Bind both so the backend stays reachable.
-builder.WebHost.UseUrls("http://0.0.0.0:8080", "http://0.0.0.0:5000");
+    // Production logs only to stdout/stderr so the platform can enforce centralized retention and
+    // the source/runtime filesystem never accumulates PII-bearing diagnostic files.
+    if (!context.HostingEnvironment.IsProduction())
+    {
+        loggerConfig.WriteTo.File("logs/tenebit-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7, outputTemplate: LogOutputTemplate);
+    }
+});
+
+builder.WebHost.UseUrls(builder.Environment.IsDevelopment()
+    ? ["http://0.0.0.0:8080", "http://0.0.0.0:5000"]
+    : ["http://0.0.0.0:8080"]);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = RequestSizeLimits.MaxMultipartBodyBytes;
+});
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -40,7 +57,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration, enableSingleInstanceGuard: builder.Environment.IsProduction());
+builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:5173"];
@@ -54,11 +71,10 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddScoped<TokenIssuer>();
-builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 builder.Services.Configure<OAuthOptions>(builder.Configuration.GetSection(OAuthOptions.SectionName));
-builder.Services.AddSingleton<OAuthStateStore>();
-builder.Services.AddSingleton<TwoFactorChallengeStore>();
+builder.Services.AddScoped<OAuthStateStore>();
+builder.Services.AddScoped<TwoFactorChallengeStore>();
 builder.Services.AddScoped<ExternalAuthService>();
 
 // Defense-in-depth ceiling na wielkość multipart body (audyt P0.4) — Kestrel ma własny domyślny limit
@@ -66,20 +82,23 @@ builder.Services.AddScoped<ExternalAuthService>();
 // bez ograniczeń. Per-endpoint limity są ustawiane dodatkowo w handlerach uploadów.
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 30 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = RequestSizeLimits.MaxMultipartBodyBytes;
+    // ASP.NET Core spools file sections larger than this threshold to a temp file instead of retaining
+    // the entire multipart body in RAM. Application code then creates only the one byte[] it actually needs.
+    options.MemoryBufferThreshold = 64 * 1024;
+    options.ValueLengthLimit = RequestLimits.Json;
+    options.KeyLengthLimit = 256;
+    options.ValueCountLimit = 1024;
+    options.MultipartBoundaryLengthLimit = 128;
+    options.MultipartHeadersCountLimit = 16;
+    options.MultipartHeadersLengthLimit = 8 * 1024;
 });
 
 // Tylko jeden zaufany skok proxy (kontener nginx w tym samym compose) łączy się bezpośrednio z Kestrel —
 // backend nie jest publicznie eksponowany. KnownNetworks/KnownProxies celowo wyczyszczone (audyt P1.3):
 // bez tego ASP.NET domyślnie ufa wyłącznie loopbackowi i middleware po cichu ignorowałby X-Forwarded-For,
 // przez co RemoteIpAddress dalej pokazywałby adres kontenera nginx zamiast realnego klienta.
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 1;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+builder.Services.AddTrustedForwardedHeaders(builder.Configuration, builder.Environment);
 
 // Partycjonowanie per-IP (audyt P1.8) — poprzednio "auth"/"public" był jednym globalnym licznikiem
 // współdzielonym przez wszystkich klientów, więc jeden agresywny użytkownik/atakujący wyczerpywał limit
@@ -122,39 +141,38 @@ builder.Services
             NameClaimType = "name",
             RoleClaimType = "roles"
         };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var subjectClaim = context.Principal?.FindFirst("sub")?.Value;
+                var organizationClaim = context.Principal?.FindFirst("organization_id")?.Value;
+                var stampClaim = context.Principal?.FindFirst("security_stamp")?.Value;
+                if (!Guid.TryParse(subjectClaim, out var userId) ||
+                    !Guid.TryParse(organizationClaim, out var organizationId) ||
+                    !Guid.TryParse(stampClaim, out var tokenStamp))
+                {
+                    context.Fail("Token nie zawiera aktualnego stanu sesji.");
+                    return;
+                }
+
+                // Refresh/device tokens are revoked on security-sensitive changes, but an already issued
+                // access JWT would otherwise keep its old roles until expiry. Comparing a per-user stamp
+                // makes role, activity, password and 2FA changes effective on the very next request.
+                var users = context.HttpContext.RequestServices.GetRequiredService<IOrganizationUserRepository>();
+                var user = await users.GetByIdAsync(userId, context.HttpContext.RequestAborted);
+                if (user is null || !user.IsActive || user.OrganizationId != organizationId || user.SecurityStamp != tokenStamp)
+                {
+                    context.Fail("Sesja została unieważniona.");
+                }
+            }
+        };
     });
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
 Tenebit.Api.Http.RequestLanguageAccessor.Configure(app.Services.GetRequiredService<IHttpContextAccessor>());
-
-if (app.Environment.IsProduction())
-{
-    var signingKey = builder.Configuration["Auth:SigningKey"];
-    if (string.IsNullOrWhiteSpace(signingKey) || signingKey == "tenebit-development-signing-key-change-me-32chars" || signingKey.Length < 32)
-    {
-        app.Logger.LogCritical("BEZPIECZEŃSTWO: Auth:SigningKey jest puste, ma domyślną wartość z repozytorium albo jest za krótkie. Ustaw unikalny sekret (min. 32 znaki) przez zmienną środowiskową Auth__SigningKey.");
-        throw new InvalidOperationException("Auth:SigningKey nie jest bezpiecznie skonfigurowany. Aplikacja nie może wystartować w Production.");
-    }
-
-    // Musi być odrębny od Auth:SigningKey — inaczej rotacja sekretu JWT (rutynowa po incydencie) po cichu
-    // unieważnia klucz szyfrowania pól (TOTP, licencje, custom fields) i dane stają się nieczytelne
-    // (audyt AUD3-011).
-    var fieldEncryptionKey = builder.Configuration["Auth:FieldEncryptionKey"];
-    if (string.IsNullOrWhiteSpace(fieldEncryptionKey) || fieldEncryptionKey == "tenebit-development-field-encryption-key-change-me" || fieldEncryptionKey.Length < 32 || fieldEncryptionKey == signingKey)
-    {
-        app.Logger.LogCritical("BEZPIECZEŃSTWO: Auth:FieldEncryptionKey jest puste, ma domyślną wartość, jest za krótkie albo jest identyczne z Auth:SigningKey. Ustaw odrębny unikalny sekret (min. 32 znaki) przez zmienną środowiskową Auth__FieldEncryptionKey.");
-        throw new InvalidOperationException("Auth:FieldEncryptionKey nie jest bezpiecznie skonfigurowany. Aplikacja nie może wystartować w Production.");
-    }
-
-    var connectionString = builder.Configuration.GetConnectionString("TenebitDb") ?? string.Empty;
-    if (connectionString.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase))
-    {
-        app.Logger.LogCritical("BEZPIECZEŃSTWO: ConnectionStrings:TenebitDb nadal używa domyślnego hasła z repozytorium. Ustaw silne hasło przez zmienną środowiskową ConnectionStrings__TenebitDb.");
-        throw new InvalidOperationException("ConnectionStrings:TenebitDb używa domyślnego hasła. Aplikacja nie może wystartować w Production.");
-    }
-}
 
 app.UseForwardedHeaders();
 app.UseCorrelationId();
@@ -204,6 +222,8 @@ app.UseExceptionHandler(errorApp =>
     });
 });
 
+app.UseMiddleware<RequestBodyLimitMiddleware>();
+
 // OpenAPI schema ujawnia pełną mapę endpointów i kontraktów DTO — w Production to rekonesans za darmo
 // dla atakującego (audyt P1.12), więc trasa zostaje wyłącznie w środowiskach nie-produkcyjnych.
 if (!app.Environment.IsProduction())
@@ -224,16 +244,35 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapTenebitApi();
 
-// Migracja musi się zakończyć zanim aplikacja zacznie przyjmować ruch/uruchamiać background jobs —
-// inaczej requesty i joby trafiają na schemat, którego jeszcze nie ma (patrz audyt AUD-014).
-try
+var verifyEncryptedDataOnly = args.Any(arg => string.Equals(arg, "--verify-encrypted-data", StringComparison.OrdinalIgnoreCase));
+if (verifyEncryptedDataOnly)
+{
+    await app.Services.VerifyEncryptedDataAsync();
+    app.Logger.LogInformation("Encrypted-data verification completed successfully without exposing plaintext.");
+    return;
+}
+
+var migrateOnly = args.Any(arg => string.Equals(arg, "--migrate-only", StringComparison.OrdinalIgnoreCase));
+if (migrateOnly)
+{
+    try
+    {
+        await app.Services.InitializeDatabaseAsync(forceMigrate: true);
+        app.Logger.LogInformation("Migracje bazy Tenebit zakończone poprawnie.");
+        return;
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogCritical(ex, "Migrator Tenebit zakończył się błędem.");
+        throw;
+    }
+}
+
+// Development/test can auto-migrate for ergonomics. Production API is deliberately schema-read-only:
+// the deployment pipeline runs the same image once with --migrate-only before starting replicas.
+if (!app.Environment.IsProduction())
 {
     await app.Services.InitializeDatabaseAsync();
-}
-catch (Exception ex)
-{
-    app.Logger.LogCritical(ex, "Nie udało się zainicjalizować bazy danych Tenebit. Aplikacja nie zostanie uruchomiona.");
-    throw;
 }
 
 await app.RunAsync();

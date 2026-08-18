@@ -4,6 +4,7 @@ public interface ICurrentUser
 {
     bool IsAuthenticated { get; }
     Guid OrganizationId { get; }
+    Guid? PersonId { get; }
     string Subject { get; }
     string Email { get; }
     string Language { get; }

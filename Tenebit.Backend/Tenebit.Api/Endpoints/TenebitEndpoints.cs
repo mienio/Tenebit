@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
+using Tenebit.Application.Common;
 using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Api.Endpoints;
@@ -37,6 +38,9 @@ public static class TenebitEndpoints
             .AllowAnonymous()
             .WithName("HealthReady");
 
+        api.MapGet("/health/security-metrics", GetSecurityMetrics)
+            .WithName("SecurityMetrics");
+
         api.MapAuthEndpoints();
         api.MapExternalAuthEndpoints();
         api.MapWorkspaceEndpoints();
@@ -62,5 +66,11 @@ public static class TenebitEndpoints
         api.MapServiceTicketsEndpoints();
 
         return api;
+    }
+
+    private static IResult GetSecurityMetrics(ICurrentUser currentUser)
+    {
+        var access = AccessPolicy.EnsureAnyRole(currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Auditor);
+        return access.IsFailure ? Results.Forbid() : Results.Ok(SecurityTelemetry.Snapshot());
     }
 }

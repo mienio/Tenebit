@@ -23,6 +23,15 @@ public sealed class CurrentUser : ICurrentUser
         }
     }
 
+    public Guid? PersonId
+    {
+        get
+        {
+            var fromClaim = _httpContextAccessor.HttpContext?.User.FindFirstValue("person_id");
+            return Guid.TryParse(fromClaim, out var personId) ? personId : null;
+        }
+    }
+
     public string Subject => _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? _httpContextAccessor.HttpContext?.User.FindFirstValue("sub")
         ?? string.Empty;

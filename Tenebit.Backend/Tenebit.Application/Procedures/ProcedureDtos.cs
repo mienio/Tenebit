@@ -18,6 +18,8 @@ public sealed record ProcedureResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset? PublishedAt);
 
+[ValidatedRequest]
 public sealed record CreateProcedureRequest(string Title, string Version, string Owner, string? AppliesTo, DateOnly? ReviewDate, bool RequiresAcceptance);
+[ValidatedRequest]
 public sealed record UpdateProcedureRequest(string Title, string Version, string Owner, string? AppliesTo, DateOnly? ReviewDate, bool RequiresAcceptance);
 public sealed record ProcedureDocumentResponse(Guid Id, string FileName, string ContentType, long SizeBytes, DateTimeOffset UploadedAt, string UploadedBy);

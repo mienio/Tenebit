@@ -4,13 +4,15 @@ public sealed class AssignmentAsset
 {
     private AssignmentAsset() { }
 
-    public AssignmentAsset(Guid assignmentId, Guid assetId, string? issueCondition)
+    public AssignmentAsset(Guid organizationId, Guid assignmentId, Guid assetId, string? issueCondition)
     {
+        OrganizationId = organizationId;
         AssignmentId = assignmentId;
         AssetId = assetId;
         IssueCondition = string.IsNullOrWhiteSpace(issueCondition) ? "Sprawny" : issueCondition.Trim();
     }
 
+    public Guid OrganizationId { get; private set; }
     public Guid AssignmentId { get; private set; }
     public Guid AssetId { get; private set; }
     public string IssueCondition { get; private set; } = "Sprawny";

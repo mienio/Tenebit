@@ -123,8 +123,8 @@ export const api = {
   deleteJobProfile: (id: string) => apiRequest<void>(`/api/job-profiles/${id}`, { method: 'DELETE' }),
 
   users: () => apiRequest<OrganizationUser[]>('/api/organization-users'),
-  createUser: (body: { email: string; displayName: string; isActive: boolean; roles: string[] }) => apiRequest<OrganizationUser>('/api/organization-users', { method: 'POST', body: JSON.stringify(body) }),
-  updateUser: (id: string, body: { email: string; displayName: string; isActive: boolean; roles: string[] }) => apiRequest<OrganizationUser>(`/api/organization-users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  createUser: (body: { email: string; displayName: string; isActive: boolean; roles: string[]; personId?: string | null }) => apiRequest<OrganizationUser>('/api/organization-users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id: string, body: { email: string; displayName: string; isActive: boolean; roles: string[]; personId?: string | null }) => apiRequest<OrganizationUser>(`/api/organization-users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   roles: () => apiRequest<RoleInfo[]>('/api/roles'),
   rolePermissions: () => apiRequest<RolePermission[]>('/api/role-permissions'),
   setRolePermission: (body: { roleKey: string; permissionKey: string; allowed: boolean }) => apiRequest<void>('/api/role-permissions', { method: 'PUT', body: JSON.stringify(body) }),

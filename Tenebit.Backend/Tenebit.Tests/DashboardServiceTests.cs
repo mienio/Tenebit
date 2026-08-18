@@ -41,14 +41,14 @@ public class DashboardServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_AllowsManagerRole()
+    public async Task GetSummaryAsync_RejectsManagerRole()
     {
         var (service, _, _, _, currentUser) = CreateService();
         currentUser.Roles = ["manager"];
 
         var result = await service.GetSummaryAsync(CancellationToken.None);
 
-        Assert.True(result.IsSuccess);
+        Assert.True(result.IsFailure);
     }
 
     [Fact]

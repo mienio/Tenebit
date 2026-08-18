@@ -34,12 +34,12 @@ public sealed class JobProfile
     public void SetAssetCategories(IEnumerable<Guid> categoryIds)
     {
         AssetCategories.Clear();
-        foreach (var categoryId in categoryIds.Distinct()) AssetCategories.Add(new JobProfileAssetCategory(Id, categoryId));
+        foreach (var categoryId in categoryIds.Distinct()) AssetCategories.Add(new JobProfileAssetCategory(OrganizationId, Id, categoryId));
     }
 
     public void SetProcedures(IEnumerable<Guid> procedureIds)
     {
         Procedures.Clear();
-        foreach (var procedureId in procedureIds.Distinct()) Procedures.Add(new JobProfileProcedure(Id, procedureId));
+        foreach (var procedureId in procedureIds.Distinct()) Procedures.Add(new JobProfileProcedure(OrganizationId, Id, procedureId));
     }
 }

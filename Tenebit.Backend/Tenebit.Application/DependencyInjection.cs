@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<Common.ManagerScopeService>();
         services.AddScoped<AssetService>();
         services.AddScoped<LocationService>();
+        services.AddScoped<LocationReferenceResolver>();
         services.AddScoped<AssetCategoryService>();
         services.AddScoped<AssetInspectionService>();
         services.AddScoped<AssetReturnDispositionService>();
@@ -50,9 +51,10 @@ public static class DependencyInjection
         services.AddScoped<AuthService>();
         services.AddScoped<SettingsService>();
         services.AddScoped<SubscriptionService>();
+        services.AddScoped<SubscriptionReconciliationService>();
         services.AddScoped<MyWorkspaceService>();
         services.AddScoped<AlertCheckService>();
-services.AddScoped<AlertSettingsService>();
+        services.AddScoped<AlertSettingsService>();
         services.AddScoped<ActivityLogService>();
         services.AddScoped<AssetEvidenceService>();
         services.AddScoped<EvidenceRetentionService>();

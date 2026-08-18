@@ -7,6 +7,7 @@ public sealed record AssetFieldDefinitionResponse(Guid Id, string Key, string La
 
 // AUD-007: klucze pól własnych trafiały .Trim()-owane bez walidacji długości/pustki wprost do warstwy
 // Application (AssetCategoryService.ReplaceFieldDefinitions) — max length dopasowane do kolumn DB.
+[ValidatedRequest]
 public sealed record SaveAssetFieldDefinitionRequest(
     [property: Required, StringLength(80, MinimumLength = 1)] string Key,
     [property: Required, StringLength(120, MinimumLength = 1)] string Label,
@@ -15,8 +16,11 @@ public sealed record SaveAssetFieldDefinitionRequest(
     bool Required);
 
 public sealed record AssetCategoryResponse(Guid Id, string Name, AssetCategoryType Type, string? Description, string? Icon, bool IsSystem, IReadOnlyList<AssetFieldDefinitionResponse> FieldDefinitions, ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
+[ValidatedRequest]
 public sealed record CreateAssetCategoryRequest([property: Required, StringLength(120, MinimumLength = 1)] string Name, AssetCategoryType Type, [property: StringLength(600)] string? Description, [property: StringLength(40)] string? Icon);
+[ValidatedRequest]
 public sealed record UpdateAssetCategoryRequest([property: Required, StringLength(120, MinimumLength = 1)] string Name, AssetCategoryType Type, [property: StringLength(600)] string? Description, [property: StringLength(40)] string? Icon);
+[ValidatedRequest]
 public sealed record UpdateAssetCategoryReturnPolicyRequest(ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
 
 public sealed record AssetResponse(
@@ -43,6 +47,7 @@ public sealed record AssetResponse(
     Guid? TeamId,
     string? TeamName);
 
+[ValidatedRequest]
 public sealed record CreateAssetRequest(
     string Name,
     string AssetTag,
@@ -64,8 +69,10 @@ public sealed record AssetGroupCountsResponse(
     IReadOnlyDictionary<Guid, int> ByPerson);
 
 public sealed record PublicAssetScanResponse(string OrganizationName);
+[ValidatedRequest]
 public sealed record ReportAssetIssueRequest(string Message);
 
+[ValidatedRequest]
 public sealed record UpdateAssetRequest(
     string Name,
     string AssetTag,

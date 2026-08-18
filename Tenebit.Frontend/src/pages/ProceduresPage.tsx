@@ -60,7 +60,7 @@ export function ProceduresPage() {
   const showAcceptances = Boolean(editedProcedure && editedProcedure.status === 'Published' && editedProcedure.requiresAcceptance);
   const acceptanceLoader = useMemo(
     () => () => (editedProcedure && showAcceptances ? api.procedureAcceptances(editedProcedure.id) : Promise.resolve([])),
-    [editedProcedure?.id, showAcceptances]
+    [editedProcedure, showAcceptances]
   );
   const acceptances = useAsyncData(acceptanceLoader, [acceptanceLoader]);
 

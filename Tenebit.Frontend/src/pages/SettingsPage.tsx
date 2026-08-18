@@ -57,7 +57,7 @@ export function SettingsPage() {
   const relationTypeSettings = useAsyncData(() => (statusesNeeded ? api.personRelationTypes() : Promise.resolve(null)), [statusesNeeded]);
   const teamSettings = useAsyncData(() => (statusesNeeded ? api.teams() : Promise.resolve(null)), [statusesNeeded]);
   const procedures = useAsyncData(() => (profilesNeeded ? api.procedures() : Promise.resolve(null)), [profilesNeeded]);
-  const people = useAsyncData(() => (profilesNeeded ? api.people() : Promise.resolve(null)), [profilesNeeded]);
+  const people = useAsyncData(() => (profilesNeeded || usersNeeded ? api.people() : Promise.resolve(null)), [profilesNeeded, usersNeeded]);
   const profiles = useAsyncData(() => (profilesNeeded ? api.jobProfiles() : Promise.resolve(null)), [profilesNeeded]);
   const users = useAsyncData(() => (usersNeeded ? api.users() : Promise.resolve(null)), [usersNeeded]);
   const roles = useAsyncData(() => (usersNeeded || permissionsNeeded ? api.roles() : Promise.resolve(null)), [usersNeeded, permissionsNeeded]);
@@ -371,7 +371,7 @@ export function SettingsPage() {
   async function saveUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const body = { email: String(form.get('email') ?? '').trim(), displayName: String(form.get('displayName') ?? '').trim(), isActive: form.get('isActive') === 'on', roles: form.getAll('roles').map(String) };
+    const body = { email: String(form.get('email') ?? '').trim(), displayName: String(form.get('displayName') ?? '').trim(), isActive: form.get('isActive') === 'on', roles: form.getAll('roles').map(String), personId: toNullable(String(form.get('personId') ?? '')) };
     if (!body.email) return setMessage({ type: 'error', text: t('settings.emailRequired') });
     if (!body.roles.length) return setMessage({ type: 'error', text: t('settings.roleRequired') });
     if (editingUser && editingUser.email.toLowerCase() === auth.userEmail.toLowerCase() && !body.isActive) {
@@ -711,6 +711,12 @@ export function SettingsPage() {
         <form className="formGrid" onSubmit={saveUser}>
           <Field label={t('settings.emailLabel')}><TextInput name="email" type="email" defaultValue={editingUser?.email ?? userCreateDefaults.email} required /></Field>
           <Field label={t('settings.displayNameLabel')}><TextInput name="displayName" defaultValue={editingUser?.displayName ?? userCreateDefaults.displayName} /></Field>
+          <Field label={t('settings.linkedPersonLabel')}>
+            <SelectInput name="personId" defaultValue={editingUser?.personId ?? ''}>
+              <option value="">{t('settings.linkedPersonAutoOption')}</option>
+              {people.data?.map(person => <option key={person.id} value={person.id}>{person.fullName} · {person.email}</option>)}
+            </SelectInput>
+          </Field>
           <label className="checkField"><input name="isActive" type="checkbox" defaultChecked={editingUser?.isActive ?? true} /> {t('settings.accountActive')}</label>
           <fieldset className="checkboxGroup"><legend>{t('settings.rolesLegend')}</legend>{roles.data?.map(role => <label key={role.key} title={role.description}><input name="roles" value={role.key} type="checkbox" defaultChecked={editingUser?.roles.includes(role.key)} /> {role.label}</label>)}</fieldset>
           <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setModal(null)}>{t('common.cancel')}</Button><Button disabled={userSaving}>{userSaving ? t('common.saving') : t('settings.saveLogin')}</Button></div>

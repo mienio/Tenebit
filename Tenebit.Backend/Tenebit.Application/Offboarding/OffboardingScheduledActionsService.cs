@@ -79,7 +79,7 @@ public sealed class OffboardingScheduledActionsService
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     item.RecordAutomationFailure(now, ex.Message);
-                    _activity.Add(new ActivityLog(organizationId, "offboarding.license_release_failed", "offboarding_item", item.Id, actorSubject, ex.Message, now));
+                    _activity.Add(new ActivityLog(organizationId, "offboarding.license_release_failed", "offboarding_item", item.Id, actorSubject, "scheduled_action_failed", now));
                 }
             }
         }
@@ -109,7 +109,7 @@ public sealed class OffboardingScheduledActionsService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _activity.Add(new ActivityLog(organizationId, "license.seat_unassign_failed", "license", license.Id, actorSubject, ex.Message, now));
+                _activity.Add(new ActivityLog(organizationId, "license.seat_unassign_failed", "license", license.Id, actorSubject, "scheduled_action_failed", now));
                 hasChanges = true;
             }
         }

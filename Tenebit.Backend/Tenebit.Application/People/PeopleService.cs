@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Assets;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
@@ -17,12 +18,13 @@ public sealed class PeopleService
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
+    private readonly LocationReferenceResolver _locationResolver;
 
     // Roles in TenebitRoles.PeopleViewers that see the whole organization; Manager alone is scoped
     // to its own team by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor];
 
-    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope)
+    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver)
     {
         _people = people;
         _teams = teams;
@@ -32,6 +34,7 @@ public sealed class PeopleService
         _clock = clock;
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
+        _locationResolver = locationResolver;
     }
 
     public async Task<Result<IReadOnlyList<PersonResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
@@ -39,10 +42,12 @@ public sealed class PeopleService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
         if (access.IsFailure) return Result<IReadOnlyList<PersonResponse>>.Failure(access.Error!);
 
-        var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
-        var people = await _people.ListAsync(_currentUser.OrganizationId, search, cancellationToken);
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null) people = people.Where(p => visibleIds.Contains(p.Id)).ToList();
+        var organizationId = _currentUser.OrganizationId;
+        var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var people = scope is null
+            ? await _people.ListAsync(organizationId, search, cancellationToken)
+            : await _people.ListScopedAsync(organizationId, search, scope.PersonIds, cancellationToken);
         return Result<IReadOnlyList<PersonResponse>>.Success(people.Select(person => Map(person, teams)).ToList());
     }
 
@@ -51,19 +56,13 @@ public sealed class PeopleService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
         if (access.IsFailure) return Result<PagedResult<PersonResponse>>.Failure(access.Error!);
 
-        var teams = await _teams.ListAsync(_currentUser.OrganizationId, cancellationToken);
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is null)
-        {
-            var (items, total) = await _people.ListPagedAsync(_currentUser.OrganizationId, search, page, pageSize, cancellationToken);
-            return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(items.Select(person => Map(person, teams)).ToList(), total, page, pageSize));
-        }
-
-        // Manager's team is small by construction — scoping after a full (unpaged) read is an
-        // acceptable trade-off versus adding a person-id filter to every repository implementation.
-        var scoped = (await _people.ListAsync(_currentUser.OrganizationId, search, cancellationToken)).Where(p => visibleIds.Contains(p.Id)).ToList();
-        var page1 = scoped.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-        return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(page1.Select(person => Map(person, teams)).ToList(), scoped.Count, page, pageSize));
+        var organizationId = _currentUser.OrganizationId;
+        var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var (items, total) = scope is null
+            ? await _people.ListPagedAsync(organizationId, search, page, pageSize, cancellationToken)
+            : await _people.ListPagedScopedAsync(organizationId, search, page, pageSize, scope.PersonIds, cancellationToken);
+        return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(items.Select(person => Map(person, teams)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<PersonResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -74,8 +73,8 @@ public sealed class PeopleService
         var person = await _people.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
         if (person is null) return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
 
-        var visibleIds = await _managerScope.ResolveVisiblePersonIdsAsync(_currentUser, OrgWideRoles, cancellationToken);
-        if (visibleIds is not null && !visibleIds.Contains(person.Id))
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        if (scope is not null && !scope.ContainsPerson(person.Id))
         {
             return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
         }
@@ -100,8 +99,11 @@ public sealed class PeopleService
             var referenceError = await ValidateReferencesAsync(organizationId, request.TeamId, request.ManagerId, null, cancellationToken);
             if (referenceError is not null) return Result<PersonResponse>.Failure(referenceError);
 
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
+            if (locationResult.IsFailure) return Result<PersonResponse>.Failure(locationResult.Error!);
             var person = new Person(organizationId, request.FirstName, request.LastName, request.Email);
-            person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, request.Location, request.CostCenter);
+            person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, locationResult.Value!.FullPath, request.CostCenter);
+            person.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             person.SetPreferredLanguage(request.PreferredLanguage);
             _people.Add(person);
             _activity.Add(new ActivityLog(organizationId, "person.created", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
@@ -132,8 +134,11 @@ public sealed class PeopleService
 
             var referenceError = await ValidateReferencesAsync(organizationId, request.TeamId, request.ManagerId, id, cancellationToken);
             if (referenceError is not null) return Result<PersonResponse>.Failure(referenceError);
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
+            if (locationResult.IsFailure) return Result<PersonResponse>.Failure(locationResult.Error!);
 
-            person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, request.Location, request.CostCenter);
+            person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, locationResult.Value!.FullPath, request.CostCenter);
+            person.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             person.SetPreferredLanguage(request.PreferredLanguage);
             if (!request.IsActive)
             {

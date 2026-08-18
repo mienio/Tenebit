@@ -1,56 +1,142 @@
-name: CI
-
+name: ci
 on:
   push:
-    branches: [main, master]
   pull_request:
-    branches: [main, master]
-
+permissions:
+  contents: read
 jobs:
   backend:
     runs-on: ubuntu-latest
-    # Tenant-isolation and other security regression tests (Tenebit.Tests/Integration) run against a
-    # real PostgreSQL, not the in-memory fakes — a fake repository can't catch a missing query filter,
-    # bad FK, or broken auth middleware wiring (audyt AUD3-023: brak security regression suite na
-    # realnym PostgreSQL blokującej release).
     services:
       postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: tenebit_test
-        ports:
-          - 5432:5432
+        image: postgres:17-alpine
+        env: { POSTGRES_DB: tenebit_test, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    defaults:
-      run:
-        working-directory: Tenebit.Backend
+          --health-cmd "pg_isready -U postgres -d tenebit_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TENEBIT_TEST_DB_CONNECTION: Host=localhost;Port=5432;Database=tenebit_test;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - run: dotnet restore Tenebit.sln
-      - run: dotnet build Tenebit.sln --no-restore -c Release
-      - run: dotnet test Tenebit.Tests/Tenebit.Tests.csproj --no-build -c Release
+        with: { dotnet-version: '10.0.x', cache: true, cache-dependency-path: 'Tenebit.Backend/**/*.csproj' }
+      - run: dotnet restore Tenebit.Backend/Tenebit.sln
+      - name: Install EF CLI
+        run: dotnet tool install --global dotnet-ef --version 10.0.2
+      - run: dotnet build Tenebit.Backend/Tenebit.sln -c Release --no-restore /warnaserror
+      - name: Unit tests
+        run: dotnet test Tenebit.Backend/Tenebit.Tests/Tenebit.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName!~Tenebit.Tests.Integration' --logger trx
+      - name: PostgreSQL security/integration suite
+        run: dotnet test Tenebit.Backend/Tenebit.Tests/Tenebit.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName~Tenebit.Tests.Integration' --logger trx
+      - name: Verify model has no pending migration
+        run: dotnet ef migrations has-pending-model-changes --project Tenebit.Backend/Tenebit.Infrastructure --startup-project Tenebit.Backend/Tenebit.Api --no-build
+      - name: Create migration verification database
         env:
-          TENEBIT_TEST_DB_CONNECTION: Host=localhost;Port=5432;Database=tenebit_test;Username=postgres;Password=postgres
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE tenebit_migration;'
+      - name: Migration from empty database
+        run: dotnet ef database update --project Tenebit.Backend/Tenebit.Infrastructure --startup-project Tenebit.Backend/Tenebit.Api --no-build
+        env:
+          ConnectionStrings__TenebitDb: Host=localhost;Port=5432;Database=tenebit_migration;Username=postgres;Password=postgres
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: backend-test-results, path: '**/TestResults/*.trx', if-no-files-found: ignore }
 
   frontend:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Tenebit.Frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - run: npx tsc -b
-      - run: npx vite build
+        with: { node-version: 22, cache: npm, cache-dependency-path: Tenebit.Frontend/package-lock.json }
+      - working-directory: Tenebit.Frontend
+        run: npm ci
+      - working-directory: Tenebit.Frontend
+        run: npx tsc -b
+      - working-directory: Tenebit.Frontend
+        run: npx eslint . --max-warnings 0
+      - working-directory: Tenebit.Frontend
+        run: npm test
+      - working-directory: Tenebit.Frontend
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_DB: tenebit_e2e, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tenebit_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TENEBIT_E2E_DB_CONNECTION: Host=localhost;Port=5432;Database=tenebit_e2e;Username=postgres;Password=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: Tenebit.Frontend/package-lock.json }
+      - run: dotnet restore Tenebit.Backend/Tenebit.sln
+      - working-directory: Tenebit.Frontend
+        run: npm ci
+      - working-directory: Tenebit.Frontend
+        run: npx playwright install --with-deps chromium
+      - working-directory: Tenebit.Frontend
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-report, path: Tenebit.Frontend/playwright-report, if-no-files-found: ignore }
+
+  container-hardening:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t tenebit-backend-ci Tenebit.Backend
+      - run: docker build -t tenebit-frontend-ci Tenebit.Frontend
+      - name: Images declare non-root users
+        run: |
+          test "$(docker image inspect tenebit-backend-ci --format '{{.Config.User}}')" != ""
+          test "$(docker image inspect tenebit-backend-ci --format '{{.Config.User}}')" != "root"
+          test "$(docker image inspect tenebit-frontend-ci --format '{{.Config.User}}')" != ""
+          test "$(docker image inspect tenebit-frontend-ci --format '{{.Config.User}}')" != "root"
+      - name: Frontend works read-only and emits security headers
+        run: |
+          id=$(docker run -d --read-only --tmpfs /tmp:size=32m --tmpfs /var/cache/nginx:size=32m -p 18080:8080 tenebit-frontend-ci)
+          trap 'docker rm -f "$id"' EXIT
+          for i in {1..30}; do curl -fsS http://127.0.0.1:18080/healthz && break || sleep 1; done
+          headers=$(curl -fsSI http://127.0.0.1:18080/)
+          grep -qi '^Content-Security-Policy:' <<<"$headers"
+          grep -qi '^Strict-Transport-Security:' <<<"$headers"
+          grep -qi '^X-Content-Type-Options: nosniff' <<<"$headers"
+      - run: docker compose -f docker-compose.production.yml config >/dev/null
+
+  release-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source tree hygiene
+        run: ./scripts/verify-release-artifact.sh .
+      - name: Build clean source archive
+        run: ./scripts/pack-source.sh "$RUNNER_TEMP/tenebit-source.zip"
+      - run: unzip -t "$RUNNER_TEMP/tenebit-source.zip"
+      - name: Verify packed artifact
+        run: |
+          mkdir "$RUNNER_TEMP/source"
+          unzip -q "$RUNNER_TEMP/tenebit-source.zip" -d "$RUNNER_TEMP/source"
+          ./scripts/verify-release-artifact.sh "$RUNNER_TEMP/source"
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Generate CycloneDX SBOMs
+        run: |
+          mkdir -p "$RUNNER_TEMP/sbom"
+          dotnet tool install --global CycloneDX --version 6.2.0
+          dotnet-CycloneDX Tenebit.Backend/Tenebit.sln -o "$RUNNER_TEMP/sbom/backend"
+          cd Tenebit.Frontend
+          npm ci --ignore-scripts
+          npm sbom --sbom-format cyclonedx > "$RUNNER_TEMP/sbom/frontend.cdx.json"
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom, path: '${{ runner.temp }}/sbom' }

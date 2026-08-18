@@ -66,7 +66,7 @@ export function PeoplePage() {
   const managerCandidates = useMemo(() => (allPeople.data ?? []).filter(p => p.id !== editing?.id), [allPeople.data, editing]);
   const selectedPeople = useMemo(() => rows.filter(person => selectedIds.has(person.id)), [rows, selectedIds]);
   const allOnPageSelected = rows.length > 0 && rows.every(person => selectedIds.has(person.id));
-  const personWorkspaceLoader = useMemo(() => () => (selected ? api.personWorkspace(selected.id) : Promise.resolve(null)), [selected?.id]);
+  const personWorkspaceLoader = useMemo(() => () => (selected ? api.personWorkspace(selected.id) : Promise.resolve(null)), [selected]);
   const personWorkspace = useAsyncData(personWorkspaceLoader, [personWorkspaceLoader]);
 
   useEffect(() => {

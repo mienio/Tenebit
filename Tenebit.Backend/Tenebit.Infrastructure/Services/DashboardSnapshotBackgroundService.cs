@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tenebit.Application.Common;
 using Tenebit.Application.Dashboard;
 
 namespace Tenebit.Infrastructure.Services;
@@ -36,11 +37,13 @@ public sealed class DashboardSnapshotBackgroundService : BackgroundService
             try
             {
                 using var scope = _scopeFactory.CreateScope();
+                var gate = scope.ServiceProvider.GetRequiredService<PostgresJobLock>();
                 var snapshotService = scope.ServiceProvider.GetRequiredService<DashboardSnapshotService>();
-                await snapshotService.CaptureAllOrganizationsAsync(stoppingToken);
+                await gate.TryRunAsync("dashboard-snapshots", interval, snapshotService.CaptureAllOrganizationsAsync, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                SecurityTelemetry.BackgroundJobFailure();
                 _logger.LogError(ex, "Zapis migawki dashboardu zakończył się błędem — spróbuję ponownie przy kolejnym cyklu.");
             }
         }

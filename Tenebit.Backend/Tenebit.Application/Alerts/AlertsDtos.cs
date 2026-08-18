@@ -11,6 +11,7 @@ public sealed record AlertRuleResponse(
     string? CustomEmails,
     int CooldownDays);
 
+[ValidatedRequest]
 public sealed record SaveAlertRuleRequest(
     bool IsEnabled,
     List<int> ThresholdDays,
@@ -29,6 +30,7 @@ public sealed record AlertDigestSettingsResponse(
     string? HolidayCalendarCountryCode,
     bool IncludeEmptyDigest);
 
+[ValidatedRequest]
 public sealed record SaveAlertDigestSettingsRequest(
     AlertDigestFrequency Frequency,
     DayOfWeek? DayOfWeek,
@@ -39,6 +41,7 @@ public sealed record SaveAlertDigestSettingsRequest(
     string? HolidayCalendarCountryCode,
     bool IncludeEmptyDigest);
 
+[ValidatedRequest]
 public sealed record AlertTestRequest(AlertType? AlertType);
 
 public sealed record SentAlertHistoryItemResponse(

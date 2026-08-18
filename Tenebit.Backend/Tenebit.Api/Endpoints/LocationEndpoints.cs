@@ -8,7 +8,7 @@ public static class LocationEndpoints
     public static RouteGroupBuilder MapLocationEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/locations", async (LocationService service, CancellationToken cancellationToken) =>
-                Results.Ok(await service.ListAsync(cancellationToken)))
+                (await service.ListAsync(cancellationToken)).ToHttpResult())
             .WithTags("Locations");
 
         api.MapPost("/locations", async (CreateLocationRequest request, LocationService service, CancellationToken cancellationToken) =>

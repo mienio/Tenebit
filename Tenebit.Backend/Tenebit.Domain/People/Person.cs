@@ -27,6 +27,7 @@ public sealed class Person
     public string? JobTitle { get; private set; }
     public Guid? TeamId { get; private set; }
     public Guid? ManagerId { get; private set; }
+    public Guid? LocationId { get; private set; }
     public string? Location { get; private set; }
     public string? CostCenter { get; private set; }
     public EmploymentStatus EmploymentStatus { get; private set; } = EmploymentStatus.Active;
@@ -72,6 +73,13 @@ public sealed class Person
         ManagerId = managerId;
         Location = Normalize(location);
         CostCenter = Normalize(costCenter);
+    }
+
+
+    public void SetLocation(Guid? locationId, string? locationPath)
+    {
+        LocationId = locationId;
+        Location = Normalize(locationPath);
     }
 
     public bool CanReceiveNewObligations => EmploymentStatus == EmploymentStatus.Active;

@@ -1,0 +1,61 @@
+services:
+  backend:
+    build:
+      context: ./Tenebit.Backend
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      AllowedHosts: ${TENEBIT_ALLOWED_HOSTS:?Set TENEBIT_ALLOWED_HOSTS}
+      Cors__AllowedOrigins__0: ${TENEBIT_PUBLIC_URL:?Set TENEBIT_PUBLIC_URL}
+      ReverseProxy__KnownProxies__0: 172.31.77.10
+      ConnectionStrings__TenebitDb: ${TENEBIT_DB_CONNECTION:?Set TENEBIT_DB_CONNECTION}
+      Auth__SigningKey: ${TENEBIT_AUTH_SIGNING_KEY:?Set TENEBIT_AUTH_SIGNING_KEY}
+      Auth__FieldEncryption__ActiveKeyId: primary
+      Auth__FieldEncryption__Keys__primary: ${TENEBIT_FIELD_ENCRYPTION_KEY:?Set TENEBIT_FIELD_ENCRYPTION_KEY}
+      App__PublicUrl: ${TENEBIT_PUBLIC_URL:?Set TENEBIT_PUBLIC_URL}
+      Stripe__SecretKey: ${STRIPE_SECRET_KEY:-}
+      Stripe__ProPriceId: ${STRIPE_PRO_PRICE_ID:-}
+      Stripe__WebhookSecret: ${STRIPE_WEBHOOK_SECRET:-}
+      Database__AutoCreate: "false"
+      Seed__Enabled: "false"
+    networks:
+      tenebit_internal:
+        ipv4_address: 172.31.77.20
+
+  frontend:
+    build:
+      context: ./Tenebit.Frontend
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /var/cache/nginx:size=32m,mode=0755
+      - /var/run:size=4m,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${TENEBIT_HTTP_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      tenebit_internal:
+        ipv4_address: 172.31.77.10
+
+networks:
+  tenebit_internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.77.0/24

@@ -74,6 +74,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<OAuthTransaction> OAuthTransactions => Set<OAuthTransaction>();
+    public DbSet<TwoFactorChallenge> TwoFactorChallenges => Set<TwoFactorChallenge>();
     public DbSet<DeviceTrustToken> DeviceTrustTokens => Set<DeviceTrustToken>();
     public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes => Set<TwoFactorRecoveryCode>();
     public DbSet<AssetStatusSetting> AssetStatusSettings => Set<AssetStatusSetting>();
@@ -146,6 +148,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Email).HasMaxLength(320).IsRequired();
             entity.Property(x => x.TokenHash).HasMaxLength(128);
             entity.HasIndex(x => new { x.OrganizationId, x.CampaignId, x.PersonId }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.PersonId }).HasDatabaseName("IX_tenant_audit_participants_person");
+            entity.HasOne<Person>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
+                .HasPrincipalKey(p => new { p.OrganizationId, p.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             // Indexed lookup for the public audit link — without it ResolveByTokenAsync had to load every
             // participant with a live token and verify each one in turn (audyt AUD3-009: O(N) koszt
             // rosnący z liczbą uczestników, wykorzystywalny jako publiczny DoS).
@@ -163,6 +170,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("asset_audit_items");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Response).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.Resolution).HasConversion<string>().HasMaxLength(30).IsRequired();
             entity.Property(x => x.ExpectedLocation).HasMaxLength(240);
@@ -171,6 +179,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.ResolvedBy).HasMaxLength(240);
             entity.HasIndex(x => new { x.OrganizationId, x.CampaignId });
             entity.HasIndex(x => new { x.OrganizationId, x.ParticipantId });
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId }).HasDatabaseName("IX_tenant_audit_items_asset");
+            entity.HasIndex(x => new { x.OrganizationId, x.ExpectedPersonId }).HasDatabaseName("IX_tenant_audit_items_expected_person");
             entity.HasOne<AssetAuditCampaign>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.CampaignId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
@@ -179,6 +189,14 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasForeignKey(x => new { x.OrganizationId, x.ParticipantId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Person>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.ExpectedPersonId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -203,6 +221,15 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.RowVersion).IsRowVersion();
             entity.HasIndex(x => new { x.OrganizationId, x.RequesterPersonId });
             entity.HasIndex(x => new { x.OrganizationId, x.Status, x.StartAt, x.EndAt });
+            entity.HasIndex(x => new { x.OrganizationId, x.AssignmentId }).HasDatabaseName("IX_tenant_reservations_assignment");
+            entity.HasOne<Person>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.RequesterPersonId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Assignment>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssignmentId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(x => x.Items).WithOne()
                 .HasForeignKey(x => new { x.OrganizationId, x.ReservationId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
@@ -217,6 +244,21 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.SubstitutionReason).HasMaxLength(1000);
             entity.HasIndex(x => new { x.OrganizationId, x.ReservationId });
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId });
+            entity.HasIndex(x => new { x.OrganizationId, x.RequestedCategoryId }).HasDatabaseName("IX_tenant_reservation_items_category");
+            entity.HasIndex(x => new { x.OrganizationId, x.OriginalAssetId }).HasDatabaseName("IX_tenant_reservation_items_original_asset");
+            entity.HasIndex(x => new { x.OrganizationId, x.KitDefinitionId }).HasDatabaseName("IX_tenant_reservation_items_kit");
+            entity.HasOne<AssetCategory>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.RequestedCategoryId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.OriginalAssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -245,6 +287,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasFilter("\"PublicTokenHash\" IS NOT NULL")
                 .HasDatabaseName("IX_offboarding_cases_PublicTokenHash");
 
+            entity.HasOne<Person>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
+                .HasPrincipalKey(p => new { p.OrganizationId, p.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+
             // P0-TENANT-005 (audyt 2026-08-17): ProcessOwnerId musi wskazywać osobę tej samej organizacji.
             entity.HasOne<Person>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.ProcessOwnerId })
@@ -256,6 +303,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("offboarding_items");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(30).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
             entity.Property(x => x.AutomationMode).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -268,10 +316,25 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.ResolutionNotes).HasMaxLength(1000);
             entity.Property(x => x.CompletedBy).HasMaxLength(240);
             entity.HasIndex(x => new { x.OrganizationId, x.OffboardingCaseId });
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId }).HasDatabaseName("IX_tenant_offboarding_items_asset");
+            entity.HasIndex(x => new { x.OrganizationId, x.AssignmentId }).HasDatabaseName("IX_tenant_offboarding_items_assignment");
+            entity.HasIndex(x => new { x.OrganizationId, x.LicenseId }).HasDatabaseName("IX_tenant_offboarding_items_license");
             entity.HasOne<OffboardingCase>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.OffboardingCaseId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Assignment>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssignmentId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<License>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.LicenseId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -290,6 +353,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Phase).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.UploadedVia).HasConversion<string>().HasMaxLength(30).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Phase });
+            entity.HasIndex(x => new { x.OrganizationId, x.OffboardingItemId }).HasDatabaseName("IX_tenant_evidence_offboarding_item");
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetAuditItemId }).HasDatabaseName("IX_tenant_evidence_audit_item");
             entity.HasOne<Asset>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
@@ -298,6 +363,14 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasForeignKey(x => new { x.OrganizationId, x.AssignmentId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<OffboardingItem>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.OffboardingItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AssetAuditItem>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetAuditItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -308,6 +381,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.ToTable("dashboard_layouts");
             entity.HasKey(x => x.OrganizationUserId);
             entity.Property(x => x.LayoutJson).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.OrganizationUserId }).HasDatabaseName("IX_tenant_dashboard_layout_user");
+            entity.HasOne<OrganizationUser>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.OrganizationUserId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DashboardSnapshot>(entity =>
@@ -383,9 +461,18 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("organization_users");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Email).HasMaxLength(240).IsRequired();
             entity.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(400);
+            entity.Property(x => x.SecurityStamp).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.PersonId })
+                .IsUnique()
+                .HasFilter("\"PersonId\" IS NOT NULL");
+            entity.HasOne<Person>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
+                .HasPrincipalKey(p => new { p.OrganizationId, p.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             // Szyfrowane at-rest (audyt P1.4) — HasMaxLength podniesiony bo ciphertext (nonce+tag+base64) jest
             // dłuższy niż surowy base32 secret.
             entity.Property(x => x.TotpSecret)
@@ -436,8 +523,42 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.ToTable("refresh_tokens");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.TokenHash).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.FamilyId).IsRequired();
+            entity.Property(x => x.RevocationReason).HasMaxLength(80);
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasIndex(x => x.OrganizationUserId);
+            entity.HasIndex(x => x.FamilyId);
+            entity.HasIndex(x => x.ParentTokenId);
+            entity.HasIndex(x => x.ReplacedByTokenId);
+            entity.HasOne<RefreshToken>().WithMany().HasForeignKey(x => x.ParentTokenId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<RefreshToken>().WithMany().HasForeignKey(x => x.ReplacedByTokenId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OAuthTransaction>(entity =>
+        {
+            entity.ToTable("oauth_transactions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.StateHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Provider).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CodeVerifier).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.ReturnPath).HasMaxLength(1024).IsRequired();
+            entity.Property(x => x.CorrelationHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Nonce).HasMaxLength(160).IsRequired();
+            entity.HasIndex(x => x.StateHash).IsUnique();
+            entity.HasIndex(x => x.ExpiresAt);
+        });
+
+        modelBuilder.Entity<TwoFactorChallenge>(entity =>
+        {
+            entity.ToTable("two_factor_challenges");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TicketHash).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => x.TicketHash).IsUnique();
+            entity.HasIndex(x => x.ExpiresAt);
+            entity.HasIndex(x => x.OrganizationUserId);
+            entity.HasOne<OrganizationUser>().WithMany()
+                .HasForeignKey(x => x.OrganizationUserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DeviceTrustToken>(entity =>
@@ -463,6 +584,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("asset_categories");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(600);
@@ -497,6 +619,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.SerialNumber).HasMaxLength(120);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.Location).HasMaxLength(180);
+            entity.HasIndex(x => new { x.OrganizationId, x.LocationId });
+            entity.HasOne<Location>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.LocationId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Manufacturer).HasMaxLength(120);
             entity.Property(x => x.Model).HasMaxLength(120);
             entity.Property(x => x.Currency).HasMaxLength(8);
@@ -504,6 +631,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.PurchasePrice).HasPrecision(18, 2);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetTag }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
+            entity.HasIndex(x => new { x.OrganizationId, x.CategoryId }).HasDatabaseName("IX_tenant_assets_category");
+            entity.HasOne<AssetCategory>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.CategoryId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Drugie linia obrony dla P0-TENANT-001/006 (audyt 2026-08-17): Application waliduje TeamId/
             // AssignedPersonId po (OrganizationId, Id) przed zapisem, DB odrzuci wszystko co to ominie.
@@ -522,7 +654,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 owned.WithOwner().HasForeignKey(x => x.AssetId);
                 owned.HasKey(x => new { x.AssetId, x.FieldKey });
                 owned.Property(x => x.FieldKey).HasMaxLength(80).IsRequired();
-                owned.Property(x => x.Value).HasMaxLength(2000).IsRequired();
+                owned.Property(x => x.Value).HasColumnType("text").IsRequired();
             });
         });
 
@@ -537,6 +669,20 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.CompletedBy).HasMaxLength(240);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Outcome });
+            entity.HasIndex(x => new { x.OrganizationId, x.AssignmentId }).HasDatabaseName("IX_tenant_inspections_assignment");
+            entity.HasIndex(x => new { x.OrganizationId, x.OffboardingItemId }).HasDatabaseName("IX_tenant_inspections_offboarding_item");
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Assignment>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssignmentId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<OffboardingItem>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.OffboardingItemId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ServiceTicket>(entity =>
@@ -549,6 +695,10 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Resolution).HasMaxLength(2000);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.Status });
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
 
             // P0-TENANT-007 (audyt 2026-08-17): AssetInspectionId musi wskazywać inspekcję tej samej organizacji.
             entity.HasOne<AssetInspection>().WithMany()
@@ -564,9 +714,17 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("asset_locations");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.NormalizedName).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Type).HasMaxLength(40).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.ParentId });
+            entity.HasIndex(x => new { x.OrganizationId, x.ParentId, x.NormalizedName }).IsUnique().HasFilter("\"ParentId\" IS NOT NULL");
+            entity.HasIndex(x => new { x.OrganizationId, x.NormalizedName }).IsUnique().HasFilter("\"ParentId\" IS NULL");
+            entity.HasOne<Location>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.ParentId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -587,6 +745,11 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.RelationType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.JobTitle).HasMaxLength(120);
             entity.Property(x => x.Location).HasMaxLength(180);
+            entity.HasIndex(x => new { x.OrganizationId, x.LocationId });
+            entity.HasOne<Location>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.LocationId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.CostCenter).HasMaxLength(80);
             entity.Property(x => x.EmploymentStatus).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.PreferredLanguage).HasMaxLength(8);
@@ -636,13 +799,13 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("procedures");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Title).HasMaxLength(180).IsRequired();
             entity.Property(x => x.Version).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Owner).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.AppliesTo).HasMaxLength(240);
             entity.HasIndex(x => new { x.OrganizationId, x.Title, x.Version });
-            entity.HasMany(x => x.Documents).WithOne().HasForeignKey(x => x.ProcedureId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ProcedureDocument>(entity =>
@@ -654,6 +817,10 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Content).IsRequired();
             entity.Property(x => x.UploadedBy).HasMaxLength(240).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.ProcedureId, x.UploadedAt });
+            entity.HasOne<Procedure>().WithMany(x => x.Documents)
+                .HasForeignKey(x => new { x.OrganizationId, x.ProcedureId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -663,20 +830,37 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("job_profiles");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Name).HasMaxLength(140).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(800);
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
             entity.OwnsMany(x => x.AssetCategories, owned =>
             {
                 owned.ToTable("job_profile_asset_categories");
-                owned.WithOwner().HasForeignKey(x => x.JobProfileId);
+                owned.WithOwner()
+                    .HasForeignKey(x => new { x.OrganizationId, x.JobProfileId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id });
                 owned.HasKey(x => new { x.JobProfileId, x.AssetCategoryId });
+                owned.HasIndex(x => new { x.OrganizationId, x.JobProfileId }).HasDatabaseName("IX_tenant_jobprofile_categories_owner");
+                owned.HasIndex(x => new { x.OrganizationId, x.AssetCategoryId }).HasDatabaseName("IX_tenant_jobprofile_categories_category");
+                owned.HasOne<AssetCategory>().WithMany()
+                    .HasForeignKey(x => new { x.OrganizationId, x.AssetCategoryId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
             });
             entity.OwnsMany(x => x.Procedures, owned =>
             {
                 owned.ToTable("job_profile_procedures");
-                owned.WithOwner().HasForeignKey(x => x.JobProfileId);
+                owned.WithOwner()
+                    .HasForeignKey(x => new { x.OrganizationId, x.JobProfileId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id });
                 owned.HasKey(x => new { x.JobProfileId, x.ProcedureId });
+                owned.HasIndex(x => new { x.OrganizationId, x.JobProfileId }).HasDatabaseName("IX_tenant_jobprofile_procedures_owner");
+                owned.HasIndex(x => new { x.OrganizationId, x.ProcedureId }).HasDatabaseName("IX_tenant_jobprofile_procedures_procedure");
+                owned.HasOne<Procedure>().WithMany()
+                    .HasForeignKey(x => new { x.OrganizationId, x.ProcedureId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // P0-TENANT-004 (audyt 2026-08-17): DefaultManagerId musi wskazywać osobę tej samej organizacji.
@@ -716,11 +900,12 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("licenses");
             entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Vendor).HasMaxLength(160);
-            // Szyfrowany at-rest (audyt P1.5) — HasMaxLength podniesiony dla narzutu ciphertext.
+            // Ciphertext includes nonce/tag/key id/base64 overhead; PostgreSQL text avoids truncating a valid encrypted plaintext.
             entity.Property(x => x.LicenseKey)
-                .HasMaxLength(600)
+                .HasColumnType("text")
                 .HasConversion(
                     plain => plain == null ? null : _fieldEncryptor.Encrypt(FieldEncryptionPurposes.LicenseKey, plain),
                     stored => stored == null ? null : _fieldEncryptor.Decrypt(FieldEncryptionPurposes.LicenseKey, stored));
@@ -729,8 +914,16 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.OwnsMany(x => x.Seats, owned =>
             {
                 owned.ToTable("license_seats");
-                owned.WithOwner().HasForeignKey("LicenseId");
+                owned.WithOwner()
+                    .HasForeignKey(x => new { x.OrganizationId, x.LicenseId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id });
                 owned.HasKey(x => new { x.LicenseId, x.PersonId });
+                owned.HasIndex(x => new { x.OrganizationId, x.LicenseId }).HasDatabaseName("IX_tenant_license_seats_owner");
+                owned.HasIndex(x => new { x.OrganizationId, x.PersonId }).HasDatabaseName("IX_tenant_license_seats_person");
+                owned.HasOne<Person>().WithMany()
+                    .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         });
     }
@@ -748,16 +941,29 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.CreatedBy).HasMaxLength(240).IsRequired();
             entity.Property(x => x.PublicTokenHash).HasMaxLength(128);
             entity.HasIndex(x => new { x.OrganizationId, x.ProtocolNumber }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.PersonId }).HasDatabaseName("IX_tenant_assignments_person");
             entity.HasIndex(x => x.PublicTokenHash)
                 .IsUnique()
                 .HasFilter("\"PublicTokenHash\" IS NOT NULL")
                 .HasDatabaseName("IX_assignments_PublicTokenHash");
+            entity.HasOne<Person>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.OwnsMany(x => x.Assets, owned =>
             {
                 owned.ToTable("assignment_assets");
-                owned.WithOwner().HasForeignKey("AssignmentId");
+                owned.WithOwner()
+                    .HasForeignKey(x => new { x.OrganizationId, x.AssignmentId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id });
                 owned.HasKey(x => new { x.AssignmentId, x.AssetId });
+                owned.HasIndex(x => new { x.OrganizationId, x.AssignmentId }).HasDatabaseName("IX_tenant_assignment_assets_owner");
+                owned.HasIndex(x => new { x.OrganizationId, x.AssetId }).HasDatabaseName("IX_tenant_assignment_assets_asset");
+                owned.HasOne<Asset>().WithMany()
+                    .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
                 owned.Property(x => x.IssueCondition).HasMaxLength(400).IsRequired();
                 owned.Property(x => x.ReturnCondition).HasMaxLength(400);
                 owned.Property(x => x.ReturnResolution).HasConversion<string>().HasMaxLength(40);
@@ -769,9 +975,22 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.OwnsMany(x => x.ProcedureAcceptances, owned =>
             {
                 owned.ToTable("procedure_acceptances");
-                owned.WithOwner().HasForeignKey("AssignmentId");
+                owned.WithOwner()
+                    .HasForeignKey(x => new { x.OrganizationId, x.AssignmentId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id });
                 owned.HasKey(x => x.Id);
                 owned.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
+                owned.HasIndex(x => new { x.OrganizationId, x.AssignmentId }).HasDatabaseName("IX_tenant_procedure_acceptances_owner");
+                owned.HasIndex(x => new { x.OrganizationId, x.ProcedureId }).HasDatabaseName("IX_tenant_procedure_acceptances_procedure");
+                owned.HasIndex(x => new { x.OrganizationId, x.PersonId }).HasDatabaseName("IX_tenant_procedure_acceptances_person");
+                owned.HasOne<Procedure>().WithMany()
+                    .HasForeignKey(x => new { x.OrganizationId, x.ProcedureId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
+                owned.HasOne<Person>().WithMany()
+                    .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
+                    .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         });
     }

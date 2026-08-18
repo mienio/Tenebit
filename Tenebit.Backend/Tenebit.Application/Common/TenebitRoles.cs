@@ -44,16 +44,15 @@ public static class TenebitRoles
     public static readonly string[] ReservationViewers = [Owner, Admin, AssetOperator];
     public static readonly string[] ReservationCheckoutRoles = [Owner, Admin, AssetOperator, Technician];
 
-    // Location inventory names identifiable people (email, job title, manager) alongside asset detail —
-    // restricted to the roles that already see that data through AssetViewers/PeopleViewers, not every
-    // authenticated user (audyt AUD3-007).
-    public static readonly string[] LocationInventoryViewers = [Owner, Admin, AssetOperator, Manager, Hr, Auditor];
+    // Location structure and asset inventory follows AssetViewers. LocationService separately suppresses
+    // the people portion for roles without PeopleViewers, so Technician/Finance/LicenseManager do not gain
+    // employee data merely because they need the location tree for asset workflows (AUD3-007).
+    public static readonly string[] LocationInventoryViewers = AssetViewers;
 
-    // Every role except Employee — the tenant-wide dashboard and location inventory aggregate cost,
-    // headcount and activity across the whole organization, which Employee's "view only own" role
-    // must never see (audyt AUD3-007: dashboard i inwentarz lokalizacji ujawniały dane każdemu
-    // zalogowanemu użytkownikowi, bo endpointy nie miały żadnej roli poza uwierzytelnieniem).
-    public static readonly string[] TenantWideViewers = All.Select(x => x.Key).Where(x => x != Employee).ToArray();
+    // The tenant-wide dashboard contains cross-module totals, costs and recent activity. Keep this
+    // narrower than module-level read groups; Manager is intentionally excluded because its scope is
+    // team-local and the current dashboard response is tenant-wide (AUD3-007).
+    public static readonly string[] DashboardViewers = [Owner, Admin, AssetOperator, Finance, Auditor];
 }
 
 public sealed record RoleInfo(string Key, string Label, string Description);

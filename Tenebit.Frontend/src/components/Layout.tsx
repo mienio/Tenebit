@@ -14,7 +14,7 @@ export const navGroups = [
 ];
 
 export const nav = [
-  { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: [] },
+  { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['owner', 'admin', 'asset_operator', 'finance', 'auditor'] },
   { to: '/my', labelKey: 'nav.my', icon: User, roles: [] },
   { to: '/assets', labelKey: 'nav.assets', icon: Boxes, roles: ['owner', 'admin', 'asset_operator', 'technician', 'manager', 'hr', 'license_manager', 'finance', 'auditor'], group: 'assets' },
   { to: '/licenses', labelKey: 'nav.licenses', icon: KeyRound, roles: ['owner', 'admin', 'license_manager', 'finance', 'auditor'], group: 'assets' },
@@ -59,11 +59,12 @@ export function Layout() {
       if (event.key === 'Escape') setMobileOpen(false);
       if (sidebarRef.current) keepFocusInside(event, sidebarRef.current);
     };
+    const menuButton = menuButtonRef.current;
     document.addEventListener('keydown', onKeyDown);
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown);
-      menuButtonRef.current?.focus();
+      menuButton?.focus();
     };
   }, [mobileOpen]);
 

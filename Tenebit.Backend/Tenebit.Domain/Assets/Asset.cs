@@ -26,6 +26,7 @@ public sealed class Asset
     public AssetStatus Status { get; private set; }
     public Guid? AssignedPersonId { get; private set; }
     public Guid? TeamId { get; private set; }
+    public Guid? LocationId { get; private set; }
     public string? Location { get; private set; }
     public string? Manufacturer { get; private set; }
     public string? Model { get; private set; }
@@ -37,6 +38,14 @@ public sealed class Asset
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public List<AssetFieldValue> FieldValues { get; private set; } = [];
+
+
+    public void SetLocation(Guid? locationId, string? locationPath)
+    {
+        LocationId = locationId;
+        Location = Normalize(locationPath);
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 
     public void SetFieldValues(IReadOnlyDictionary<string, string> values)
     {

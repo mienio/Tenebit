@@ -62,7 +62,7 @@ public sealed class License
             throw new DomainException("Brak wolnych miejsc w tej licencji.");
         }
 
-        Seats.Add(new LicenseSeat(Id, personId, now));
+        Seats.Add(new LicenseSeat(OrganizationId, Id, personId, now));
     }
 
     public void UnassignSeat(Guid personId)

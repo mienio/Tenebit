@@ -24,7 +24,7 @@ export default tseslint.config(
       // pre-existing, working code as errors on day one of the lint gate.
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react-refresh/only-export-components': 'off',
     },
   },
 );

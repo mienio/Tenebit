@@ -75,37 +75,55 @@ public sealed class AssetEvidenceService
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
         if (access.IsFailure) return Result<AssetEvidenceResponse>.Failure(access.Error!);
 
+        var requestError = RequestObjectValidator.Validate(request);
+        if (requestError is not null) return Result<AssetEvidenceResponse>.Failure(Error.Validation(requestError));
+
         var validation = ValidateAndDetectFormat(declaredContentType, content);
         if (validation.IsFailure) return Result<AssetEvidenceResponse>.Failure(validation.Error!);
 
-        var organizationId = _currentUser.OrganizationId;
-        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
-
-        if (request.AssignmentId.HasValue)
-        {
-            var assignment = await _assignments.GetAsync(organizationId, request.AssignmentId.Value, cancellationToken);
-            if (assignment is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
-            if (assignment.Assets.All(x => x.AssetId != assetId))
-            {
-                return Result<AssetEvidenceResponse>.Failure(Error.Validation("To aktywo nie należy do tego wydania."));
-            }
-        }
-
-        var existingCount = await _evidence.CountAsync(organizationId, assetId, request.Phase, cancellationToken);
-        if (existingCount >= MaxPerAssetAndPhase)
-        {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
-        }
-
+        SanitizedImage sanitized;
         try
         {
-            var sanitized = _sanitizer.StripMetadata(validation.Value, content);
-            var item = new AssetEvidence(organizationId, assetId, request.AssignmentId, request.Phase, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, request.Caption, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser, _clock.UtcNow);
-            _evidence.Add(item);
-            _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, _currentUser.Subject, item.FileName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<AssetEvidenceResponse>.Success(Map(item));
+            sanitized = _sanitizer.StripMetadata(validation.Value, content);
+        }
+        catch (DomainException ex)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
+        }
+
+        var organizationId = _currentUser.OrganizationId;
+        try
+        {
+            // Count + insert + SaveChanges are serialized in one DB transaction. The organization lock is
+            // deliberately stronger than a per-asset lock: it closes the race for every evidence entry point
+            // (authenticated, public, assignment batch) with the existing tested UoW primitive.
+            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            {
+                var asset = await _assets.GetAsync(organizationId, assetId, ct);
+                if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+                if (request.AssignmentId.HasValue)
+                {
+                    var assignment = await _assignments.GetAsync(organizationId, request.AssignmentId.Value, ct);
+                    if (assignment is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
+                    if (assignment.Assets.All(x => x.AssetId != assetId))
+                    {
+                        return Result<AssetEvidenceResponse>.Failure(Error.Validation("To aktywo nie należy do tego wydania."));
+                    }
+                }
+
+                var existingCount = await _evidence.CountAsync(organizationId, assetId, request.Phase, ct);
+                if (existingCount >= MaxPerAssetAndPhase)
+                {
+                    return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+                }
+
+                var item = new AssetEvidence(organizationId, assetId, request.AssignmentId, request.Phase, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, request.Caption, _currentUser.Subject, EvidenceUploadSource.AuthenticatedUser, _clock.UtcNow);
+                _evidence.Add(item);
+                _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, _currentUser.Subject, item.FileName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<AssetEvidenceResponse>.Success(Map(item));
+            }, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -122,23 +140,35 @@ public sealed class AssetEvidenceService
         var validation = ValidateAndDetectFormat(declaredContentType, content);
         if (validation.IsFailure) return Result<AssetEvidenceResponse>.Failure(validation.Error!);
 
-        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
-
-        var existingCount = await _evidence.CountAsync(organizationId, assetId, EvidencePhase.Offboarding, cancellationToken);
-        if (existingCount >= MaxPerAssetAndPhase)
+        SanitizedImage sanitized;
+        try
         {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+            sanitized = _sanitizer.StripMetadata(validation.Value, content);
+        }
+        catch (DomainException ex)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
         }
 
         try
         {
-            var sanitized = _sanitizer.StripMetadata(validation.Value, content);
-            var item = new AssetEvidence(organizationId, assetId, null, EvidencePhase.Offboarding, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, null, "employee", EvidenceUploadSource.PublicToken, _clock.UtcNow, offboardingItemId);
-            _evidence.Add(item);
-            _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, "public-link", item.FileName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<AssetEvidenceResponse>.Success(Map(item));
+            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            {
+                var asset = await _assets.GetAsync(organizationId, assetId, ct);
+                if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+                var existingCount = await _evidence.CountAsync(organizationId, assetId, EvidencePhase.Offboarding, ct);
+                if (existingCount >= MaxPerAssetAndPhase)
+                {
+                    return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+                }
+
+                var item = new AssetEvidence(organizationId, assetId, null, EvidencePhase.Offboarding, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, null, "employee", EvidenceUploadSource.PublicToken, _clock.UtcNow, offboardingItemId);
+                _evidence.Add(item);
+                _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, "public-link", item.FileName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<AssetEvidenceResponse>.Success(Map(item));
+            }, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -155,23 +185,35 @@ public sealed class AssetEvidenceService
         var validation = ValidateAndDetectFormat(declaredContentType, content);
         if (validation.IsFailure) return Result<AssetEvidenceResponse>.Failure(validation.Error!);
 
-        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
-
-        var existingCount = await _evidence.CountAsync(organizationId, assetId, EvidencePhase.Audit, cancellationToken);
-        if (existingCount >= MaxPerAssetAndPhase)
+        SanitizedImage sanitized;
+        try
         {
-            return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+            sanitized = _sanitizer.StripMetadata(validation.Value, content);
+        }
+        catch (DomainException ex)
+        {
+            return Result<AssetEvidenceResponse>.Failure(Error.Validation(ex.Message));
         }
 
         try
         {
-            var sanitized = _sanitizer.StripMetadata(validation.Value, content);
-            var item = new AssetEvidence(organizationId, assetId, null, EvidencePhase.Audit, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, null, "employee", EvidenceUploadSource.PublicToken, _clock.UtcNow, null, assetAuditItemId);
-            _evidence.Add(item);
-            _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, "public-link", item.FileName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<AssetEvidenceResponse>.Success(Map(item));
+            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            {
+                var asset = await _assets.GetAsync(organizationId, assetId, ct);
+                if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+
+                var existingCount = await _evidence.CountAsync(organizationId, assetId, EvidencePhase.Audit, ct);
+                if (existingCount >= MaxPerAssetAndPhase)
+                {
+                    return Result<AssetEvidenceResponse>.Failure(Error.Validation("Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."));
+                }
+
+                var item = new AssetEvidence(organizationId, assetId, null, EvidencePhase.Audit, fileName, sanitized.ContentType, sanitized.Content, sanitized.Sha256, null, "employee", EvidenceUploadSource.PublicToken, _clock.UtcNow, null, assetAuditItemId);
+                _evidence.Add(item);
+                _activity.Add(new ActivityLog(organizationId, "asset_evidence.uploaded", "asset_evidence", item.Id, "public-link", item.FileName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<AssetEvidenceResponse>.Success(Map(item));
+            }, cancellationToken);
         }
         catch (DomainException ex)
         {
@@ -186,6 +228,16 @@ public sealed class AssetEvidenceService
     public async Task<Result<IReadOnlyList<AssetEvidence>>> PrepareEvidenceBatchAsync(
         Guid organizationId, Guid? assignmentId, EvidencePhase phase, IReadOnlyList<EvidenceUploadInput> uploads, CancellationToken cancellationToken)
     {
+        if (uploads.Count > 25)
+            return Result<IReadOnlyList<AssetEvidence>>.Failure(Error.Validation("Można przesłać maksymalnie 25 zdjęć w jednym żądaniu."));
+        long totalBytes = 0;
+        foreach (var upload in uploads)
+        {
+            totalBytes = checked(totalBytes + upload.Content.LongLength);
+            if (totalBytes > 25L * 1024 * 1024)
+                return Result<IReadOnlyList<AssetEvidence>>.Failure(Error.Validation("Łączny rozmiar zdjęć w jednym żądaniu może wynosić maksymalnie 25 MB."));
+        }
+
         var sanitized = new List<(EvidenceUploadInput Upload, SanitizedImage Image)>();
         var perAssetCount = new Dictionary<Guid, int>();
 

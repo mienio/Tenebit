@@ -80,22 +80,23 @@ public static class AssignmentsEndpoints
 
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxEvidenceBundleUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
-            var createRequest = MultipartRequestHelpers.DeserializePart<CreateAssignmentRequest>(form, "request");
+            MultipartRequestHelpers.ValidateEvidenceBundle(form.Files);
+            var createRequest = MultipartRequestHelpers.DeserializePart<CreateAssignmentRequest>(form, "request", out var requestError);
             if (createRequest is null)
             {
-                return Results.BadRequest(new { message = "Pole 'request' musi zawierać poprawny JSON wydania.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = requestError ?? "Nieprawidłowe dane wydania.", code = "VALIDATION_ERROR" });
             }
 
-            var manifest = MultipartRequestHelpers.DeserializeManifest(form);
+            var manifest = MultipartRequestHelpers.DeserializeManifest(form, out var manifestError);
             if (manifest is null)
             {
-                return Results.BadRequest(new { message = "Pole 'evidenceManifest' musi zawierać poprawny JSON.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = manifestError ?? "Nieprawidłowy manifest zdjęć.", code = "VALIDATION_ERROR" });
             }
 
             var files = new List<EvidenceFileInput>();
             foreach (var file in form.Files)
             {
-                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await MultipartRequestHelpers.ReadFileAsync(file, cancellationToken)));
+                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken)));
             }
 
             return (await service.CreateWithEvidenceAsync(createRequest, manifest, files, cancellationToken)).ToCreatedResult(response => $"/api/assignments/{response.Id}");
@@ -107,16 +108,17 @@ public static class AssignmentsEndpoints
         {
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxEvidenceBundleUploadBytes);
             var form = await request.ReadFormAsync(cancellationToken);
-            var returnRequest = MultipartRequestHelpers.DeserializePart<ReturnAssignmentAssetItemRequest>(form, "request");
+            MultipartRequestHelpers.ValidateEvidenceBundle(form.Files);
+            var returnRequest = MultipartRequestHelpers.DeserializePart<ReturnAssignmentAssetItemRequest>(form, "request", out var requestError);
             if (returnRequest is null)
             {
-                return Results.BadRequest(new { message = "Pole 'request' musi zawierać poprawny JSON zwrotu.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = requestError ?? "Nieprawidłowe dane zwrotu.", code = "VALIDATION_ERROR" });
             }
 
             var files = new List<EvidenceFileInput>();
             foreach (var file in form.Files)
             {
-                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await MultipartRequestHelpers.ReadFileAsync(file, cancellationToken)));
+                files.Add(new EvidenceFileInput(file.Name, file.FileName, file.ContentType, await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken)));
             }
 
             return (await service.ReturnAssetWithEvidenceAsync(assignmentId, assetId, returnRequest, files, cancellationToken)).ToHttpResult();

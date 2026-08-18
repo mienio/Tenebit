@@ -246,7 +246,7 @@ public sealed class AssetAuditCampaignService
         }
         catch (Exception ex)
         {
-            _activity.Add(new ActivityLog(campaign.OrganizationId, "asset_audit.email_failed", "asset_audit_campaign", campaign.Id, _currentUser.Subject, ex.Message, now));
+            _activity.Add(new ActivityLog(campaign.OrganizationId, "asset_audit.email_failed", "asset_audit_campaign", campaign.Id, _currentUser.Subject, "delivery_failed", now));
         }
     }
 
@@ -323,6 +323,7 @@ public sealed class AssetAuditCampaignService
             }
         }
 
+        SecurityTelemetry.PublicTokenRejected();
         return Result<AssetAuditParticipant>.Failure(Error.NotFound("Link jest nieprawidłowy lub wygasł."));
     }
 

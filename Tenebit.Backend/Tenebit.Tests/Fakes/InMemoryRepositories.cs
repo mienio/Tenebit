@@ -28,6 +28,9 @@ public sealed class InMemoryOrganizationUserRepository : IOrganizationUserReposi
     public Task<IReadOnlyList<OrganizationUser>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<OrganizationUser>>(Users.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<bool> PersonLinkExistsAsync(Guid organizationId, Guid personId, Guid? excludingId, CancellationToken cancellationToken) =>
+        Task.FromResult(Users.Any(x => x.OrganizationId == organizationId && x.PersonId == personId && (!excludingId.HasValue || x.Id != excludingId.Value)));
+
     public Task<OrganizationUser?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Users.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
@@ -212,21 +215,34 @@ public sealed class InMemoryEmailVerificationTokenRepository : IEmailVerificatio
 public sealed class InMemoryRefreshTokenRepository : IRefreshTokenRepository
 {
     public List<RefreshToken> Tokens { get; } = [];
+    private readonly object _gate = new();
+
+    public Task<RefreshToken?> FindAsync(string tokenHash, CancellationToken cancellationToken) =>
+        Task.FromResult(Tokens.FirstOrDefault(x => x.TokenHash == tokenHash));
 
     public Task<RefreshToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult(Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.IsValid(now)));
 
-    public Task<RefreshToken?> TryConsumeAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
+    public Task<bool> TryMarkRotatedAsync(Guid tokenId, Guid replacementTokenId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var token = Tokens.FirstOrDefault(x => x.TokenHash == tokenHash);
-        if (token is null || !token.IsValid(now) || token.RevokedAt is not null) return Task.FromResult<RefreshToken?>(null);
-        token.Revoke();
-        return Task.FromResult<RefreshToken?>(token);
+        lock (_gate)
+        {
+            var token = Tokens.FirstOrDefault(x => x.Id == tokenId);
+            if (token is null || !token.IsValid(now)) return Task.FromResult(false);
+            token.MarkRotated(replacementTokenId, now);
+            return Task.FromResult(true);
+        }
+    }
+
+    public Task RevokeFamilyAsync(Guid familyId, DateTimeOffset now, string reason, CancellationToken cancellationToken)
+    {
+        foreach (var token in Tokens.Where(x => x.FamilyId == familyId && x.RevokedAt is null)) token.Revoke(now, reason);
+        return Task.CompletedTask;
     }
 
     public Task RevokeAllForUserAsync(Guid organizationUserId, CancellationToken cancellationToken)
     {
-        foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.RevokedAt is null)) token.Revoke();
+        foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.RevokedAt is null)) token.Revoke(reason: "security_state_changed");
         return Task.CompletedTask;
     }
 

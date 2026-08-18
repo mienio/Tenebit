@@ -6,6 +6,7 @@ using Tenebit.Domain.Offboarding;
 
 namespace Tenebit.Application.Offboarding;
 
+[ValidatedRequest]
 public sealed record CreateOffboardingCaseRequest(
     Guid PersonId,
     DateTimeOffset EmploymentEndsAt,
@@ -17,6 +18,7 @@ public sealed record CreateOffboardingCaseRequest(
     bool CancelFutureReservations,
     bool AutoReleaseLicenses);
 
+[ValidatedRequest]
 public sealed record UpdateOffboardingCaseRequest(
     DateTimeOffset EmploymentEndsAt,
     DateTimeOffset ReturnDueDate,
@@ -27,22 +29,29 @@ public sealed record UpdateOffboardingCaseRequest(
     bool CancelFutureReservations,
     bool AutoReleaseLicenses);
 
+[ValidatedRequest]
 public sealed record ConfirmOffboardingItemReturnRequest(string? ReturnCondition, string? ReturnLocation, string? Notes);
 
+[ValidatedRequest]
 public sealed record ResolveOffboardingItemRequest(OffboardingItemStatus Status, string Notes);
 
+[ValidatedRequest]
 public sealed record WaiveOffboardingItemRequest(string Reason);
 
+[ValidatedRequest]
 public sealed record CancelOffboardingCaseRequest(string Reason);
 
+[ValidatedRequest]
 public sealed record StartOffboardingCaseRequest(bool NotifyEmployee = true);
 
 public sealed record PublicOffboardingItemResponse(Guid Id, string Label, string? AssetTag, OffboardingItemStatus Status, string? EmployeeResponse, string? EmployeeComment, Guid? IssuePhotoEvidenceId);
 
 public sealed record PublicOffboardingResponse(string OrganizationName, DateTimeOffset ReturnDueDate, string? DefaultReturnLocation, string? Notes, IReadOnlyList<PublicOffboardingItemResponse> Items);
 
+[ValidatedRequest]
 public sealed record PublicOffboardingItemAnswer(Guid ItemId, string Response, string? Comment);
 
+[ValidatedRequest]
 public sealed record SubmitPublicOffboardingResponseRequest(IReadOnlyList<PublicOffboardingItemAnswer> Answers);
 
 public sealed record OffboardingItemResponse(

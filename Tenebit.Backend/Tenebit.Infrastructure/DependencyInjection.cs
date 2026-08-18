@@ -11,7 +11,7 @@ namespace Tenebit.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration, bool enableSingleInstanceGuard)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("TenebitDb");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -41,6 +41,8 @@ public static class DependencyInjection
         services.AddScoped<IDeviceTrustTokenRepository, DeviceTrustTokenRepository>();
         services.AddScoped<ITwoFactorRecoveryCodeRepository, TwoFactorRecoveryCodeRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IOAuthTransactionRepository, OAuthTransactionRepository>();
+        services.AddScoped<ITwoFactorChallengeRepository, TwoFactorChallengeRepository>();
         services.AddScoped<IJobProfileRepository, JobProfileRepository>();
         services.AddScoped<IAssetStatusSettingRepository, AssetStatusSettingRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
@@ -64,32 +66,29 @@ public static class DependencyInjection
         services.AddSingleton<IImageSanitizer, ImageSanitizer>();
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
-        services.AddSingleton<IPaymentGateway, StripePaymentGateway>();
+        services.AddHttpClient<IPaymentGateway, StripePaymentGateway>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.stripe.com/v1/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
         services.AddSingleton<IFieldEncryptor, FieldEncryptor>();
         services.AddScoped<DefaultDataSeeder>();
-        if (enableSingleInstanceGuard)
-        {
-            // Musi wystartować przed pozostałymi hosted services — patrz komentarz w SingleInstanceGuardService
-            // (audyt P0.7: deployment jest single-instance, ten guard zamienia przypadkowy drugi proces
-            // w głośny błąd startowy zamiast cichego rozjazdu OAuth/2FA state i zdublowanych background jobów).
-            // Wyłączony poza Production, żeby WebApplicationFactory w testach integracyjnych mogło
-            // uruchamiać kilka równoległych hostów na tej samej bazie testowej.
-            services.AddHostedService<SingleInstanceGuardService>();
-        }
-
+        services.AddScoped<PostgresJobLock>();
         services.AddHostedService<AlertBackgroundService>();
         services.AddHostedService<DashboardSnapshotBackgroundService>();
         services.AddHostedService<OffboardingBackgroundService>();
         services.AddHostedService<EvidenceRetentionBackgroundService>();
+        services.AddHostedService<SecurityStateCleanupBackgroundService>();
+        services.AddHostedService<SubscriptionReconciliationBackgroundService>();
         return services;
     }
 
-    public static async Task InitializeDatabaseAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
+    public static async Task InitializeDatabaseAsync(this IServiceProvider services, bool forceMigrate = false, CancellationToken cancellationToken = default)
     {
         using var scope = services.CreateScope();
         var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         var db = scope.ServiceProvider.GetRequiredService<TenebitDbContext>();
-        if (configuration.GetValue("Database:AutoCreate", true))
+        if (forceMigrate || configuration.GetValue("Database:AutoCreate", true))
         {
             await db.Database.MigrateAsync(cancellationToken);
         }

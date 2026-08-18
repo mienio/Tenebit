@@ -1,60 +1,22 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Infrastructure.Services;
 
-// Tenebit jest wdrażany jako pojedyncza instancja API (audyt P0.7) — OAuth/2FA state
-// (OAuthStateStore/TwoFactorChallengeStore) żyje w IMemoryCache per-proces, a background jobs
-// (AlertBackgroundService i inne) nie mają distributed locka, więc druga równoległa instancja
-// dublowałaby joby i gubiła cudzy OAuth/2FA state bez żadnego widocznego błędu. Ten guard trzyma
-// session-scoped pg_try_advisory_lock przez cały czas życia procesu; jeśli lock jest już zajęty,
-// start aplikacji kończy się głośnym błędem zamiast ciche uruchomienie drugiej instancji.
+/// <summary>
+/// Compatibility stub retained so overlay patches do not require deleting an old source file.
+/// OAuth/2FA state and periodic-job coordination are now PostgreSQL-backed, so the API is intentionally
+/// allowed to run with multiple replicas. Do not reintroduce a process-wide singleton lock here.
+/// </summary>
+[Obsolete("HA is supported; this compatibility service must not be registered.")]
 public sealed class SingleInstanceGuardService : IHostedService
 {
-    private const string LockKey = "tenebit-api-single-instance";
-
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SingleInstanceGuardService> _logger;
-    private IServiceScope? _scope;
-    private TenebitDbContext? _db;
-
-    public SingleInstanceGuardService(IServiceScopeFactory scopeFactory, ILogger<SingleInstanceGuardService> logger)
+    public SingleInstanceGuardService(ILogger<SingleInstanceGuardService> logger) => _logger = logger;
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
+        _logger.LogWarning("Obsolete SingleInstanceGuardService was registered. It no longer acquires a global lock.");
+        return Task.CompletedTask;
     }
-
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        _scope = _scopeFactory.CreateScope();
-        _db = _scope.ServiceProvider.GetRequiredService<TenebitDbContext>();
-        await _db.Database.OpenConnectionAsync(cancellationToken);
-
-        var acquired = await _db.Database
-            .SqlQuery<bool>($"SELECT pg_try_advisory_lock(hashtext({LockKey}))")
-            .SingleAsync(cancellationToken);
-
-        if (!acquired)
-        {
-            throw new InvalidOperationException(
-                "Inna instancja Tenebit API już trzyma single-instance advisory lock w tej bazie danych. " +
-                "Deployment jest skonfigurowany jako single-instance (audyt P0.7) — zatrzymaj poprzedni proces przed startem nowego.");
-        }
-
-        _logger.LogInformation("Single-instance advisory lock zajęty przez ten proces.");
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        if (_db is not null)
-        {
-            await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_unlock(hashtext({LockKey}))", cancellationToken);
-            await _db.Database.CloseConnectionAsync();
-        }
-
-        _scope?.Dispose();
-    }
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

@@ -62,7 +62,7 @@ public static class AuthEndpoints
 
                 if (result.Value!.RequiresTwoFactor)
                 {
-                    var challengeToken = challenges.Create(result.Value!.PendingUserId!.Value);
+                    var challengeToken = await challenges.CreateAsync(result.Value!.PendingUserId!.Value, cancellationToken);
                     return Results.Ok(new { requiresTwoFactor = true, challengeToken });
                 }
 
@@ -77,7 +77,7 @@ public static class AuthEndpoints
 
         api.MapPost("/auth/login/2fa", async (TwoFactorLoginRequest request, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
-                var userId = challenges.Consume(request.ChallengeToken);
+                var userId = await challenges.ConsumeAsync(request.ChallengeToken, cancellationToken);
                 if (userId is null)
                 {
                     return Results.Json(new ErrorResponse("Sesja logowania wygasła. Zaloguj się ponownie.", "CHALLENGE_EXPIRED"), statusCode: 401);
@@ -189,7 +189,7 @@ public static class AuthEndpoints
             .RequireRateLimiting("auth")
             .WithTags("Auth");
 
-        api.MapPost("/auth/2fa/enable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/2fa/enable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
@@ -197,12 +197,18 @@ public static class AuthEndpoints
                 }
 
                 var result = await service.EnableTwoFactorAsync(userId, request.Code, cancellationToken);
-                return result.ToHttpResult();
+                if (result.IsFailure) return result.ToHttpResult();
+
+                var user = result.Value!.User;
+                var refreshToken = await service.IssueRefreshTokenAsync(user.Id, cancellationToken);
+                RefreshTokenCookie.Append(response, refreshToken, env.IsDevelopment());
+                DeviceTrustCookie.Delete(response, env.IsDevelopment());
+                return Results.Ok(new { recoveryCodes = result.Value.RecoveryCodes, token = tokens.Issue(user), user });
             })
             .RequireRateLimiting("auth")
             .WithTags("Auth");
 
-        api.MapPost("/auth/2fa/disable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/2fa/disable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
@@ -212,8 +218,11 @@ public static class AuthEndpoints
                 var result = await service.DisableTwoFactorAsync(userId, request.Code, cancellationToken);
                 if (result.IsFailure) return result.ToNoContentResult();
 
+                var user = result.Value!;
+                var refreshToken = await service.IssueRefreshTokenAsync(user.Id, cancellationToken);
+                RefreshTokenCookie.Append(response, refreshToken, env.IsDevelopment());
                 DeviceTrustCookie.Delete(response, env.IsDevelopment());
-                return Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone." });
+                return Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone.", token = tokens.Issue(user), user });
             })
             .RequireRateLimiting("auth")
             .WithTags("Auth");

@@ -34,6 +34,12 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         return Task.FromResult<IReadOnlyList<Asset>>(rows);
     }
 
+    public async Task<IReadOnlyList<Asset>> ListScopedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken)
+    {
+        var rows = await ListAsync(organizationId, search, status, location, cancellationToken);
+        return rows.Where(x => (x.AssignedPersonId.HasValue && personIds.Contains(x.AssignedPersonId.Value)) || (x.TeamId.HasValue && teamIds.Contains(x.TeamId.Value))).ToList();
+    }
+
     public Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
         var prefix = string.IsNullOrWhiteSpace(location) ? null : location.Trim() + " / ";
@@ -47,6 +53,20 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         return Task.FromResult<(IReadOnlyList<Asset>, int)>((rows, rows.Count));
     }
 
+    public async Task<(IReadOnlyList<Asset> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, DateOnly? warrantyFrom, DateOnly? warrantyTo, string? sortKey, bool sortDesc, int page, int pageSize, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken)
+    {
+        var rows = (await ListScopedAsync(organizationId, search, status, location, personIds, teamIds, cancellationToken))
+            .Where(x => !teamId.HasValue || x.TeamId == teamId.Value)
+            .Where(x => !categoryId.HasValue || x.CategoryId == categoryId.Value)
+            .Where(x => !unassignedOnly || x.AssignedPersonId is null)
+            .Where(x => !warrantyFrom.HasValue || (x.WarrantyUntil.HasValue && x.WarrantyUntil.Value >= warrantyFrom.Value))
+            .Where(x => !warrantyTo.HasValue || (x.WarrantyUntil.HasValue && x.WarrantyUntil.Value <= warrantyTo.Value))
+            .ToList();
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        return (rows.Skip((safePage - 1) * safePageSize).Take(safePageSize).ToList(), rows.Count);
+    }
+
     public Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsAsync(Guid organizationId, CancellationToken cancellationToken)
     {
         var rows = Assets.Where(x => x.OrganizationId == organizationId).ToList();
@@ -56,8 +76,20 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         return Task.FromResult((byCategory, byStatus, byPerson));
     }
 
+    public async Task<(IReadOnlyDictionary<Guid, int> ByCategory, IReadOnlyDictionary<AssetStatus, int> ByStatus, IReadOnlyDictionary<Guid, int> ByPerson)> GetGroupCountsScopedAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken)
+    {
+        var rows = await ListScopedAsync(organizationId, null, null, null, personIds, teamIds, cancellationToken);
+        IReadOnlyDictionary<Guid, int> byCategory = rows.GroupBy(x => x.CategoryId).ToDictionary(g => g.Key, g => g.Count());
+        IReadOnlyDictionary<AssetStatus, int> byStatus = rows.GroupBy(x => x.Status).ToDictionary(g => g.Key, g => g.Count());
+        IReadOnlyDictionary<Guid, int> byPerson = rows.Where(x => x.AssignedPersonId.HasValue).GroupBy(x => x.AssignedPersonId!.Value).ToDictionary(g => g.Key, g => g.Count());
+        return (byCategory, byStatus, byPerson);
+    }
+
     public Task<IReadOnlyList<Asset>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId && ids.Contains(x.Id)).ToList());
+
+    public Task<IReadOnlyList<Asset>> ListByAssignedPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId && x.AssignedPersonId == personId).ToList());
 
     public Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
@@ -71,6 +103,9 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId && x.Location == location));
 
+    public Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId && x.LocationId == locationId));
+
     public void Add(Asset asset) => Assets.Add(asset);
     public void Remove(Asset asset) => Assets.Remove(asset);
 }
@@ -82,11 +117,28 @@ public sealed class InMemoryPersonRepository : IPersonRepository
     public Task<IReadOnlyList<Person>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Person>>(People.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<IReadOnlyList<Person>> ListScopedAsync(Guid organizationId, string? search, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Person>>(People.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.Id)).ToList());
+
     public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
     {
         var rows = People.Where(x => x.OrganizationId == organizationId).ToList();
         return Task.FromResult<(IReadOnlyList<Person>, int)>((rows, rows.Count));
     }
+
+    public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken)
+    {
+        var rows = People.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.Id)).ToList();
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        return Task.FromResult<(IReadOnlyList<Person>, int)>((rows.Skip((safePage - 1) * safePageSize).Take(safePageSize).ToList(), rows.Count));
+    }
+
+    public Task<IReadOnlyList<Guid>> ListManagedScopePersonIdsAsync(Guid organizationId, Guid managerPersonId, IReadOnlyCollection<Guid> managedTeamIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>(People
+            .Where(x => x.OrganizationId == organizationId && (x.Id == managerPersonId || x.ManagerId == managerPersonId || (x.TeamId.HasValue && managedTeamIds.Contains(x.TeamId.Value))))
+            .Select(x => x.Id)
+            .ToList());
 
     public Task<Person?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(People.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
@@ -105,6 +157,9 @@ public sealed class InMemoryPersonRepository : IPersonRepository
     public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
         Task.FromResult(People.Count(x => x.OrganizationId == organizationId && x.Location == location));
 
+    public Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken) =>
+        Task.FromResult(People.Count(x => x.OrganizationId == organizationId && x.LocationId == locationId));
+
     public void Add(Person person) => People.Add(person);
     public void Remove(Person person) => People.Remove(person);
 }
@@ -117,6 +172,9 @@ public sealed class InMemoryTeamRepository : ITeamRepository
 
     public Task<IReadOnlyList<Team>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Team>>(Teams.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<IReadOnlyList<Guid>> ListManagedIdsAsync(Guid organizationId, Guid managerPersonId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>(Teams.Where(x => x.OrganizationId == organizationId && x.ManagerId == managerPersonId).Select(x => x.Id).ToList());
 
     public Task<Team?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Teams.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
@@ -203,11 +261,35 @@ public sealed class InMemoryAssignmentRepository : IAssignmentRepository
     public Task<IReadOnlyList<Assignment>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Assignment>>(Assignments.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<IReadOnlyList<Assignment>> ListByPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Assignment>>(Assignments.Where(x => x.OrganizationId == organizationId && x.PersonId == personId).ToList());
+
+    public Task<IReadOnlyList<Assignment>> ListByPersonIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Assignment>>(Assignments.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId)).ToList());
+
     public Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
         var rows = Assignments.Where(x => x.OrganizationId == organizationId).ToList();
         return Task.FromResult<(IReadOnlyList<Assignment>, int)>((rows, rows.Count));
     }
+
+    public Task<(IReadOnlyList<Assignment> Items, int Total)> ListPagedByPersonIdsAsync(Guid organizationId, string? search, AssignmentStatus? status, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken)
+    {
+        var rows = Assignments.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId) && (!status.HasValue || x.Status == status.Value)).ToList();
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        return Task.FromResult<(IReadOnlyList<Assignment>, int)>((rows.Skip((safePage - 1) * safePageSize).Take(safePageSize).ToList(), rows.Count));
+    }
+
+    public Task<IReadOnlyList<Guid>> ListProcedureIdsByPersonIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>(Assignments.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId))
+            .SelectMany(x => x.ProcedureAcceptances).Select(x => x.ProcedureId).Distinct().ToList());
+
+    public Task<bool> HasProcedureAssignmentAsync(Guid organizationId, Guid personId, Guid procedureId, CancellationToken cancellationToken) =>
+        Task.FromResult(Assignments.Any(x => x.OrganizationId == organizationId && x.PersonId == personId && x.ProcedureAcceptances.Any(a => a.ProcedureId == procedureId)));
+
+    public Task<bool> HasProcedureAssignmentForPeopleAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, Guid procedureId, CancellationToken cancellationToken) =>
+        Task.FromResult(Assignments.Any(x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId) && x.ProcedureAcceptances.Any(a => a.ProcedureId == procedureId)));
 
     public Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Assignments.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
@@ -227,6 +309,9 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
 
     public Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken) =>
         Task.FromResult(Subscriptions.FirstOrDefault(x => x.StripeCustomerId == stripeCustomerId));
+
+    public Task<IReadOnlyList<OrganizationSubscription>> ListWithStripeSubscriptionAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions.Where(x => !string.IsNullOrWhiteSpace(x.StripeSubscriptionId)).ToList());
 
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
 }
@@ -379,6 +464,7 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string NextCheckoutUrl { get; set; } = "https://checkout.stripe.com/fake-session";
     public string NextPortalUrl { get; set; } = "https://billing.stripe.com/fake-portal";
     public PaymentWebhookEvent? NextWebhookEvent { get; set; }
+    public PaymentSubscriptionState? NextCanonicalSubscription { get; set; }
     public bool ThrowOnParseWebhookEvent { get; set; }
 
     public Task<string> CreateCustomerAsync(string email, Guid organizationId, CancellationToken cancellationToken) =>
@@ -392,9 +478,19 @@ public sealed class FakePaymentGateway : IPaymentGateway
 
     public PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader)
     {
-        if (ThrowOnParseWebhookEvent) throw new InvalidOperationException("Invalid Stripe webhook signature.");
+        if (ThrowOnParseWebhookEvent) throw new PaymentWebhookValidationException("Invalid Stripe webhook signature.");
         return NextWebhookEvent;
     }
+
+    public Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken) =>
+        Task.FromResult(NextCanonicalSubscription ?? (NextWebhookEvent is null ? null : new PaymentSubscriptionState(
+            NextWebhookEvent.CustomerId,
+            NextWebhookEvent.SubscriptionId ?? subscriptionId,
+            NextWebhookEvent.PlanKey,
+            NextWebhookEvent.Status,
+            NextWebhookEvent.CurrentPeriodStart,
+            NextWebhookEvent.CurrentPeriodEnd,
+            NextWebhookEvent.OrganizationId)));
 }
 
 public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator
@@ -450,6 +546,9 @@ public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository
     public Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId).ToList());
 
+    public Task<IReadOnlyList<AssetEvidence>> ListByAssignmentIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> assignmentIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidence>>(Evidence.Where(x => x.OrganizationId == organizationId && x.AssignmentId.HasValue && assignmentIds.Contains(x.AssignmentId.Value)).ToList());
+
     public Task<IReadOnlyList<AssetEvidence>> ListByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId).ToList());
 
@@ -495,6 +594,7 @@ public sealed class FakeCurrentUser : ICurrentUser
 {
     public bool IsAuthenticated { get; set; } = true;
     public Guid OrganizationId { get; set; } = Guid.NewGuid();
+    public Guid? PersonId { get; set; }
     public string Subject { get; set; } = Guid.NewGuid().ToString();
     public string Email { get; set; } = "tester@acme.test";
     public string Language { get; set; } = "pl";

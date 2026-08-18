@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
@@ -71,7 +72,10 @@ public static class SubscriptionEndpoints
         return api;
     }
 
+    [ValidatedRequest]
     private sealed record UpgradeRequest(string PlanKey);
+    [ValidatedRequest]
     private sealed record CheckoutSessionRequest(string SuccessUrl, string CancelUrl);
+    [ValidatedRequest]
     private sealed record BillingPortalRequest(string ReturnUrl);
 }

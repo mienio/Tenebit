@@ -6,6 +6,7 @@ using Tenebit.Api.Auth;
 using Tenebit.Application.Identity;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.Organizations;
+using Tenebit.Domain.People;
 using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Tests.Integration;
@@ -57,10 +58,33 @@ public sealed class TenebitApiFactory : WebApplicationFactory<Program>
         await db.SaveChangesAsync();
 
         var tokenIssuer = scope.ServiceProvider.GetRequiredService<TokenIssuer>();
-        var authUser = new AuthUserResponse(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, roles.Length > 0 ? roles : ["owner"], true, false);
+        var authUser = new AuthUserResponse(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, roles.Length > 0 ? roles : ["owner"], true, false, user.SecurityStamp);
         var token = tokenIssuer.Issue(authUser);
 
         return (organization, user, token);
+    }
+
+    public async Task<(Organization Organization, OrganizationUser User, Person Person, string Token)> SeedTenantWithPersonAsync(string namePrefix, params string[] roles)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<TenebitDbContext>();
+
+        var organization = new Organization($"{namePrefix} {Guid.NewGuid():N}", "PL", "pl", "PLN", "Europe/Warsaw");
+        var email = $"{Guid.NewGuid():N}@example.test";
+        var person = new Person(organization.Id, namePrefix, "User", email);
+        var user = new OrganizationUser(organization.Id, email, $"{namePrefix} user", true);
+        user.Update(user.Email, user.DisplayName, true, roles.Length > 0 ? roles : ["employee"]);
+        user.LinkPerson(person.Id);
+        user.MarkEmailVerified();
+
+        db.Organizations.Add(organization);
+        db.People.Add(person);
+        db.OrganizationUsers.Add(user);
+        await db.SaveChangesAsync();
+
+        var tokenIssuer = scope.ServiceProvider.GetRequiredService<TokenIssuer>();
+        var authUser = new AuthUserResponse(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, roles.Length > 0 ? roles : ["employee"], true, false, user.SecurityStamp, person.Id);
+        return (organization, user, person, tokenIssuer.Issue(authUser));
     }
 
     public HttpClient CreateAuthenticatedClient(string token)
