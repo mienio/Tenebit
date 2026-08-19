@@ -1,6 +1,6 @@
 import { MailCheck } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
 import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
@@ -15,10 +15,11 @@ import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 export function VerifyEmailPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const [fragment] = useState(readRecoveryCodeFragment);
   const [email, setEmail] = useState(fragment.email);
   const [code, setCode] = useState(fragment.code);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(() => (location.state as { password?: string } | null)?.password ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

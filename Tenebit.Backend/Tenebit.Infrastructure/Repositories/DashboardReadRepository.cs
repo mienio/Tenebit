@@ -52,11 +52,13 @@ public sealed class DashboardReadRepository : IDashboardReadRepository
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var byStatus = await assets
+        var byStatus = (await assets
             .GroupBy(x => x.Status)
-            .Select(group => new DashboardStatusCount(group.Key, group.Count()))
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken))
+            .Select(x => new DashboardStatusCount(x.Status, x.Count))
             .OrderBy(x => x.Status)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var warranty = await assets
             .Where(x => x.WarrantyUntil.HasValue && x.WarrantyUntil.Value >= today && x.WarrantyUntil.Value <= warrantyLimit)
@@ -65,33 +67,39 @@ public sealed class DashboardReadRepository : IDashboardReadRepository
             .Select(x => new DashboardWarrantyAsset(x.Id, x.Name, x.AssetTag, x.WarrantyUntil!.Value))
             .ToListAsync(cancellationToken);
 
-        var byCategory = await (
+        var byCategory = (await (
                 from asset in _db.Assets.AsNoTracking()
                 join category in _db.AssetCategories.AsNoTracking()
                     on new { asset.OrganizationId, Id = asset.CategoryId } equals new { category.OrganizationId, category.Id }
                 where asset.OrganizationId == organizationId
                 group asset by new { category.Id, category.Name } into grouped
                 orderby grouped.Count() descending
-                select new DashboardCategoryCount(grouped.Key.Id, grouped.Key.Name, grouped.Count()))
-            .ToListAsync(cancellationToken);
+                select new { grouped.Key.Id, grouped.Key.Name, Count = grouped.Count() })
+            .ToListAsync(cancellationToken))
+            .Select(x => new DashboardCategoryCount(x.Id, x.Name, x.Count))
+            .ToList();
 
-        var byLocation = await assets
+        var byLocation = (await assets
             .Where(x => x.Location != null && x.Location != string.Empty)
             .GroupBy(x => x.Location!)
-            .Select(group => new DashboardLocationCount(group.Key, group.Count()))
+            .Select(group => new { Location = group.Key, Count = group.Count() })
             .OrderByDescending(x => x.Count)
             .Take(10)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken))
+            .Select(x => new DashboardLocationCount(x.Location, x.Count))
+            .ToList();
 
-        var byTeam = await (
+        var byTeam = (await (
                 from asset in _db.Assets.AsNoTracking()
                 join team in _db.Teams.AsNoTracking()
                     on new { asset.OrganizationId, Id = asset.TeamId!.Value } equals new { team.OrganizationId, team.Id }
                 where asset.OrganizationId == organizationId && asset.TeamId.HasValue
                 group asset by new { team.Id, team.Name } into grouped
                 orderby grouped.Count() descending
-                select new DashboardTeamCount(grouped.Key.Id, grouped.Key.Name, grouped.Count(), grouped.Sum(x => x.PurchasePrice ?? 0m)))
-            .ToListAsync(cancellationToken);
+                select new { grouped.Key.Id, grouped.Key.Name, Count = grouped.Count(), Value = grouped.Sum(x => x.PurchasePrice ?? 0m) })
+            .ToListAsync(cancellationToken))
+            .Select(x => new DashboardTeamCount(x.Id, x.Name, x.Count, x.Value))
+            .ToList();
 
         return new DashboardReadModel(
             assetMetrics?.Total ?? 0,

@@ -34,15 +34,19 @@ export function RegisterPage() {
         String(form.get('organizationName') ?? ''),
         String(form.get('displayName') ?? ''),
         email,
-        String(form.get('password') ?? ''),
+        password,
         String(form.get('currency') ?? 'PLN'),
         language,
         form.get('acceptTerms') === 'on'
       );
-      const destination = result.requiresEmailVerification
-        ? `/verify-email#email=${encodeURIComponent(email)}`
-        : '/login?registered=1';
-      navigate(destination, { replace: true });
+      if (result.requiresEmailVerification) {
+        // Confirming the emailed code re-sets the account password (so someone who receives the
+        // code for an address they didn't register can reclaim it) — prefill with what was just
+        // typed here so the common case doesn't look like a second, unrelated password prompt.
+        navigate(`/verify-email#email=${encodeURIComponent(email)}`, { replace: true, state: { password } });
+      } else {
+        navigate('/login?registered=1', { replace: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.registerFailed'));
     } finally {
