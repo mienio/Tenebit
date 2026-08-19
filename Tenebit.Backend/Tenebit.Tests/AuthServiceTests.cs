@@ -534,11 +534,11 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task EmailVerificationClaim_ReplacesPreregistrationPassword_AndInvalidatesOldCredential()
+    public async Task EmailVerification_ConfirmsCode_AndKeepsTheRegistrationPassword()
     {
         var fixture = CreateFullFixture();
         var registered = await fixture.Service.RegisterAsync(
-            new RegisterRequest("VictimCo", "victim@example.test", "attacker-password", "Victim", "PLN", AcceptTerms: true),
+            new RegisterRequest("VictimCo", "victim@example.test", "registration-password", "Victim", "PLN", AcceptTerms: true),
             CancellationToken.None);
         const string verificationCode = "654321";
         fixture.EmailVerificationTokens.Add(new EmailVerificationToken(
@@ -547,14 +547,12 @@ public class AuthServiceTests
             fixture.Clock.UtcNow.AddHours(1)));
 
         var verified = await fixture.Service.VerifyEmailAsync(
-            new VerifyEmailRequest("victim@example.test", verificationCode, "mailbox-owner-password"),
+            new VerifyEmailRequest("victim@example.test", verificationCode),
             CancellationToken.None);
-        var oldLogin = await fixture.Service.LoginAsync(new LoginRequest("victim@example.test", "attacker-password"), null, CancellationToken.None);
-        var newLogin = await fixture.Service.LoginAsync(new LoginRequest("victim@example.test", "mailbox-owner-password"), null, CancellationToken.None);
+        var login = await fixture.Service.LoginAsync(new LoginRequest("victim@example.test", "registration-password"), null, CancellationToken.None);
 
         Assert.True(verified.IsSuccess);
-        Assert.True(oldLogin.IsFailure);
-        Assert.True(newLogin.IsSuccess);
+        Assert.True(login.IsSuccess);
     }
 
     [Fact]

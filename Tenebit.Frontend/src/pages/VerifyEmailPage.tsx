@@ -1,11 +1,10 @@
 import { MailCheck } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
 import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
-import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { PublicFooter } from '../components/PublicFooter';
 import { SegmentedCodeInput } from '../components/SegmentedCodeInput';
 import { clearUrlFragment, readRecoveryCodeFragment } from '../hooks/usePublicCapabilitySession';
@@ -15,11 +14,9 @@ import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 export function VerifyEmailPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const location = useLocation();
   const [fragment] = useState(readRecoveryCodeFragment);
   const [email, setEmail] = useState(fragment.email);
   const [code, setCode] = useState(fragment.code);
-  const [password, setPassword] = useState(() => (location.state as { password?: string } | null)?.password ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +31,7 @@ export function VerifyEmailPage() {
     try {
       await apiRequest('/api/auth/verify-email', {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim(), code, newPassword: password })
+        body: JSON.stringify({ email: email.trim(), code })
       });
       navigate('/login?verified=1', { replace: true });
     } catch (err) {
@@ -66,12 +63,8 @@ export function VerifyEmailPage() {
             autoFocus={Boolean(email) && !code}
           />
           <p className="formHint authCard__hint">{t('auth.codeHint')}</p>
-          <Field label={t('auth.newPasswordLabel')} info={t('auth.passwordHint')}>
-            <TextInput type="password" minLength={8} required autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} />
-          </Field>
-          <PasswordStrengthMeter password={password} />
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
-          <Button disabled={submitting || code.length !== 6 || password.length < 8} icon={<MailCheck size={16} />}>
+          <Button disabled={submitting || code.length !== 6} icon={<MailCheck size={16} />}>
             {submitting ? t('auth.verifyLoading') : t('auth.verifyButton')}
           </Button>
         </form>

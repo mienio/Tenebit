@@ -35,8 +35,7 @@ public sealed record ResetPasswordRequest(
 [ValidatedRequest]
 public sealed record VerifyEmailRequest(
     [property: Required, EmailAddress, StringLength(240)] string Email,
-    [property: Required, RegularExpression(@"^\d{6}$")] string Code,
-    [property: Required] string NewPassword);
+    [property: Required, RegularExpression(@"^\d{6}$")] string Code);
 
 [ValidatedRequest]
 public sealed record ResendVerificationRequest([property: Required, EmailAddress, StringLength(240)] string Email);

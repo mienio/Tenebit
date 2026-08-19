@@ -604,11 +604,6 @@ public sealed class AuthService
 
     public async Task<Result> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
-        {
-            return Result.Failure(Error.Validation("Hasło musi mieć co najmniej 8 znaków."));
-        }
-
         var code = TokenHasher.NormalizeOneTimeCode(request.Code);
         if (code.Length != TokenHasher.OneTimeCodeLength)
         {
@@ -631,13 +626,7 @@ public sealed class AuthService
                 return Result.Failure(Error.Validation("Kod weryfikacyjny jest nieprawidłowy lub wygasł."));
             }
 
-            user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
             user.MarkEmailVerified();
-            user.RotateSecurityStamp();
-            _securityStateCache?.Remove(user.Id);
-            await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
-            await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, ct);
-            await _passwordResetTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
             await _emailVerificationTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
             await _unitOfWork.SaveChangesAsync(ct);
             return Result.Success();

@@ -19,8 +19,10 @@ export function ResetPasswordPage() {
   const [email, setEmail] = useState(fragment.email);
   const [code, setCode] = useState(fragment.code);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   useEffect(() => {
     clearUrlFragment();
@@ -28,6 +30,10 @@ export function ResetPasswordPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (password !== confirmPassword) {
+      setError(t('auth.passwordMismatch'));
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -69,8 +75,12 @@ export function ResetPasswordPage() {
             <TextInput type="password" minLength={8} required autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} />
           </Field>
           <PasswordStrengthMeter password={password} />
+          <Field label={t('auth.confirmPasswordLabel')}>
+            <TextInput type="password" minLength={8} required autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} />
+          </Field>
+          {passwordsMismatch ? <p className="formMessage formMessage--error">{t('auth.passwordMismatch')}</p> : null}
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
-          <Button disabled={submitting || code.length !== 6 || password.length < 8} icon={<KeyRound size={16} />}>
+          <Button disabled={submitting || code.length !== 6 || password.length < 8 || passwordsMismatch} icon={<KeyRound size={16} />}>
             {submitting ? t('auth.resetLoading') : t('auth.resetButton')}
           </Button>
         </form>

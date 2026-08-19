@@ -22,9 +22,15 @@ export function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (password !== confirmPassword) {
+      setError(t('auth.passwordMismatch'));
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim();
     setError(null);
@@ -39,14 +45,10 @@ export function RegisterPage() {
         language,
         form.get('acceptTerms') === 'on'
       );
-      if (result.requiresEmailVerification) {
-        // Confirming the emailed code re-sets the account password (so someone who receives the
-        // code for an address they didn't register can reclaim it) — prefill with what was just
-        // typed here so the common case doesn't look like a second, unrelated password prompt.
-        navigate(`/verify-email#email=${encodeURIComponent(email)}`, { replace: true, state: { password } });
-      } else {
-        navigate('/login?registered=1', { replace: true });
-      }
+      const destination = result.requiresEmailVerification
+        ? `/verify-email#email=${encodeURIComponent(email)}`
+        : '/login?registered=1';
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.registerFailed'));
     } finally {
@@ -80,12 +82,24 @@ export function RegisterPage() {
           </Field>
           {!password ? <p className="formHint">{t('auth.passwordHint')}</p> : null}
           <PasswordStrengthMeter password={password} />
+          <Field label={t('auth.confirmPasswordLabel')}>
+            <TextInput
+              name="confirmPassword"
+              type="password"
+              minLength={8}
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={event => setConfirmPassword(event.target.value)}
+            />
+          </Field>
+          {passwordsMismatch ? <p className="formMessage formMessage--error">{t('auth.passwordMismatch')}</p> : null}
           <label className="authLegalConsent">
             <input type="checkbox" name="acceptTerms" required />
             <span>{t('auth.acceptTermsPrefix')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.</span>
           </label>
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
-          <Button disabled={submitting} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>
+          <Button disabled={submitting || passwordsMismatch} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>
         </form>
         <p className="authFooter">{t('auth.hasAccount')} <Link to="/login">{t('auth.loginLink')}</Link></p>
       </section>
