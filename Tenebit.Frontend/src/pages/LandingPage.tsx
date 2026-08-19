@@ -6,14 +6,13 @@ import {
   ClipboardCheck,
   Headphones,
   Laptop,
-  MailCheck,
   Monitor,
   PackageCheck,
   QrCode,
   Smartphone,
   Users
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BrandMark } from '../components/BrandMark';
 import { PublicFooter } from '../components/PublicFooter';
@@ -37,21 +36,17 @@ const features = [
   { icon: BarChart3, key: 'reports' }
 ] as const;
 
-type FeatureKey = (typeof features)[number]['key'];
-
 const steps = ['step1', 'step2', 'step3'];
 
 export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
-  const [activeFeature, setActiveFeature] = useState<FeatureKey>('assets');
   const currencyByLanguage: Record<typeof language, { locale: string; currency: string }> = {
     pl: { locale: 'pl-PL', currency: 'PLN' },
     en: { locale: 'en-US', currency: 'USD' },
     es: { locale: 'es-ES', currency: 'EUR' },
     de: { locale: 'de-DE', currency: 'EUR' }
   };
-  const selectedFeature = useMemo(() => features.find(feature => feature.key === activeFeature) ?? features[0], [activeFeature]);
   const formatPreviewValue = (value: number) => {
     const { locale, currency } = currencyByLanguage[language];
     return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
@@ -134,59 +129,14 @@ export function LandingPage() {
           <p>{t('landing.featuresLead')}</p>
         </div>
 
-        <div className="landing__featureShowcase">
-          <div className="landing__featureTabs" role="tablist" aria-label={t('landing.featuresHeadline')}>
-            {features.map(feature => {
-              const isActive = feature.key === activeFeature;
-              return (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`feature-panel-${feature.key}`}
-                  id={`feature-tab-${feature.key}`}
-                  className={`landing__featureTab${isActive ? ' landing__featureTab--active' : ''}`}
-                  key={feature.key}
-                  onClick={() => setActiveFeature(feature.key)}
-                >
-                  <span className="landing__featureTabIcon"><feature.icon size={20} /></span>
-                  <span className="landing__featureTabText">
-                    <strong>{t(`landing.feature.${feature.key}.title`)}</strong>
-                    <small>{t(`landing.feature.${feature.key}.tab`)}</small>
-                  </span>
-                  <ArrowRight size={17} aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
-
-          <article
-            className="landing__featurePanel"
-            role="tabpanel"
-            id={`feature-panel-${selectedFeature.key}`}
-            aria-labelledby={`feature-tab-${selectedFeature.key}`}
-          >
-            <div className="landing__featurePanelHead">
-              <span className="landing__featurePanelIcon"><selectedFeature.icon size={26} /></span>
-              <div>
-                <p className="eyebrow">{t('landing.featureShowcase.kicker')}</p>
-                <h3>{t(`landing.feature.${selectedFeature.key}.title`)}</h3>
-              </div>
-            </div>
-            <p className="landing__featurePanelText">{t(`landing.feature.${selectedFeature.key}.text`)}</p>
-            <blockquote>{t(`landing.feature.${selectedFeature.key}.example`)}</blockquote>
-            <div className="landing__featureChecklist">
-              {[1, 2, 3].map(index => (
-                <span key={index}><Check size={15} /> {t(`landing.feature.${selectedFeature.key}.point${index}`)}</span>
-              ))}
-            </div>
-            {selectedFeature.key === 'assignments' ? (
-              <div className="landing__mailProof">
-                <MailCheck size={20} />
-                <span>{t('landing.feature.assignments.mailProof')}</span>
-              </div>
-            ) : null}
-          </article>
+        <div className="landing__featureGrid">
+          {features.map(feature => (
+            <article className="landing__featureCard" key={feature.key}>
+              <h3>{t(`landing.feature.${feature.key}.title`)}</h3>
+              <p>{t(`landing.feature.${feature.key}.text`)}</p>
+              <blockquote>{t(`landing.feature.${feature.key}.example`)}</blockquote>
+            </article>
+          ))}
         </div>
       </section>
 
