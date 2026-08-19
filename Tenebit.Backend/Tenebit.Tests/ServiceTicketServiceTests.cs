@@ -20,7 +20,8 @@ public class ServiceTicketServiceTests
             new InMemoryActivityLogRepository(),
             currentUser,
             new FakeClock(),
-            new FakeUnitOfWork());
+            new FakeUnitOfWork(),
+            TestAuthorization.Asset(assets, currentUser));
 
         return (service, currentUser, tickets, assets, inspections);
     }

@@ -53,7 +53,7 @@ public sealed class OffboardingCase
     public string? CancellationReason { get; private set; }
     public string? FinalProtocolNumber { get; private set; }
 
-    /// <summary>Edycja pól sprawy dozwolona tylko w statusie roboczym — po starcie migawka pozycji jest już wygenerowana.</summary>
+    /// <summary>Edycja pól sprawy dozwolona tylko w statusie roboczym - po starcie migawka pozycji jest już wygenerowana.</summary>
     public void UpdateDraft(DateTimeOffset employmentEndsAt, DateTimeOffset returnDueDate, string? defaultReturnLocation, string? notes,
         Guid? processOwnerId, bool blockNewReservations, bool cancelFutureReservations, bool autoReleaseLicenses)
     {
@@ -84,7 +84,7 @@ public sealed class OffboardingCase
     }
 
     /// <summary>Wylicza status na podstawie rozliczenia pozycji. ReadyToClose jest tu jedynie kandydatem
-    /// operacyjnym — realne zamknięcie (<see cref="Complete"/>) wymaga dodatkowo dezaktywacji osoby.</summary>
+    /// operacyjnym - realne zamknięcie (<see cref="Complete"/>) wymaga dodatkowo dezaktywacji osoby.</summary>
     public void RecomputeStatus(IReadOnlyCollection<OffboardingItem> items, DateTimeOffset now)
     {
         if (Status is OffboardingCaseStatus.Draft or OffboardingCaseStatus.Completed or OffboardingCaseStatus.Cancelled)
@@ -106,7 +106,7 @@ public sealed class OffboardingCase
             : OffboardingCaseStatus.Active;
     }
 
-    /// <summary>Idempotentne: ponowne wywołanie na już zakończonej sprawie nic nie zmienia i nie tworzy drugiego protokołu.</summary>
+    /// <summary>Idempotentne: ponowne wywołanie na już zakończonej sprawie nic nie zmienia i nie tworzy drugiego numeru zamknięcia.</summary>
     public void Complete(DateTimeOffset completedAt, string completedBy, string protocolNumber)
     {
         if (Status == OffboardingCaseStatus.Completed)
@@ -131,7 +131,7 @@ public sealed class OffboardingCase
         PublicTokenRevokedAt ??= completedAt;
     }
 
-    /// <summary>Dozwolone tylko przed dezaktywacją osoby — po niej korektę pomyłki obsługuje <see cref="RestoreEmployment"/>.</summary>
+    /// <summary>Dozwolone tylko przed dezaktywacją osoby - po niej korektę pomyłki obsługuje <see cref="RestoreEmployment"/>.</summary>
     public void Cancel(DateTimeOffset cancelledAt, string reason)
     {
         if (Status == OffboardingCaseStatus.Cancelled)
@@ -157,13 +157,13 @@ public sealed class OffboardingCase
         Status = OffboardingCaseStatus.Cancelled;
         CancelledAt = cancelledAt;
         CancellationReason = reason.Trim();
-        // A cancelled case's link must stop working immediately — otherwise a stale link can still read,
+        // A cancelled case's link must stop working immediately - otherwise a stale link can still read,
         // answer, or upload evidence into a case that no longer exists administratively (audyt AUD3-008).
         PublicTokenRevokedAt ??= cancelledAt;
     }
 
     /// <summary>Korekta pomyłkowej dezaktywacji. Nie przydziela automatycznie zwolnionych licencji ani zwróconych
-    /// aktywów — to wymaga ręcznej odbudowy w kolejnym kroku procesu.</summary>
+    /// aktywów - to wymaga ręcznej odbudowy w kolejnym kroku procesu.</summary>
     public void RestoreEmployment(DateTimeOffset restoredAt)
     {
         if (!PersonDeactivatedAt.HasValue)
@@ -174,7 +174,7 @@ public sealed class OffboardingCase
         Status = OffboardingCaseStatus.Cancelled;
         CancelledAt = restoredAt;
         CancellationReason = "Przywrócenie zatrudnienia";
-        // Same reasoning as Cancel(...) — restoring employment must also kill the outstanding public
+        // Same reasoning as Cancel(...) - restoring employment must also kill the outstanding public
         // link atomically (audyt AUD3-008).
         PublicTokenRevokedAt ??= restoredAt;
     }

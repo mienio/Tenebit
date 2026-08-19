@@ -74,13 +74,10 @@ export function ProceduresPage() {
     const openId = searchParams.get('open');
     if (!openId) return;
     let cancelled = false;
-    // Deep link from elsewhere (e.g. an assignment's procedure list): the
-    // target procedure may not be on the currently loaded page/search, so
-    // resolve it against the full unpaged list instead.
-    api.procedures().then(all => {
+    // Deep links resolve exactly one record instead of loading the complete procedure list.
+    api.procedure(openId).then(match => {
       if (cancelled) return;
-      const match = all.find(item => item.id === openId);
-      if (match) setDialog({ mode: 'edit', procedure: match });
+      setDialog({ mode: 'edit', procedure: match });
       setSearchParams(params => { params.delete('open'); return params; }, { replace: true });
     }).catch(() => {
       setSearchParams(params => { params.delete('open'); return params; }, { replace: true });
@@ -321,7 +318,7 @@ export function ProceduresPage() {
                 <span className="fileDropzone__hint">{dragActive ? t('procedures.dropHintActive') : t('procedures.dropHint')}</span>
                 <label className="button button--secondary">
                   {uploading ? t('procedures.uploading') : t('procedures.addFiles')}
-                  <input type="file" multiple style={{ display: 'none' }} disabled={uploading} onChange={uploadDocument} accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" />
+                  <input type="file" multiple style={{ display: 'none' }} disabled={uploading} onChange={uploadDocument} accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" />
                 </label>
               </div>
             ) : <p className="muted">{t('procedures.filesLocked')}</p>}
@@ -337,7 +334,7 @@ export function ProceduresPage() {
                       <div className="listRow" key={`${item.personId}-${item.protocolNumber}`}>
                         <div>
                           <strong>{item.personName}</strong>
-                          <small>{item.protocolNumber ?? '—'}{item.confirmedIp ? ` · ${t('assignments.proofIp')}: ${item.confirmedIp}` : ''}{item.status === 'Accepted' && !item.isIntegrityVerified ? ` · ${t('assignments.proofTampered')}` : ''}</small>
+                          <small>{item.protocolNumber ?? '-'}{item.confirmedIp ? ` · ${t('assignments.proofIp')}: ${item.confirmedIp}` : ''}{item.status === 'Accepted' && !item.isIntegrityVerified ? ` · ${t('assignments.proofTampered')}` : ''}</small>
                         </div>
                         <StatusBadge status={item.status} />
                       </div>

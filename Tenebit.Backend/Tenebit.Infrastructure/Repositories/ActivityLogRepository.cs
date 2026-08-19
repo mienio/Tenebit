@@ -54,5 +54,21 @@ public sealed class ActivityLogRepository : IActivityLogRepository
             x.Action == action &&
             x.CreatedAt >= since, cancellationToken);
 
+    public async Task<int> DeleteOlderThanAsync(DateTimeOffset cutoff, int batchSize, CancellationToken cancellationToken)
+    {
+        var ids = await _db.ActivityLogs
+            .AsNoTracking()
+            .Where(x => x.CreatedAt < cutoff)
+            .OrderBy(x => x.CreatedAt)
+            .Select(x => x.Id)
+            .Take(Math.Clamp(batchSize, 1, 5_000))
+            .ToListAsync(cancellationToken);
+
+        if (ids.Count == 0) return 0;
+        return await _db.ActivityLogs
+            .Where(x => ids.Contains(x.Id) && x.CreatedAt < cutoff)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
     public void Add(ActivityLog log) => _db.ActivityLogs.Add(log);
 }

@@ -169,16 +169,16 @@ export function LicensesPage() {
                   <tr key={license.id} onClick={() => setSelected(license)}>
                     <td className="cell-icon"><div className="table-icon"><KeyRound size={16} /></div></td>
                     <td data-label={t('licenses.colName')}><strong>{license.name}</strong></td>
-                    <td data-label={t('licenses.colVendor')}>{license.vendor ?? '—'}</td>
+                    <td data-label={t('licenses.colVendor')}>{license.vendor ?? '-'}</td>
                     <td data-label={t('licenses.colSeats')}>{license.seatsAssigned}/{license.seatsTotal}</td>
                     <td data-label={t('licenses.colKey')}>
-                      {!license.hasLicenseKey ? '—' : !license.canViewLicenseKey ? (
+                      {!license.hasLicenseKey ? '-' : !license.canViewLicenseKey ? (
                         <span title={t('licenses.keyHiddenHint')}><Lock size={14} /> {t('licenses.keyHidden')}</span>
                       ) : revealedKeys.has(license.id) ? (
                         <code>{license.licenseKey}</code>
                       ) : '••••••••'}
                     </td>
-                    <td data-label={t('licenses.colExpires')}>{license.expiresAt ?? '—'}</td>
+                    <td data-label={t('licenses.colExpires')}>{license.expiresAt ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

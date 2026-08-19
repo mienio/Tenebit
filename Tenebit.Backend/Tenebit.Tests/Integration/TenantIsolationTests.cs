@@ -12,13 +12,14 @@ using Tenebit.Infrastructure.Data;
 namespace Tenebit.Tests.Integration;
 
 /// <summary>Audyt AUD-040: "red team tenant isolation" na prawdziwym API + PostgreSQL. Każdy test zakłada
-/// dwie niezależne organizacje (A, B) i sprawdza, że A nie może odczytać/zmodyfikować danych B — oraz że
+/// dwie niezależne organizacje (A, B) i sprawdza, że A nie może odczytać/zmodyfikować danych B - oraz że
 /// role bez uprawnień dostają 403 z prawdziwego middleware auth/authz, nie tylko z Application-layer mocka.</summary>
+[Collection(PostgresIntegrationCollection.Name)]
 public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
 {
     // Serwer serializuje enumy jako stringi (Program.cs: JsonStringEnumConverter na JsonOptions Minimal API),
     // ale HttpClient.ReadFromJsonAsync<T>() bez jawnych opcji używa domyślnego JsonSerializerOptions, który
-    // tego nie wie — bez tego AssetCategoryResponse.Type/AssetResponse.Status rzucają JsonException.
+    // tego nie wie - bez tego AssetCategoryResponse.Type/AssetResponse.Status rzucają JsonException.
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() }

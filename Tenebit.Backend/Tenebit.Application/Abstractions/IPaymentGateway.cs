@@ -5,8 +5,8 @@ namespace Tenebit.Application.Abstractions;
 public interface IPaymentGateway
 {
     bool IsConfigured { get; }
-    Task<string> CreateCustomerAsync(string email, Guid organizationId, CancellationToken cancellationToken);
-    Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, CancellationToken cancellationToken);
+    Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken);
+    Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken);
     Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken);
     PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader);
     Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken);

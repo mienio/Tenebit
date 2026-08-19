@@ -7,7 +7,7 @@ namespace Tenebit.Infrastructure.Data.Migrations;
 /// <summary>
 /// Backfill domyślnych reguł alertów dla wszystkich istniejących organizacji. Trzy typy, które przed
 /// wprowadzeniem konfigurowalnych alertów działały bezwarunkowo (gwarancja, termin zwrotu wydania, brak
-/// potwierdzenia wydania), są włączone — żeby wdrożenie nie uciszyło istniejących powiadomień. Nowe kategorie
+/// potwierdzenia wydania), są włączone - żeby wdrożenie nie uciszyło istniejących powiadomień. Nowe kategorie
 /// startują wyłączone. Nowe organizacje otrzymują te same reguły przez StarterAlertRules (hook w AuthService).
 /// </summary>
 [DbContext(typeof(TenebitDbContext))]

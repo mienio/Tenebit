@@ -26,11 +26,14 @@ public sealed class AuthService
     private readonly IDeviceTrustTokenRepository _deviceTrustTokens;
     private readonly ITwoFactorRecoveryCodeRepository _recoveryCodes;
     private readonly IEmailSender _emailSender;
+    private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly IQrCodeGenerator _qrCodeGenerator;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<AuthService> _logger;
+    private readonly IUserSecurityStateCache? _securityStateCache;
+    private readonly IEmailAvailability? _emailAvailability;
 
     public AuthService(
         IOrganizationRepository organizations,
@@ -50,7 +53,10 @@ public sealed class AuthService
         IQrCodeGenerator qrCodeGenerator,
         IClock clock,
         IUnitOfWork unitOfWork,
-        ILogger<AuthService> logger)
+        ILogger<AuthService> logger,
+        IEmailOutboxWriter? emailOutbox = null,
+        IUserSecurityStateCache? securityStateCache = null,
+        IEmailAvailability? emailAvailability = null)
     {
         _organizations = organizations;
         _users = users;
@@ -65,23 +71,56 @@ public sealed class AuthService
         _deviceTrustTokens = deviceTrustTokens;
         _recoveryCodes = recoveryCodes;
         _emailSender = emailSender;
+        _emailOutbox = emailOutbox;
         _appLinkBuilder = appLinkBuilder;
         _qrCodeGenerator = qrCodeGenerator;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _securityStateCache = securityStateCache;
+        _emailAvailability = emailAvailability;
     }
+
+    // No SMTP means the verification code can never reach the user, so the verification gate would
+    // permanently lock every new account out. Auto-verify instead of blocking login; once a real
+    // Email:Enabled=true SMTP config is deployed, registration requires the delivered one-time code.
+    private bool AutoVerifyEmailOnRegister => _emailAvailability is not null && !_emailAvailability.Enabled;
+
+    public bool RequiresEmailVerificationOnRegister => !AutoVerifyEmailOnRegister;
 
     public async Task<Result<AuthUserResponse>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
+        if (!request.AcceptTerms)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation("Akceptacja regulaminu i polityki prywatności jest wymagana."));
+        }
+
         if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
         {
             return Result<AuthUserResponse>.Failure(Error.Validation("Hasło musi mieć co najmniej 8 znaków."));
         }
 
-        if (await _users.FindByEmailAsync(request.Email, cancellationToken) is not null)
+        var existingUser = await _users.FindByEmailAsync(request.Email, cancellationToken);
+        if (existingUser is not null)
         {
-            return Result<AuthUserResponse>.Failure(Error.Conflict("Użytkownik z tym adresem e-mail już istnieje."));
+            // Registration must not disclose account existence. The endpoint returns the same 202 shape.
+            if (!existingUser.IsEmailVerified && existingUser.IsActive)
+            {
+                if (AutoVerifyEmailOnRegister)
+                {
+                    existingUser.MarkEmailVerified();
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+                else
+                {
+                    await SendVerificationEmailBestEffortAsync(existingUser, cancellationToken);
+                }
+            }
+
+            var existingOrganization = await _organizations.GetAsync(existingUser.OrganizationId, cancellationToken);
+            if (existingOrganization is null)
+                return Result<AuthUserResponse>.Failure(Error.Validation("Nie można dokończyć rejestracji."));
+            return Result<AuthUserResponse>.Success(Map(existingUser, existingOrganization));
         }
 
         try
@@ -94,6 +133,7 @@ public sealed class AuthService
             var user = new OrganizationUser(organization.Id, request.Email, request.DisplayName, true);
             user.Update(request.Email, request.DisplayName, true, [TenebitRoles.Owner]);
             user.SetPasswordHash(PasswordHasher.Hash(request.Password));
+            if (AutoVerifyEmailOnRegister) user.MarkEmailVerified();
             _users.Add(user);
 
             foreach (var category in StarterAssetCategories.Create(organization.Id))
@@ -114,7 +154,10 @@ public sealed class AuthService
             _activity.Add(new ActivityLog(organization.Id, "organization.registered", "organization", organization.Id, user.Email, organization.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            await SendVerificationEmailBestEffortAsync(user, cancellationToken);
+            if (!AutoVerifyEmailOnRegister)
+            {
+                await SendVerificationEmailBestEffortAsync(user, cancellationToken);
+            }
 
             return Result<AuthUserResponse>.Success(Map(user, organization));
         }
@@ -127,9 +170,17 @@ public sealed class AuthService
     public async Task<Result<LoginOutcome>> LoginAsync(LoginRequest request, string? deviceTrustToken, CancellationToken cancellationToken)
     {
         var user = await _users.FindByEmailAsync(request.Email, cancellationToken);
-        if (user is null || !user.IsActive || !PasswordHasher.Verify(request.Password, user.PasswordHash))
+        var passwordHash = user?.PasswordHash ?? PasswordHasher.DummyHash;
+        var passwordValid = PasswordHasher.Verify(request.Password, passwordHash);
+        if (user is null || !user.IsActive || !user.IsEmailVerified || !passwordValid)
         {
             return Result<LoginOutcome>.Failure(Error.Validation("Nieprawidłowy e-mail lub hasło."));
+        }
+
+        if (PasswordHasher.NeedsRehash(user.PasswordHash))
+        {
+            user.SetPasswordHash(PasswordHasher.Hash(request.Password));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         var trustedDevice = user.IsTwoFactorEnabled
@@ -152,6 +203,10 @@ public sealed class AuthService
 
     public async Task<string> IssueDeviceTrustTokenAsync(Guid organizationUserId, CancellationToken cancellationToken)
     {
+        var user = await _users.GetByIdAsync(organizationUserId, cancellationToken);
+        if (user is null || !user.IsActive || !user.IsEmailVerified || !user.IsTwoFactorEnabled)
+            throw new InvalidOperationException("Zaufane urządzenie wymaga aktywnego, zweryfikowanego konta z 2FA.");
+
         var rawToken = TokenHasher.NewRawToken();
         var token = new DeviceTrustToken(organizationUserId, TokenHasher.Hash(rawToken), _clock.UtcNow.AddDays(30));
         _deviceTrustTokens.Add(token);
@@ -162,12 +217,12 @@ public sealed class AuthService
     public async Task<Result<AuthUserResponse>> CompleteTwoFactorLoginAsync(Guid userId, string code, CancellationToken cancellationToken)
     {
         var user = await _users.GetByIdAsync(userId, cancellationToken);
-        if (user is null || !user.IsActive || !user.IsTwoFactorEnabled || string.IsNullOrEmpty(user.TotpSecret))
+        if (user is null || !user.IsActive || !user.IsEmailVerified || !user.IsTwoFactorEnabled || string.IsNullOrEmpty(user.TotpSecret))
         {
             return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
         }
 
-        var isValidTotp = TotpService.ValidateCode(user.TotpSecret, code);
+        var isValidTotp = await TryConsumeTotpCodeAsync(user, code, cancellationToken);
         if (!isValidTotp && !await TryConsumeRecoveryCodeAsync(userId, code, cancellationToken))
         {
             return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
@@ -207,7 +262,7 @@ public sealed class AuthService
             return Result<TwoFactorEnableResponse>.Failure(Error.Validation("Najpierw wygeneruj sekret 2FA."));
         }
 
-        if (!TotpService.ValidateCode(user.TotpSecret, code))
+        if (!await TryConsumeTotpCodeAsync(user, code, cancellationToken))
         {
             return Result<TwoFactorEnableResponse>.Failure(Error.Validation("Nieprawidłowy kod. Sprawdź godzinę na urządzeniu i spróbuj ponownie."));
         }
@@ -220,6 +275,7 @@ public sealed class AuthService
 
         user.EnableTwoFactor();
         user.RotateSecurityStamp();
+        _securityStateCache?.Remove(user.Id);
         var rawCodes = await ReplaceRecoveryCodesAsync(userId, cancellationToken);
 
         // A 2FA policy change is a security-boundary change. Revoke every existing refresh/trust
@@ -240,7 +296,7 @@ public sealed class AuthService
             return Result<AuthUserResponse>.Failure(Error.Validation("Dwuskładnikowe uwierzytelnianie nie jest włączone."));
         }
 
-        if (!TotpService.ValidateCode(user.TotpSecret, code))
+        if (!await TryConsumeTotpCodeAsync(user, code, cancellationToken))
         {
             return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
         }
@@ -253,6 +309,7 @@ public sealed class AuthService
 
         user.DisableTwoFactor();
         user.RotateSecurityStamp();
+        _securityStateCache?.Remove(user.Id);
         var existingCodes = await _recoveryCodes.ListAsync(userId, cancellationToken);
         _recoveryCodes.RemoveAll(existingCodes);
 
@@ -273,7 +330,7 @@ public sealed class AuthService
             return Result<TwoFactorRecoveryCodesResponse>.Failure(Error.Validation("Dwuskładnikowe uwierzytelnianie nie jest włączone."));
         }
 
-        if (!TotpService.ValidateCode(user.TotpSecret, code))
+        if (!await TryConsumeTotpCodeAsync(user, code, cancellationToken))
         {
             return Result<TwoFactorRecoveryCodesResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
         }
@@ -307,19 +364,22 @@ public sealed class AuthService
         return rawCodes;
     }
 
+    private async Task<bool> TryConsumeTotpCodeAsync(OrganizationUser user, string code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(user.TotpSecret) || !TotpService.TryValidateCode(user.TotpSecret, code, out var counter)) return false;
+        if (!await _users.TryConsumeTotpCounterAsync(user.Id, counter, cancellationToken)) return false;
+        // Keep the tracked entity in sync with the atomic database update.
+        if (!user.LastUsedTotpCounter.HasValue || user.LastUsedTotpCounter.Value < counter) user.RecordTotpCounter(counter);
+        return true;
+    }
+
     private async Task<bool> TryConsumeRecoveryCodeAsync(Guid userId, string code, CancellationToken cancellationToken)
     {
         var normalized = code.Trim().Replace(" ", "").Replace("-", "").ToUpperInvariant();
         if (normalized.Length == 0) return false;
 
         var hash = TokenHasher.Hash(normalized);
-        var codes = await _recoveryCodes.ListAsync(userId, cancellationToken);
-        var match = codes.FirstOrDefault(x => x.IsUnused && x.CodeHash == hash);
-        if (match is null) return false;
-
-        match.MarkUsed(_clock.UtcNow);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return true;
+        return await _recoveryCodes.TryConsumeAsync(userId, hash, _clock.UtcNow, cancellationToken);
     }
 
     private static string GenerateRecoveryCode()
@@ -336,7 +396,7 @@ public sealed class AuthService
     }
 
     // Generic message for every OAuth rejection that stems from account state (inactive account,
-    // unverified provider email) — the callback must not tell an attacker which reason applied
+    // unverified provider email) - the callback must not tell an attacker which reason applied
     // (audyt AUD3-002: "Zwracaj generyczne oauth_rejected, bez ujawniania statusu konta").
     private const string OAuthRejectedMessage = "Logowanie nie powiodło się.";
 
@@ -345,7 +405,7 @@ public sealed class AuthService
         var linkedUser = await _externalLogins.FindLinkedUserAsync(info.Provider, info.ProviderUserId, cancellationToken);
         if (linkedUser is not null)
         {
-            if (!linkedUser.IsActive)
+            if (!linkedUser.IsActive || !linkedUser.IsEmailVerified)
             {
                 return Result<LoginOutcome>.Failure(Error.Validation(OAuthRejectedMessage));
             }
@@ -366,17 +426,16 @@ public sealed class AuthService
                 return Result<LoginOutcome>.Failure(Error.Validation(OAuthRejectedMessage));
             }
 
-            if (!info.EmailVerified)
+            if (!info.EmailVerified || !existingUser.IsEmailVerified)
             {
-                return Result<LoginOutcome>.Failure(Error.Validation("E-mail z tego dostawcy nie jest zweryfikowany. Zaloguj się hasłem i połącz konto w ustawieniach."));
+                // Never merge a verified provider identity into an unverified local account based on
+                // e-mail equality alone. That account may have been preregistered by someone who does
+                // not control the mailbox. The mailbox owner must first complete Tenebit's verification/
+                // recovery flow, or link the provider explicitly from an authenticated session.
+                return Result<LoginOutcome>.Failure(Error.Validation(OAuthRejectedMessage));
             }
 
             _externalLogins.Add(new ExternalLogin(existingUser.Id, info.Provider, info.ProviderUserId));
-            if (!existingUser.IsEmailVerified)
-            {
-                existingUser.MarkEmailVerified();
-            }
-
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             return await BuildLoginOutcomeAsync(existingUser, deviceTrustToken, cancellationToken);
@@ -390,7 +449,7 @@ public sealed class AuthService
         try
         {
             var displayName = string.IsNullOrWhiteSpace(info.DisplayName) ? info.Email.Split('@')[0] : info.DisplayName;
-            var organization = new Organization($"{displayName} — organizacja", "PL", "pl", "PLN", "Europe/Warsaw");
+            var organization = new Organization($"{displayName} - organizacja", "PL", "pl", "PLN", "Europe/Warsaw");
             _organizations.Add(organization);
 
             var user = new OrganizationUser(organization.Id, info.Email, displayName, true);
@@ -456,16 +515,43 @@ public sealed class AuthService
             return;
         }
 
-        var rawToken = TokenHasher.NewRawToken();
-        var token = new PasswordResetToken(user.Id, TokenHasher.Hash(rawToken), _clock.UtcNow.AddHours(1));
-        _passwordResetTokens.Add(token);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        var code = TokenHasher.NewOneTimeCode();
+        var tokenHash = TokenHasher.HashOneTimeCode(user.Email, code);
+        var now = _clock.UtcNow;
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        var link = _appLinkBuilder.BuildPasswordResetLink(user.Email, code);
+        var (subject, html) = EmailTemplates.PasswordReset(organization?.Language, code, link);
+
+        if (_emailOutbox is not null)
+        {
+            await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                await _passwordResetTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+                _passwordResetTokens.Add(new PasswordResetToken(user.Id, tokenHash, now.AddMinutes(15)));
+                await _emailOutbox.EnqueueAsync(
+                    user.OrganizationId,
+                    user.Email,
+                    subject,
+                    html,
+                    "password-reset",
+                    $"password-reset:{user.Id:N}:{tokenHash}",
+                    ct);
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+            return;
+        }
+
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            await _passwordResetTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+            _passwordResetTokens.Add(new PasswordResetToken(user.Id, tokenHash, now.AddMinutes(15)));
+            await _unitOfWork.SaveChangesAsync(ct);
+            return true;
+        }, cancellationToken);
 
         try
         {
-            var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
-            var link = _appLinkBuilder.BuildPasswordResetLink(rawToken);
-            var (subject, html) = EmailTemplates.PasswordReset(organization?.Language, link);
             await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
         }
         catch (Exception ex)
@@ -481,87 +567,128 @@ public sealed class AuthService
             return Result.Failure(Error.Validation("Hasło musi mieć co najmniej 8 znaków."));
         }
 
-        var tokenHash = TokenHasher.Hash(request.Token);
-        var token = await _passwordResetTokens.FindValidAsync(tokenHash, _clock.UtcNow, cancellationToken);
-        if (token is null)
+        var code = TokenHasher.NormalizeOneTimeCode(request.Code);
+        if (code.Length != TokenHasher.OneTimeCodeLength)
         {
-            return Result.Failure(Error.Validation("Link do resetu hasła jest nieprawidłowy lub wygasł."));
+            return Result.Failure(Error.Validation("Kod resetujący jest nieprawidłowy lub wygasł."));
         }
 
-        var user = await _users.GetByIdAsync(token.OrganizationUserId, cancellationToken);
-        if (user is null)
+        var tokenHash = TokenHasher.HashOneTimeCode(request.Email, code);
+        return await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            return Result.Failure(Error.Validation("Nie znaleziono konta powiązanego z tym linkiem."));
-        }
+            var now = _clock.UtcNow;
+            var userId = await _passwordResetTokens.TryConsumeAsync(tokenHash, now, ct);
+            if (!userId.HasValue)
+            {
+                return Result.Failure(Error.Validation("Kod resetujący jest nieprawidłowy lub wygasł."));
+            }
 
-        user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
-        user.RotateSecurityStamp();
-        token.MarkUsed();
+            var user = await _users.GetByIdAsync(userId.Value, ct);
+            if (user is null || !string.Equals(user.Email, request.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure(Error.Validation("Kod resetujący jest nieprawidłowy lub wygasł."));
+            }
 
-        // Reset hasła jest często wywołany właśnie DLATEGO, że konto mogło zostać przejęte — stare refresh
-        // sessions i zaufane urządzenia nie mogą przeżyć zmiany hasła (audyt P0.5). Revoke happens before
-        // the single SaveChangesAsync so it commits atomically with the password change, not as a
-        // separate statement that could succeed/fail independently (audyt AUD3-012).
-        await _refreshTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
-        await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+            user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
+            user.MarkEmailVerified();
+            user.RotateSecurityStamp();
+            _securityStateCache?.Remove(user.Id);
+            await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _passwordResetTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+            await _emailVerificationTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+            return Result.Success();
+        }, cancellationToken);
     }
 
     public async Task<Result> VerifyEmailAsync(VerifyEmailRequest request, CancellationToken cancellationToken)
     {
-        var tokenHash = TokenHasher.Hash(request.Token);
-        var token = await _emailVerificationTokens.FindValidAsync(tokenHash, _clock.UtcNow, cancellationToken);
-        if (token is null)
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
         {
-            return Result.Failure(Error.Validation("Link weryfikacyjny jest nieprawidłowy lub wygasł."));
+            return Result.Failure(Error.Validation("Hasło musi mieć co najmniej 8 znaków."));
         }
 
-        var user = await _users.GetByIdAsync(token.OrganizationUserId, cancellationToken);
-        if (user is null)
+        var code = TokenHasher.NormalizeOneTimeCode(request.Code);
+        if (code.Length != TokenHasher.OneTimeCodeLength)
         {
-            return Result.Failure(Error.Validation("Nie znaleziono konta powiązanego z tym linkiem."));
+            return Result.Failure(Error.Validation("Kod weryfikacyjny jest nieprawidłowy lub wygasł."));
         }
 
-        if (!user.IsEmailVerified)
+        var tokenHash = TokenHasher.HashOneTimeCode(request.Email, code);
+        return await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
+            var now = _clock.UtcNow;
+            var userId = await _emailVerificationTokens.TryConsumeAsync(tokenHash, now, ct);
+            if (!userId.HasValue)
+            {
+                return Result.Failure(Error.Validation("Kod weryfikacyjny jest nieprawidłowy lub wygasł."));
+            }
+
+            var user = await _users.GetByIdAsync(userId.Value, ct);
+            if (user is null || !string.Equals(user.Email, request.Email.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure(Error.Validation("Kod weryfikacyjny jest nieprawidłowy lub wygasł."));
+            }
+
+            user.SetPasswordHash(PasswordHasher.Hash(request.NewPassword));
             user.MarkEmailVerified();
-        }
-
-        token.MarkUsed();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+            user.RotateSecurityStamp();
+            _securityStateCache?.Remove(user.Id);
+            await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _passwordResetTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+            await _emailVerificationTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+            return Result.Success();
+        }, cancellationToken);
     }
 
-    public async Task ResendVerificationEmailAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task ResendVerificationEmailAsync(string email, CancellationToken cancellationToken)
     {
-        var user = await _users.GetByIdAsync(userId, cancellationToken);
-        if (user is null || user.IsEmailVerified)
-        {
-            return;
-        }
-
+        var user = await _users.FindByEmailAsync(email, cancellationToken);
+        if (user is null || user.IsEmailVerified || !user.IsActive) return;
         await SendVerificationEmailBestEffortAsync(user, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private async Task SendVerificationEmailBestEffortAsync(OrganizationUser user, CancellationToken cancellationToken)
     {
+        var code = TokenHasher.NewOneTimeCode();
+        var tokenHash = TokenHasher.HashOneTimeCode(user.Email, code);
+        var now = _clock.UtcNow;
         try
         {
-            var rawToken = TokenHasher.NewRawToken();
-            var token = new EmailVerificationToken(user.Id, TokenHasher.Hash(rawToken), _clock.UtcNow.AddHours(48));
-            _emailVerificationTokens.Add(token);
-
             var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
-            var link = _appLinkBuilder.BuildEmailVerificationLink(rawToken);
-            var (subject, html) = EmailTemplates.EmailVerification(organization?.Language, link);
-            await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
+            var link = _appLinkBuilder.BuildEmailVerificationLink(user.Email, code);
+            var (subject, html) = EmailTemplates.EmailVerification(organization?.Language, code, link);
+
+            await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                await _emailVerificationTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+                _emailVerificationTokens.Add(new EmailVerificationToken(user.Id, tokenHash, now.AddMinutes(30)));
+                if (_emailOutbox is not null)
+                {
+                    await _emailOutbox.EnqueueAsync(
+                        user.OrganizationId,
+                        user.Email,
+                        subject,
+                        html,
+                        "email-verification",
+                        $"email-verification:{user.Id:N}:{tokenHash}",
+                        ct);
+                }
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (_emailOutbox is null)
+            {
+                await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Nie udało się wysłać e-maila weryfikacyjnego dla użytkownika {UserId}", user.Id);
+            _logger.LogWarning(ex, "Nie udało się przygotować lub zakolejkować e-maila weryfikacyjnego dla użytkownika {UserId}", user.Id);
         }
     }
 
@@ -599,6 +726,10 @@ public sealed class AuthService
 
     public async Task<string> IssueRefreshTokenAsync(Guid organizationUserId, CancellationToken cancellationToken)
     {
+        var user = await _users.GetByIdAsync(organizationUserId, cancellationToken);
+        if (user is null || !user.IsActive || !user.IsEmailVerified)
+            throw new InvalidOperationException("Pełna sesja wymaga aktywnego, zweryfikowanego konta.");
+
         var rawToken = TokenHasher.NewRawToken();
         var token = new RefreshToken(organizationUserId, TokenHasher.Hash(rawToken), _clock.UtcNow.AddDays(30));
         _refreshTokens.Add(token);
@@ -621,12 +752,12 @@ public sealed class AuthService
             return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
         }
 
-        return await _unitOfWork.ExecuteWithOrganizationLockAsync(observedUser.OrganizationId, async ct =>
+        return await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             var now = _clock.UtcNow;
             var token = await _refreshTokens.FindAsync(tokenHash, ct);
             var user = await _users.GetByIdAsync(observed.OrganizationUserId, ct);
-            if (token is null || user is null || !user.IsActive || token.ExpiresAt <= now)
+            if (token is null || user is null || !user.IsActive || !user.IsEmailVerified || token.ExpiresAt <= now)
             {
                 return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));
             }
@@ -641,6 +772,7 @@ public sealed class AuthService
                     await _refreshTokens.RevokeFamilyAsync(token.FamilyId, now, "refresh_reuse_detected", ct);
                     await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, ct);
                     user.RotateSecurityStamp();
+                    _securityStateCache?.Remove(user.Id);
                     await _unitOfWork.SaveChangesAsync(ct);
                 }
                 return Result<RefreshResult>.Failure(Error.Unauthorized("Sesja wygasła. Zaloguj się ponownie."));

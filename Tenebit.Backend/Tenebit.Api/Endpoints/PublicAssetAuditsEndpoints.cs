@@ -1,39 +1,8 @@
-using System.IO;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
 using Tenebit.Application.Abstractions;
-using Tenebit.Application.Alerts;
-using Tenebit.Application.Assets;
-using Tenebit.Application.Assignments;
-using Tenebit.Application.Audit;
-using Tenebit.Domain.Alerts;
 using Tenebit.Application.Audits;
-using Tenebit.Domain.Audits;
-using Tenebit.Application.Dashboard;
-using Tenebit.Application.Evidence;
-using Tenebit.Application.Identity;
-using Tenebit.Application.JobProfiles;
-using Tenebit.Application.Licenses;
-using Tenebit.Application.Offboarding;
-using Tenebit.Application.Onboarding;
-using Tenebit.Application.Organizations;
-using Tenebit.Application.People;
-using Tenebit.Application.Procedures;
-using Tenebit.Application.Reservations;
-using Tenebit.Application.Settings;
-using Tenebit.Application.Subscriptions;
-using Tenebit.Application.Workspace;
-using Tenebit.Domain.Assets;
-using Tenebit.Domain.Evidence;
-using Tenebit.Domain.Offboarding;
-using Tenebit.Domain.Reservations;
-using Tenebit.Infrastructure.Data;
+using Tenebit.Application.Common;
 
 namespace Tenebit.Api.Endpoints;
 
@@ -41,47 +10,36 @@ public static class PublicAssetAuditsEndpoints
 {
     public static RouteGroupBuilder MapPublicAssetAuditsEndpoints(this RouteGroupBuilder api)
     {
-        api.MapGet("/public/asset-audits/{token}", async (string token, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
-                (await service.GetPublicAsync(token, cancellationToken)).ToHttpResult())
-            .AllowAnonymous()
-            .RequireRateLimiting("public")
-            .WithTags("Public asset audits");
-
-        api.MapPut("/public/asset-audits/{token}/items/{itemId:guid}", async (string token, Guid itemId, SubmitPublicAssetAuditItemRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
-                (await service.RecordItemResponseAsync(token, itemId, request, cancellationToken)).ToHttpResult())
-            .AllowAnonymous()
-            .RequireRateLimiting("public")
-            .WithTags("Public asset audits");
-
-        api.MapPost("/public/asset-audits/{token}/submit", async (string token, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
-                (await service.SubmitAsync(token, cancellationToken)).ToHttpResult())
-            .AllowAnonymous()
-            .RequireRateLimiting("public")
-            .WithTags("Public asset audits");
-
-        api.MapPost("/public/asset-audits/{token}/items/{itemId:guid}/evidence", async (string token, Guid itemId, HttpRequest request, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
+        api.MapGet("/public/asset-audits", async (HttpRequest request, AssetAuditCampaignService service, IPublicCapabilitySessionProtector protector, IClock clock, CancellationToken ct) =>
         {
-            if (!request.HasFormContentType)
-            {
-                return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
-            }
+            var token = PublicCapabilityCookie.Read(request, protector, PublicCapabilityCookie.AssetAuditPurpose, clock.UtcNow);
+            return token is null ? Results.NotFound() : (await service.GetPublicAsync(token, ct)).ToHttpResult();
+        }).AllowAnonymous().RequireRateLimiting("public").WithTags("Public asset audits");
 
+        api.MapPut("/public/asset-audits/items/{itemId:guid}", async (Guid itemId, SubmitPublicAssetAuditItemRequest body, HttpRequest request, AssetAuditCampaignService service, IPublicCapabilitySessionProtector protector, IClock clock, CancellationToken ct) =>
+        {
+            var token = PublicCapabilityCookie.Read(request, protector, PublicCapabilityCookie.AssetAuditPurpose, clock.UtcNow);
+            return token is null ? Results.NotFound() : (await service.RecordItemResponseAsync(token, itemId, body, ct)).ToHttpResult();
+        }).AllowAnonymous().RequireRateLimiting("public").WithTags("Public asset audits");
+
+        api.MapPost("/public/asset-audits/submit", async (HttpRequest request, AssetAuditCampaignService service, IPublicCapabilitySessionProtector protector, IClock clock, CancellationToken ct) =>
+        {
+            var token = PublicCapabilityCookie.Read(request, protector, PublicCapabilityCookie.AssetAuditPurpose, clock.UtcNow);
+            return token is null ? Results.NotFound() : (await service.SubmitAsync(token, ct)).ToHttpResult();
+        }).AllowAnonymous().RequireRateLimiting("public").WithTags("Public asset audits");
+
+        api.MapPost("/public/asset-audits/items/{itemId:guid}/evidence", async (Guid itemId, HttpRequest request, AssetAuditCampaignService service, IPublicCapabilitySessionProtector protector, IClock clock, CancellationToken ct) =>
+        {
+            var token = PublicCapabilityCookie.Read(request, protector, PublicCapabilityCookie.AssetAuditPurpose, clock.UtcNow);
+            if (token is null) return Results.NotFound();
+            if (!request.HasFormContentType) return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxSingleEvidenceUploadBytes);
-            var form = await request.ReadFormAsync(cancellationToken);
+            var form = await request.ReadFormAsync(ct);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0)
-            {
-                return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
-            }
-
-            var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken);
-            var result = await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, content, cancellationToken);
-            return result.ToHttpResult();
-        })
-            .DisableAntiforgery()
-            .AllowAnonymous()
-            .RequireRateLimiting("public")
-            .WithTags("Public asset audits");
+            if (file is null || file.Length == 0) return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
+            var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, ct);
+            return (await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, content, ct)).ToHttpResult();
+        }).DisableAntiforgery().AllowAnonymous().RequireRateLimiting("public").WithTags("Public asset audits");
 
         return api;
     }

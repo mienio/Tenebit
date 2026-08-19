@@ -7,7 +7,7 @@ using Tenebit.Domain.Procedures;
 
 namespace Tenebit.Application.Assignments;
 
-/// <summary>Buduje response DTO dla wydań (widok wewnętrzny i publiczny kanał pracownika) — wydzielone
+/// <summary>Buduje response DTO dla wydań (widok wewnętrzny i publiczny kanał pracownika) - wydzielone
 /// z AssignmentService (audyt P2 #4), analogicznie do OffboardingResponseBuilder.</summary>
 public sealed class AssignmentResponseBuilder
 {
@@ -29,7 +29,7 @@ public sealed class AssignmentResponseBuilder
         _organizations = organizations;
     }
 
-    // Used after a mutation (create/accept/return) that already ran its own, narrower role check —
+    // Used after a mutation (create/accept/return) that already ran its own, narrower role check -
     // callers must not re-apply the broader read-role gate from GetAsync, or an "employee" accepting
     // their own assignment would succeed the accept but then get a 403 back.
     public async Task<Result<AssignmentResponse>> BuildResponseAsync(Guid organizationId, Guid id, CancellationToken cancellationToken)
@@ -42,7 +42,7 @@ public sealed class AssignmentResponseBuilder
         var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
         var procedureIds = assignment.ProcedureAcceptances.Select(x => x.ProcedureId).Distinct().ToArray();
         var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
-        var evidence = await _evidence.ListByAssignmentAsync(organizationId, id, cancellationToken);
+        var evidence = await _evidence.ListMetadataByAssignmentAsync(organizationId, id, cancellationToken);
         return Result<AssignmentResponse>.Success(Map(assignment, people, assets, procedures, evidence));
     }
 
@@ -54,9 +54,10 @@ public sealed class AssignmentResponseBuilder
         var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
         var procedureIds = assignment.ProcedureAcceptances.Select(x => x.ProcedureId).ToArray();
         var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+        var procedureDocuments = await _procedures.ListDocumentMetadataByProcedureIdsAsync(organizationId, procedureIds, cancellationToken);
 
-        // Zdjęcia wydania są pokazywane pracownikowi przed potwierdzeniem (spec 6.2/6.7) — wyłącznie faza Issue.
-        var evidence = await _evidence.ListByAssignmentAsync(organizationId, assignment.Id, cancellationToken);
+        // Zdjęcia wydania są pokazywane pracownikowi przed potwierdzeniem (spec 6.2/6.7) - wyłącznie faza Issue.
+        var evidence = await _evidence.ListMetadataByAssignmentAsync(organizationId, assignment.Id, cancellationToken);
         var issueEvidenceByAsset = evidence
             .Where(x => x.Phase == EvidencePhase.Issue)
             .GroupBy(x => x.AssetId)
@@ -66,7 +67,7 @@ public sealed class AssignmentResponseBuilder
         {
             var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
             var evidenceIds = issueEvidenceByAsset.TryGetValue(item.AssetId, out var ids) ? ids : [];
-            return new PublicAssignmentAssetResponse(asset?.Name ?? "—", asset?.AssetTag ?? "—", item.IssueCondition, item.AssetId, evidenceIds);
+            return new PublicAssignmentAssetResponse(asset?.Name ?? "-", asset?.AssetTag ?? "-", item.IssueCondition, item.AssetId, evidenceIds);
         }).ToList();
         var procedureRows = procedures
             .Where(x => x.RequiresAcceptance)
@@ -74,19 +75,23 @@ public sealed class AssignmentResponseBuilder
                 x.Id,
                 x.Title,
                 x.Version,
-                x.Documents.Select(doc => new PublicAssignmentDocumentResponse(doc.Id, doc.FileName)).ToList()))
+                procedureDocuments
+                    .Where(document => document.ProcedureId == x.Id)
+                    .OrderByDescending(document => document.UploadedAt)
+                    .Select(document => new PublicAssignmentDocumentResponse(document.Id, document.FileName))
+                    .ToList()))
             .ToList();
 
         return new PublicAssignmentResponse(
             organization?.Name ?? "Tenebit",
             assignment.ProtocolNumber,
             assignment.Status,
-            person?.FirstName ?? "—",
+            person?.FirstName ?? "-",
             assetRows,
             procedureRows);
     }
 
-    public static AssignmentResponse Map(Assignment assignment, IReadOnlyList<Domain.People.Person> people, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, IReadOnlyList<AssetEvidence>? evidence = null)
+    public static AssignmentResponse Map(Assignment assignment, IReadOnlyList<Domain.People.Person> people, IReadOnlyList<Asset> assets, IReadOnlyList<Procedure> procedures, IReadOnlyList<AssetEvidenceMetadata>? evidence = null)
     {
         var person = people.FirstOrDefault(x => x.Id == assignment.PersonId);
         var items = assignment.Assets.Select(item =>
@@ -102,6 +107,10 @@ public sealed class AssignmentResponseBuilder
         }).ToList();
 
         var assignmentEvidence = evidence?.Where(x => x.AssignmentId == assignment.Id).ToList();
-        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, assignment.AcceptedIp, assignment.AcceptanceHash, assignment.VerifyIntegrity(assignmentEvidence));
+        return new AssignmentResponse(assignment.Id, assignment.PersonId, person?.FullName, assignment.Status, assignment.IssuedAt, assignment.DueDate, assignment.AcceptedAt, assignment.ReturnedAt, assignment.ProtocolNumber, assignment.Notes, items, acceptances, assignment.AcceptedIp, assignment.AcceptanceHash, assignment.VerifyIntegrity(assignmentEvidence?.Select(ToIntegrityEntry).ToList()));
     }
+
+    private static AssetEvidenceIntegrityEntry ToIntegrityEntry(AssetEvidenceMetadata evidence) =>
+        new(evidence.Id, evidence.Phase, evidence.Sha256);
+
 }

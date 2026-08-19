@@ -154,7 +154,7 @@ public sealed class OffboardingItem
         Complete(OffboardingItemStatus.Waived, at, actor);
     }
 
-    /// <summary>Zwalnia miejsce licencyjne — jedyna droga do stanu końcowego Released.</summary>
+    /// <summary>Zwalnia miejsce licencyjne - jedyna droga do stanu końcowego Released.</summary>
     public void MarkReleased(DateTimeOffset releasedAt, string releasedBy)
     {
         if (IsResolved)

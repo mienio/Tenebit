@@ -5,10 +5,9 @@ using Tenebit.Infrastructure.Data;
 namespace Tenebit.Infrastructure.Services;
 
 /// <summary>
-/// Durable PostgreSQL execution gate for periodic jobs. The claim row is updated in the same transaction
-/// as the job, so concurrent replicas serialize and a second replica that arrives after the winner has
-/// already completed still skips the same interval. If the job fails, the transaction rolls back and a
-/// different replica may retry.
+/// Durable multi-replica gate for periodic jobs. The claim is one short PostgreSQL statement and is
+/// committed before the job executes, so SMTP/Stripe/other network I/O never holds an open DB transaction.
+/// On an observed failure the claim is released conditionally, allowing another replica to retry.
 /// </summary>
 public sealed class PostgresJobLock
 {
@@ -26,14 +25,12 @@ public sealed class PostgresJobLock
         if (string.IsNullOrWhiteSpace(jobName)) throw new ArgumentException("Job name is required.", nameof(jobName));
         if (minimumInterval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(minimumInterval));
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        var now = _clock.UtcNow;
-        var eligibleBefore = now.Subtract(minimumInterval);
-
+        var claimedAt = _clock.UtcNow;
+        var eligibleBefore = claimedAt.Subtract(minimumInterval);
         var claimed = await _db.Database.ExecuteSqlInterpolatedAsync(
             $"""
             INSERT INTO tenebit.background_job_runs ("JobName", "LastRunAt")
-            VALUES ({jobName}, {now})
+            VALUES ({jobName}, {claimedAt})
             ON CONFLICT ("JobName") DO UPDATE
             SET "LastRunAt" = EXCLUDED."LastRunAt"
             WHERE tenebit.background_job_runs."LastRunAt" <= {eligibleBefore};
@@ -41,8 +38,22 @@ public sealed class PostgresJobLock
 
         if (claimed != 1) return false;
 
-        await action(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return true;
+        try
+        {
+            await action(cancellationToken);
+            return true;
+        }
+        catch
+        {
+            // Best-effort release only if this worker still owns the exact claim. If the process is
+            // hard-killed, minimumInterval acts as the bounded lease and prevents a permanent lock.
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                UPDATE tenebit.background_job_runs
+                SET "LastRunAt" = {eligibleBefore.Subtract(TimeSpan.FromSeconds(1))}
+                WHERE "JobName" = {jobName} AND "LastRunAt" = {claimedAt};
+                """, CancellationToken.None);
+            throw;
+        }
     }
 }

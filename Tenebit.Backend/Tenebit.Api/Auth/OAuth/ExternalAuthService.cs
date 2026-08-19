@@ -142,7 +142,7 @@ public sealed class ExternalAuthService
     }
 
     // AUD-006: id_token providerów OIDC musi być kryptograficznie zweryfikowany (podpis przez JWKS, issuer,
-    // audience, lifetime) — samo ReadJwtToken tylko dekoduje payload bez weryfikacji, więc dowolny nadawca
+    // audience, lifetime) - samo ReadJwtToken tylko dekoduje payload bez weryfikacji, więc dowolny nadawca
     // mógłby podrobić email/sub. ConfigurationManager cache'uje JWKS/metadata providera (odświeża wg jego TTL).
     private static readonly ConcurrentDictionary<string, ConfigurationManager<OpenIdConnectConfiguration>> OidcConfigCache = new();
 
@@ -223,7 +223,7 @@ public sealed class ExternalAuthService
         var sub = principal.FindFirst("sub")?.Value;
         if (string.IsNullOrWhiteSpace(sub)) return null;
 
-        // Ties this id_token to the specific authorization request we started — without it, an id_token
+        // Ties this id_token to the specific authorization request we started - without it, an id_token
         // obtained through another flow (or replayed) would still pass signature/issuer/audience checks.
         var nonce = principal.FindFirst("nonce")?.Value;
         if (!string.Equals(nonce, expectedNonce, StringComparison.Ordinal)) return null;

@@ -69,7 +69,7 @@ public sealed class SubscriptionService
     }
 
     /// <summary>
-    /// Direct, no-billing plan switch. Only the Free plan can be reached this way — moving to a paid
+    /// Direct, no-billing plan switch. Only the Free plan can be reached this way - moving to a paid
     /// plan requires real payment via <see cref="CreateCheckoutSessionAsync"/>. Downgrading away from an
     /// active Stripe subscription must go through the Stripe billing portal so cancellation actually
     /// stops the charges instead of just editing our own record.
@@ -101,7 +101,7 @@ public sealed class SubscriptionService
             }
             else
             {
-                if (subscription.HasActiveStripeSubscription)
+                if (subscription.HasLiveStripeSubscription)
                 {
                     return Result<SubscriptionResponse>.Failure(Error.Validation("Ta organizacja ma aktywną płatną subskrypcję. Zarządzaj nią (w tym anulowaniem) w portalu rozliczeń Stripe."));
                 }
@@ -145,11 +145,8 @@ public sealed class SubscriptionService
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
-
         if (!_paymentGateway.IsConfigured)
-        {
             return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane."));
-        }
 
         var organizationId = _currentUser.OrganizationId;
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
@@ -157,28 +154,51 @@ public sealed class SubscriptionService
         {
             subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
             _subscriptions.Add(subscription);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        if (subscription.HasActiveStripeSubscription)
+        if (!string.IsNullOrWhiteSpace(subscription.StripeSubscriptionId))
         {
-            return Result<string>.Failure(Error.Validation("Organizacja ma już aktywną płatną subskrypcję."));
+            var canonical = await _paymentGateway.GetSubscriptionAsync(subscription.StripeSubscriptionId, cancellationToken)
+                ?? throw new PaymentGatewayException("Stripe subscription state could not be verified.");
+            if (!string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
+                || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
+                throw new PaymentGatewayException("Stripe subscription association mismatch.");
+
+            subscription.ReconcileFromStripe(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (canonical.Status != SubscriptionStatus.Cancelled)
+                return Result<string>.Failure(Error.Validation("Istnieje subskrypcja Stripe wymagająca naprawy lub zarządzania. Użyj portalu rozliczeniowego zamiast tworzyć drugą subskrypcję."));
         }
 
         if (string.IsNullOrWhiteSpace(subscription.StripeCustomerId))
         {
-            var customerId = await _paymentGateway.CreateCustomerAsync(_currentUser.Email, organizationId, cancellationToken);
+            var customerId = await _paymentGateway.CreateCustomerAsync(
+                _currentUser.Email, organizationId, $"tenebit-customer-{organizationId:N}", cancellationToken);
             subscription.AttachStripeCustomer(customerId);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        var attemptId = await _unitOfWork.ExecuteWithResourceLocksAsync(
+            organizationId,
+            "subscription-checkout",
+            [organizationId],
+            async ct =>
+        {
+            var locked = await _subscriptions.GetByOrganizationAsync(organizationId, ct)
+                ?? throw new InvalidOperationException("Subscription disappeared during checkout claim.");
+            var id = locked.GetOrCreateCheckoutAttempt(_clock.UtcNow, TimeSpan.FromMinutes(30));
+            await _unitOfWork.SaveChangesAsync(ct);
+            return id;
+        }, cancellationToken);
 
-        // successPath/cancelPath are client-supplied but only ever used as a relative path — the
-        // redirect the customer actually lands on always goes through App:PublicUrl, so a crafted path
-        // cannot turn Stripe's trusted payment flow into an open redirect to another origin (audyt
-        // AUD3-010).
-        var successUrl = _appLinkBuilder.BuildAppUrl(successPath);
-        var cancelUrl = _appLinkBuilder.BuildAppUrl(cancelPath);
-        var checkoutUrl = await _paymentGateway.CreateCheckoutSessionAsync(subscription.StripeCustomerId!, organizationId, successUrl, cancelUrl, cancellationToken);
+        var checkoutUrl = await _paymentGateway.CreateCheckoutSessionAsync(
+            subscription.StripeCustomerId!,
+            organizationId,
+            _appLinkBuilder.BuildAppUrl(successPath),
+            _appLinkBuilder.BuildAppUrl(cancelPath),
+            $"tenebit-checkout-{attemptId:N}",
+            cancellationToken);
         return Result<string>.Success(checkoutUrl);
     }
 
@@ -220,7 +240,7 @@ public sealed class SubscriptionService
 
         if (webhookEvent is null) return Result.Success();
 
-        // Stripe retries webhook delivery on timeout/5xx — replaying the same EventId must be a no-op
+        // Stripe retries webhook delivery on timeout/5xx - replaying the same EventId must be a no-op
         // instead of reapplying (and re-logging) the same state change twice (audyt P0.6).
         if (await _processedEvents.ExistsAsync(webhookEvent.EventId, cancellationToken))
         {
@@ -239,7 +259,7 @@ public sealed class SubscriptionService
             return Result.Success();
         }
 
-        // Metadata routing is a convenience, not proof of ownership — once a subscription already has a
+        // Metadata routing is a convenience, not proof of ownership - once a subscription already has a
         // Stripe customer attached (from our own CreateCheckoutSessionAsync flow), an event whose
         // customer/subscription IDs don't match that record must not be applied to it. Without this, a
         // crafted or misrouted metadata.organizationId could point one organization's webhook event at

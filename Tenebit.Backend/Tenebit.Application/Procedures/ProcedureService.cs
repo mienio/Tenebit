@@ -65,7 +65,7 @@ public sealed class ProcedureService
                 .Where(acceptance => acceptance.ProcedureId == procedureId)
                 .Select(acceptance => new ProcedureAcceptanceStatusResponse(
                     acceptance.PersonId,
-                    people.FirstOrDefault(p => p.Id == acceptance.PersonId)?.FullName ?? "—",
+                    people.FirstOrDefault(p => p.Id == acceptance.PersonId)?.FullName ?? "-",
                     acceptance.Status,
                     acceptance.SentAt,
                     acceptance.AcceptedAt,
@@ -86,15 +86,19 @@ public sealed class ProcedureService
 
         var organizationId = _currentUser.OrganizationId;
         var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideReadRoles, cancellationToken);
+        IReadOnlyList<Procedure> procedures;
         if (scope is null)
         {
-            var all = await _procedures.ListAsync(organizationId, search, cancellationToken);
-            return Result<IReadOnlyList<ProcedureResponse>>.Success(all.Select(Map).ToList());
+            procedures = await _procedures.ListAsync(organizationId, search, cancellationToken);
+        }
+        else
+        {
+            var procedureIds = await _assignments.ListProcedureIdsByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
+            procedures = FilterAndOrder(await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken), search).ToList();
         }
 
-        var procedureIds = await _assignments.ListProcedureIdsByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
-        var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
-        return Result<IReadOnlyList<ProcedureResponse>>.Success(FilterAndOrder(procedures, search).Select(Map).ToList());
+        var documents = await LoadDocumentMetadataAsync(organizationId, procedures, cancellationToken);
+        return Result<IReadOnlyList<ProcedureResponse>>.Success(procedures.Select(procedure => Map(procedure, documents)).ToList());
     }
 
     public async Task<Result<PagedResult<ProcedureResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
@@ -107,15 +111,17 @@ public sealed class ProcedureService
         if (scope is null)
         {
             var (items, total) = await _procedures.ListPagedAsync(organizationId, search, page, pageSize, cancellationToken);
-            return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(items.Select(Map).ToList(), total, page, pageSize));
+            var documents = await LoadDocumentMetadataAsync(organizationId, items, cancellationToken);
+            return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(items.Select(item => Map(item, documents)).ToList(), total, Math.Max(page, 1), Math.Clamp(pageSize, 1, 100)));
         }
 
         var procedureIds = await _assignments.ListProcedureIdsByPersonIdsAsync(organizationId, scope.PersonIds, cancellationToken);
         var procedures = FilterAndOrder(await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken), search).ToList();
         var normalizedPage = Math.Max(page, 1);
         var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
-        var itemsForPage = procedures.Skip((normalizedPage - 1) * normalizedPageSize).Take(normalizedPageSize).Select(Map).ToList();
-        return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(itemsForPage, procedures.Count, normalizedPage, normalizedPageSize));
+        var itemsForPage = procedures.Skip((normalizedPage - 1) * normalizedPageSize).Take(normalizedPageSize).ToList();
+        var pageDocuments = await LoadDocumentMetadataAsync(organizationId, itemsForPage, cancellationToken);
+        return Result<PagedResult<ProcedureResponse>>.Success(new PagedResult<ProcedureResponse>(itemsForPage.Select(item => Map(item, pageDocuments)).ToList(), procedures.Count, normalizedPage, normalizedPageSize));
     }
 
     public async Task<Result<ProcedureResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -131,7 +137,8 @@ public sealed class ProcedureService
         }
 
         var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
-        return procedure is null ? Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje.")) : Result<ProcedureResponse>.Success(Map(procedure));
+        if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+        return Result<ProcedureResponse>.Success(await MapWithDocumentsAsync(organizationId, procedure, cancellationToken));
     }
 
     public async Task<Result<ProcedureResponse>> CreateAsync(CreateProcedureRequest request, CancellationToken cancellationToken)
@@ -146,44 +153,64 @@ public sealed class ProcedureService
             _procedures.Add(procedure);
             _activity.Add(new ActivityLog(organizationId, "procedure.created", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<ProcedureResponse>.Success(Map(procedure));
+            return Result<ProcedureResponse>.Success(Map(procedure, []));
         }
-        catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
+        catch (DomainException ex)
+        {
+            return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message));
+        }
     }
 
     public async Task<Result<ProcedureResponse>> UpdateAsync(Guid id, UpdateProcedureRequest request, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
         try
         {
-            var organizationId = _currentUser.OrganizationId;
-            var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
-            if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
-            procedure.Update(request.Title, request.Version, request.Owner, request.AppliesTo, request.ReviewDate, request.RequiresAcceptance);
-            _activity.Add(new ActivityLog(organizationId, "procedure.updated", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<ProcedureResponse>.Success(Map(procedure));
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "procedure", [id], async ct =>
+            {
+                var procedure = await _procedures.GetAsync(organizationId, id, ct);
+                if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+                procedure.Update(request.Title, request.Version, request.Owner, request.AppliesTo, request.ReviewDate, request.RequiresAcceptance);
+                _activity.Add(new ActivityLog(organizationId, "procedure.updated", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<ProcedureResponse>.Success(await MapWithDocumentsAsync(organizationId, procedure, ct));
+            }, cancellationToken);
         }
-        catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
+        catch (DomainException ex)
+        {
+            return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message));
+        }
     }
 
     public async Task<Result<ProcedureResponse>> AttachDocumentAsync(Guid id, string fileName, string contentType, byte[] content, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
         try
         {
-            var organizationId = _currentUser.OrganizationId;
-            var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
-            if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
-            var document = procedure.AttachDocument(fileName, contentType, content, _currentUser.Subject, _clock.UtcNow);
-            _procedures.AddDocument(document);
-            _activity.Add(new ActivityLog(organizationId, "procedure.document_uploaded", "procedure", procedure.Id, _currentUser.Subject, fileName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<ProcedureResponse>.Success(Map(procedure));
+            var validated = ProcedureDocumentValidator.Validate(fileName, content);
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "procedure", [id], async ct =>
+            {
+                var procedure = await _procedures.GetAsync(organizationId, id, ct);
+                if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+
+                // Never trust multipart Content-Type. The validator derives a canonical MIME type from verified bytes.
+                var document = procedure.AttachDocument(validated.FileName, validated.ContentType, content, _currentUser.Subject, _clock.UtcNow);
+                _procedures.AddDocument(document);
+                _activity.Add(new ActivityLog(organizationId, "procedure.document_uploaded", "procedure", procedure.Id, _currentUser.Subject, validated.FileName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<ProcedureResponse>.Success(await MapWithDocumentsAsync(organizationId, procedure, ct));
+            }, cancellationToken);
         }
-        catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
+        catch (DomainException ex)
+        {
+            return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message));
+        }
     }
 
     public async Task<Result<ProcedureDocument>> GetDocumentAsync(Guid procedureId, Guid documentId, CancellationToken cancellationToken)
@@ -216,48 +243,86 @@ public sealed class ProcedureService
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
         try
         {
-            var organizationId = _currentUser.OrganizationId;
-            var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
-            if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
-            procedure.Publish(_clock.UtcNow);
-            _activity.Add(new ActivityLog(organizationId, "procedure.published", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<ProcedureResponse>.Success(Map(procedure));
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "procedure", [id], async ct =>
+            {
+                var procedure = await _procedures.GetAsync(organizationId, id, ct);
+                if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+                var hasDocuments = await _procedures.HasDocumentsAsync(organizationId, id, ct);
+                procedure.Publish(_clock.UtcNow, hasDocuments);
+                _activity.Add(new ActivityLog(organizationId, "procedure.published", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<ProcedureResponse>.Success(await MapWithDocumentsAsync(organizationId, procedure, ct));
+            }, cancellationToken);
         }
-        catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
+        catch (DomainException ex)
+        {
+            return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message));
+        }
     }
 
     public async Task<Result<ProcedureResponse>> ArchiveAsync(Guid id, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+
         var organizationId = _currentUser.OrganizationId;
-        var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
-        if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
-        procedure.Archive();
-        _activity.Add(new ActivityLog(organizationId, "procedure.archived", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<ProcedureResponse>.Success(Map(procedure));
+        return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "procedure", [id], async ct =>
+        {
+            var procedure = await _procedures.GetAsync(organizationId, id, ct);
+            if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+            procedure.Archive();
+            _activity.Add(new ActivityLog(organizationId, "procedure.archived", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(ct);
+            return Result<ProcedureResponse>.Success(await MapWithDocumentsAsync(organizationId, procedure, ct));
+        }, cancellationToken);
     }
 
     public async Task<Result<ProcedureResponse>> RemoveDocumentAsync(Guid id, Guid documentId, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
         try
         {
-            var organizationId = _currentUser.OrganizationId;
-            var procedure = await _procedures.GetAsync(organizationId, id, cancellationToken);
-            if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
-            var document = procedure.RemoveDocument(documentId);
-            _procedures.RemoveDocument(document);
-            _activity.Add(new ActivityLog(organizationId, "procedure.document_removed", "procedure", procedure.Id, _currentUser.Subject, document.FileName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<ProcedureResponse>.Success(Map(procedure));
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "procedure", [id], async ct =>
+            {
+                var procedure = await _procedures.GetAsync(organizationId, id, ct);
+                if (procedure is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Procedura nie istnieje."));
+                procedure.EnsureDocumentsEditable();
+
+                var document = await _procedures.GetDocumentMetadataAsync(organizationId, id, documentId, ct);
+                if (document is null) return Result<ProcedureResponse>.Failure(Error.NotFound("Plik procedury nie istnieje."));
+                if (!await _procedures.DeleteDocumentAsync(organizationId, id, documentId, ct))
+                {
+                    return Result<ProcedureResponse>.Failure(Error.NotFound("Plik procedury nie istnieje."));
+                }
+
+                _activity.Add(new ActivityLog(organizationId, "procedure.document_removed", "procedure", procedure.Id, _currentUser.Subject, document.FileName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return Result<ProcedureResponse>.Success(await MapWithDocumentsAsync(organizationId, procedure, ct));
+            }, cancellationToken);
         }
-        catch (DomainException ex) { return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message)); }
+        catch (DomainException ex)
+        {
+            return Result<ProcedureResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    private async Task<IReadOnlyList<ProcedureDocumentMetadata>> LoadDocumentMetadataAsync(Guid organizationId, IEnumerable<Procedure> procedures, CancellationToken cancellationToken)
+    {
+        var ids = procedures.Select(x => x.Id).Distinct().ToArray();
+        return await _procedures.ListDocumentMetadataByProcedureIdsAsync(organizationId, ids, cancellationToken);
+    }
+
+    private async Task<ProcedureResponse> MapWithDocumentsAsync(Guid organizationId, Procedure procedure, CancellationToken cancellationToken)
+    {
+        var documents = await _procedures.ListDocumentMetadataByProcedureIdsAsync(organizationId, [procedure.Id], cancellationToken);
+        return Map(procedure, documents);
     }
 
     private static IEnumerable<Procedure> FilterAndOrder(IEnumerable<Procedure> procedures, string? search)
@@ -270,15 +335,17 @@ public sealed class ProcedureService
                 || x.Owner.Contains(phrase, StringComparison.OrdinalIgnoreCase)
                 || x.Version.Contains(phrase, StringComparison.OrdinalIgnoreCase));
         }
+
         return query.OrderBy(x => x.Title);
     }
 
-    private static ProcedureResponse Map(Procedure procedure)
+    private static ProcedureResponse Map(Procedure procedure, IReadOnlyList<ProcedureDocumentMetadata> documents)
     {
-        var documents = procedure.Documents
+        var documentResponses = documents
+            .Where(x => x.ProcedureId == procedure.Id)
             .OrderByDescending(x => x.UploadedAt)
             .Select(x => new ProcedureDocumentResponse(x.Id, x.FileName, x.ContentType, x.SizeBytes, x.UploadedAt, x.UploadedBy))
             .ToList();
-        return new ProcedureResponse(procedure.Id, procedure.Title, procedure.Version, procedure.Owner, procedure.Status, procedure.AppliesTo, procedure.ReviewDate, procedure.RequiresAcceptance, documents, procedure.CreatedAt, procedure.PublishedAt);
+        return new ProcedureResponse(procedure.Id, procedure.Title, procedure.Version, procedure.Owner, procedure.Status, procedure.AppliesTo, procedure.ReviewDate, procedure.RequiresAcceptance, documentResponses, procedure.CreatedAt, procedure.PublishedAt);
     }
 }

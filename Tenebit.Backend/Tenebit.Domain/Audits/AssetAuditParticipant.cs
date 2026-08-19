@@ -58,7 +58,7 @@ public sealed class AssetAuditParticipant
         }
     }
 
-    /// <summary>Po wysłaniu odpowiedzi pracownik nie może już nic zmienić samodzielnie — ponowne otwarcie
+    /// <summary>Po wysłaniu odpowiedzi pracownik nie może już nic zmienić samodzielnie - ponowne otwarcie
     /// jest możliwe wyłącznie przez administratora (<see cref="Reopen"/>), sekcja 5.5.</summary>
     public void Submit(DateTimeOffset submittedAt)
     {
@@ -71,7 +71,7 @@ public sealed class AssetAuditParticipant
         SubmittedAt = submittedAt;
     }
 
-    /// <summary>Wywoływane wyłącznie przez administratora (kontrola uprawnień w serwisie) — nie da się otworzyć
+    /// <summary>Wywoływane wyłącznie przez administratora (kontrola uprawnień w serwisie) - nie da się otworzyć
     /// ponownie odpowiedzi, które nigdy nie zostały wysłane.</summary>
     public void Reopen(DateTimeOffset reopenedAt)
     {

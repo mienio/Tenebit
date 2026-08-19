@@ -60,7 +60,7 @@ export function LocationsManager() {
     if (!value) return;
     setSessionCustomTypes(current => {
       const next = Array.from(new Set([...current, value]));
-      try { window.sessionStorage.setItem(customTypesStorageKey, JSON.stringify(next)); } catch { /* sessionStorage unavailable (private browsing/quota) — non-critical */ }
+      try { window.sessionStorage.setItem(customTypesStorageKey, JSON.stringify(next)); } catch { /* sessionStorage unavailable (private browsing/quota) - non-critical */ }
       return next;
     });
     setTypeValue(value);

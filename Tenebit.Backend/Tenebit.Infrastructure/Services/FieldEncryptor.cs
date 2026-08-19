@@ -50,7 +50,7 @@ public sealed class FieldEncryptor : IFieldEncryptor
         }
     }
 
-    private static string DecryptPayload(byte[] key,string encoded,byte[]? aad){var payload=Convert.FromBase64String(encoded); if(payload.Length<NonceSize+TagSize)throw new FormatException("Encrypted payload too short."); var plain=new byte[payload.Length-NonceSize-TagSize]; using(var aes=new AesGcm(key,TagSize)) aes.Decrypt(payload.AsSpan(0,NonceSize),payload.AsSpan(NonceSize,TagSize),payload.AsSpan(NonceSize+TagSize),plain,aad); return Encoding.UTF8.GetString(plain);}
+    private static string DecryptPayload(byte[] key,string encoded,byte[]? aad){var payload=Convert.FromBase64String(encoded); if(payload.Length<NonceSize+TagSize)throw new FormatException("Encrypted payload too short."); var plain=new byte[payload.Length-NonceSize-TagSize]; using(var aes=new AesGcm(key,TagSize)) aes.Decrypt(payload.AsSpan(0,NonceSize),payload.AsSpan(NonceSize+TagSize),payload.AsSpan(NonceSize,TagSize),plain,aad); return Encoding.UTF8.GetString(plain);}
     private static byte[] Derive(byte[] root,string purpose)=>HKDF.DeriveKey(HashAlgorithmName.SHA256,root,32,info:Encoding.UTF8.GetBytes(purpose));
     private static byte[] Aad(string purpose,string id)=>Encoding.UTF8.GetBytes($"tenebit-field|v2|{id}|{purpose}");
 }

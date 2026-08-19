@@ -25,6 +25,7 @@ public sealed class OrganizationUser
     public bool IsEmailVerified { get; private set; }
     public string? TotpSecret { get; private set; }
     public bool IsTwoFactorEnabled { get; private set; }
+    public long? LastUsedTotpCounter { get; private set; }
     public Guid SecurityStamp { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public List<OrganizationUserRole> Roles { get; private set; } = [];
@@ -35,10 +36,17 @@ public sealed class OrganizationUser
     public void MarkEmailVerified() => IsEmailVerified = true;
     public void SetPendingTotpSecret(string secret) => TotpSecret = secret;
     public void EnableTwoFactor() => IsTwoFactorEnabled = true;
+    public void RecordTotpCounter(long counter)
+    {
+        if (LastUsedTotpCounter.HasValue && counter <= LastUsedTotpCounter.Value)
+            throw new DomainException("Kod uwierzytelniający został już użyty.");
+        LastUsedTotpCounter = counter;
+    }
     public void DisableTwoFactor()
     {
         IsTwoFactorEnabled = false;
         TotpSecret = null;
+        LastUsedTotpCounter = null;
     }
 
     public void Update(string email, string displayName, bool isActive, IEnumerable<string> roles)

@@ -35,11 +35,10 @@ public class OnboardingServiceTests
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
         var evidence = new InMemoryAssetEvidenceRepository();
-        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork);
-        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork, TestAuthorization.Asset(assets, user));
+        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
             new AssetReturnDispositionService(inspections),
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
-            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures),
             new Tenebit.Application.Common.ManagerScopeService(people, teams));
         var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)));
         return (service, user, people);
@@ -152,11 +151,10 @@ public class OnboardingServiceTests
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
         var evidence = new InMemoryAssetEvidenceRepository();
-        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork);
-        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakePdfProtocolGenerator(), new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork, TestAuthorization.Asset(assets, user));
+        var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
             new AssetReturnDispositionService(inspections),
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
-            new AssignmentProtocolModelBuilder(assignments, people, teams, organizations, assets, procedures),
             new Tenebit.Application.Common.ManagerScopeService(people, teams));
         var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)));
         return (service, user, assets, people, assignments, evidence);

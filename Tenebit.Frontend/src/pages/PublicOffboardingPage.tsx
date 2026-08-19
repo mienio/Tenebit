@@ -1,19 +1,20 @@
 import { Camera, CheckCircle2, ChevronRight, PackageCheck, Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ErrorState, LoadingState } from '../components/StateViews';
+import { PublicFooter } from '../components/PublicFooter';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { usePublicCapabilitySession } from '../hooks/usePublicCapabilitySession';
 import { useI18n } from '../i18n/I18nProvider';
 
 const responseValues = ['HaveWillReturn', 'AlreadyReturned', 'DontHave', 'Damaged'] as const;
 
 export function PublicOffboardingPage() {
   const { t } = useI18n();
-  const { token } = useParams<{ token: string }>();
-  const loader = useMemo(() => () => token ? api.publicOffboarding(token) : Promise.resolve(null), [token]);
+  const capability = usePublicCapabilitySession('offboarding');
+  const loader = useMemo(() => () => capability === 'ready' ? api.publicOffboarding() : Promise.resolve(null), [capability]);
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [step, setStep] = useState<'form' | 'review' | 'submitted'>('form');
   const [answers, setAnswers] = useState<Record<string, { response: string; comment: string; uploading: boolean }>>({});
@@ -21,10 +22,9 @@ export function PublicOffboardingPage() {
   const [submitting, setSubmitting] = useState(false);
 
   async function upload(itemId: string, file: File) {
-    if (!token) return;
     setAnswers(current => ({ ...current, [itemId]: { response: current[itemId]?.response ?? 'Damaged', comment: current[itemId]?.comment ?? '', uploading: true } }));
     try {
-      await api.uploadPublicOffboardingEvidence(token, itemId, file);
+      await api.uploadPublicOffboardingEvidence(itemId, file);
       setMessage(null);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicOffboarding.uploadFailed'));
@@ -34,11 +34,11 @@ export function PublicOffboardingPage() {
   }
 
   async function submit() {
-    if (!token || !data) return;
+    if (!data) return;
     setSubmitting(true);
     setMessage(null);
     try {
-      await api.submitPublicOffboardingResponse(token, {
+      await api.submitPublicOffboardingResponse({
         answers: data.items.map(item => ({
           itemId: item.id,
           response: answers[item.id]?.response ?? 'HaveWillReturn',
@@ -54,7 +54,8 @@ export function PublicOffboardingPage() {
     }
   }
 
-  if (!token) return <ErrorState message={t('publicOffboarding.invalidLink')} />;
+  if (capability === 'loading') return <LoadingState title={t('publicOffboarding.loadingTitle')} description={t('publicOffboarding.loadingDesc')} />;
+  if (capability === 'error') return <ErrorState message={t('publicOffboarding.invalidLink')} />;
   if (isLoading && !data) return <LoadingState title={t('publicOffboarding.loadingTitle')} description={t('publicOffboarding.loadingDesc')} />;
   if (error || !data) return <ErrorState message={error ?? t('publicOffboarding.invalidLink')} onRetry={reload} />;
 
@@ -81,11 +82,11 @@ export function PublicOffboardingPage() {
                 <div className="listRow" key={item.id}>
                   <div>
                     <strong>{item.label}</strong>
-                    <small>{item.assetTag ?? '—'}</small>
+                    <small>{item.assetTag ?? '-'}</small>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <strong>{t(`publicOffboarding.response.${answers[item.id]?.response ?? 'HaveWillReturn'}`)}</strong>
-                    <small>{answers[item.id]?.comment || '—'}</small>
+                    <small>{answers[item.id]?.comment || '-'}</small>
                   </div>
                 </div>
               ))}
@@ -108,7 +109,7 @@ export function PublicOffboardingPage() {
                   <div className="listRow" key={item.id} style={{ alignItems: 'stretch' }}>
                     <div style={{ flex: 1 }}>
                       <strong>{item.label}</strong>
-                      <small>{item.assetTag ?? '—'}</small>
+                      <small>{item.assetTag ?? '-'}</small>
                       <select value={current.response} onChange={event => setAnswers(state => ({ ...state, [item.id]: { ...current, response: event.target.value } }))} style={{ marginTop: '10px' }}>
                         {responseValues.map(value => <option key={value} value={value}>{t(`publicOffboarding.response.${value}`)}</option>)}
                       </select>
@@ -144,6 +145,7 @@ export function PublicOffboardingPage() {
           </>
         )}
       </section>
+      <PublicFooter compact />
     </main>
   );
 }

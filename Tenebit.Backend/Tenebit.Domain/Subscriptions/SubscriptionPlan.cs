@@ -2,7 +2,7 @@ namespace Tenebit.Domain.Subscriptions;
 
 public sealed class SubscriptionPlan
 {
-    // Real free-tier limit (not a temporary testing bump) — in line with competitors' free tiers
+    // Real free-tier limit (not a temporary testing bump) - in line with competitors' free tiers
     // and with what the pricing page already advertises ("Up to 10 assets"). Paid plans are now
     // live via Stripe, so the earlier testing-only bump no longer applies.
     public static readonly SubscriptionPlan Free = new("free", "Free", 10, 0m, "USD");

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
+using Tenebit.Application.Identity;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
@@ -27,6 +28,7 @@ public sealed class AssetService
     private readonly IQrCodeGenerator _qrCodeGenerator;
     private readonly IAppLinkBuilder _linkBuilder;
     private readonly IEmailSender _emailSender;
+    private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly ILogger<AssetService> _logger;
     private readonly IFieldEncryptor _fieldEncryptor;
     private readonly ManagerScopeService _managerScope;
@@ -36,7 +38,7 @@ public sealed class AssetService
     // its own team's assigned assets by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician, TenebitRoles.Hr, TenebitRoles.LicenseManager, TenebitRoles.Finance, TenebitRoles.Auditor];
 
-    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver)
+    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IEmailOutboxWriter? emailOutbox = null)
     {
         _assets = assets;
         _categories = categories;
@@ -52,6 +54,7 @@ public sealed class AssetService
         _qrCodeGenerator = qrCodeGenerator;
         _linkBuilder = linkBuilder;
         _emailSender = emailSender;
+        _emailOutbox = emailOutbox;
         _logger = logger;
         _fieldEncryptor = fieldEncryptor;
         _managerScope = managerScope;
@@ -183,10 +186,13 @@ public sealed class AssetService
             asset.SetLocation(locationResult.Value.Id, locationResult.Value.FullPath);
             asset.SetFieldValues(EncryptSensitiveFields(category, customFieldsResult.Value!));
 
-            // Limit sprawdzany i egzekwowany atomowo pod blokadą per-organizacja (audyt P1.11) — samo
-            // "policz, porównaj, wstaw" bez blokady pozwalało dwóm równoległym requestom przejść walidację
-            // zanim którykolwiek zapisze wiersz, więc organizacja mogła przekroczyć limit planu.
-            var withinLimit = await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            // Serializujemy wyłącznie operacje zużywające limit aktywów. Nie blokujemy uploadów,
+            // refreshy ani innych zapisów całej organizacji, a check-then-insert nadal pozostaje atomowy.
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "asset-capacity",
+                [organizationId],
+                async ct =>
             {
                 var currentCount = await _assets.CountAsync(organizationId, ct);
                 if (currentCount >= limit) return false;
@@ -298,46 +304,64 @@ public sealed class AssetService
 
     public async Task<Result> ReportPublicIssueAsync(Guid organizationId, Guid assetId, ReportAssetIssueRequest request, CancellationToken cancellationToken)
     {
-        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
         if (string.IsNullOrWhiteSpace(request.Message)) return Result.Failure(Error.Validation("Treść zgłoszenia jest wymagana."));
 
-        var reporterIp = string.IsNullOrWhiteSpace(_currentUser.IpAddress) ? "unknown" : _currentUser.IpAddress;
-        var actorSubject = $"public-scan:{reporterIp}";
-        var since = _clock.UtcNow - PublicIssueReportCooldown;
-        var reportedRecently = await _activity.ExistsRecentAsync(organizationId, "asset", asset.Id, actorSubject, "asset.scan_reported", since, cancellationToken);
-        if (reportedRecently) return Result.Failure(Error.TooManyRequests("To aktywo zostało już zgłoszone niedawno. Spróbuj ponownie później."));
+        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
+        if (asset is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        if (organization is null) return Result.Failure(Error.NotFound("Organizacja nie istnieje."));
 
-        var users = await _organizationUsers.ListAsync(organizationId, cancellationToken);
-        var adminEmails = users
-            .Where(u => u.IsActive && u.Roles.Any(r => r.Role is TenebitRoles.Owner or TenebitRoles.Admin))
-            .Select(u => u.Email)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-
-        var subject = $"Zgłoszenie ze skanu QR — {asset.Name} ({asset.AssetTag})";
-        var html = $"""
-            <p>Ktoś zeskanował kod QR aktywa <strong>{System.Net.WebUtility.HtmlEncode(asset.Name)}</strong> (tag: {System.Net.WebUtility.HtmlEncode(asset.AssetTag)}) i zgłosił:</p>
-            <p>{System.Net.WebUtility.HtmlEncode(request.Message)}</p>
-            """;
-
-        foreach (var email in adminEmails)
+        return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "asset-public-issue", [assetId], async ct =>
         {
-            try
-            {
-                await _emailSender.SendAsync(email, subject, html, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Nie udało się wysłać powiadomienia ze skanu QR dla aktywa {AssetId}", asset.Id);
-            }
-        }
+            var now = _clock.UtcNow;
+            var capturedIp = PublicIpPrivacyPolicy.Capture(organization, _currentUser.IpAddress, now);
+            const string actorSubject = "public-scan";
+            var since = now - PublicIssueReportCooldown;
 
-        _activity.Add(new ActivityLog(organizationId, "asset.scan_reported", "asset", asset.Id, actorSubject, asset.Name, _clock.UtcNow));
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+            // The per-asset advisory lock makes the cooldown check + enqueue + audit write atomic. Two concurrent
+            // public scans can no longer both observe an empty cooldown window and send duplicate notifications.
+            var reportedRecently = await _activity.ExistsRecentAsync(organizationId, "asset", asset.Id, actorSubject, "asset.scan_reported", since, ct);
+            if (reportedRecently) return Result.Failure(Error.TooManyRequests("To aktywo zostało już zgłoszone niedawno. Spróbuj ponownie później."));
+
+            var users = await _organizationUsers.ListAsync(organizationId, ct);
+            var adminEmails = users
+                .Where(user => user.IsActive && user.Roles.Any(role => role.Role is TenebitRoles.Owner or TenebitRoles.Admin))
+                .Select(user => user.Email)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            var subject = $"Zgłoszenie ze skanu QR - {asset.Name} ({asset.AssetTag})";
+            var html = $"""
+                <p>Ktoś zeskanował kod QR aktywa <strong>{System.Net.WebUtility.HtmlEncode(asset.Name)}</strong> (tag: {System.Net.WebUtility.HtmlEncode(asset.AssetTag)}) i zgłosił:</p>
+                <p>{System.Net.WebUtility.HtmlEncode(request.Message)}</p>
+                """;
+
+            foreach (var email in adminEmails)
+            {
+                try
+                {
+                    if (_emailOutbox is not null)
+                    {
+                        var recipientHash = TokenHasher.Hash(email.ToLowerInvariant());
+                        await _emailOutbox.EnqueueAsync(organizationId, email, subject, html, "asset-public-issue", $"asset-public-issue:{asset.Id:N}:{now.ToUnixTimeSeconds() / 600}:{recipientHash}", ct);
+                    }
+                    else
+                    {
+                        await _emailSender.SendAsync(email, subject, html, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Nie udało się zakolejkować powiadomienia ze skanu QR dla aktywa {AssetId}", asset.Id);
+                }
+            }
+
+            _activity.Add(new ActivityLog(organizationId, "asset.scan_reported", "asset", asset.Id, actorSubject, asset.Name, now, capturedIp.StoredIp, capturedIp.ExpiresAt));
+            await _unitOfWork.SaveChangesAsync(ct);
+            return Result.Success();
+        }, cancellationToken);
     }
 
-    // Zwraca zawsze plaintext (istniejąca wartość jest odszyfrowywana) — pojedynczy punkt szyfrowania to
+    // Zwraca zawsze plaintext (istniejąca wartość jest odszyfrowywana) - pojedynczy punkt szyfrowania to
     // EncryptSensitiveFields wołane po ValidateCustomFields, żeby zachowane-bez-zmian wartości nie zostały
     // zaszyfrowane drugi raz.
     private IReadOnlyDictionary<string, string> PreserveUnchangedSensitiveFields(Asset asset, AssetCategory category, IReadOnlyDictionary<string, string>? customFields)
@@ -356,7 +380,7 @@ public sealed class AssetService
         return merged;
     }
 
-    /// <summary>Szyfruje wartości pól typu Sensitive tuż przed zapisem (audyt P1.5) — wołane po
+    /// <summary>Szyfruje wartości pól typu Sensitive tuż przed zapisem (audyt P1.5) - wołane po
     /// ValidateCustomFields, więc operuje na finalnym, przyciętym zbiorze wartości.</summary>
     private Dictionary<string, string> EncryptSensitiveFields(AssetCategory category, Dictionary<string, string> values)
     {
@@ -431,7 +455,7 @@ public sealed class AssetService
         return Result<string>.Success(value);
     }
 
-    /// <summary>Eksport listy aktywów do JSON. Zawiera wyłącznie dane z <see cref="AssetResponse"/> — bez materiałów dowodowych (AssetEvidence),
+    /// <summary>Eksport listy aktywów do JSON. Zawiera wyłącznie dane z <see cref="AssetResponse"/> - bez materiałów dowodowych (AssetEvidence),
     /// które są danymi własnościowymi organizacji i nie podlegają eksportowi.</summary>
     public async Task<Result<string>> ExportJsonAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
@@ -455,7 +479,7 @@ public sealed class AssetService
     }
 
     /// <summary>Eksport listy aktywów do CSV. Dane identyczne jak <see cref="ExportJsonAsync"/> (bez AssetEvidence). Status
-    /// eksportowany jako nazwa enuma — brak dedykowanego helpera translacji w warstwie Application.</summary>
+    /// eksportowany jako nazwa enuma - brak dedykowanego helpera translacji w warstwie Application.</summary>
     public async Task<Result<string>> ExportCsvAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);

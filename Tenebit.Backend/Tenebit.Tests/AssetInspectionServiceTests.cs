@@ -18,7 +18,8 @@ public class AssetInspectionServiceTests
             new InMemoryActivityLogRepository(),
             currentUser,
             new FakeClock(),
-            new FakeUnitOfWork());
+            new FakeUnitOfWork(),
+            TestAuthorization.Asset(assets, currentUser));
 
         return (service, currentUser, inspections, assets);
     }

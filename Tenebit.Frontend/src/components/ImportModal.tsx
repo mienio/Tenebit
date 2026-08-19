@@ -342,8 +342,8 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
                           {result.status === 'ok' ? t('import.statusOk') : result.status === 'duplicate' ? t('import.statusDuplicate') : t('import.statusError')}
                         </span>
                       </td>
-                      <td>{result.reason ?? '—'}</td>
-                      {fields.map(f => <td key={f.key}>{result.values[f.key] || '—'}</td>)}
+                      <td>{result.reason ?? '-'}</td>
+                      {fields.map(f => <td key={f.key}>{result.values[f.key] || '-'}</td>)}
                     </tr>
                   ))}
                 </tbody>

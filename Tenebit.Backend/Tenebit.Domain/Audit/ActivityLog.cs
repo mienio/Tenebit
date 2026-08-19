@@ -4,7 +4,7 @@ public sealed class ActivityLog
 {
     private ActivityLog() { }
 
-    public ActivityLog(Guid organizationId, string action, string entityType, Guid? entityId, string actorSubject, string? details, DateTimeOffset createdAt)
+    public ActivityLog(Guid organizationId, string action, string entityType, Guid? entityId, string actorSubject, string? details, DateTimeOffset createdAt, string? sourceIp = null, DateTimeOffset? sourceIpExpiresAt = null)
     {
         Id = Guid.NewGuid();
         OrganizationId = organizationId;
@@ -14,6 +14,8 @@ public sealed class ActivityLog
         ActorSubject = actorSubject;
         Details = details;
         CreatedAt = createdAt;
+        SourceIp = sourceIp;
+        SourceIpExpiresAt = sourceIpExpiresAt;
     }
 
     public Guid Id { get; private set; }
@@ -23,5 +25,7 @@ public sealed class ActivityLog
     public Guid? EntityId { get; private set; }
     public string ActorSubject { get; private set; } = string.Empty;
     public string? Details { get; private set; }
+    public string? SourceIp { get; private set; }
+    public DateTimeOffset? SourceIpExpiresAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 }

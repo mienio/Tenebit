@@ -7,6 +7,7 @@ namespace Tenebit.Tests.Integration;
 
 /// <summary>PostgreSQL proof for AUD3-013: migration constraints exist in the real database and reject
 /// a cross-tenant reference even when application/repository validation is completely bypassed.</summary>
+[Collection(PostgresIntegrationCollection.Name)]
 public sealed class TenantForeignKeyDatabaseTests : IClassFixture<TenebitApiFactory>
 {
     private readonly TenebitApiFactory _factory;

@@ -42,9 +42,7 @@ public static class AssignmentsEndpoints
     public static RouteGroupBuilder MapAssignmentsEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/assignments", async (AssignmentService service, string? search, Tenebit.Domain.Assignments.AssignmentStatus? status, int? page, int? pageSize, CancellationToken cancellationToken) =>
-                page.HasValue
-                    ? (await service.ListPagedAsync(search, status, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
-                    : (await service.ListAsync(cancellationToken)).ToHttpResult())
+                (await service.ListPagedAsync(search, status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
             .WithTags("Assignments");
 
         api.MapGet("/assignments/{id:guid}", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
@@ -124,15 +122,6 @@ public static class AssignmentsEndpoints
             return (await service.ReturnAssetWithEvidenceAsync(assignmentId, assetId, returnRequest, files, cancellationToken)).ToHttpResult();
         })
             .DisableAntiforgery()
-            .WithTags("Assignments");
-
-        api.MapGet("/assignments/{id:guid}/protocol", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
-        {
-            var result = await service.GetProtocolPdfAsync(id, cancellationToken);
-            return result.IsFailure || result.Value is null
-                ? result.ToHttpResult()
-                : Results.File(result.Value, "application/pdf", $"protokol-{id}.pdf");
-        })
             .WithTags("Assignments");
 
         return api;

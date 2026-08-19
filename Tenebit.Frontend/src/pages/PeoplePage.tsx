@@ -436,7 +436,7 @@ export function PeoplePage() {
                             {person.phone}
                           </div>
                         ) : (
-                          <span style={{ color: 'var(--muted)' }}>—</span>
+                          <span style={{ color: 'var(--muted)' }}>-</span>
                         )}
                       </td>
                       <td data-label={t('people.colType')}>
@@ -449,10 +449,10 @@ export function PeoplePage() {
                             {person.jobTitle}
                           </div>
                         ) : (
-                          <span style={{ color: 'var(--muted)' }}>—</span>
+                          <span style={{ color: 'var(--muted)' }}>-</span>
                         )}
                       </td>
-                      <td data-label={t('people.colTeam')}>{person.teamName ?? <span style={{ color: 'var(--muted)' }}>—</span>}</td>
+                      <td data-label={t('people.colTeam')}>{person.teamName ?? <span style={{ color: 'var(--muted)' }}>-</span>}</td>
                       <td data-label={t('people.colStatus')}>
                         <span className={`status ${getEmploymentStatusPresentation(person.employmentStatus).badgeClass}`}>
                           {t(getEmploymentStatusPresentation(person.employmentStatus).labelKey)}

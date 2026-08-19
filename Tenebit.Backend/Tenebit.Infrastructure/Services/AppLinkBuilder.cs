@@ -12,7 +12,7 @@ public sealed class AppLinkBuilder : IAppLinkBuilder
     public string BuildAssignmentAcceptanceLink(string rawToken)
     {
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
-        return $"{baseUrl}/accept/{Uri.EscapeDataString(rawToken)}";
+        return $"{baseUrl}/accept#{Uri.EscapeDataString(rawToken)}";
     }
 
     public string BuildAssetScanLink(Guid organizationId, Guid assetId)
@@ -21,28 +21,28 @@ public sealed class AppLinkBuilder : IAppLinkBuilder
         return $"{baseUrl}/scan/{organizationId}/{assetId}";
     }
 
-    public string BuildPasswordResetLink(string rawToken)
+    public string BuildPasswordResetLink(string email, string code)
     {
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
-        return $"{baseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
+        return $"{baseUrl}/reset-password#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
     }
 
-    public string BuildEmailVerificationLink(string rawToken)
+    public string BuildEmailVerificationLink(string email, string code)
     {
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
-        return $"{baseUrl}/verify-email?token={Uri.EscapeDataString(rawToken)}";
+        return $"{baseUrl}/verify-email#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
     }
 
     public string BuildOffboardingLink(string rawToken)
     {
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
-        return $"{baseUrl}/exit/{Uri.EscapeDataString(rawToken)}";
+        return $"{baseUrl}/exit#{Uri.EscapeDataString(rawToken)}";
     }
 
     public string BuildAssetAuditLink(string rawToken)
     {
         var baseUrl = (_configuration["App:PublicUrl"] ?? "http://localhost:5173").TrimEnd('/');
-        return $"{baseUrl}/audit/{Uri.EscapeDataString(rawToken)}";
+        return $"{baseUrl}/audit#{Uri.EscapeDataString(rawToken)}";
     }
 
     public string BuildAppUrl(string relativePath)
@@ -52,7 +52,7 @@ public sealed class AppLinkBuilder : IAppLinkBuilder
         return $"{baseUrl}{safePath}";
     }
 
-    // Same "/" + not "//" shape check used by the OAuth return-path validator — a leading "//" is
+    // Same "/" + not "//" shape check used by the OAuth return-path validator - a leading "//" is
     // still schema-relative and browsers/redirects can treat it as a cross-origin absolute URL.
     private static bool IsSafeRelativePath(string? path) =>
         !string.IsNullOrWhiteSpace(path) && path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal);

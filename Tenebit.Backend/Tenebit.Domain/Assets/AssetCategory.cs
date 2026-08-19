@@ -57,7 +57,7 @@ public sealed class AssetCategory
 
     // Diff po Key zamiast Clear()+Add(): niezmienione pola zostają jako te same wiersze (Id bez zmian),
     // więc zapis dotyka w bazie tylko realnie usuniętych/dodanych/zmienionych pozycji, a nie całej kolekcji
-    // przy każdej edycji (patrz audyt AUD-021 — DbUpdateConcurrencyException przy pełnym replace).
+    // przy każdej edycji (patrz audyt AUD-021 - DbUpdateConcurrencyException przy pełnym replace).
     public void ReplaceFieldDefinitions(IEnumerable<(string Key, string Label, AssetFieldType FieldType, string? Options, bool Required)> definitions)
     {
         var incoming = definitions.ToList();

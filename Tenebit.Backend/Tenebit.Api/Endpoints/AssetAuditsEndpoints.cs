@@ -94,15 +94,6 @@ public static class AssetAuditsEndpoints
         })
             .WithTags("Asset audits");
 
-        api.MapGet("/asset-audits/{id:guid}/report.pdf", async (Guid id, AssetAuditCampaignService service, CancellationToken cancellationToken) =>
-        {
-            var result = await service.GetReportPdfAsync(id, cancellationToken);
-            return result.IsFailure || result.Value is null
-                ? result.ToHttpResult()
-                : Results.File(result.Value, "application/pdf", $"raport-audytu-{id}.pdf");
-        })
-            .WithTags("Asset audits");
-
         return api;
     }
 }

@@ -19,7 +19,7 @@ export default tseslint.config(
     },
     rules: {
       // Only the long-standing hook rules, not eslint-plugin-react-hooks v7's newer
-      // React Compiler-readiness rules (set-state-in-effect, static-components, purity, ...) —
+      // React Compiler-readiness rules (set-state-in-effect, static-components, purity, ...) -
       // this codebase predates those and adopting them wholesale would flag a large amount of
       // pre-existing, working code as errors on day one of the lint gate.
       'react-hooks/rules-of-hooks': 'error',

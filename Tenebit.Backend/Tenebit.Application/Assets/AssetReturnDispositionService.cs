@@ -11,7 +11,7 @@ public enum AssetReturnDisposition
     Disposed
 }
 
-/// <summary>Zwrot fizyczny aktywa wg polityki kategorii (DirectToStock/InspectionRequired/ReturnToVendor/Dispose) —
+/// <summary>Zwrot fizyczny aktywa wg polityki kategorii (DirectToStock/InspectionRequired/ReturnToVendor/Dispose) -
 /// wydzielone z <see cref="Tenebit.Application.Assignments.AssignmentService"/>, żeby ta sama logika mogła być
 /// reużyta przez offboarding bez duplikacji.</summary>
 public sealed class AssetReturnDispositionService

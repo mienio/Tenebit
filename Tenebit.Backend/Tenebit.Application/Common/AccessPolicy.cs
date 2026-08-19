@@ -11,7 +11,13 @@ public static class AccessPolicy
             return Result.Failure(Error.Unauthorized());
         }
 
-        if (roles.Length == 0 || currentUser.HasAnyRole(roles))
+        if (roles.Length == 0)
+        {
+            SecurityTelemetry.AuthorizationDenied();
+            return Result.Failure(Error.Forbidden());
+        }
+
+        if (currentUser.HasAnyRole(roles))
         {
             return Result.Success();
         }

@@ -27,21 +27,20 @@ public class OffboardingServiceTests
         var inspections = new InMemoryAssetInspectionRepository();
         var unitOfWork = new FakeUnitOfWork();
 
-        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, new FakeClock(), unitOfWork);
+        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, new FakeClock(), unitOfWork, TestAuthorization.Asset(assets, currentUser));
         var disposition = new AssetReturnDispositionService(inspections);
         var organizations = new InMemoryOrganizationRepository();
         var emailSender = new FakeEmailSender();
         var linkBuilder = new FakeAppLinkBuilder();
         var evidence = new InMemoryAssetEvidenceRepository();
-        var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork);
+        var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork, TestAuthorization.Asset(assets, currentUser));
         var reservations = new InMemoryEquipmentReservationRepository();
         var responseBuilder = new OffboardingResponseBuilder(cases, items, people, organizations, assets, evidence, reservations, new FakeClock());
-        var protocolModelBuilder = new OffboardingProtocolModelBuilder(organizations, people, items, assets, evidence, licenses);
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, new FakeClock(), unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            organizations, emailSender, linkBuilder, evidenceService, new FakePdfProtocolGenerator(), reservations,
-            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository(), responseBuilder, protocolModelBuilder);
+            organizations, emailSender, linkBuilder, evidenceService, reservations,
+            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository(), responseBuilder);
 
         return (service, currentUser, cases, items, people, assets, assignments, licenses, activity, categories, inspections, emailSender);
     }
@@ -164,7 +163,7 @@ public class OffboardingServiceTests
     [Fact]
     public async Task StartAsync_WorksForPersonWithoutOwnEmailNotification()
     {
-        // The service never reads/sends email during Start — it only touches domain state and items,
+        // The service never reads/sends email during Start - it only touches domain state and items,
         // so the result is identical regardless of the person's email content.
         var (service, user, _, _, people, assets, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people, email: "no-reply@acme.test");
@@ -380,32 +379,6 @@ public class OffboardingServiceTests
     }
 
     [Fact]
-    public async Task GetProtocolPdfAsync_FailsBeforeCompletion_SucceedsAfter_AndIsStableAcrossCalls()
-    {
-        var (service, user, _, _, people, assets, _, _, _, _, _, _) = CreateService();
-        var person = AddPerson(user, people);
-        AddAsset(user, assets, person.Id);
-
-        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(3), null, null, null, false, false, false), CancellationToken.None);
-        var started = await service.StartAsync(created.Value!.Case.Id, new StartOffboardingCaseRequest(), CancellationToken.None);
-        var item = started.Value!.Items.Single();
-
-        var beforeCompletion = await service.GetProtocolPdfAsync(created.Value.Case.Id, CancellationToken.None);
-        Assert.True(beforeCompletion.IsFailure);
-
-        await service.WaiveItemAsync(created.Value.Case.Id, item.Id, new WaiveOffboardingItemRequest("Nie odzyskane"), CancellationToken.None);
-        await service.ExecuteScheduledActionsAsync(created.Value.Case.Id, CancellationToken.None);
-        await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
-
-        var firstPdf = await service.GetProtocolPdfAsync(created.Value.Case.Id, CancellationToken.None);
-        var secondPdf = await service.GetProtocolPdfAsync(created.Value.Case.Id, CancellationToken.None);
-
-        Assert.True(firstPdf.IsSuccess);
-        Assert.True(secondPdf.IsSuccess);
-        Assert.Equal(firstPdf.Value, secondPdf.Value);
-    }
-
-    [Fact]
     public async Task ResolveItemAsync_Missing_MarksAssetLost()
     {
         var (service, user, _, _, people, assets, _, _, activity, _, _, _) = CreateService();
@@ -442,7 +415,7 @@ public class OffboardingServiceTests
     public async Task StartAsync_NotifyEmployeeFalse_DoesNotIssueToken()
     {
         // Domena Person zawsze wymaga poprawnego adresu e-mail (Person.Update), więc "brak e-maila" nie jest
-        // reprezentowalnym stanem — realnym odpowiednikiem z kryterium 4.12 jest notifyEmployee=false przy starcie.
+        // reprezentowalnym stanem - realnym odpowiednikiem z kryterium 4.12 jest notifyEmployee=false przy starcie.
         var (service, user, cases, _, people, assets, _, _, _, _, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);

@@ -149,5 +149,5 @@ public sealed class LicenseService
         license.Seats.Count,
         license.ExpiresAt,
         license.Notes,
-        license.Seats.Select(seat => new LicenseSeatResponse(seat.PersonId, people.FirstOrDefault(p => p.Id == seat.PersonId)?.FullName ?? "—", seat.AssignedAt)).ToList());
+        license.Seats.Select(seat => new LicenseSeatResponse(seat.PersonId, people.FirstOrDefault(p => p.Id == seat.PersonId)?.FullName ?? "-", seat.AssignedAt)).ToList());
 }

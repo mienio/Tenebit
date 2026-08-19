@@ -188,7 +188,7 @@ public sealed class EquipmentReservation
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// <summary>Akcja "Wydaj sprzęt" (spec 8.8) — wymaga, żeby każda pozycja miała już przydzielone aktywo
+    /// <summary>Akcja "Wydaj sprzęt" (spec 8.8) - wymaga, żeby każda pozycja miała już przydzielone aktywo
     /// (przydział/zamiana dzieje się wcześniej, przy zatwierdzeniu). Backend re-weryfikuje dostępność aktywów
     /// przed wywołaniem tej metody (w serwisie), więc tutaj pilnujemy tylko spójności stanu.</summary>
     public void MarkCheckedOut(Guid assignmentId, DateTimeOffset at)
@@ -212,7 +212,7 @@ public sealed class EquipmentReservation
         }
     }
 
-    /// <summary>Domknięcie po pełnym zwrocie powiązanego wydania (spec 8.8/8.12) — wywoływane przez
+    /// <summary>Domknięcie po pełnym zwrocie powiązanego wydania (spec 8.8/8.12) - wywoływane przez
     /// AssignmentService, gdy wszystkie pozycje tego wydania mają już ustaloną rezolucję zwrotu.</summary>
     public void Complete(DateTimeOffset at)
     {

@@ -34,18 +34,17 @@ public class OffboardingCaseTests
         var auditCampaigns = new InMemoryAssetAuditCampaignRepository();
         var auditItems = new InMemoryAssetAuditItemRepository();
 
-        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, clock, unitOfWork);
+        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser));
         var disposition = new AssetReturnDispositionService(inspections);
         var evidence = new InMemoryAssetEvidenceRepository();
-        var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork);
+        var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser));
         var organizations = new InMemoryOrganizationRepository();
         var responseBuilder = new OffboardingResponseBuilder(cases, items, people, organizations, assets, evidence, reservations, clock);
-        var protocolModelBuilder = new OffboardingProtocolModelBuilder(organizations, people, items, assets, evidence, licenses);
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, clock, unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
-            organizations, new FakeEmailSender(), new FakeAppLinkBuilder(), evidenceService, new FakePdfProtocolGenerator(),
-            reservations, auditCampaigns, auditItems, responseBuilder, protocolModelBuilder);
+            organizations, new FakeEmailSender(), new FakeAppLinkBuilder(), evidenceService,
+            reservations, auditCampaigns, auditItems, responseBuilder);
 
         return (service, currentUser, people, assets, assignments, licenses, reservations, auditCampaigns, auditItems, clock);
     }

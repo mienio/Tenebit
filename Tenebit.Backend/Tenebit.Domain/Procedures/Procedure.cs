@@ -30,10 +30,7 @@ public sealed class Procedure
 
     public void Update(string title, string version, string owner, string? appliesTo, DateOnly? reviewDate, bool requiresAcceptance)
     {
-        if (Status == ProcedureStatus.Published)
-        {
-            throw new DomainException("Nie można edytować opublikowanej procedury — osoby już ją zaakceptowały. Zarchiwizuj ją i utwórz nową wersję.");
-        }
+        EnsureDraftForModification();
 
         if (string.IsNullOrWhiteSpace(title)) throw new DomainException("Tytuł procedury jest wymagany.");
         if (string.IsNullOrWhiteSpace(version)) throw new DomainException("Wersja procedury jest wymagana.");
@@ -48,6 +45,7 @@ public sealed class Procedure
 
     public ProcedureDocument AttachDocument(string fileName, string contentType, byte[] content, string uploadedBy, DateTimeOffset uploadedAt)
     {
+        EnsureDraftForModification();
         var document = new ProcedureDocument(OrganizationId, Id, fileName, contentType, content, uploadedBy, uploadedAt);
         Documents.Add(document);
         return document;
@@ -55,24 +53,42 @@ public sealed class Procedure
 
     public ProcedureDocument RemoveDocument(Guid documentId)
     {
+        EnsureDraftForModification();
         var document = Documents.FirstOrDefault(x => x.Id == documentId);
         if (document is null) throw new DomainException("Plik procedury nie istnieje.");
         Documents.Remove(document);
         return document;
     }
 
-    public void Publish(DateTimeOffset publishedAt)
+    public void Publish(DateTimeOffset publishedAt) => Publish(publishedAt, Documents.Count != 0);
+
+    public void Publish(DateTimeOffset publishedAt, bool hasDocuments)
     {
         if (Status == ProcedureStatus.Archived) throw new DomainException("Nie można opublikować zarchiwizowanej procedury.");
         if (Status == ProcedureStatus.Published) return;
-        if (!Documents.Any()) throw new DomainException("Nie można opublikować procedury bez pliku.");
+        if (!hasDocuments) throw new DomainException("Nie można opublikować procedury bez pliku.");
         Status = ProcedureStatus.Published;
         PublishedAt = publishedAt;
     }
+
+    public void EnsureDocumentsEditable() => EnsureDraftForModification();
 
     public void Archive()
     {
         if (Status == ProcedureStatus.Archived) return;
         Status = ProcedureStatus.Archived;
+    }
+
+    private void EnsureDraftForModification()
+    {
+        if (Status == ProcedureStatus.Published)
+        {
+            throw new DomainException("Nie można edytować opublikowanej procedury - osoby już ją zaakceptowały. Zarchiwizuj ją i utwórz nową wersję.");
+        }
+
+        if (Status == ProcedureStatus.Archived)
+        {
+            throw new DomainException("Nie można edytować zarchiwizowanej procedury. Utwórz nową wersję.");
+        }
     }
 }

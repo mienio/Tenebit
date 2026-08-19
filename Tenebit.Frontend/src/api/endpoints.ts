@@ -145,7 +145,7 @@ export const api = {
 
   subscription: () => apiRequest<import('../types/domain').Subscription>('/api/subscription'),
   upgradeSubscription: (planKey: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/upgrade', { method: 'POST', body: JSON.stringify({ planKey }) }),
-  // successPath/cancelPath/returnPath are relative paths (e.g. "/dashboard?checkout=success") — the
+  // successPath/cancelPath/returnPath are relative paths (e.g. "/dashboard?checkout=success") - the
   // backend builds the actual absolute redirect URL from its own configured origin, never from a
   // client-supplied full URL (audit AUD3-010, open redirect).
   createCheckoutSession: (successPath: string, cancelPath: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ successUrl: successPath, cancelUrl: cancelPath }) }),
@@ -241,6 +241,7 @@ export const api = {
   personWorkspace: (id: string) => apiRequest<MyWorkspace>(`/api/people/${id}/workspace`),
 
   procedures: (search?: string) => apiRequest<Procedure[]>(`/api/procedures${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  procedure: (id: string) => apiRequest<Procedure>(`/api/procedures/${id}`),
   proceduresPaged: (params: { search?: string; page: number; pageSize: number }) => {
     const query = new URLSearchParams();
     if (params.search) query.set('search', params.search);
@@ -275,7 +276,6 @@ export const api = {
   archiveProcedure: (id: string) => apiRequest<Procedure>(`/api/procedures/${id}/archive`, { method: 'POST' }),
   procedureAcceptances: (id: string) => apiRequest<import('../types/domain').ProcedureAcceptanceStatus[]>(`/api/procedures/${id}/acceptances`),
 
-  assignments: () => apiRequest<Assignment[]>('/api/assignments'),
   assignmentsPaged: (params: { search?: string; status?: string; page: number; pageSize: number }) => {
     const query = new URLSearchParams();
     if (params.search) query.set('search', params.search);
@@ -294,8 +294,6 @@ export const api = {
     photos.forEach((file, index) => form.append(`photo_${index}`, file));
     return apiRequest<Assignment>(`/api/assignments/${assignmentId}/assets/${assetId}/return-with-evidence`, { method: 'POST', body: form });
   },
-  downloadAssignmentProtocol: (id: string) => apiBlob(`/api/assignments/${id}/protocol`),
-
   offboardingPaged: (params: { status?: OffboardingCaseStatus | ''; page: number; pageSize: number }) => {
     const query = new URLSearchParams();
     if (params.status) query.set('status', params.status);
@@ -319,14 +317,12 @@ export const api = {
   completeOffboarding: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/complete`, { method: 'POST' }),
   cancelOffboarding: (id: string, body: { reason: string }) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
   restoreOffboardingEmployment: (id: string) => apiRequest<OffboardingCaseDetails>(`/api/offboarding/${id}/restore-employment`, { method: 'POST' }),
-  downloadOffboardingProtocol: (id: string) => apiBlob(`/api/offboarding/${id}/protocol`),
-
-  publicOffboarding: (token: string) => apiRequest<PublicOffboarding>(`/api/public/offboarding/${token}`),
-  submitPublicOffboardingResponse: (token: string, body: { answers: PublicOffboardingAnswer[] }) => apiRequest<PublicOffboarding>(`/api/public/offboarding/${token}/response`, { method: 'POST', body: JSON.stringify(body) }),
-  uploadPublicOffboardingEvidence: (token: string, itemId: string, file: File) => {
+  publicOffboarding: () => apiRequest<PublicOffboarding>('/api/public/offboarding'),
+  submitPublicOffboardingResponse: (body: { answers: PublicOffboardingAnswer[] }) => apiRequest<PublicOffboarding>('/api/public/offboarding/response', { method: 'POST', body: JSON.stringify(body) }),
+  uploadPublicOffboardingEvidence: (itemId: string, file: File) => {
     const body = new FormData();
     body.set('file', file);
-    return apiRequest<unknown>(`/api/public/offboarding/${token}/items/${itemId}/evidence`, { method: 'POST', body });
+    return apiRequest<unknown>(`/api/public/offboarding/items/${itemId}/evidence`, { method: 'POST', body });
   },
 
   assetAuditsPaged: (params: { status?: AssetAuditCampaignStatus | ''; page: number; pageSize: number }) => {
@@ -347,7 +343,6 @@ export const api = {
   completeAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/complete`, { method: 'POST' }),
   cancelAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/cancel`, { method: 'POST' }),
   downloadAssetAuditCsv: (id: string) => apiBlob(`/api/asset-audits/${id}/export.csv`),
-  downloadAssetAuditReport: (id: string) => apiBlob(`/api/asset-audits/${id}/report.pdf`),
   downloadAssetsCsv: (params?: { search?: string; status?: string; location?: string }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
@@ -365,20 +360,19 @@ export const api = {
     return apiBlob(`/api/assets/export.json${suffix}`);
   },
 
-  publicAssetAudit: (token: string) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}`),
-  submitPublicAssetAuditItemResponse: (token: string, itemId: string, body: SubmitPublicAssetAuditItemRequest) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(body) }),
-  submitPublicAssetAudit: (token: string) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/${token}/submit`, { method: 'POST' }),
-  uploadPublicAssetAuditEvidence: (token: string, itemId: string, file: File) => {
+  publicAssetAudit: () => apiRequest<PublicAssetAuditResponse>('/api/public/asset-audits'),
+  submitPublicAssetAuditItemResponse: (itemId: string, body: SubmitPublicAssetAuditItemRequest) => apiRequest<PublicAssetAuditResponse>(`/api/public/asset-audits/items/${itemId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  submitPublicAssetAudit: () => apiRequest<PublicAssetAuditResponse>('/api/public/asset-audits/submit', { method: 'POST' }),
+  uploadPublicAssetAuditEvidence: (itemId: string, file: File) => {
     const body = new FormData();
     body.set('file', file);
-    return apiRequest<unknown>(`/api/public/asset-audits/${token}/items/${itemId}/evidence`, { method: 'POST', body });
+    return apiRequest<unknown>(`/api/public/asset-audits/items/${itemId}/evidence`, { method: 'POST', body });
   },
 
-  publicAssignment: (token: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${token}`),
-  acceptPublicAssignment: (token: string) => apiRequest<PublicAssignment>(`/api/public/assignments/${token}/accept`, { method: 'POST' }),
-  downloadPublicAssignmentProtocol: (token: string) => apiBlob(`/api/public/assignments/${token}/protocol`),
-  downloadPublicProcedureDocument: (token: string, procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/${token}/procedures/${procedureId}/documents/${documentId}`),
-  publicAssignmentEvidence: (token: string, id: string) => apiBlob(`/api/public/assignments/${token}/evidence/${id}`),
+  publicAssignment: () => apiRequest<PublicAssignment>('/api/public/assignments'),
+  acceptPublicAssignment: () => apiRequest<PublicAssignment>('/api/public/assignments/accept', { method: 'POST' }),
+  downloadPublicProcedureDocument: (procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/procedures/${procedureId}/documents/${documentId}`),
+  publicAssignmentEvidence: (id: string) => apiBlob(`/api/public/assignments/evidence/${id}`),
   regenerateAssignmentAcceptanceLink: (id: string) => apiRequest<{ link: string }>(`/api/assignments/${id}/acceptance-link`, { method: 'POST' }),
 
   myWorkspace: () => apiRequest<MyWorkspace>('/api/my/workspace'),

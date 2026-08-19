@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Tenebit.Application.Abstractions;
 using Tenebit.Infrastructure.Data;
 using Tenebit.Infrastructure.Repositories;
@@ -19,7 +20,24 @@ public static class DependencyInjection
             throw new InvalidOperationException("Brakuje ConnectionStrings:TenebitDb w konfiguracji.");
         }
 
-        services.AddDbContext<TenebitDbContext>(options => options.UseNpgsql(connectionString));
+        var connectionBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            MaxPoolSize = configuration.GetValue("Database:MaxPoolSize", 40),
+            MinPoolSize = configuration.GetValue("Database:MinPoolSize", 0)
+        };
+        if (configuration.GetValue("Database:RequireSsl", false))
+        {
+            connectionBuilder.SslMode = SslMode.Require;
+        }
+
+        var commandTimeoutSeconds = configuration.GetValue("Database:CommandTimeoutSeconds", 30);
+        services.AddDbContext<TenebitDbContext>(options =>
+            options.UseNpgsql(connectionBuilder.ConnectionString, npgsql =>
+            {
+                npgsql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
+                npgsql.CommandTimeout(commandTimeoutSeconds);
+                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+            }));
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<TenebitDbContext>());
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<ILocationRepository, LocationRepository>();
@@ -50,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<ISentAlertRepository, SentAlertRepository>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
         services.AddScoped<IAlertDigestSettingsRepository, AlertDigestSettingsRepository>();
+        services.AddScoped<IDashboardReadRepository, DashboardReadRepository>();
         services.AddScoped<IDashboardLayoutRepository, DashboardLayoutRepository>();
         services.AddScoped<IDashboardSnapshotRepository, DashboardSnapshotRepository>();
         services.AddScoped<IAssetEvidenceRepository, AssetEvidenceRepository>();
@@ -60,11 +79,15 @@ public static class DependencyInjection
         services.AddScoped<IAssetAuditItemRepository, AssetAuditItemRepository>();
         services.AddScoped<IEquipmentReservationRepository, EquipmentReservationRepository>();
         services.AddScoped<IServiceTicketRepository, ServiceTicketRepository>();
+        services.AddSingleton<IUserSecurityStateCache, UserSecurityStateCache>();
+        services.AddScoped<IDatabaseHealthProbe, DatabaseHealthProbe>();
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
-        services.AddSingleton<IPdfProtocolGenerator, PdfProtocolGenerator>();
         services.AddSingleton<IImageSanitizer, ImageSanitizer>();
+        services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<IEmailAvailability, EmailAvailability>();
+        services.AddScoped<IEmailOutboxWriter, PostgresEmailOutboxWriter>();
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
         services.AddHttpClient<IPaymentGateway, StripePaymentGateway>(client =>
         {
@@ -72,14 +95,19 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(15);
         });
         services.AddSingleton<IFieldEncryptor, FieldEncryptor>();
+        services.AddSingleton<IPublicCapabilitySessionProtector, PublicCapabilitySessionProtector>();
         services.AddScoped<DefaultDataSeeder>();
         services.AddScoped<PostgresJobLock>();
+        services.AddScoped<IAuthenticationAbuseLimiter, PostgresAuthenticationAbuseLimiter>();
         services.AddHostedService<AlertBackgroundService>();
         services.AddHostedService<DashboardSnapshotBackgroundService>();
         services.AddHostedService<OffboardingBackgroundService>();
         services.AddHostedService<EvidenceRetentionBackgroundService>();
+        services.AddHostedService<ActivityLogRetentionBackgroundService>();
         services.AddHostedService<SecurityStateCleanupBackgroundService>();
+        services.AddHostedService<PublicIpRetentionBackgroundService>();
         services.AddHostedService<SubscriptionReconciliationBackgroundService>();
+        services.AddHostedService<EmailOutboxBackgroundService>();
         return services;
     }
 

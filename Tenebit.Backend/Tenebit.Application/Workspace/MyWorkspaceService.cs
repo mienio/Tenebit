@@ -80,6 +80,7 @@ public sealed class MyWorkspaceService
         var allAssets = assignedAssets.Concat(assignmentAssets).GroupBy(x => x.Id).Select(x => x.First()).ToList();
         var procedureIds = assignmentRows.SelectMany(x => x.ProcedureAcceptances).Select(x => x.ProcedureId).Distinct().ToArray();
         var procedures = await _procedures.GetByIdsAsync(organizationId, procedureIds, cancellationToken);
+        var procedureDocuments = await _procedures.ListDocumentMetadataByProcedureIdsAsync(organizationId, procedureIds, cancellationToken);
         var assignments = assignmentRows
             .OrderByDescending(x => x.IssuedAt)
             .Select(assignment =>
@@ -91,7 +92,10 @@ public sealed class MyWorkspaceService
                     .Select(acceptance =>
                     {
                         var procedure = procedures.FirstOrDefault(p => p.Id == acceptance.ProcedureId);
-                        var document = procedure?.Documents.OrderByDescending(d => d.UploadedAt).FirstOrDefault();
+                        var document = procedureDocuments
+                            .Where(item => item.ProcedureId == acceptance.ProcedureId)
+                            .OrderByDescending(item => item.UploadedAt)
+                            .FirstOrDefault();
                         return new MyProcedureResponse(acceptance.ProcedureId, procedure?.Title, acceptance.Status, document?.Id, document?.FileName);
                     })
                     .ToList();

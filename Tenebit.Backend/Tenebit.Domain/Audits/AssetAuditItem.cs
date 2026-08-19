@@ -35,7 +35,7 @@ public sealed class AssetAuditItem
     public DateTimeOffset? ResolvedAt { get; private set; }
     public string? ResolvedBy { get; private set; }
 
-    /// <summary>Blokada "już wysłano odpowiedzi" celowo NIE jest duplikowana tutaj — sprawdzana jest wyłącznie
+    /// <summary>Blokada "już wysłano odpowiedzi" celowo NIE jest duplikowana tutaj - sprawdzana jest wyłącznie
     /// przez serwis na podstawie <see cref="AssetAuditParticipant.Status"/>, żeby nie utrzymywać dwóch niezależnych
     /// blokad, które mogłyby się rozjechać.</summary>
     public void RecordResponse(AssetAuditResponse response, string? comment, DateTimeOffset respondedAt)
@@ -45,7 +45,7 @@ public sealed class AssetAuditItem
         RespondedAt = respondedAt;
     }
 
-    /// <summary>Rozstrzygnięcie jest jednorazowe — korekta wcześniejszego rozstrzygnięcia to logika poza zakresem
+    /// <summary>Rozstrzygnięcie jest jednorazowe - korekta wcześniejszego rozstrzygnięcia to logika poza zakresem
     /// tego kroku.</summary>
     public void Resolve(AssetAuditResolution resolution, string? notes, string resolvedBy, DateTimeOffset resolvedAt)
     {

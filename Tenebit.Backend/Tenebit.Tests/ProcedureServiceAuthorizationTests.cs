@@ -97,4 +97,41 @@ public sealed class ProcedureServiceAuthorizationTests
 
         Assert.True(result.IsFailure);
     }
+
+    [Fact]
+    public async Task PublishedProcedure_CannotBeEditedOrHaveDocumentsChangedThroughService()
+    {
+        var (service, _, _, _, _, _) = CreateService();
+        var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        var procedureId = created.Value!.Id;
+        var pdf = System.Text.Encoding.ASCII.GetBytes("%PDF-1.7\nminimal-test");
+        var attached = await service.AttachDocumentAsync(procedureId, "policy.pdf", "application/octet-stream", pdf, CancellationToken.None);
+        Assert.True(attached.IsSuccess);
+        var documentId = Assert.Single(attached.Value!.Documents).Id;
+
+        var published = await service.PublishAsync(procedureId, CancellationToken.None);
+        Assert.True(published.IsSuccess);
+
+        var update = await service.UpdateAsync(procedureId, new UpdateProcedureRequest("Changed", "2.0", "HR", null, null, true), CancellationToken.None);
+        var attachAgain = await service.AttachDocumentAsync(procedureId, "other.pdf", "application/pdf", pdf, CancellationToken.None);
+        var remove = await service.RemoveDocumentAsync(procedureId, documentId, CancellationToken.None);
+
+        Assert.True(update.IsFailure);
+        Assert.True(attachAgain.IsFailure);
+        Assert.True(remove.IsFailure);
+    }
+
+    [Fact]
+    public async Task ProcedureUpload_RejectsArbitraryExecutablePayload()
+    {
+        var (service, _, _, _, _, _) = CreateService();
+        var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        var result = await service.AttachDocumentAsync(created.Value!.Id, "payload.exe", "application/octet-stream", [0x4D, 0x5A, 0x90, 0x00], CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
 }

@@ -15,6 +15,7 @@ public sealed class ProcedureAcceptance
         AssignmentId = assignmentId;
         SentAt = sentAt;
         Status = AcceptanceStatus.Pending;
+        IntegrityVersion = 2;
     }
 
     public Guid Id { get; private set; }
@@ -27,8 +28,9 @@ public sealed class ProcedureAcceptance
     public DateTimeOffset? AcceptedAt { get; private set; }
     public string? ConfirmedIp { get; private set; }
     public string? ConfirmationHash { get; private set; }
+    public int IntegrityVersion { get; private set; } = 1;
 
-    // Hardening: a confirmed acceptance is a legal proof-of-receipt record — once signed it must never be
+    // Hardening: a confirmed acceptance is a legal proof-of-receipt record - once signed it must never be
     // overwritten (re-signed, re-timestamped, re-IP-stamped). The hash is computed only from fields owned by
     // this record, so any direct DB tampering after signing can be detected by recomputing it (VerifyIntegrity).
     public void Accept(DateTimeOffset acceptedAt, string? ipAddress)
@@ -41,7 +43,16 @@ public sealed class ProcedureAcceptance
         Status = AcceptanceStatus.Accepted;
         AcceptedAt = acceptedAt;
         ConfirmedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
+        IntegrityVersion = Math.Max(IntegrityVersion, 2);
         ConfirmationHash = ComputeHash(acceptedAt, ConfirmedIp);
+    }
+
+    public void ApplyIpPrivacy(string? storedIp)
+    {
+        if (AcceptedAt is null || ConfirmationHash is null) return;
+        ConfirmedIp = string.IsNullOrWhiteSpace(storedIp) ? null : storedIp.Trim();
+        IntegrityVersion = Math.Max(IntegrityVersion, 2);
+        ConfirmationHash = ComputeHash(AcceptedAt.Value, ConfirmedIp);
     }
 
     public void MarkOverdue()
@@ -52,7 +63,7 @@ public sealed class ProcedureAcceptance
         }
     }
 
-    // Recomputes the hash from the record's current field values — a mismatch with the stored
+    // Recomputes the hash from the record's current field values - a mismatch with the stored
     // ConfirmationHash means the record was altered after signing, bypassing this class.
     public bool VerifyIntegrity()
     {
@@ -62,7 +73,8 @@ public sealed class ProcedureAcceptance
 
     private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress)
     {
-        var payload = string.Join('|', Id, OrganizationId, ProcedureId, PersonId, AssignmentId, SentAt.ToUniversalTime().ToString("O"), acceptedAt.ToUniversalTime().ToString("O"), ipAddress ?? "");
+        var privacySafeIpPart = IntegrityVersion >= 2 ? string.Empty : ipAddress ?? string.Empty;
+        var payload = string.Join('|', Id, OrganizationId, ProcedureId, PersonId, AssignmentId, SentAt.ToUniversalTime().ToString("O"), acceptedAt.ToUniversalTime().ToString("O"), privacySafeIpPart);
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }

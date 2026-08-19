@@ -6,7 +6,7 @@ namespace Tenebit.Application.People;
 
 /// <summary>Cykliczny scheduler dla dezaktywacji osób w trakcie offboardingu i zwolnienia ich zaplanowanych
 /// (AtEmploymentEnd) miejsc licencyjnych. Faktyczna logika "jedna osoba" żyje w
-/// <see cref="OffboardingScheduledActionsService"/> — współdzielona z ręcznym endpointem
+/// <see cref="OffboardingScheduledActionsService"/> - współdzielona z ręcznym endpointem
 /// <c>POST /api/offboarding/{id}/execute-scheduled-actions</c>, żeby nie duplikować kroków ani izolacji błędów.</summary>
 public sealed class PersonOffboardingSchedulerService
 {

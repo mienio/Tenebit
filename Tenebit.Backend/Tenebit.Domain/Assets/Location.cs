@@ -40,7 +40,7 @@ public sealed class Location
 
     /// <summary>
     /// Zwraca " / "-delimitowaną ścieżkę od korzenia do <paramref name="location"/>. Odporne na cykliczne dane
-    /// (np. powstałe przed wprowadzeniem <see cref="WouldCreateCycle"/>) — zamiast zakładać maksymalną głębokość,
+    /// (np. powstałe przed wprowadzeniem <see cref="WouldCreateCycle"/>) - zamiast zakładać maksymalną głębokość,
     /// zatrzymuje się przy pierwszym powtórzonym węźle.
     /// </summary>
     public static string BuildFullPath(Location location, IReadOnlyDictionary<Guid, Location> byId)

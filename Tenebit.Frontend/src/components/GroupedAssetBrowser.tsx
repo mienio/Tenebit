@@ -98,10 +98,10 @@ export function GroupedAssetBrowser({ groups, icon, fetchGroupAssets, onSelectAs
                   <div className="locationGroup__children">
                     {isLoading && <p className="muted"><Loader2 className="spin" size={14} /> {t('common.loading')}</p>}
                     {items.map(asset => (
-                      <button type="button" key={asset.id} className="listRow" onClick={() => onSelectAsset(asset.id)}>
-                        <Package size={14} />
-                        <div><strong>{asset.name}</strong><small>{asset.assetTag}</small></div>
-                        {asset.status ? <StatusBadge status={asset.status} /> : <span>{asset.categoryName}</span>}
+                      <button type="button" key={asset.id} className="assetBrowserRow" onClick={() => onSelectAsset(asset.id)}>
+                        <span className="assetBrowserRow__icon" aria-hidden="true"><Package size={16} /></span>
+                        <span className="assetBrowserRow__main"><strong>{asset.name}</strong><small>{asset.assetTag}</small></span>
+                        <span className="assetBrowserRow__meta">{asset.status ? <StatusBadge status={asset.status} /> : asset.categoryName}</span>
                       </button>
                     ))}
                     {!isLoading && result && items.length === 0 && <p className="muted">{t('assets.browseGroupEmpty')}</p>}

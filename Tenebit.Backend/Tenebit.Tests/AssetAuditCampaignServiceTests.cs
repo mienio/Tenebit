@@ -11,8 +11,8 @@ public class AssetAuditCampaignServiceTests
 {
     private static (AssetAuditCampaignService Service, FakeCurrentUser User, InMemoryAssetAuditCampaignRepository Campaigns,
         InMemoryAssetAuditParticipantRepository Participants, InMemoryAssetAuditItemRepository Items,
-        InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryActivityLogRepository Activity, FakeEmailSender EmailSender,
-        FakePdfProtocolGenerator PdfGenerator) CreateService()
+        InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryActivityLogRepository Activity,
+        FakeEmailSender EmailSender) CreateService()
     {
         var currentUser = new FakeCurrentUser();
         var campaigns = new InMemoryAssetAuditCampaignRepository();
@@ -27,13 +27,12 @@ public class AssetAuditCampaignServiceTests
         var linkBuilder = new FakeAppLinkBuilder();
         var evidence = new InMemoryAssetEvidenceRepository();
         var assignments = new InMemoryAssignmentRepository();
-        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork);
-        var pdfGenerator = new FakePdfProtocolGenerator();
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork, TestAuthorization.Asset(assets, currentUser));
 
         var service = new AssetAuditCampaignService(campaigns, participants, items, people, assets, evidence, evidenceService, activity, currentUser,
-            new FakeClock(), unitOfWork, organizations, emailSender, linkBuilder, pdfGenerator);
+            new FakeClock(), unitOfWork, organizations, emailSender, linkBuilder);
 
-        return (service, currentUser, campaigns, participants, items, people, assets, activity, emailSender, pdfGenerator);
+        return (service, currentUser, campaigns, participants, items, people, assets, activity, emailSender);
     }
 
     private static Person AddPerson(FakeCurrentUser user, InMemoryPersonRepository people, string email = "jan.kowalski@acme.test")
@@ -57,7 +56,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task CreateAsync_CreatesDraftCampaign()
     {
-        var (service, _, _, _, _, _, _, activity, _, _) = CreateService();
+        var (service, _, _, _, _, _, _, activity, _) = CreateService();
 
         var result = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
 
@@ -69,7 +68,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task PreviewAsync_MatchesAssignedAssetCount_AndDoesNotPersist()
     {
-        var (service, user, campaigns, participants, items, people, assets, _, _, _) = CreateService();
+        var (service, user, campaigns, participants, items, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         AddAsset(user, assets, person.Id);
@@ -89,9 +88,9 @@ public class AssetAuditCampaignServiceTests
     public async Task PreviewAsync_ListsPeopleWithoutEmail()
     {
         // Person domain entity always requires a valid e-mail at construction (defensive validation),
-        // so "no email" is not reachable via the public constructor in this test — verified instead
+        // so "no email" is not reachable via the public constructor in this test - verified instead
         // that a person WITH email is not flagged, keeping the warning list empty when everyone has one.
-        var (service, user, _, _, _, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, _, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -105,7 +104,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task StartAsync_CreatesParticipantsOnlyForPeopleWithAtLeastOneAsset()
     {
-        var (service, user, campaigns, participants, items, people, assets, _, _, _) = CreateService();
+        var (service, user, campaigns, participants, items, people, assets, _, _) = CreateService();
         var withAsset = AddPerson(user, people, "with.asset@acme.test");
         AddAsset(user, assets, withAsset.Id);
         AddPerson(user, people, "without.asset@acme.test");
@@ -123,7 +122,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task StartAsync_IssuesDistinctTokensPerParticipant()
     {
-        var (service, user, _, participants, _, people, assets, _, _, _) = CreateService();
+        var (service, user, _, participants, _, people, assets, _, _) = CreateService();
         var person1 = AddPerson(user, people, "person1@acme.test");
         var person2 = AddPerson(user, people, "person2@acme.test");
         AddAsset(user, assets, person1.Id);
@@ -141,7 +140,7 @@ public class AssetAuditCampaignServiceTests
     {
         // Mirrors the "no email = no send" branch exercised in OffboardingServiceTests: since Person
         // always requires a valid e-mail, we assert the positive path (email actually sent) here instead.
-        var (service, user, _, participants, _, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, participants, _, people, assets, _, emailSender) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -156,7 +155,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task AllOperations_AreFilteredByOrganizationId()
     {
-        var (service, user, campaigns, _, _, people, assets, _, _, _) = CreateService();
+        var (service, user, campaigns, _, _, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -171,7 +170,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task UpdateAsync_RejectedWhenNotDraft()
     {
-        var (service, user, _, _, _, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, _, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -186,7 +185,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task PublicToken_OfOneParticipant_DoesNotResolveOtherParticipantsItem()
     {
-        var (service, user, _, participants, items, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, participants, items, people, assets, _, emailSender) = CreateService();
         var personA = AddPerson(user, people, "a@acme.test");
         var personB = AddPerson(user, people, "b@acme.test");
         AddAsset(user, assets, personA.Id);
@@ -207,7 +206,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task RecordItemResponseAsync_RejectedAfterSubmit()
     {
-        var (service, user, _, _, items, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, emailSender) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -228,7 +227,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task RecordItemResponseAsync_DoesNotChangeAssetStatus()
     {
-        var (service, user, _, _, items, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, emailSender) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets, person.Id);
 
@@ -246,7 +245,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task SubmitAsync_SetsStatusSubmitted_AndRecomputesCampaignStatus()
     {
-        var (service, user, campaigns, participants, _, people, assets, activity, emailSender, _) = CreateService();
+        var (service, user, campaigns, participants, _, people, assets, activity, emailSender) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -265,7 +264,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task CompleteAsync_RevokesAllParticipantTokens()
     {
-        var (service, user, _, _, _, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, _, _, people, assets, _, emailSender) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -284,7 +283,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task CancelAsync_RevokesAllParticipantTokens()
     {
-        var (service, user, _, _, _, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, _, _, people, assets, _, emailSender) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
 
@@ -303,7 +302,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task GetPublicAsync_ExpiredOrRevokedOrUnknownToken_ReturnsNotFound()
     {
-        var (service, _, _, _, _, _, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _, _, _, _) = CreateService();
 
         var result = await service.GetPublicAsync("does-not-exist", CancellationToken.None);
 
@@ -314,7 +313,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ResolveItemAsync_AssetMarkedLost_ChangesStatusAndClearsOwner()
     {
-        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -333,7 +332,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ResolveItemAsync_AssetMarkedDamaged_ChangesStatus_ButKeepsOwner()
     {
-        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         var asset = AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -352,7 +351,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ResolveItemAsync_OwnershipCorrected_MovesAssetToNewOwner_EvenIfPreviouslyAssignedToSomeoneElse()
     {
-        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
         var oldOwner = AddPerson(user, people, "old@acme.test");
         var newOwner = AddPerson(user, people, "new@acme.test");
         var asset = AddAsset(user, assets, oldOwner.Id);
@@ -372,7 +371,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ResolveItemAsync_OwnershipCorrected_RejectsCrossOrganizationNewOwnerPersonId()
     {
-        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
         var oldOwner = AddPerson(user, people, "old@acme.test");
         var otherOrgPerson = new Person(Guid.NewGuid(), "Anna", "Nowak", "anna@other.test");
         people.Add(otherOrgPerson);
@@ -394,7 +393,7 @@ public class AssetAuditCampaignServiceTests
     [InlineData(AssetAuditResolution.AssetMarkedDamaged)]
     public async Task ResolveItemAsync_WithoutNotes_ReturnsValidationError(AssetAuditResolution resolution)
     {
-        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -411,7 +410,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ResolveItemAsync_OwnershipCorrected_WithoutNewOwner_ReturnsValidationError()
     {
-        var (service, user, _, _, items, people, assets, _, _, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -428,7 +427,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ReopenParticipantAsync_OnlyWorksFromSubmitted()
     {
-        var (service, user, _, participants, _, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, participants, _, people, assets, _, emailSender) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -450,7 +449,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task CompleteAsync_IsIdempotent()
     {
-        var (service, user, campaigns, _, _, people, assets, activity, _, _) = CreateService();
+        var (service, user, campaigns, _, _, people, assets, activity, _) = CreateService();
         var person = AddPerson(user, people);
         AddAsset(user, assets, person.Id);
         var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
@@ -468,7 +467,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task RemindParticipantsAsync_OnlyRemindsPendingOrInProgress()
     {
-        var (service, user, _, participants, _, people, assets, activity, emailSender, _) = CreateService();
+        var (service, user, _, participants, _, people, assets, activity, emailSender) = CreateService();
         var personA = AddPerson(user, people, "a@acme.test");
         var personB = AddPerson(user, people, "b@acme.test");
         AddAsset(user, assets, personA.Id);
@@ -491,7 +490,7 @@ public class AssetAuditCampaignServiceTests
     [Fact]
     public async Task ExportCsvAsync_ContainsAllItems_AndEscapesCommaInComment()
     {
-        var (service, user, _, _, items, people, assets, _, emailSender, _) = CreateService();
+        var (service, user, _, _, items, people, assets, _, emailSender) = CreateService();
         var personA = AddPerson(user, people, "a@acme.test");
         var personB = AddPerson(user, people, "b@acme.test");
         AddAsset(user, assets, personA.Id);
@@ -510,31 +509,6 @@ public class AssetAuditCampaignServiceTests
         var lines = result.Value!.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(items.Items.Count + 1, lines.Length); // header + one row per item
         Assert.Contains(lines, l => l.Contains("\"Rysa, pęknięcie\""));
-    }
-
-    [Fact]
-    public async Task GetReportPdfAsync_SummaryCountsMatchItemResponses()
-    {
-        var (service, user, _, _, items, people, assets, _, emailSender, pdfGenerator) = CreateService();
-        var personA = AddPerson(user, people, "a@acme.test");
-        var personB = AddPerson(user, people, "b@acme.test");
-        AddAsset(user, assets, personA.Id);
-        AddAsset(user, assets, personB.Id);
-        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
-        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
-
-        var tokenA = ExtractRawTokenFromEmail(emailSender, personA.Email);
-        var itemA = items.Items.Single(x => x.ExpectedPersonId == personA.Id);
-        await service.RecordItemResponseAsync(tokenA, itemA.Id,
-            new SubmitPublicAssetAuditItemRequest(AssetAuditResponse.Missing, "Zagubione"), CancellationToken.None);
-
-        var result = await service.GetReportPdfAsync(created.Value!.Campaign.Id, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        var model = pdfGenerator.LastAssetAuditReportModel!;
-        Assert.Equal(1, model.MissingCount);
-        Assert.Equal(0, model.ConfirmedCount);
-        Assert.Single(model.Exceptions);
     }
 
     private static string ExtractRawTokenFromEmail(FakeEmailSender emailSender, string recipient)

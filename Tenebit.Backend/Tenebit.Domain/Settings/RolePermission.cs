@@ -1,7 +1,7 @@
 namespace Tenebit.Domain.Settings;
 
 // A per-organization (role, permission) override. Absence of a row means "use the built-in
-// default" for that role+permission (see RolePermissions.DefaultAllow) — admins only need to
+// default" for that role+permission (see RolePermissions.DefaultAllow) - admins only need to
 // create a row when they want to flip a role away from its default.
 public sealed class RolePermission
 {

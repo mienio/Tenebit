@@ -8,7 +8,7 @@ namespace Tenebit.Application.Offboarding;
 /// <summary>Shared "dezaktywuj + zwolnij zaplanowane licencje" krok (spec 4.5 krok 9, 4.12) używany zarówno przez
 /// cykliczny <see cref="Tenebit.Application.People.PersonOffboardingSchedulerService"/>, jak i ręczny
 /// <c>POST /api/offboarding/{id}/execute-scheduled-actions</c>. Idempotentne i bezpieczne do wielokrotnego
-/// wywołania — błąd pojedynczego zwolnienia licencji jest izolowany (try/catch per pozycja) i widoczny jako
+/// wywołania - błąd pojedynczego zwolnienia licencji jest izolowany (try/catch per pozycja) i widoczny jako
 /// <see cref="OffboardingItem.RecordAutomationFailure"/>, do ponowienia przy kolejnym wywołaniu; nigdy nie cofa
 /// dezaktywacji osoby ani innych udanych zwolnień. Zapis następuje raz, na koniec przetwarzania jednej osoby, więc
 /// błąd innej osoby (przetwarzanej w osobnym wywołaniu) nigdy nie wycofuje tego zapisu.</summary>
@@ -40,7 +40,7 @@ public sealed class OffboardingScheduledActionsService
             hasChanges = true;
         }
 
-        // Nie jest jeszcze (i wciąż nie jest) czas dezaktywacji tej osoby — nic więcej do zrobienia w tym wywołaniu.
+        // Nie jest jeszcze (i wciąż nie jest) czas dezaktywacji tej osoby - nic więcej do zrobienia w tym wywołaniu.
         if (person.EmploymentStatus != EmploymentStatus.Inactive)
         {
             if (hasChanges) await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -50,7 +50,7 @@ public sealed class OffboardingScheduledActionsService
         var offboardingCase = await _cases.FindOpenByPersonAsync(organizationId, person.Id, cancellationToken);
         if (offboardingCase is null)
         {
-            // Legacy fallback: offboarding rozpoczęty zanim istniał OffboardingCase — zachowaj poprzednie
+            // Legacy fallback: offboarding rozpoczęty zanim istniał OffboardingCase - zachowaj poprzednie
             // zachowanie zwalniania wszystkich miejsc licencyjnych bezpośrednio.
             hasChanges |= await ReleaseAllSeatsAsync(organizationId, person, now, actorSubject, cancellationToken);
             if (hasChanges) await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -84,7 +84,7 @@ public sealed class OffboardingScheduledActionsService
             }
         }
 
-        // "Zaplanowane działania zakończone" oznacza, że KAŻDA pozycja AtEmploymentEnd faktycznie się powiodła —
+        // "Zaplanowane działania zakończone" oznacza, że KAŻDA pozycja AtEmploymentEnd faktycznie się powiodła -
         // nie tylko że została podjęta próba. Jeśli którakolwiek nadal ma błąd/stan nieostateczny, znacznik
         // zostaje nieustawiony, aby kolejny cykl (lub ręczne ponowienie) spróbował ponownie.
         if (scheduledItems.All(i => i.IsResolved))

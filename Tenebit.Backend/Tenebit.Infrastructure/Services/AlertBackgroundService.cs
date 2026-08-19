@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Tenebit.Application.Common;
+using Tenebit.Application.Abstractions;
 using Tenebit.Application.Alerts;
 
 namespace Tenebit.Infrastructure.Services;
@@ -37,15 +38,29 @@ public sealed class AlertBackgroundService : BackgroundService
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var gate = scope.ServiceProvider.GetRequiredService<PostgresJobLock>();
-                var alertCheckService = scope.ServiceProvider.GetRequiredService<AlertCheckService>();
-                await gate.TryRunAsync("alerts", interval, ct => alertCheckService.RunAsync(onboardingDeadlineDays, ct), stoppingToken);
+                using var gateScope = _scopeFactory.CreateScope();
+                var gate = gateScope.ServiceProvider.GetRequiredService<PostgresJobLock>();
+                await gate.TryRunAsync("alerts", interval, async ct =>
+                {
+                    IReadOnlyList<Guid> organizationIds;
+                    using (var discoveryScope = _scopeFactory.CreateScope())
+                    {
+                        var organizations = discoveryScope.ServiceProvider.GetRequiredService<IOrganizationRepository>();
+                        organizationIds = (await organizations.ListAllAsync(ct)).Select(x => x.Id).ToArray();
+                    }
+
+                    foreach (var organizationId in organizationIds)
+                    {
+                        using var organizationScope = _scopeFactory.CreateScope();
+                        var alertCheckService = organizationScope.ServiceProvider.GetRequiredService<AlertCheckService>();
+                        await alertCheckService.RunOrganizationAsync(organizationId, onboardingDeadlineDays, ct);
+                    }
+                }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 SecurityTelemetry.BackgroundJobFailure();
-                _logger.LogError(ex, "Sprawdzanie alertów zakończyło się błędem — spróbuję ponownie przy kolejnym cyklu.");
+                _logger.LogError(ex, "Sprawdzanie alertów zakończyło się błędem - spróbuję ponownie przy kolejnym cyklu.");
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));

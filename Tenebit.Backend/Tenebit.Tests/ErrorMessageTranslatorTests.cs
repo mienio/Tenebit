@@ -85,4 +85,17 @@ public class ErrorMessageTranslatorTests
         var result = ErrorMessageTranslator.Translate("Unknown plan: gold", "en");
         Assert.Equal("Unknown plan: gold", result);
     }
+
+    [Theory]
+    [InlineData("Akceptacja regulaminu i polityki prywatności jest wymagana.", "en", "Acceptance of the terms and privacy policy is required.")]
+    [InlineData("Akceptacja regulaminu i polityki prywatności jest wymagana.", "es", "Debes aceptar los términos y la política de privacidad.")]
+    [InlineData("Akceptacja regulaminu i polityki prywatności jest wymagana.", "de", "Die Nutzungsbedingungen und die Datenschutzerklärung müssen akzeptiert werden.")]
+    [InlineData("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", "en", "Too many attempts. Request a new code or try again later.")]
+    [InlineData("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", "es", "Demasiados intentos. Solicita un código nuevo o inténtalo de nuevo más tarde.")]
+    [InlineData("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", "de", "Zu viele Versuche. Fordern Sie einen neuen Code an oder versuchen Sie es später erneut.")]
+    public void Translate_TranslatesRecoveryAndLegalMessages(string message, string language, string expected)
+    {
+        var result = ErrorMessageTranslator.Translate(message, language);
+        Assert.Equal(expected, result);
+    }
 }

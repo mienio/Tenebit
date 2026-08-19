@@ -107,6 +107,7 @@ FROM node:20-bookworm-slim AS build
 WORKDIR /app
 ENV NODE_ENV=development
 ENV VITE_API_BASE_URL=
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN corepack enable && corepack prepare pnpm@10.14.0 --activate
 COPY package.json package-lock.json ./
 RUN pnpm import && pnpm install --frozen-lockfile --prod=false
@@ -138,7 +139,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://backend:8080;
+        proxy_pass http://tenebit-backend:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

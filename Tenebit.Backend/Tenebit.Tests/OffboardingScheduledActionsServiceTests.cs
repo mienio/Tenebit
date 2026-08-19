@@ -82,7 +82,7 @@ public class OffboardingScheduledActionsServiceTests
         Assert.Equal(OffboardingItemStatus.Released, goodItem.Status);
         Assert.NotEqual(OffboardingItemStatus.Released, badItem.Status);
         Assert.NotNull(badItem.AutomationError);
-        // Not all AtEmploymentEnd items succeeded yet — the marker must stay unset so a future run retries.
+        // Not all AtEmploymentEnd items succeeded yet - the marker must stay unset so a future run retries.
         Assert.Null(offboardingCase.ScheduledActionsCompletedAt);
 
         Assert.Contains(activity.Logs, l => l.Action == "offboarding.license_released" && l.EntityId == goodItem.Id);

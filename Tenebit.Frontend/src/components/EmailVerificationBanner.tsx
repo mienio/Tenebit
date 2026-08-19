@@ -23,7 +23,10 @@ export function EmailVerificationNotice() {
   async function resend() {
     setSending(true);
     try {
-      await apiRequest('/api/auth/resend-verification', { method: 'POST' });
+      await apiRequest('/api/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email: auth.userEmail })
+      });
       setSent(true);
     } finally {
       setSending(false);

@@ -28,10 +28,10 @@ public static class TenebitRoles
         new(Auditor, "Audytor", "Tylko odczyt raportów, historii i logów.")
     ];
 
-    // Read-access groups for the main data modules — kept in sync with each role's own write
+    // Read-access groups for the main data modules - kept in sync with each role's own write
     // permissions elsewhere (e.g. Technician/LicenseManager can already act on assets;
     // ProcedureManager can already author procedures) and with the frontend nav matrix
-    // (components/Layout.tsx `nav`). "employee" is intentionally excluded from all of these —
+    // (components/Layout.tsx `nav`). "employee" is intentionally excluded from all of these -
     // its role is "view only own", served entirely through My Workspace.
     public static readonly string[] AssetViewers = [Owner, Admin, AssetOperator, Technician, Manager, Hr, LicenseManager, Finance, Auditor];
     public static readonly string[] PeopleViewers = [Owner, Admin, Manager, Hr, AssetOperator, Auditor];

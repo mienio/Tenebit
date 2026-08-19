@@ -21,7 +21,7 @@ function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
 }
 
 // Pole przesyłania zdjęć (kilka plików per aktywo, maks. 5). Zawsze pokazuje linię instrukcji
-// prywatności ze spec 6.9. Samo zbiera pliki do stanu rodzica — wysyłka następuje razem z formularzem.
+// prywatności ze spec 6.9. Samo zbiera pliki do stanu rodzica - wysyłka następuje razem z formularzem.
 export function EvidencePhotoPicker({ files, onChange }: { files: File[]; onChange: (files: File[]) => void }) {
   const { t } = useI18n();
   function addFiles(list: FileList | null) {

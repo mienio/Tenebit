@@ -12,7 +12,9 @@ dump="$tmp/tenebit.dump"
 pg_dump --format=custom --no-owner --no-acl --dbname="$TENEBIT_SOURCE_DB_URL" --file="$dump"
 pg_restore --clean --if-exists --no-owner --no-acl --dbname="$TENEBIT_RESTORE_DB_URL" "$dump"
 psql "$TENEBIT_RESTORE_DB_URL" -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM tenebit.organization_users' >/dev/null
+# pg_* tools accept libpq URLs/conninfo, while Npgsql expects its own connection-string syntax.
 # Reuse the operator-provided Auth__FieldEncryption__* key ring. Nothing here prints plaintext.
-ConnectionStrings__TenebitDb="$TENEBIT_RESTORE_DB_URL" Database__AutoCreate=false Seed__Enabled=false \
+restore_app_connection="${TENEBIT_RESTORE_DB_CONNECTION:-$TENEBIT_RESTORE_DB_URL}"
+ConnectionStrings__TenebitDb="$restore_app_connection" Database__AutoCreate=false Seed__Enabled=false \
   dotnet "$TENEBIT_API_DLL" --verify-encrypted-data
 printf '%s\n' 'Backup restore + encrypted-data/key-ring verification: PASS'

@@ -29,7 +29,7 @@ public class AssetEvidenceServiceTests
         var activity = new InMemoryActivityLogRepository();
         var clock = new FakeClock();
 
-        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, new FakeUnitOfWork());
+        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, new FakeUnitOfWork(), TestAuthorization.Asset(assets, currentUser));
         return (service, currentUser, evidence, assets, assignments, activity, clock);
     }
 

@@ -253,7 +253,7 @@ export function AlertsSettings() {
                       <TextInput type="number" min={0} max={14} value={draft.cooldownDays} onChange={event => updateDraft(type, { cooldownDays: Number(event.target.value) || 0 })} />
                     </Field>
                   </div>
-                  <p className="muted">{t('alerts.preview', { type: typeLabel, days: draft.thresholds || '—' })}</p>
+                  <p className="muted">{t('alerts.preview', { type: typeLabel, days: draft.thresholds || '-' })}</p>
                   <div className="formActions formActions--split">
                     <Button type="button" variant="secondary" disabled={testingType === type} icon={<Send size={16} />} onClick={() => sendTest(type)}>{testingType === type ? t('common.saving') : t('alerts.sendTest')}</Button>
                     <Button type="button" disabled={savingType === type} icon={<Save size={16} />} onClick={() => saveRule(type)}>{savingType === type ? t('common.saving') : t('common.save')}</Button>
@@ -328,7 +328,7 @@ export function AlertsSettings() {
                     <td data-label={t('alerts.colStatus')}>{t(`alerts.status.${item.status}`)}</td>
                     <td data-label={t('alerts.colCreatedAt')}><small>{formatDateTime(item.createdAt)}</small></td>
                     <td data-label={t('alerts.colSentAt')}><small>{formatDateTime(item.sentAt)}</small></td>
-                    <td data-label={t('alerts.colError')}>{item.lastError ?? '—'}</td>
+                    <td data-label={t('alerts.colError')}>{item.lastError ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

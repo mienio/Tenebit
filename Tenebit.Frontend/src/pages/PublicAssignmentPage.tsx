@@ -1,28 +1,28 @@
 import { CheckCircle2, Download, PackageCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { EvidenceGallery } from '../components/Evidence';
 import { ErrorState, LoadingState } from '../components/StateViews';
+import { PublicFooter } from '../components/PublicFooter';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { usePublicCapabilitySession } from '../hooks/usePublicCapabilitySession';
 import { useI18n } from '../i18n/I18nProvider';
 
 export function PublicAssignmentPage() {
   const { t } = useI18n();
-  const { token } = useParams<{ token: string }>();
-  const loader = useMemo(() => () => api.publicAssignment(token!), [token]);
+  const capability = usePublicCapabilitySession('assignment');
+  const loader = useMemo(() => () => capability === 'ready' ? api.publicAssignment() : Promise.resolve(null), [capability]);
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [accepting, setAccepting] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   async function accept() {
-    if (!token) return;
     setAccepting(true);
     setMessage(null);
     try {
-      await api.acceptPublicAssignment(token);
+      await api.acceptPublicAssignment();
       await reload();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.acceptFailed'));
@@ -42,27 +42,17 @@ export function PublicAssignmentPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function download() {
-    if (!token) return;
-    try {
-      const blob = await api.downloadPublicAssignmentProtocol(token);
-      saveBlob(blob, `${data?.protocolNumber ?? 'protokol'}.pdf`);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
-    }
-  }
-
   async function downloadProcedureDocument(procedureId: string, documentId: string, fileName: string) {
-    if (!token) return;
     try {
-      const blob = await api.downloadPublicProcedureDocument(token, procedureId, documentId);
+      const blob = await api.downloadPublicProcedureDocument(procedureId, documentId);
       saveBlob(blob, fileName);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
     }
   }
 
-  if (!token) return <ErrorState message={t('publicAssignment.invalidLink')} />;
+  if (capability === 'loading') return <LoadingState title={t('publicAssignment.loadingTitle')} description={t('publicAssignment.loadingDesc')} />;
+  if (capability === 'error') return <ErrorState message={t('publicAssignment.invalidLink')} />;
   if (isLoading && !data) return <LoadingState title={t('publicAssignment.loadingTitle')} description={t('publicAssignment.loadingDesc')} />;
   if (error || !data) return <ErrorState message={error ?? t('publicAssignment.invalidLink')} onRetry={reload} />;
 
@@ -94,7 +84,7 @@ export function PublicAssignmentPage() {
             {data.assets.filter(asset => asset.evidenceIds.length > 0).map(asset => (
               <div key={asset.assetId} style={{ marginBottom: '12px' }}>
                 <strong>{asset.name}</strong>
-                <EvidenceGallery ids={asset.evidenceIds} getBlob={id => api.publicAssignmentEvidence(token!, id)} />
+                <EvidenceGallery ids={asset.evidenceIds} getBlob={id => api.publicAssignmentEvidence(id)} />
               </div>
             ))}
           </>
@@ -126,11 +116,10 @@ export function PublicAssignmentPage() {
         {message && <p className="formMessage formMessage--error">{message}</p>}
 
         {accepted ? (
-          <div className="formActions formActions--split">
+          <div className="formActions">
             <p style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
               <CheckCircle2 size={18} /> {t('publicAssignment.alreadyAccepted')}
             </p>
-            <Button variant="secondary" onClick={download} icon={<Download size={16} />}>{t('publicAssignment.downloadProtocol')}</Button>
           </div>
         ) : canAccept ? (
           <>
@@ -149,6 +138,7 @@ export function PublicAssignmentPage() {
           <p className="muted">{t('publicAssignment.notAcceptable')}</p>
         )}
       </section>
+      <PublicFooter compact />
     </main>
   );
 }

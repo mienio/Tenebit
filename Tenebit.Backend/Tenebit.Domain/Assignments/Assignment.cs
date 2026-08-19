@@ -11,7 +11,7 @@ public sealed class Assignment
     {
         if (string.IsNullOrWhiteSpace(protocolNumber))
         {
-            throw new DomainException("Numer protokołu jest wymagany.");
+            throw new DomainException("Numer wydania jest wymagany.");
         }
 
         Id = Guid.NewGuid();
@@ -67,7 +67,7 @@ public sealed class Assignment
         ProcedureAcceptances.Add(new ProcedureAcceptance(organizationId, procedureId, personId, Id, sentAt));
     }
 
-    // Hardening: the accepted protocol is a legal proof-of-receipt record — capture who signed it, when, from
+    // Hardening: the accepted protocol is a legal proof-of-receipt record - capture who signed it, when, from
     // where, and a hash of exactly what was confirmed (assets + conditions + procedures), so any later direct
     // edit to those rows can be detected by recomputing the hash (see VerifyIntegrity).
     public void Accept(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidence>? evidence = null)
@@ -82,6 +82,48 @@ public sealed class Assignment
         Status = AssignmentStatus.Accepted;
         AcceptedAt = acceptedAt;
         AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
+        // v3 keeps IP outside the permanent integrity seal so privacy retention can remove/truncate
+        // the address later without invalidating the signed business facts.
+        IntegrityVersion = Math.Max(IntegrityVersion, 3);
+        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp, ToIntegrityEntries(evidence));
+        foreach (var acceptance in ProcedureAcceptances)
+        {
+            acceptance.Accept(acceptedAt, ipAddress);
+        }
+    }
+
+    // Recomputes the hash from the assignment's current field values - a mismatch with the stored
+    // AcceptanceHash means the protocol was altered after signing, bypassing this class.
+    public bool VerifyIntegrity(IReadOnlyList<AssetEvidence>? evidence = null)
+    {
+        if (AcceptedAt is null || AcceptanceHash is null) return true;
+        return ComputeHash(AcceptedAt.Value, AcceptedIp, ToIntegrityEntries(evidence)) == AcceptanceHash;
+    }
+
+    public bool VerifyIntegrity(IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence)
+    {
+        if (AcceptedAt is null || AcceptanceHash is null) return true;
+        return ComputeHash(AcceptedAt.Value, AcceptedIp, evidence) == AcceptanceHash;
+    }
+
+    // Spec 6.6: wersja 2 obejmuje zdjęcia wydania w hashu akceptacji. Wersja 1 pozostaje bez zmian
+    // dla istniejących potwierdzeń - nie przeliczamy ich nowym algorytmem.
+    public void EnableEvidenceIntegrity()
+    {
+        IntegrityVersion = 2;
+    }
+
+    public void AcceptWithEvidenceIntegrity(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidenceIntegrityEntry> evidence)
+    {
+        if (Status is not AssignmentStatus.AwaitingAcceptance and not AssignmentStatus.Overdue)
+        {
+            throw new DomainException("Wydanie można zaakceptować tylko wtedy, gdy oczekuje na akceptację albo jest po terminie.");
+        }
+
+        Status = AssignmentStatus.Accepted;
+        AcceptedAt = acceptedAt;
+        AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
+        IntegrityVersion = Math.Max(IntegrityVersion, 3);
         AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp, evidence);
         foreach (var acceptance in ProcedureAcceptances)
         {
@@ -89,23 +131,20 @@ public sealed class Assignment
         }
     }
 
-    // Recomputes the hash from the assignment's current field values — a mismatch with the stored
-    // AcceptanceHash means the protocol was altered after signing, bypassing this class.
-    public bool VerifyIntegrity(IReadOnlyList<AssetEvidence>? evidence = null)
-    {
-        if (AcceptedAt is null || AcceptanceHash is null) return true;
-        return ComputeHash(AcceptedAt.Value, AcceptedIp, evidence) == AcceptanceHash;
-    }
+    public void ApplyAcceptedIpPrivacy(string? storedIp, IReadOnlyList<AssetEvidence>? evidence = null) =>
+        ApplyAcceptedIpPrivacyWithEvidenceIntegrity(storedIp, ToIntegrityEntries(evidence));
 
-    // Spec 6.6: wersja 2 obejmuje zdjęcia wydania w hashu akceptacji. Wersja 1 pozostaje bez zmian
-    // dla istniejących protokołów — nie przeliczamy ich nowym algorytmem.
-    public void EnableEvidenceIntegrity()
+    public void ApplyAcceptedIpPrivacyWithEvidenceIntegrity(string? storedIp, IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence)
     {
-        IntegrityVersion = 2;
+        if (AcceptedAt is null || AcceptanceHash is null) return;
+        AcceptedIp = string.IsNullOrWhiteSpace(storedIp) ? null : storedIp.Trim();
+        IntegrityVersion = Math.Max(IntegrityVersion, 3);
+        AcceptanceHash = ComputeHash(AcceptedAt.Value, AcceptedIp, evidence);
+        foreach (var acceptance in ProcedureAcceptances) acceptance.ApplyIpPrivacy(AcceptedIp);
     }
 
     // AUD-001: publiczny link akceptacji identyfikuje wydanie tokenem (hash w DB, TTL, revoke),
-    // nie samym OrganizationId+Id — patrz PublicTokenService dla generacji/weryfikacji.
+    // nie samym OrganizationId+Id - patrz PublicTokenService dla generacji/weryfikacji.
     public void SetPublicToken(string tokenHash, DateTimeOffset expiresAt)
     {
         if (string.IsNullOrWhiteSpace(tokenHash))
@@ -139,17 +178,18 @@ public sealed class Assignment
         }
     }
 
-    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidence>? evidence)
+    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence)
     {
         var assetsPart = string.Join(',', Assets.OrderBy(x => x.AssetId).Select(x => $"{x.AssetId}:{x.IssueCondition}"));
         var proceduresPart = string.Join(',', ProcedureAcceptances.Select(x => x.ProcedureId).OrderBy(x => x));
-        var payload = string.Join('|', Id, OrganizationId, PersonId, ProtocolNumber, assetsPart, proceduresPart, acceptedAt.ToUniversalTime().ToString("O"), ipAddress ?? "");
+        var privacySafeIpPart = IntegrityVersion >= 3 ? string.Empty : ipAddress ?? string.Empty;
+        var payload = string.Join('|', Id, OrganizationId, PersonId, ProtocolNumber, assetsPart, proceduresPart, acceptedAt.ToUniversalTime().ToString("O"), privacySafeIpPart);
 
         if (IntegrityVersion >= 2)
         {
-            // Zdjęcia wydania są częścią potwierdzonego protokołu (spec 6.6). Zdjęcia zwrotu dodawane później
+            // Zdjęcia wydania są częścią potwierdzonego wydania (spec 6.6). Zdjęcia zwrotu dodawane później
             // nie mogą zmieniać hashu akceptacji, dlatego bierzemy pod uwagę wyłącznie fazę Issue.
-            var entries = evidence ?? Array.Empty<AssetEvidence>();
+            var entries = evidence ?? Array.Empty<AssetEvidenceIntegrityEntry>();
             var evidencePart = string.Join(',', entries
                 .Where(x => x.Phase == EvidencePhase.Issue)
                 .OrderBy(x => x.Id)
@@ -160,6 +200,9 @@ public sealed class Assignment
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
+
+    private static IReadOnlyList<AssetEvidenceIntegrityEntry>? ToIntegrityEntries(IReadOnlyList<AssetEvidence>? evidence) =>
+        evidence?.Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList();
 
     public void ReturnAsset(Guid assetId, ReturnResolution resolution, DateTimeOffset returnedAt, string? returnCondition, string? returnLocation, string? returnedBy, string? notes)
     {

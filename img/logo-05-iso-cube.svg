@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect x="4" y="4" width="120" height="120" rx="20" fill="#f6e9e6"/>
+  <!-- isometric cube, one box = one asset -->
+  <path d="M64 30 L92 46 L64 62 L36 46 Z" fill="#a63a2e" stroke="#221d18" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="M36 46 L64 62 L64 96 L36 80 Z" fill="#221d18" stroke="#221d18" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="M92 46 L64 62 L64 96 L92 80 Z" fill="#4a4038" stroke="#221d18" stroke-width="4.5" stroke-linejoin="round"/>
+</svg>

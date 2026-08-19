@@ -126,7 +126,7 @@ public sealed class LocationService
 
             if (Location.WouldCreateCycle(id, request.ParentId.Value, byId))
             {
-                return Result<LocationResponse>.Failure(Error.Validation("Nie można ustawić lokalizacji podrzędnej jako nadrzędnej — utworzyłoby to cykl."));
+                return Result<LocationResponse>.Failure(Error.Validation("Nie można ustawić lokalizacji podrzędnej jako nadrzędnej - utworzyłoby to cykl."));
             }
         }
 

@@ -6,7 +6,7 @@ namespace Tenebit.Application.Assets;
 public sealed record AssetFieldDefinitionResponse(Guid Id, string Key, string Label, AssetFieldType FieldType, IReadOnlyList<string> Options, bool Required);
 
 // AUD-007: klucze pól własnych trafiały .Trim()-owane bez walidacji długości/pustki wprost do warstwy
-// Application (AssetCategoryService.ReplaceFieldDefinitions) — max length dopasowane do kolumn DB.
+// Application (AssetCategoryService.ReplaceFieldDefinitions) - max length dopasowane do kolumn DB.
 [ValidatedRequest]
 public sealed record SaveAssetFieldDefinitionRequest(
     [property: Required, StringLength(80, MinimumLength = 1)] string Key,

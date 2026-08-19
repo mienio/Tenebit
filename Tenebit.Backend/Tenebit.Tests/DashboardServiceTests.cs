@@ -14,13 +14,8 @@ public class DashboardServiceTests
         var snapshots = new InMemoryDashboardSnapshotRepository();
         var clock = new FakeClock();
         var service = new DashboardService(
-            assets,
-            new InMemoryPersonRepository(),
-            new InMemoryAssignmentRepository(),
-            new InMemoryAssetCategoryRepository(),
-            new InMemoryTeamRepository(),
+            new InMemoryDashboardReadRepository(assets),
             new InMemoryActivityLogRepository(),
-            new InMemoryLicenseRepository(),
             new InMemoryDashboardLayoutRepository(),
             snapshots,
             currentUser,
@@ -91,7 +86,7 @@ public class DashboardServiceTests
         var (service, _, snapshots, clock, currentUser) = CreateService();
         clock.UtcNow = new DateTimeOffset(2026, 1, 15, 10, 0, 0, TimeSpan.Zero);
 
-        // No snapshot for exactly 7 days ago (2026-01-08) — closest earlier one (2026-01-05) should be used instead.
+        // No snapshot for exactly 7 days ago (2026-01-08) - closest earlier one (2026-01-05) should be used instead.
         snapshots.Add(new DashboardSnapshot(currentUser.OrganizationId, new DateOnly(2026, 1, 5), totalAssets: 3, assetsWithoutOwner: 0, openAssignments: 0, visibleAssetValue: 0m, createdAt: clock.UtcNow.AddDays(-10)));
 
         var result = await service.GetComparisonAsync(7, CancellationToken.None);

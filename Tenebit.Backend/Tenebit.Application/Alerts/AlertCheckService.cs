@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Alerts;
@@ -32,6 +34,8 @@ public sealed class AlertCheckService
     private readonly IAssetAuditParticipantRepository _auditParticipants;
     private readonly IEquipmentReservationRepository _reservations;
     private readonly IEmailSender _emailSender;
+    private readonly IEmailOutboxWriter? _emailOutbox;
+    private readonly Dictionary<Guid, IReadOnlyList<Tenebit.Domain.Identity.OrganizationUser>> _usersByOrganization = [];
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -52,7 +56,8 @@ public sealed class AlertCheckService
         IEquipmentReservationRepository reservations,
         IEmailSender emailSender,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IEmailOutboxWriter? emailOutbox = null)
     {
         _organizations = organizations;
         _users = users;
@@ -69,41 +74,51 @@ public sealed class AlertCheckService
         _auditParticipants = auditParticipants;
         _reservations = reservations;
         _emailSender = emailSender;
+        _emailOutbox = emailOutbox;
         _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
-    // onboardingDeadlineDays is read from configuration by the caller (AlertBackgroundService) — kept as a
-    // plain parameter here so the Application layer doesn't need a dependency on Microsoft.Extensions.Configuration.
+    // onboardingDeadlineDays is read from configuration by the caller (AlertBackgroundService).
     public async Task RunAsync(int onboardingDeadlineDays, CancellationToken cancellationToken)
     {
         var organizations = await _organizations.ListAllAsync(cancellationToken);
         foreach (var organization in organizations)
         {
-            var rules = await _rules.ListByOrganizationAsync(organization.Id, cancellationToken);
-            if (rules.Count == 0) continue;
-
-            var isQuietHours = organization.IsWithinQuietHours(_clock.UtcNow);
-            var digestItems = new List<DigestItem>();
-            var hasChanges = false;
-
-            hasChanges |= await CheckWarrantyAlertsAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckLicenseExpiringAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckProcedureReviewDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckAssignmentReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckAssignmentNotConfirmedAsync(organization, onboardingDeadlineDays, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckOffboardingReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckAssetAuditNoResponseAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckReservationAwaitingApprovalAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckReservationPickupUpcomingAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await CheckReservationOverdueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
-            hasChanges |= await TryGenerateDigestAsync(organization, digestItems, isQuietHours, cancellationToken);
-
-            if (hasChanges)
-            {
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-            }
+            await ProcessOrganizationAsync(organization, onboardingDeadlineDays, cancellationToken);
         }
+    }
+
+    public async Task RunOrganizationAsync(Guid organizationId, int onboardingDeadlineDays, CancellationToken cancellationToken)
+    {
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        if (organization is null) return;
+        await ProcessOrganizationAsync(organization, onboardingDeadlineDays, cancellationToken);
+    }
+
+    private async Task ProcessOrganizationAsync(Organization organization, int onboardingDeadlineDays, CancellationToken cancellationToken)
+    {
+        _usersByOrganization.Remove(organization.Id);
+        var rules = await _rules.ListByOrganizationAsync(organization.Id, cancellationToken);
+        if (rules.Count == 0) return;
+
+        var isQuietHours = organization.IsWithinQuietHours(_clock.UtcNow);
+        var digestItems = new List<DigestItem>();
+        var hasChanges = false;
+
+        hasChanges |= await CheckWarrantyAlertsAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckLicenseExpiringAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckProcedureReviewDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckAssignmentReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckAssignmentNotConfirmedAsync(organization, onboardingDeadlineDays, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckOffboardingReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckAssetAuditNoResponseAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckReservationAwaitingApprovalAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckReservationPickupUpcomingAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckReservationOverdueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await TryGenerateDigestAsync(organization, digestItems, isQuietHours, cancellationToken);
+
+        if (hasChanges) await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     // ---------- detection methods ----------
@@ -114,15 +129,17 @@ public sealed class AlertCheckService
         if (rule is null) return false;
 
         var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
-        var assets = await _assets.ListAsync(organization.Id, null, null, null, cancellationToken);
+        var thresholds = NormalizeThresholds(rule).ToArray();
+        if (thresholds.Length == 0) return false;
+        var assets = await _assets.ListWarrantyExpiringAsync(organization.Id, today, today.AddDays(thresholds.Max()), cancellationToken);
         var events = new List<AlertEvent>();
 
-        foreach (var thresholdDays in NormalizeThresholds(rule))
+        foreach (var thresholdDays in thresholds)
         {
             var targetDate = today.AddDays(thresholdDays);
             foreach (var asset in assets.Where(a => a.WarrantyUntil.HasValue && a.WarrantyUntil.Value >= today && a.WarrantyUntil.Value <= targetDate))
             {
-                var subject = $"Gwarancja wygasa za {thresholdDays} dni — {asset.Name} ({asset.AssetTag})";
+                var subject = $"Gwarancja wygasa za {thresholdDays} dni - {asset.Name} ({asset.AssetTag})";
                 var html = $"<p>Gwarancja na aktywo <strong>{Encode(asset.Name)}</strong> (tag: {Encode(asset.AssetTag)}) wygasa <strong>{asset.WarrantyUntil:yyyy-MM-dd}</strong> ({thresholdDays} dni).</p>";
                 events.Add(new AlertEvent(asset.Id, thresholdDays, asset.WarrantyUntil, subject, html, []));
             }
@@ -145,9 +162,9 @@ public sealed class AlertCheckService
             var targetDate = today.AddDays(thresholdDays);
             foreach (var license in licenses.Where(l => l.ExpiresAt.HasValue && l.ExpiresAt.Value >= today && l.ExpiresAt.Value <= targetDate))
             {
-                // Spec 7.9: alert o licencji NIE ujawnia klucza licencyjnego — tylko nazwa, dostawca i data.
+                // Spec 7.9: alert o licencji NIE ujawnia klucza licencyjnego - tylko nazwa, dostawca i data.
                 var vendorPart = license.Vendor is null ? string.Empty : $" (dostawca: {Encode(license.Vendor)})";
-                var subject = $"Licencja wygasa za {thresholdDays} dni — {license.Name}";
+                var subject = $"Licencja wygasa za {thresholdDays} dni - {license.Name}";
                 var html = $"<p>Licencja <strong>{Encode(license.Name)}</strong>{vendorPart} wygasa <strong>{license.ExpiresAt:yyyy-MM-dd}</strong> ({thresholdDays} dni).</p>";
                 events.Add(new AlertEvent(license.Id, thresholdDays, license.ExpiresAt, subject, html, []));
             }
@@ -170,7 +187,7 @@ public sealed class AlertCheckService
             var targetDate = today.AddDays(thresholdDays);
             foreach (var procedure in procedures.Where(p => p.ReviewDate.HasValue && p.ReviewDate.Value >= today && p.ReviewDate.Value <= targetDate))
             {
-                var subject = $"Termin przeglądu procedury — {procedure.Title}";
+                var subject = $"Termin przeglądu procedury - {procedure.Title}";
                 var html = $"<p>Procedura <strong>{Encode(procedure.Title)}</strong> (wersja {Encode(procedure.Version)}) wymaga przeglądu do <strong>{procedure.ReviewDate:yyyy-MM-dd}</strong> ({thresholdDays} dni).</p>";
                 events.Add(new AlertEvent(procedure.Id, thresholdDays, procedure.ReviewDate, subject, html, []));
             }
@@ -195,10 +212,10 @@ public sealed class AlertCheckService
             foreach (var (thresholdDays, _) in DueDateThresholds(rule, today, due))
             {
                 var (subject, html) = thresholdDays == 0
-                    ? ($"Zwrot sprzętu po terminie — protokół {assignment.ProtocolNumber}",
-                       $"<p>Termin zwrotu sprzętu z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> minął ({due:yyyy-MM-dd}).</p>")
-                    : ($"Termin zwrotu wydania za {thresholdDays} dni — protokół {assignment.ProtocolNumber}",
-                       $"<p>Termin zwrotu sprzętu z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{due:yyyy-MM-dd}</strong>.</p>");
+                    ? ($"Zwrot sprzętu po terminie - wydanie {assignment.ProtocolNumber}",
+                       $"<p>Termin zwrotu sprzętu z wydania <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> minął ({due:yyyy-MM-dd}).</p>")
+                    : ($"Termin zwrotu wydania za {thresholdDays} dni - wydanie {assignment.ProtocolNumber}",
+                       $"<p>Termin zwrotu sprzętu z wydania <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{due:yyyy-MM-dd}</strong>.</p>");
                 events.Add(new AlertEvent(assignment.Id, thresholdDays, due, subject, html, PersonEmail(person)));
             }
         }
@@ -219,7 +236,7 @@ public sealed class AlertCheckService
 
         foreach (var assignment in assignments.Where(a => a.Status == AssignmentStatus.AwaitingAcceptance && a.IssuedAt <= deadline))
         {
-            // ListAsync zwraca encje AsNoTracking — MarkOverdue na nich nie zapisałby statusu. Pobieramy
+            // ListAsync zwraca encje AsNoTracking - MarkOverdue na nich nie zapisałby statusu. Pobieramy
             // śledzoną kopię i dopiero na niej oznaczamy Overdue (Poprawka 4), żeby dashboard to widział.
             var tracked = await _assignments.GetAsync(organization.Id, assignment.Id, cancellationToken);
             if (tracked is not null && tracked.Status == AssignmentStatus.AwaitingAcceptance)
@@ -229,8 +246,8 @@ public sealed class AlertCheckService
             }
 
             var person = await _people.GetAsync(organization.Id, assignment.PersonId, cancellationToken);
-            var subject = $"Sprzęt nieodebrany — protokół {assignment.ProtocolNumber}";
-            var html = $"<p>Sprzęt z protokołu <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> nie został odebrany w ciągu {deadlineDays} dni od wysłania.</p>";
+            var subject = $"Sprzęt nieodebrany - wydanie {assignment.ProtocolNumber}";
+            var html = $"<p>Sprzęt z wydania <strong>{Encode(assignment.ProtocolNumber)}</strong> dla osoby <strong>{Encode(person?.FullName)}</strong> nie został odebrany w ciągu {deadlineDays} dni od wysłania.</p>";
             events.Add(new AlertEvent(assignment.Id, deadlineDays, DateOnly.FromDateTime(assignment.IssuedAt.UtcDateTime), subject, html, PersonEmail(person)));
         }
 
@@ -280,9 +297,9 @@ public sealed class AlertCheckService
             foreach (var (thresholdDays, _) in DueDateThresholds(rule, today, due))
             {
                 var (subject, html) = thresholdDays == 0
-                    ? ($"Termin zwrotu w offboardingu minął — {person?.FullName ?? "—"}",
+                    ? ($"Termin zwrotu w offboardingu minął - {person?.FullName ?? "-"}",
                        $"<p>Termin zwrotu sprzętu w sprawie offboardingowej osoby <strong>{Encode(person?.FullName)}</strong> minął ({offboardingCase.ReturnDueDate:yyyy-MM-dd}).</p>")
-                    : ($"Termin zwrotu w offboardingu za {thresholdDays} dni — {person?.FullName ?? "—"}",
+                    : ($"Termin zwrotu w offboardingu za {thresholdDays} dni - {person?.FullName ?? "-"}",
                        $"<p>Termin zwrotu sprzętu w sprawie offboardingowej osoby <strong>{Encode(person?.FullName)}</strong> to <strong>{offboardingCase.ReturnDueDate:yyyy-MM-dd}</strong>.</p>");
                 events.Add(new AlertEvent(offboardingCase.Id, thresholdDays, due, subject, html, PersonEmail(person)));
             }
@@ -313,7 +330,7 @@ public sealed class AlertCheckService
 
                 foreach (var participant in noResponse)
                 {
-                    var subject = $"Brak odpowiedzi w kampanii — {campaign.Name}";
+                    var subject = $"Brak odpowiedzi w kampanii - {campaign.Name}";
                     var html = $"<p>Uczestnik <strong>{Encode(participant.Email)}</strong> nie odpowiedział w kampanii <strong>{Encode(campaign.Name)}</strong> (termin {campaign.DueDate:yyyy-MM-dd}).</p>";
                     events.Add(new AlertEvent(participant.Id, thresholdDays, campaignDue, subject, html, [participant.Email]));
                 }
@@ -337,7 +354,7 @@ public sealed class AlertCheckService
             foreach (var reservation in reservations.Where(r => r.Status == EquipmentReservationStatus.PendingApproval && r.RequestedAt.HasValue && r.RequestedAt.Value <= now.AddDays(-thresholdDays)))
             {
                 var person = await _people.GetAsync(organization.Id, reservation.RequesterPersonId, cancellationToken);
-                var subject = $"Rezerwacja oczekuje na akceptację — {reservation.Purpose}";
+                var subject = $"Rezerwacja oczekuje na akceptację - {reservation.Purpose}";
                 var html = $"<p>Rezerwacja <strong>{Encode(reservation.Purpose)}</strong> osoby <strong>{Encode(person?.FullName)}</strong> czeka na akceptację od {reservation.RequestedAt:yyyy-MM-dd}.</p>";
                 events.Add(new AlertEvent(reservation.Id, thresholdDays, DateOnly.FromDateTime(reservation.RequestedAt!.Value.UtcDateTime), subject, html, PersonEmail(person)));
             }
@@ -364,7 +381,7 @@ public sealed class AlertCheckService
                 if (startDate < today || startDate > targetDate) continue;
 
                 var person = await _people.GetAsync(organization.Id, reservation.RequesterPersonId, cancellationToken);
-                var subject = $"Odbiór rezerwacji — {reservation.Purpose}";
+                var subject = $"Odbiór rezerwacji - {reservation.Purpose}";
                 var html = $"<p>Odbiór sprzętu z rezerwacji <strong>{Encode(reservation.Purpose)}</strong> zaplanowano na <strong>{reservation.StartAt:yyyy-MM-dd}</strong>.</p>";
                 events.Add(new AlertEvent(reservation.Id, thresholdDays, startDate, subject, html, PersonEmail(person)));
             }
@@ -388,7 +405,7 @@ public sealed class AlertCheckService
             if (endDate >= today) continue;
 
             var person = await _people.GetAsync(organization.Id, reservation.RequesterPersonId, cancellationToken);
-            var subject = $"Zwrot rezerwacji po terminie — {reservation.Purpose}";
+            var subject = $"Zwrot rezerwacji po terminie - {reservation.Purpose}";
             var html = $"<p>Termin zwrotu sprzętu z rezerwacji <strong>{Encode(reservation.Purpose)}</strong> minął ({reservation.EndAt:yyyy-MM-dd}).</p>";
             events.Add(new AlertEvent(reservation.Id, 0, endDate, subject, html, PersonEmail(person)));
         }
@@ -406,7 +423,7 @@ public sealed class AlertCheckService
         if (digest is null || digest.Frequency == AlertDigestFrequency.Off) return false;
         if (!IsDigestDue(digest, organization, _clock.UtcNow)) return false;
 
-        // Oznaczamy digest jako wygenerowany w tej lokalnej "porze dnia" — dzięki temu kolejne cykle w tej
+        // Oznaczamy digest jako wygenerowany w tej lokalnej "porze dnia" - dzięki temu kolejne cykle w tej
         // samej dobie/week nie wyślą go ponownie.
         digest.Update(digest.Frequency, digest.DayOfWeek, digest.LocalTime, digest.QuietHoursStart, digest.QuietHoursEnd,
             digest.BusinessDays, digest.HolidayCalendarCountryCode, digest.IncludeEmptyDigest, _clock.UtcNow);
@@ -419,7 +436,16 @@ public sealed class AlertCheckService
         var (subject, html) = BuildDigestEmail(items);
         foreach (var email in recipients)
         {
-            await _emailSender.SendAsync(email, subject, html, cancellationToken);
+            if (_emailOutbox is not null)
+            {
+                var localDate = TimeZoneInfo.ConvertTime(_clock.UtcNow, GetOrganizationTimeZone(organization)).Date;
+                var digestKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{email.ToLowerInvariant()}|{localDate:yyyy-MM-dd}|{digest.Frequency}")));
+                await _emailOutbox.EnqueueAsync(organization.Id, email, subject, html, "alert-digest", $"alert-digest:{organization.Id:N}:{digestKey}", cancellationToken);
+            }
+            else
+            {
+                await _emailSender.SendAsync(email, subject, html, cancellationToken);
+            }
         }
 
         return true;
@@ -435,7 +461,7 @@ public sealed class AlertCheckService
 
         var todayLocal = DateOnly.FromDateTime(localNow.DateTime);
 
-        // BusinessDays (spec 7.3 flags) — digest wychodzi tylko w skonfigurowane dni. HolidayCalendarCountryCode
+        // BusinessDays (spec 7.3 flags) - digest wychodzi tylko w skonfigurowane dni. HolidayCalendarCountryCode
         // jest celowo jeszcze nieużywane: honorowanie świąt wymagałoby zewnętrznego źródła kalendarza (osobne zadanie).
         if (!digest.BusinessDays.HasFlag(ToBusinessDayFlag(todayLocal.DayOfWeek))) return false;
 
@@ -456,8 +482,8 @@ public sealed class AlertCheckService
     private static (string Subject, string Html) BuildDigestEmail(IReadOnlyList<DigestItem> items)
     {
         var subject = items.Count == 1
-            ? "Tenebit — 1 działanie wymaga uwagi"
-            : $"Tenebit — {items.Count} działań wymaga uwagi";
+            ? "Tenebit - 1 działanie wymaga uwagi"
+            : $"Tenebit - {items.Count} działań wymaga uwagi";
 
         var sections = items
             .GroupBy(i => i.Type)
@@ -478,7 +504,7 @@ public sealed class AlertCheckService
                     AlertType.ReservationOverdue => "Zwroty rezerwacji po terminie",
                     _ => group.Key.ToString()
                 };
-                var rows = string.Join("", group.Select(i => $"<li>{Encode(i.Text)}{(i.DueDate.HasValue ? $" — termin {i.DueDate:yyyy-MM-dd}" : "")}</li>"));
+                var rows = string.Join("", group.Select(i => $"<li>{Encode(i.Text)}{(i.DueDate.HasValue ? $" - termin {i.DueDate:yyyy-MM-dd}" : "")}</li>"));
                 return $"<h3>{Encode(title)}</h3><ul>{rows}</ul>";
             });
 
@@ -506,7 +532,7 @@ public sealed class AlertCheckService
                 var alertKey = BuildAlertKey(type, alertEvent.ThresholdDays, alertEvent.DueDate);
 
                 // CooldownDays (spec 7.4): ten sam byt nie dostaje kolejnego alertu częściej niż raz na
-                // CooldownDays — nawet gdy trafi go inny próg/termin (inny klucz dedup). Retry/dedup tego
+                // CooldownDays - nawet gdy trafi go inny próg/termin (inny klucz dedup). Retry/dedup tego
                 // samego klucza obsługuje DeliverAsync, więc cooldown go nie tłumi.
                 if (await IsWithinCooldownAsync(organization.Id, rule, type, alertEvent.EntityId, alertKey, cancellationToken))
                 {
@@ -531,7 +557,7 @@ public sealed class AlertCheckService
             AlertRecipientMode.Custom => ParseCustomEmails(rule.CustomEmails),
             AlertRecipientMode.ResponsiblePerson => responsibleEmails.Count > 0 ? responsibleEmails : await GetAdminEmailsAsync(organization.Id, cancellationToken),
             AlertRecipientMode.ResponsibleRoles => await GetResponsibleRoleEmailsAsync(organization.Id, cancellationToken),
-            // Domyślny tryb „właściciele+adminowie" musi obejmować też odpowiedzialną osobę, jeśli istnieje —
+            // Domyślny tryb „właściciele+adminowie" musi obejmować też odpowiedzialną osobę, jeśli istnieje -
             // przed #23 alerty zwrotu/niepotwierdzenia zawsze dorzucały email osoby powiązanej z wydaniem.
             _ => (await GetAdminEmailsAsync(organization.Id, cancellationToken))
                 .Concat(responsibleEmails)
@@ -542,7 +568,7 @@ public sealed class AlertCheckService
 
     private async Task<IReadOnlyList<string>> GetAdminEmailsAsync(Guid organizationId, CancellationToken cancellationToken)
     {
-        var users = await _users.ListAsync(organizationId, cancellationToken);
+        var users = await GetOrganizationUsersAsync(organizationId, cancellationToken);
         return users
             .Where(u => u.IsActive && u.Roles.Any(r => r.Role is TenebitRoles.Owner or TenebitRoles.Admin))
             .Select(u => u.Email)
@@ -552,12 +578,20 @@ public sealed class AlertCheckService
 
     private async Task<IReadOnlyList<string>> GetResponsibleRoleEmailsAsync(Guid organizationId, CancellationToken cancellationToken)
     {
-        var users = await _users.ListAsync(organizationId, cancellationToken);
+        var users = await GetOrganizationUsersAsync(organizationId, cancellationToken);
         return users
             .Where(u => u.IsActive && u.Roles.Any(r => r.Role is TenebitRoles.Owner or TenebitRoles.Admin or TenebitRoles.AssetOperator or TenebitRoles.Technician))
             .Select(u => u.Email)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private async Task<IReadOnlyList<Tenebit.Domain.Identity.OrganizationUser>> GetOrganizationUsersAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        if (_usersByOrganization.TryGetValue(organizationId, out var cached)) return cached;
+        var users = await _users.ListAsync(organizationId, cancellationToken);
+        _usersByOrganization[organizationId] = users;
+        return users;
     }
 
     private async Task<bool> DeliverAsync(Guid organizationId, string alertKey, Guid entityId, IEnumerable<string> recipients, string subject, string html, bool isQuietHours, CancellationToken cancellationToken)
@@ -581,7 +615,15 @@ public sealed class AlertCheckService
 
             try
             {
-                await _emailSender.SendAsync(email, subject, html, cancellationToken);
+                if (_emailOutbox is not null)
+                {
+                    var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{alertKey}|{email.ToLowerInvariant()}")));
+                    await _emailOutbox.EnqueueAsync(organizationId, email, subject, html, "alert", $"alert:{organizationId:N}:{entityId:N}:{digest}", cancellationToken);
+                }
+                else
+                {
+                    await _emailSender.SendAsync(email, subject, html, cancellationToken);
+                }
                 record.MarkSent(now);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -637,7 +679,7 @@ public sealed class AlertCheckService
         if (rule.CooldownDays <= 0) return false;
         var latest = await _sentAlerts.GetLatestAsync(organizationId, entityId, $"{type}:", cancellationToken);
         if (latest is null) return false;
-        // Ten sam klucz = retry/dedup tego samego alertu — tym zajmuje się DeliverAsync, nie cooldown.
+        // Ten sam klucz = retry/dedup tego samego alertu - tym zajmuje się DeliverAsync, nie cooldown.
         if (latest.AlertKey == currentKey) return false;
         return latest.CreatedAt >= _clock.UtcNow.AddDays(-rule.CooldownDays);
     }

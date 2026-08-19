@@ -31,13 +31,27 @@ public sealed class OrganizationSubscription
     public string? StripeSubscriptionId { get; private set; }
 
     /// <summary>Timestamp (Stripe event `created`) of the last webhook event actually applied to this
-    /// record — Stripe does not guarantee delivery order, so a retried/out-of-order older event must
+    /// record - Stripe does not guarantee delivery order, so a retried/out-of-order older event must
     /// never overwrite state a newer event already applied (audyt P0.6).</summary>
     public DateTimeOffset? LastWebhookEventAt { get; private set; }
 
-    /// <summary>True while Stripe still considers there to be a live (billable) subscription behind this plan.</summary>
-    public bool HasActiveStripeSubscription =>
-        !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status == SubscriptionStatus.Active;
+    public bool IsEntitledToPaidPlan => Status == SubscriptionStatus.Active && PlanKey != SubscriptionPlan.Free.Key;
+
+    /// <summary>A provider subscription still exists and must be recovered/managed instead of duplicated.</summary>
+    public bool HasLiveStripeSubscription =>
+        !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status != SubscriptionStatus.Cancelled;
+
+    public Guid? CheckoutAttemptId { get; private set; }
+    public DateTimeOffset? CheckoutAttemptExpiresAt { get; private set; }
+
+    public Guid GetOrCreateCheckoutAttempt(DateTimeOffset now, TimeSpan lifetime)
+    {
+        if (CheckoutAttemptId.HasValue && CheckoutAttemptExpiresAt > now) return CheckoutAttemptId.Value;
+        CheckoutAttemptId = Guid.NewGuid();
+        CheckoutAttemptExpiresAt = now.Add(lifetime);
+        UpdatedAt = now;
+        return CheckoutAttemptId.Value;
+    }
 
     public void Upgrade(string newPlanKey)
     {
@@ -80,7 +94,7 @@ public sealed class OrganizationSubscription
     /// <summary>
     /// Applies the state of a Stripe subscription (from checkout completion or a webhook) to this record.
     /// A Cancelled status always reverts the organization to the Free plan, regardless of what plan the
-    /// caller passed in — an org can never keep paid-plan benefits once Stripe says the subscription is gone.
+    /// caller passed in - an org can never keep paid-plan benefits once Stripe says the subscription is gone.
     /// </summary>
     public void SyncFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? stripeSubscriptionId, string stripeCustomerId, DateTimeOffset webhookEventCreatedAt)
     {

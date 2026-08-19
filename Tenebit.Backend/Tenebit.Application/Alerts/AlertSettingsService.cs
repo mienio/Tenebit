@@ -173,7 +173,7 @@ public sealed class AlertSettingsService
             return Result.Failure(Error.Validation("Brak adresu e-mail dla zalogowanego użytkownika."));
 
         var alertType = request?.AlertType ?? AlertType.AssetWarrantyExpiring;
-        var subject = $"Tenebit — test alert: {alertType}";
+        var subject = $"Tenebit - test alert: {alertType}";
         var body = BuildTestEmailBody(alertType, _currentUser.Email, _currentUser.OrganizationId);
 
         await _emailSender.SendAsync(_currentUser.Email, subject, body, cancellationToken);
@@ -233,7 +233,7 @@ public sealed class AlertSettingsService
         <html>
         <head><meta charset="utf-8" /><title>Test alert</title></head>
         <body style="font-family: sans-serif; color: #1f2937;">
-        <h2 style="color: #2563eb;">Tenebit — test alert</h2>
+        <h2 style="color: #2563eb;">Tenebit - test alert</h2>
         <p>Otrzymałeś tego maila jako <strong>{recipient}</strong>.</p>
         <p>Jest to wiadomość testowa. Konfiguracja alertów działa poprawnie.</p>
         <table style="border-collapse: collapse; margin-top: 16px;">

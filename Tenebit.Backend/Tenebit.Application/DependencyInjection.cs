@@ -26,6 +26,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<Common.ManagerScopeService>();
+        services.AddScoped<AssetAuthorizationService>();
         services.AddScoped<AssetService>();
         services.AddScoped<LocationService>();
         services.AddScoped<LocationReferenceResolver>();
@@ -40,7 +41,6 @@ public static class DependencyInjection
         services.AddScoped<RolePermissionService>();
         services.AddScoped<ProcedureService>();
         services.AddScoped<AssignmentResponseBuilder>();
-        services.AddScoped<AssignmentProtocolModelBuilder>();
         services.AddScoped<AssignmentService>();
         services.AddScoped<DashboardService>();
         services.AddScoped<DashboardSnapshotService>();
@@ -56,11 +56,11 @@ public static class DependencyInjection
         services.AddScoped<AlertCheckService>();
         services.AddScoped<AlertSettingsService>();
         services.AddScoped<ActivityLogService>();
+        services.AddScoped<ActivityLogRetentionService>();
         services.AddScoped<AssetEvidenceService>();
         services.AddScoped<EvidenceRetentionService>();
         services.AddScoped<OffboardingScheduledActionsService>();
         services.AddScoped<OffboardingResponseBuilder>();
-        services.AddScoped<OffboardingProtocolModelBuilder>();
         services.AddScoped<OffboardingService>();
         services.AddScoped<AssetAuditCampaignService>();
         services.AddScoped<ServiceTicketService>();

@@ -5,15 +5,18 @@ import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
+import { PublicFooter } from '../components/PublicFooter';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
+import { legalContent } from '../legal/legalContent';
 
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const legal = legalContent[language].ui;
   const routeState = location.state as { from?: unknown; challengeToken?: unknown } | null;
   const fromState = routeState?.from;
   const returnTo = typeof fromState === 'string' && fromState.startsWith('/') ? fromState : '/dashboard';
@@ -62,7 +65,7 @@ export function LoginPage() {
     return (
       <main className="authShell">
         {/* Distinct key forces React to remount this subtree instead of patching the login form's
-            DOM in place — otherwise the uncontrolled "code" input reuses the "email" input's node
+            DOM in place - otherwise the uncontrolled "code" input reuses the "email" input's node
             and inherits its stale value, since both branches have the same tag/position shape. */}
         <section className="authCard" key="two-factor-challenge">
           <div className="authTop">
@@ -79,6 +82,7 @@ export function LoginPage() {
           </form>
           <p className="authFooter"><button type="button" className="linkButton" onClick={() => { setChallengeToken(null); setError(null); }}>{t('auth.backToLogin')}</button></p>
         </section>
+        <PublicFooter compact />
       </main>
     );
   }
@@ -92,6 +96,9 @@ export function LoginPage() {
         </div>
         <h1>{t('auth.loginTitle')}</h1>
         <SocialLoginButtons returnUrl={returnTo} />
+        <p className="authCard__hint">
+          {t('auth.socialTermsNotice')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.
+        </p>
         <form className="formGrid" onSubmit={handleSubmit}>
           <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required autoFocus /></Field>
           <Field label={t('auth.passwordLabel')}><TextInput name="password" type="password" required /></Field>
@@ -101,6 +108,7 @@ export function LoginPage() {
         </form>
         <p className="authFooter">{t('auth.noAccount')} <Link to="/register">{t('auth.registerLink')}</Link></p>
       </section>
+      <PublicFooter compact />
     </main>
   );
 }

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Tenebit.Application.Abstractions;
 using Tenebit.Domain.Alerts;
@@ -24,11 +25,15 @@ namespace Tenebit.Infrastructure.Data;
 public sealed class TenebitDbContext : DbContext, IUnitOfWork
 {
     private readonly IFieldEncryptor _fieldEncryptor;
+    private readonly ITenantContext? _tenantContext;
 
-    public TenebitDbContext(DbContextOptions<TenebitDbContext> options, IFieldEncryptor fieldEncryptor) : base(options)
+    public TenebitDbContext(DbContextOptions<TenebitDbContext> options, IFieldEncryptor fieldEncryptor, ITenantContext? tenantContext = null) : base(options)
     {
         _fieldEncryptor = fieldEncryptor;
+        _tenantContext = tenantContext;
     }
+
+    private Guid CurrentTenantOrganizationId => _tenantContext?.OrganizationId ?? Guid.Empty;
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -38,24 +43,47 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new ConcurrencyException("Dane zostały zmodyfikowane równolegle — odśwież i spróbuj ponownie.");
+            throw new ConcurrencyException("Dane zostały zmodyfikowane równolegle - odśwież i spróbuj ponownie.");
         }
     }
 
-    public async Task<T> ExecuteWithOrganizationLockAsync<T>(Guid organizationId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken)
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken)
     {
         var strategy = Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
-            // pg_advisory_xact_lock jest transakcyjny (samoczynnie zwalniany przy commit/rollback) i blokuje
-            // wyłącznie żądania dla tej samej organizacji — inne organizacje nie czekają na siebie nawzajem.
-            await Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({organizationId.ToString()}))", cancellationToken);
             var result = await action(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return result;
         });
     }
+
+    public async Task<T> ExecuteWithResourceLocksAsync<T>(Guid organizationId, string resourceType, IReadOnlyCollection<Guid> resourceIds, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceType);
+        var orderedIds = resourceIds.Distinct().OrderBy(x => x).ToArray();
+        if (orderedIds.Length == 0) return await ExecuteInTransactionAsync(action, cancellationToken);
+
+        var strategy = Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+            foreach (var resourceId in orderedIds)
+            {
+                await AcquireAdvisoryLockAsync($"{organizationId:N}:{resourceType}:{resourceId:N}", cancellationToken);
+            }
+
+            var result = await action(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        });
+    }
+
+    private Task<int> AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken) =>
+        Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock((('x' || substr(md5({key}), 1, 16))::bit(64)::bigint))",
+            cancellationToken);
 
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
@@ -120,7 +148,28 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureOffboarding(modelBuilder);
         ConfigureAudits(modelBuilder);
         ConfigureReservations(modelBuilder);
+        ConfigureTenantQueryFilters(modelBuilder);
     }
+
+    private void ConfigureTenantQueryFilters(ModelBuilder modelBuilder)
+    {
+        // Defense in depth: authenticated request queries are automatically tenant-scoped. Background/public
+        // flows have no authenticated tenant and therefore use the explicit repository filters already present.
+        var configureMethod = typeof(TenebitDbContext).GetMethod(nameof(ConfigureTenantQueryFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            if (entityType.IsOwned() || entityType.BaseType is not null) continue;
+            var organizationId = entityType.FindProperty("OrganizationId");
+            if (organizationId?.ClrType != typeof(Guid)) continue;
+
+            configureMethod.MakeGenericMethod(entityType.ClrType).Invoke(this, [modelBuilder]);
+        }
+    }
+
+    private void ConfigureTenantQueryFilter<TEntity>(ModelBuilder modelBuilder) where TEntity : class =>
+        modelBuilder.Entity<TEntity>().HasQueryFilter(entity =>
+            CurrentTenantOrganizationId == Guid.Empty ||
+            EF.Property<Guid>(entity, "OrganizationId") == CurrentTenantOrganizationId);
 
     private static void ConfigureAudits(ModelBuilder modelBuilder)
     {
@@ -128,7 +177,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         {
             entity.ToTable("asset_audit_campaigns");
             entity.HasKey(x => x.Id);
-            // AUD-003: alternate key (OrganizationId, Id) — pozwala dzieciom (participant/item) mieć composite FK,
+            // AUD-003: alternate key (OrganizationId, Id) - pozwala dzieciom (participant/item) mieć composite FK,
             // więc baza odrzuci wiersz, który wskazuje kampanię innej organizacji niż deklarowana w OrganizationId dziecka.
             entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -153,7 +202,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
                 .HasPrincipalKey(p => new { p.OrganizationId, p.Id })
                 .OnDelete(DeleteBehavior.Restrict);
-            // Indexed lookup for the public audit link — without it ResolveByTokenAsync had to load every
+            // Indexed lookup for the public audit link - without it ResolveByTokenAsync had to load every
             // participant with a live token and verify each one in turn (audyt AUD3-009: O(N) koszt
             // rosnący z liczbą uczestników, wykorzystywalny jako publiczny DoS).
             entity.HasIndex(x => x.TokenHash)
@@ -216,7 +265,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.DecisionNotes).HasMaxLength(2000);
             entity.Property(x => x.CancelledBy).HasMaxLength(240);
             entity.Property(x => x.CancellationReason).HasMaxLength(2000);
-            // Token współbieżności wymagany przez sekcję 8.5 — zapobiega zatwierdzeniu dwóch nachodzących
+            // Token współbieżności wymagany przez sekcję 8.5 - zapobiega zatwierdzeniu dwóch nachodzących
             // rezerwacji tego samego aktywa w równoległych żądaniach.
             entity.Property(x => x.RowVersion).IsRowVersion();
             entity.HasIndex(x => new { x.OrganizationId, x.RequesterPersonId });
@@ -473,7 +522,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasForeignKey(x => new { x.OrganizationId, x.PersonId })
                 .HasPrincipalKey(p => new { p.OrganizationId, p.Id })
                 .OnDelete(DeleteBehavior.Restrict);
-            // Szyfrowane at-rest (audyt P1.4) — HasMaxLength podniesiony bo ciphertext (nonce+tag+base64) jest
+            // Szyfrowane at-rest (audyt P1.4) - HasMaxLength podniesiony bo ciphertext (nonce+tag+base64) jest
             // dłuższy niż surowy base32 secret.
             entity.Property(x => x.TotpSecret)
                 .HasMaxLength(200)
@@ -1005,6 +1054,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.EntityType).HasMaxLength(80).IsRequired();
             entity.Property(x => x.ActorSubject).HasMaxLength(240).IsRequired();
             entity.Property(x => x.Details).HasMaxLength(1000);
+            entity.Property(x => x.SourceIp).HasMaxLength(64);
+            entity.HasIndex(x => x.SourceIpExpiresAt);
             entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt });
         });
     }

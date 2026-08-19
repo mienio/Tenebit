@@ -37,7 +37,7 @@ public sealed class DefaultDataSeeder
         await SeedStarterCategoriesForAllOrganizationsAsync(cancellationToken);
         await SeedDefaultAlertRulesForAllOrganizationsAsync(cancellationToken);
 
-        // BUG FIX: The second check below previously used GetValue("Seed:DemoData", true) — a different
+        // BUG FIX: The second check below previously used GetValue("Seed:DemoData", true) - a different
         // default than the guard above (false). Since we already checked the flag above, the second
         // check was both redundant and misleading for readers. Removed entirely.
         if (!_configuration.GetValue("Seed:DemoData", false))
@@ -69,8 +69,8 @@ public sealed class DefaultDataSeeder
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    // Every organization gets its own private copy of the starter category pack — never a shared/global
-    // row — so per-tenant isolation stays intact through the existing OrganizationId filtering. Tops up
+    // Every organization gets its own private copy of the starter category pack - never a shared/global
+    // row - so per-tenant isolation stays intact through the existing OrganizationId filtering. Tops up
     // by name so organizations that already created a few categories of their own still receive whichever
     // starter categories they're missing, without touching or duplicating what they already have.
     private async Task SeedStarterCategoriesForAllOrganizationsAsync(CancellationToken cancellationToken)
@@ -95,7 +95,7 @@ public sealed class DefaultDataSeeder
     }
 
     // Idempotentne uzupełnianie domyślnych reguł alertów (po org+type). Pokrywa też organizację demo, której
-    // nie obejmuje jednorazowa migracja seed ani hook w AuthService — dzięki temu żadna organizacja nie zostaje
+    // nie obejmuje jednorazowa migracja seed ani hook w AuthService - dzięki temu żadna organizacja nie zostaje
     // bez reguł, a typy, które działały przed #23, pozostają włączone.
     private async Task SeedDefaultAlertRulesForAllOrganizationsAsync(CancellationToken cancellationToken)
     {

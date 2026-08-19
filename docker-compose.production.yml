@@ -13,6 +13,15 @@ x-backend-env: &backend-env
   ReverseProxy__KnownProxies__0: 172.30.0.10
   Database__AutoCreate: "false"
   Seed__Enabled: "false"
+  Email__Enabled: "true"
+  Email__OutboxDispatcherEnabled: "true"
+  Email__Host: ${TENEBIT_SMTP_HOST:?required}
+  Email__Port: ${TENEBIT_SMTP_PORT:-587}
+  Email__Username: ${TENEBIT_SMTP_USERNAME:-}
+  Email__Password: ${TENEBIT_SMTP_PASSWORD:-}
+  Email__FromAddress: ${TENEBIT_SMTP_FROM:?required}
+  Email__FromName: ${TENEBIT_SMTP_FROM_NAME:-Tenebit}
+  Email__UseSsl: ${TENEBIT_SMTP_USE_SSL:-true}
 services:
   db:
     image: postgres:17-alpine

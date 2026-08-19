@@ -10,7 +10,7 @@ using Tenebit.Application.Reservations;
 namespace Tenebit.Application.Offboarding;
 
 /// <summary>Buduje response DTO dla spraw offboardingowych (widok wewnętrzny i publiczny kanał pracownika)
-/// — wydzielone z OffboardingService (audyt P2 #3), żeby ta jedna odpowiedzialność miała jedno miejsce.</summary>
+/// - wydzielone z OffboardingService (audyt P2 #3), żeby ta jedna odpowiedzialność miała jedno miejsce.</summary>
 public sealed class OffboardingResponseBuilder
 {
     private readonly IOffboardingCaseRepository _cases;
@@ -66,7 +66,7 @@ public sealed class OffboardingResponseBuilder
             var asset = await _assets.GetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken);
             if (asset is not null) assetTags[item.Id] = asset.AssetTag;
 
-            var evidence = (await _evidence.ListByAssetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken))
+            var evidence = (await _evidence.ListMetadataByAssetAsync(offboardingCase.OrganizationId, item.AssetId!.Value, cancellationToken))
                 .Where(x => x.Phase == EvidencePhase.Issue)
                 .OrderByDescending(x => x.UploadedAt)
                 .FirstOrDefault();

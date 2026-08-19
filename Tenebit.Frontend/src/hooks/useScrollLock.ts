@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 // Shared across every overlay (Modal, ConfirmDialog, SlidePanel, ...) so nested or
-// out-of-order open/close never leaves body scroll stuck locked or unlocked — each
+// out-of-order open/close never leaves body scroll stuck locked or unlocked - each
 // active overlay holds one "vote" and the lock only releases once every vote is gone.
 let lockCount = 0;
 let originalOverflow = '';

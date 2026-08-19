@@ -9,9 +9,9 @@ namespace Tenebit.Tests;
 public class AuthServiceTests
 {
     // Independent RFC 6238 reference implementation used only to compute a valid TOTP code for a known secret in tests.
-    private static string ComputeTotpCode(string secret)
+    private static string ComputeTotpCode(string secret, int stepOffset = 0)
     {
-        var counter = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var counter = (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30) + stepOffset;
         var key = Base32.Decode(secret);
         var counterBytes = BitConverter.GetBytes(counter);
         if (BitConverter.IsLittleEndian) Array.Reverse(counterBytes);
@@ -32,6 +32,9 @@ public class AuthServiceTests
         InMemoryOrganizationUserRepository Users,
         InMemoryRefreshTokenRepository RefreshTokens,
         InMemoryDeviceTrustTokenRepository DeviceTrustTokens,
+        InMemoryPasswordResetTokenRepository PasswordResetTokens,
+        InMemoryEmailVerificationTokenRepository EmailVerificationTokens,
+        InMemoryTwoFactorRecoveryCodeRepository RecoveryCodes,
         FakeClock Clock);
 
     private static AuthFixture CreateFullFixture()
@@ -40,6 +43,9 @@ public class AuthServiceTests
         var users = new InMemoryOrganizationUserRepository();
         var refreshTokens = new InMemoryRefreshTokenRepository();
         var deviceTrustTokens = new InMemoryDeviceTrustTokenRepository();
+        var passwordResetTokens = new InMemoryPasswordResetTokenRepository();
+        var emailVerificationTokens = new InMemoryEmailVerificationTokenRepository();
+        var recoveryCodes = new InMemoryTwoFactorRecoveryCodeRepository();
         var clock = new FakeClock();
         var service = new AuthService(
             organizations,
@@ -49,11 +55,11 @@ public class AuthServiceTests
             new InMemoryAlertRuleRepository(),
             new InMemoryActivityLogRepository(),
             new InMemoryExternalLoginRepository(users),
-            new InMemoryPasswordResetTokenRepository(),
-            new InMemoryEmailVerificationTokenRepository(),
+            passwordResetTokens,
+            emailVerificationTokens,
             refreshTokens,
             deviceTrustTokens,
-            new InMemoryTwoFactorRecoveryCodeRepository(),
+            recoveryCodes,
             new FakeEmailSender(),
             new FakeAppLinkBuilder(),
             new FakeQrCodeGenerator(),
@@ -61,7 +67,7 @@ public class AuthServiceTests
             new FakeUnitOfWork(),
             NullLogger<AuthService>.Instance);
 
-        return new AuthFixture(service, organizations, users, refreshTokens, deviceTrustTokens, clock);
+        return new AuthFixture(service, organizations, users, refreshTokens, deviceTrustTokens, passwordResetTokens, emailVerificationTokens, recoveryCodes, clock);
     }
 
     private static (AuthService Service, InMemoryOrganizationRepository Organizations, InMemoryOrganizationUserRepository Users) CreateService()
@@ -70,32 +76,50 @@ public class AuthServiceTests
         return (fixture.Service, fixture.Organizations, fixture.Users);
     }
 
+    private static void MarkVerified(InMemoryOrganizationUserRepository users, Guid userId)
+    {
+        var user = users.Users.Single(x => x.Id == userId);
+        user.MarkEmailVerified();
+    }
+
     [Fact]
-    public async Task RegisterAsync_RejectsPasswordShorterThanEightCharacters()
+    public async Task RegisterAsync_RejectsMissingLegalAcceptance()
     {
         var (service, _, _) = CreateService();
-        var result = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "short", "Owner", "PLN"), CancellationToken.None);
+        var result = await service.RegisterAsync(
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"),
+            CancellationToken.None);
+
         Assert.True(result.IsFailure);
     }
 
     [Fact]
-    public async Task RegisterAsync_RejectsDuplicateEmail()
+    public async Task RegisterAsync_RejectsPasswordShorterThanEightCharacters()
     {
         var (service, _, _) = CreateService();
-        var request = new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN");
+        var result = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "short", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_DoesNotRevealDuplicateEmail()
+    {
+        var (service, organizations, users) = CreateService();
+        var request = new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true);
         var first = await service.RegisterAsync(request, CancellationToken.None);
         Assert.True(first.IsSuccess);
 
         var second = await service.RegisterAsync(request with { OrganizationName = "Acme 2" }, CancellationToken.None);
-        Assert.True(second.IsFailure);
-        Assert.Equal("USER_EMAIL_EXISTS", second.Error!.Code);
+        Assert.True(second.IsSuccess);
+        Assert.Single(users.Users);
+        Assert.Single(organizations.Organizations);
     }
 
     [Fact]
     public async Task RegisterAsync_GrantsOwnerRoleAndUnverifiedEmailOnSuccess()
     {
         var (service, _, _) = CreateService();
-        var result = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var result = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Contains("owner", result.Value!.Roles);
@@ -105,8 +129,9 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_RejectsWrongPassword()
     {
-        var (service, _, _) = CreateService();
-        await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
 
         var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "wrong-password"), null, CancellationToken.None);
         Assert.True(result.IsFailure);
@@ -115,8 +140,9 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_ReturnsAuthenticatedOutcomeForCorrectCredentials_WhenTwoFactorDisabled()
     {
-        var (service, _, _) = CreateService();
-        await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
 
         var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), null, CancellationToken.None);
         Assert.True(result.IsSuccess);
@@ -169,7 +195,7 @@ public class AuthServiceTests
     public async Task ExternalLoginAsync_RefusesToLinkUnverifiedEmailToExistingAccount()
     {
         var (service, _, _) = CreateService();
-        await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
 
         var info = new ExternalUserInfo("facebook", "fb-sub-1", "owner@acme.test", false, "Owner");
         var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
@@ -180,8 +206,9 @@ public class AuthServiceTests
     [Fact]
     public async Task ExternalLoginAsync_LinksVerifiedEmailToExistingAccount()
     {
-        var (service, organizations, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, organizations, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
 
         var info = new ExternalUserInfo("google", "google-sub-2", "owner@acme.test", true, "Owner");
         var result = await service.ExternalLoginAsync(info, null, CancellationToken.None);
@@ -196,7 +223,8 @@ public class AuthServiceTests
     public async Task ExternalLoginAsync_RejectsInactiveLinkedAccount()
     {
         var (service, _, users) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var info = new ExternalUserInfo("google", "google-sub-3", "owner@acme.test", true, "Owner");
         await service.ExternalLoginAsync(info, null, CancellationToken.None);
 
@@ -211,8 +239,9 @@ public class AuthServiceTests
     [Fact]
     public async Task ExternalLoginAsync_RequiresTwoFactorWhenEnabledAndNoTrustedDevicePresented()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
 
@@ -227,8 +256,9 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_RequiresTwoFactorWhenEnabledAndNoTrustedDevicePresented()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
 
@@ -241,8 +271,9 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_SkipsTwoFactorWhenValidDeviceTrustTokenPresented()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
 
@@ -257,12 +288,16 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_DoesNotHonorDeviceTrustTokenIssuedForADifferentUser()
     {
-        var (service, _, _) = CreateService();
-        var owner = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var owner = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, owner.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(owner.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(owner.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
 
-        var otherUser = await service.RegisterAsync(new RegisterRequest("OtherCo", "other@other.test", "password123", "Other", "PLN"), CancellationToken.None);
+        var otherUser = await service.RegisterAsync(new RegisterRequest("OtherCo", "other@other.test", "password123", "Other", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, otherUser.Value!.Id);
+        var otherSetup = await service.SetupTwoFactorAsync(otherUser.Value!.Id, CancellationToken.None);
+        await service.EnableTwoFactorAsync(otherUser.Value!.Id, ComputeTotpCode(otherSetup.Value!.Secret), CancellationToken.None);
         var foreignDeviceToken = await service.IssueDeviceTrustTokenAsync(otherUser.Value!.Id, CancellationToken.None);
 
         var result = await service.LoginAsync(new LoginRequest("owner@acme.test", "password123"), foreignDeviceToken, CancellationToken.None);
@@ -275,7 +310,7 @@ public class AuthServiceTests
     public async Task EnableTwoFactorAsync_ReturnsTenUniqueRecoveryCodes()
     {
         var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
 
         var result = await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
@@ -288,8 +323,9 @@ public class AuthServiceTests
     [Fact]
     public async Task CompleteTwoFactorLoginAsync_AcceptsRecoveryCodeAndConsumesItOnUse()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         var enabled = await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
         var recoveryCode = enabled.Value!.RecoveryCodes[0];
@@ -304,13 +340,14 @@ public class AuthServiceTests
     [Fact]
     public async Task RegenerateRecoveryCodesAsync_InvalidatesPreviouslyIssuedCodes()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         var enabled = await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
         var oldCode = enabled.Value!.RecoveryCodes[0];
 
-        var regenerated = await service.RegenerateRecoveryCodesAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        var regenerated = await service.RegenerateRecoveryCodesAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret, 1), CancellationToken.None);
         Assert.True(regenerated.IsSuccess);
 
         var loginWithOldCode = await service.CompleteTwoFactorLoginAsync(registered.Value!.Id, oldCode, CancellationToken.None);
@@ -321,14 +358,29 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RegenerateRecoveryCodesAsync_RejectsReplayedTotpCounter()
+    {
+        var (service, _, _) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
+        var code = ComputeTotpCode(setup.Value!.Secret);
+        var enabled = await service.EnableTwoFactorAsync(registered.Value!.Id, code, CancellationToken.None);
+        Assert.True(enabled.IsSuccess);
+
+        var replay = await service.RegenerateRecoveryCodesAsync(registered.Value.Id, code, CancellationToken.None);
+
+        Assert.True(replay.IsFailure);
+    }
+
+    [Fact]
     public async Task DisableTwoFactorAsync_RemovesRecoveryCodes()
     {
         var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
 
-        await service.DisableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        await service.DisableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret, 1), CancellationToken.None);
 
         var remaining = await service.GetRecoveryCodesRemainingAsync(registered.Value!.Id, CancellationToken.None);
         Assert.Equal(0, remaining.Value);
@@ -362,7 +414,7 @@ public class AuthServiceTests
             new FakeUnitOfWork(),
             NullLogger<AuthService>.Instance);
 
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
         Assert.True(registered.IsSuccess);
         var userId = registered.Value!.Id;
         var user = await users.GetByIdAsync(userId, CancellationToken.None);
@@ -370,9 +422,15 @@ public class AuthServiceTests
 
         refreshTokens.Add(new RefreshToken(userId, TokenHasher.Hash("existing-refresh"), DateTimeOffset.UtcNow.AddDays(30)));
         deviceTrustTokens.Add(new DeviceTrustToken(userId, TokenHasher.Hash("existing-device"), DateTimeOffset.UtcNow.AddDays(30)));
-        passwordResetTokens.Add(new PasswordResetToken(userId, TokenHasher.Hash("reset-token"), DateTimeOffset.UtcNow.AddHours(1)));
+        const string resetCode = "123456";
+        passwordResetTokens.Add(new PasswordResetToken(
+            userId,
+            TokenHasher.HashOneTimeCode("owner@acme.test", resetCode),
+            DateTimeOffset.UtcNow.AddHours(1)));
 
-        var result = await service.ResetPasswordAsync(new ResetPasswordRequest("reset-token", "newpassword123"), CancellationToken.None);
+        var result = await service.ResetPasswordAsync(
+            new ResetPasswordRequest("owner@acme.test", resetCode, "newpassword123"),
+            CancellationToken.None);
         Assert.True(result.IsSuccess);
 
         var now = DateTimeOffset.UtcNow;
@@ -384,15 +442,16 @@ public class AuthServiceTests
     [Fact]
     public async Task DisableTwoFactorAsync_RevokesTrustedDevices()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var setup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
         var deviceTrustToken = await service.IssueDeviceTrustTokenAsync(registered.Value!.Id, CancellationToken.None);
 
-        await service.DisableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret), CancellationToken.None);
+        await service.DisableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(setup.Value!.Secret, 1), CancellationToken.None);
 
-        // Re-enable with a fresh secret and present the OLD trust cookie — it must not be honored,
+        // Re-enable with a fresh secret and present the OLD trust cookie - it must not be honored,
         // otherwise a device trusted under the previous TOTP secret would silently skip the new one.
         var newSetup = await service.SetupTwoFactorAsync(registered.Value!.Id, CancellationToken.None);
         await service.EnableTwoFactorAsync(registered.Value!.Id, ComputeTotpCode(newSetup.Value!.Secret), CancellationToken.None);
@@ -408,10 +467,11 @@ public class AuthServiceTests
     {
         var fixture = CreateFullFixture();
         var registered = await fixture.Service.RegisterAsync(
-            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"),
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true),
             CancellationToken.None);
         var user = await fixture.Users.GetByIdAsync(registered.Value!.Id, CancellationToken.None);
-        var setup = await fixture.Service.SetupTwoFactorAsync(user!.Id, CancellationToken.None);
+        user!.MarkEmailVerified();
+        var setup = await fixture.Service.SetupTwoFactorAsync(user.Id, CancellationToken.None);
 
         const string refreshBeforeEnable = "refresh-before-enable";
         const string deviceBeforeEnable = "device-before-enable";
@@ -432,7 +492,7 @@ public class AuthServiceTests
         fixture.DeviceTrustTokens.Add(new DeviceTrustToken(user.Id, TokenHasher.Hash(deviceBeforeDisable), fixture.Clock.UtcNow.AddDays(30)));
         var stampBeforeDisable = user.SecurityStamp;
 
-        var disabled = await fixture.Service.DisableTwoFactorAsync(user.Id, ComputeTotpCode(setup.Value.Secret), CancellationToken.None);
+        var disabled = await fixture.Service.DisableTwoFactorAsync(user.Id, ComputeTotpCode(setup.Value.Secret, 1), CancellationToken.None);
 
         Assert.True(disabled.IsSuccess);
         Assert.NotEqual(stampBeforeDisable, user.SecurityStamp);
@@ -443,8 +503,9 @@ public class AuthServiceTests
     [Fact]
     public async Task RefreshAsync_ConcurrentUseOfSameToken_OnlyOneSucceeds()
     {
-        var (service, _, _) = CreateService();
-        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN"), CancellationToken.None);
+        var (service, _, users) = CreateService();
+        var registered = await service.RegisterAsync(new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(users, registered.Value!.Id);
         var rawToken = await service.IssueRefreshTokenAsync(registered.Value!.Id, CancellationToken.None);
 
         var first = await service.RefreshAsync(rawToken, CancellationToken.None);
@@ -453,4 +514,91 @@ public class AuthServiceTests
         Assert.True(first.IsSuccess);
         Assert.True(second.IsFailure);
     }
+    [Fact]
+    public async Task PreregisteredUnverifiedOwner_CannotLogin_AndVerifiedOAuthDoesNotAutoLink()
+    {
+        var fixture = CreateFullFixture();
+        var registered = await fixture.Service.RegisterAsync(
+            new RegisterRequest("VictimCo", "victim@example.test", "attacker-password", "Victim", "PLN", AcceptTerms: true),
+            CancellationToken.None);
+        Assert.True(registered.IsSuccess);
+
+        var passwordLogin = await fixture.Service.LoginAsync(new LoginRequest("victim@example.test", "attacker-password"), null, CancellationToken.None);
+        var oauthLogin = await fixture.Service.ExternalLoginAsync(
+            new ExternalUserInfo("google", "victim-google", "victim@example.test", true, "Victim"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(passwordLogin.IsFailure);
+        Assert.True(oauthLogin.IsFailure);
+    }
+
+    [Fact]
+    public async Task EmailVerificationClaim_ReplacesPreregistrationPassword_AndInvalidatesOldCredential()
+    {
+        var fixture = CreateFullFixture();
+        var registered = await fixture.Service.RegisterAsync(
+            new RegisterRequest("VictimCo", "victim@example.test", "attacker-password", "Victim", "PLN", AcceptTerms: true),
+            CancellationToken.None);
+        const string verificationCode = "654321";
+        fixture.EmailVerificationTokens.Add(new EmailVerificationToken(
+            registered.Value!.Id,
+            TokenHasher.HashOneTimeCode("victim@example.test", verificationCode),
+            fixture.Clock.UtcNow.AddHours(1)));
+
+        var verified = await fixture.Service.VerifyEmailAsync(
+            new VerifyEmailRequest("victim@example.test", verificationCode, "mailbox-owner-password"),
+            CancellationToken.None);
+        var oldLogin = await fixture.Service.LoginAsync(new LoginRequest("victim@example.test", "attacker-password"), null, CancellationToken.None);
+        var newLogin = await fixture.Service.LoginAsync(new LoginRequest("victim@example.test", "mailbox-owner-password"), null, CancellationToken.None);
+
+        Assert.True(verified.IsSuccess);
+        Assert.True(oldLogin.IsFailure);
+        Assert.True(newLogin.IsSuccess);
+    }
+
+    [Fact]
+    public async Task PasswordReset_UsingNewestToken_InvalidatesAllOlderOutstandingTokens()
+    {
+        var fixture = CreateFullFixture();
+        var registered = await fixture.Service.RegisterAsync(
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true), CancellationToken.None);
+        MarkVerified(fixture.Users, registered.Value!.Id);
+        const string codeA = "111111";
+        const string codeB = "222222";
+        fixture.PasswordResetTokens.Add(new PasswordResetToken(
+            registered.Value.Id,
+            TokenHasher.HashOneTimeCode("owner@acme.test", codeA),
+            fixture.Clock.UtcNow.AddHours(1)));
+        fixture.PasswordResetTokens.Add(new PasswordResetToken(
+            registered.Value.Id,
+            TokenHasher.HashOneTimeCode("owner@acme.test", codeB),
+            fixture.Clock.UtcNow.AddHours(1)));
+
+        var latest = await fixture.Service.ResetPasswordAsync(
+            new ResetPasswordRequest("owner@acme.test", codeB, "new-password-123"),
+            CancellationToken.None);
+        var old = await fixture.Service.ResetPasswordAsync(
+            new ResetPasswordRequest("owner@acme.test", codeA, "another-password-123"),
+            CancellationToken.None);
+
+        Assert.True(latest.IsSuccess);
+        Assert.True(old.IsFailure);
+    }
+
+    [Fact]
+    public async Task RecoveryCode_ConcurrentConsume_ExactlyOneSucceeds_InRepositoryContract()
+    {
+        var repository = new InMemoryTwoFactorRecoveryCodeRepository();
+        var userId = Guid.NewGuid();
+        var hash = TokenHasher.Hash("single-use-code");
+        repository.AddRange([new TwoFactorRecoveryCode(userId, hash, DateTimeOffset.UtcNow)]);
+
+        var results = await Task.WhenAll(
+            repository.TryConsumeAsync(userId, hash, DateTimeOffset.UtcNow, CancellationToken.None),
+            repository.TryConsumeAsync(userId, hash, DateTimeOffset.UtcNow, CancellationToken.None));
+
+        Assert.Equal(1, results.Count(x => x));
+    }
+
 }

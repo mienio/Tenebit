@@ -96,7 +96,7 @@ export function AuditLogPage() {
                         ? <Link className="status" to={auditEntityRoutes[entry.entityType]}>{auditEntityLabel(t, entry.entityType)}</Link>
                         : <span className="status">{auditEntityLabel(t, entry.entityType)}</span>}
                     </td>
-                    <td data-label={t('audit.colDetails')}>{entry.details ?? '—'}</td>
+                    <td data-label={t('audit.colDetails')}>{entry.details ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

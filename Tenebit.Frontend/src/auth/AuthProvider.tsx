@@ -16,6 +16,7 @@ type AuthUser = {
 type LoginResponse = { token: string; user: AuthUser };
 type LoginStartResponse = LoginResponse | { requiresTwoFactor: true; challengeToken: string };
 export type LoginOutcome = { requiresTwoFactor: true; challengeToken: string } | { requiresTwoFactor: false };
+export type RegisterOutcome = { requiresEmailVerification: boolean };
 
 type AuthContextValue = {
   isAuthenticated: boolean;
@@ -28,7 +29,7 @@ type AuthContextValue = {
   isTwoFactorEnabled: boolean;
   login: (email: string, password: string) => Promise<LoginOutcome>;
   completeTwoFactorLogin: (challengeToken: string, code: string, rememberDevice: boolean) => Promise<void>;
-  register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string) => Promise<void>;
+  register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string, acceptTerms: boolean) => Promise<RegisterOutcome>;
   loginWithToken: (token: string) => boolean;
   completeExternalLogin: () => Promise<boolean>;
   logout: () => Promise<boolean>;
@@ -157,10 +158,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiRequest<LoginResponse>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ challengeToken, code, rememberDevice }) });
       applySession(response);
     },
-    register: async (organizationName, displayName, email, password, currency, language) => {
-      const response = await apiRequest<LoginResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ organizationName, displayName, email, password, currency, language }) });
-      applySession(response);
-    },
+    register: async (organizationName, displayName, email, password, currency, language, acceptTerms) =>
+      apiRequest<RegisterOutcome>('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ organizationName, displayName, email, password, currency, language, acceptTerms })
+      }),
     loginWithToken: (token: string) => {
       const fromToken = userFromToken(token);
       if (!fromToken) return false;

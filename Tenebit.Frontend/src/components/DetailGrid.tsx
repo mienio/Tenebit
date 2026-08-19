@@ -26,7 +26,7 @@ export function DetailItem({ label, value }: DetailGridItem) {
   return (
     <div>
       <dt>{label}</dt>
-      <dd>{value ?? '—'}</dd>
+      <dd>{value ?? '-'}</dd>
     </div>
   );
 }

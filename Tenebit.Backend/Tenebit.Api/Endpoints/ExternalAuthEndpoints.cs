@@ -45,13 +45,13 @@ public static class ExternalAuthEndpoints
         api.MapGet("/auth/external/{provider}/start", async (string provider, string? returnUrl, ExternalAuthService service, OAuthStateStore stateStore, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
                 await StartExternalLoginAsync(provider, returnUrl, service, stateStore, response, env, cancellationToken))
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-oauth")
             .WithTags("Auth");
 
         api.MapGet("/auth/external/{provider}/callback", (string provider, string? code, string? state, string? error, HttpRequest request, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
                 HandleCallbackAsync(provider, code, state, error, request, service, stateStore, authService, challenges, response, env, configuration, cancellationToken))
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-oauth")
             .WithTags("Auth");
 
         api.MapPost("/auth/external/{provider}/callback", async (HttpRequest request, HttpResponse response, string provider, ExternalAuthService service, OAuthStateStore stateStore, AuthService authService, TwoFactorChallengeStore challenges, IWebHostEnvironment env, IConfiguration configuration, CancellationToken cancellationToken) =>
@@ -63,7 +63,7 @@ public static class ExternalAuthEndpoints
                 return await HandleCallbackAsync(provider, code, state, error, request, service, stateStore, authService, challenges, response, env, configuration, cancellationToken);
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-oauth")
             .WithTags("Auth");
     }
 

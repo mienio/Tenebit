@@ -8,13 +8,13 @@ public static class PublicTokenService
     public sealed record GeneratedToken(string RawToken, string TokenHash);
 
     // Generates a new raw token + its hash. Return RawToken to the caller ONLY at generation
-    // time (e.g. to embed in a one-time link/email) — never log it, never persist it.
+    // time (e.g. to embed in a one-time link/email) - never log it, never persist it.
     // Persist only TokenHash (plus caller-chosen ExpiresAt) on the owning entity.
     //
     // Also the mechanism for "regenerate": call Generate() again and OVERWRITE the owning
     // entity's TokenHash/ExpiresAt columns with the new values. Because only the current hash
     // is stored (no history table), the previous raw token can no longer verify once the
-    // column is overwritten — this is what "invalidates the previous token" in practice.
+    // column is overwritten - this is what "invalidates the previous token" in practice.
     public static GeneratedToken Generate()
     {
         var rawToken = TokenHasher.NewRawToken();

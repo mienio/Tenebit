@@ -32,7 +32,7 @@ public sealed class AssetAuditCampaign
     public AssetAuditCampaignStatus Status { get; private set; }
     public DateTimeOffset DueDate { get; private set; }
 
-    /// <summary>Migawka definicji zakresu kampanii, wyłącznie do historycznego podglądu — nie jest używana do zapytań.</summary>
+    /// <summary>Migawka definicji zakresu kampanii, wyłącznie do historycznego podglądu - nie jest używana do zapytań.</summary>
     public string? ScopeJson { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
@@ -70,7 +70,7 @@ public sealed class AssetAuditCampaign
         }
     }
 
-    /// <summary>Idempotentny. Dozwolony z Active albo Reviewing — administrator może jawnie zakończyć kampanię
+    /// <summary>Idempotentny. Dozwolony z Active albo Reviewing - administrator może jawnie zakończyć kampanię
     /// z nieudzielonymi odpowiedziami (sekcja 5.7).</summary>
     public void Complete(DateTimeOffset completedAt, string completedBy)
     {
@@ -104,7 +104,7 @@ public sealed class AssetAuditCampaign
         Status = AssetAuditCampaignStatus.Cancelled;
     }
 
-    /// <summary>Zakres kampanii po uruchomieniu jest zablokowany (sekcja 5.4) — jedyną dozwoloną zmianą jest
+    /// <summary>Zakres kampanii po uruchomieniu jest zablokowany (sekcja 5.4) - jedyną dozwoloną zmianą jest
     /// wydłużenie terminu, żeby nie utracić już zebranych odpowiedzi.</summary>
     public void ExtendDueDate(DateTimeOffset newDueDate)
     {
@@ -116,7 +116,7 @@ public sealed class AssetAuditCampaign
         DueDate = newDueDate;
     }
 
-    /// <summary>Edycja nazwy/opisu/terminu/zakresu dozwolona wyłącznie w Draft — po starcie zakres jest zablokowany
+    /// <summary>Edycja nazwy/opisu/terminu/zakresu dozwolona wyłącznie w Draft - po starcie zakres jest zablokowany
     /// (sekcja 5.4), a wydłużenie terminu po starcie idzie przez <see cref="ExtendDueDate"/>.</summary>
     public void UpdateDraft(string name, string? description, DateTimeOffset dueDate, string? scopeJson)
     {

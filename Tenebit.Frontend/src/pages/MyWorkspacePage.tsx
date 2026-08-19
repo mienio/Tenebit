@@ -46,22 +46,6 @@ export function MyWorkspacePage() {
     }
   }
 
-  async function downloadProtocol(assignment: MyAssignment) {
-    try {
-      const blob = await api.downloadAssignmentProtocol(assignment.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${assignment.protocolNumber}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.downloadProtocolFailed') });
-    }
-  }
-
   async function download(procedure: MyProcedure) {
     if (!procedure.documentId) return;
     try {
@@ -69,7 +53,7 @@ export function MyWorkspacePage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = procedure.documentFileName ?? `${procedure.title ?? 'procedura'}.pdf`;
+      link.download = procedure.documentFileName ?? (procedure.title ?? 'document');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -138,7 +122,6 @@ export function MyWorkspacePage() {
                   <small>{assignment.assetNames.join(', ')}</small>
                 </div>
                 <div className="rowActions">
-                  <button className="iconButton" aria-label={t('assignments.downloadProtocol')} title={t('assignments.downloadProtocol')} onClick={() => downloadProtocol(assignment)}><Download size={16} /></button>
                   <Button disabled={accepting === assignment.id} onClick={() => accept(assignment)} icon={<CheckCircle2 size={16} />}>
                     {accepting === assignment.id ? t('myWorkspace.confirming') : t('myWorkspace.confirmReceipt')}
                   </Button>
@@ -195,7 +178,6 @@ export function MyWorkspacePage() {
               <div className="listRow" key={assignment.id}>
                 <div><strong>{assignment.protocolNumber}</strong><small>{formatDateTime(assignment.issuedAt)} · {formatDate(assignment.dueDate)}</small></div>
                 <div className="rowActions">
-                  <button className="iconButton" aria-label={t('assignments.downloadProtocol')} title={t('assignments.downloadProtocol')} onClick={() => downloadProtocol(assignment)}><Download size={16} /></button>
                   <StatusBadge status={assignment.status} />
                 </div>
               </div>

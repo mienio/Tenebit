@@ -13,6 +13,7 @@ const SocialCallbackPage = lazy(() => import('./pages/SocialCallbackPage').then(
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage').then(m => ({ default: m.VerifyEmailPage })));
+const LegalPage = lazy(() => import('./pages/LegalPage').then(m => ({ default: m.LegalPage })));
 const PublicAssignmentPage = lazy(() => import('./pages/PublicAssignmentPage').then(m => ({ default: m.PublicAssignmentPage })));
 const PublicOffboardingPage = lazy(() => import('./pages/PublicOffboardingPage').then(m => ({ default: m.PublicOffboardingPage })));
 const PublicAssetScanPage = lazy(() => import('./pages/PublicAssetScanPage').then(m => ({ default: m.PublicAssetScanPage })));
@@ -57,10 +58,13 @@ export function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/accept/:token" element={<PublicAssignmentPage />} />
-        <Route path="/exit/:token" element={<PublicOffboardingPage />} />
+        <Route path="/privacy" element={<LegalPage kind="privacy" />} />
+        <Route path="/terms" element={<LegalPage kind="terms" />} />
+        <Route path="/cookies" element={<LegalPage kind="cookies" />} />
+        <Route path="/accept" element={<PublicAssignmentPage />} />
+        <Route path="/exit" element={<PublicOffboardingPage />} />
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
-        <Route path="/audit/:token" element={<PublicAssetAuditPage />} />
+        <Route path="/audit" element={<PublicAssetAuditPage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<RequireRoles path="/dashboard"><DashboardPage /></RequireRoles>} />
           <Route path="my" element={<MyWorkspacePage />} />

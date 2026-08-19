@@ -45,6 +45,12 @@ public sealed class AssetRepository : IAssetRepository
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<Asset>> ListWarrantyExpiringAsync(Guid organizationId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+        await _db.Assets.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.WarrantyUntil.HasValue && x.WarrantyUntil.Value >= from && x.WarrantyUntil.Value <= to)
+            .OrderBy(x => x.WarrantyUntil)
+            .ToListAsync(cancellationToken);
+
     public Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.Assets.Include(x => x.FieldValues).FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

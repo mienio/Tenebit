@@ -3,6 +3,7 @@ import { Navigate, useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { ErrorState, LoadingState } from '../components/StateViews';
+import { PublicFooter } from '../components/PublicFooter';
 import { Field, TextArea } from '../components/FormFields';
 import { QrCode, Send } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
@@ -35,7 +36,7 @@ export function PublicAssetScanPage() {
           if (!cancelled) setState({ kind: 'internal' });
           return;
         } catch {
-          // Not this organization's session or no access — fall back to the public view below.
+          // Not this organization's session or no access - fall back to the public view below.
         }
       }
 
@@ -97,6 +98,7 @@ export function PublicAssetScanPage() {
           </form>
         )}
       </section>
+      <PublicFooter compact />
     </main>
   );
 }

@@ -1,14 +1,16 @@
 import { Rocket } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthProvider';
 import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
+import { PublicFooter } from '../components/PublicFooter';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
-import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
+import { legalContent } from '../legal/legalContent';
 
 const currencies = ['PLN', 'EUR', 'USD', 'GBP', 'CHF', 'CZK', 'UAH'];
 
@@ -16,6 +18,7 @@ export function RegisterPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { t, language } = useI18n();
+  const legal = legalContent[language].ui;
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [password, setPassword] = useState('');
@@ -23,18 +26,23 @@ export function RegisterPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const email = String(form.get('email') ?? '').trim();
     setError(null);
     setSubmitting(true);
     try {
-      await auth.register(
+      const result = await auth.register(
         String(form.get('organizationName') ?? ''),
         String(form.get('displayName') ?? ''),
-        String(form.get('email') ?? ''),
+        email,
         String(form.get('password') ?? ''),
         String(form.get('currency') ?? 'PLN'),
-        language
+        language,
+        form.get('acceptTerms') === 'on'
       );
-      navigate('/dashboard', { replace: true });
+      const destination = result.requiresEmailVerification
+        ? `/verify-email#email=${encodeURIComponent(email)}`
+        : '/login?registered=1';
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.registerFailed'));
     } finally {
@@ -51,23 +59,33 @@ export function RegisterPage() {
         </div>
         <h1>{t('auth.registerTitle')}</h1>
         <SocialLoginButtons returnUrl="/dashboard" />
+        <p className="authCard__hint">
+          {t('auth.socialTermsNotice')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.
+        </p>
         <form className="formGrid" onSubmit={handleSubmit}>
           <Field label={t('auth.orgNameLabel')}><TextInput name="organizationName" required autoFocus /></Field>
-          <Field label={t('auth.displayNameLabel')}><TextInput name="displayName" required /></Field>
-          <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required /></Field>
+          <Field label={t('auth.displayNameLabel')}><TextInput name="displayName" required autoComplete="name" /></Field>
+          <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required autoComplete="email" /></Field>
           <Field label={t('auth.currencyLabel')}>
             <SelectInput name="currency" defaultValue="PLN">
               {currencies.map(code => <option key={code} value={code}>{code}</option>)}
             </SelectInput>
           </Field>
-          <Field label={t('auth.passwordLabel')} info={t('auth.passwordHint')}><TextInput name="password" type="password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></Field>
+          <Field label={t('auth.passwordLabel')} info={t('auth.passwordHint')}>
+            <TextInput name="password" type="password" minLength={8} required autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} />
+          </Field>
           {!password ? <p className="formHint">{t('auth.passwordHint')}</p> : null}
           <PasswordStrengthMeter password={password} />
+          <label className="authLegalConsent">
+            <input type="checkbox" name="acceptTerms" required />
+            <span>{t('auth.acceptTermsPrefix')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.</span>
+          </label>
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
           <Button disabled={submitting} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>
         </form>
         <p className="authFooter">{t('auth.hasAccount')} <Link to="/login">{t('auth.loginLink')}</Link></p>
       </section>
+      <PublicFooter compact />
     </main>
   );
 }

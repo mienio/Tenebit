@@ -19,8 +19,9 @@ public sealed class AssetEvidenceService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly Tenebit.Application.Assets.AssetAuthorizationService _assetAuthorization;
 
-    public AssetEvidenceService(IAssetEvidenceRepository evidence, IAssetRepository assets, IAssignmentRepository assignments, IImageSanitizer sanitizer, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public AssetEvidenceService(IAssetEvidenceRepository evidence, IAssetRepository assets, IAssignmentRepository assignments, IImageSanitizer sanitizer, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, Tenebit.Application.Assets.AssetAuthorizationService assetAuthorization)
     {
         _evidence = evidence;
         _assets = assets;
@@ -30,6 +31,7 @@ public sealed class AssetEvidenceService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _assetAuthorization = assetAuthorization;
     }
 
     public async Task<Result<IReadOnlyList<AssetEvidenceResponse>>> ListByAssetAsync(Guid assetId, CancellationToken cancellationToken)
@@ -38,10 +40,10 @@ public sealed class AssetEvidenceService
         if (access.IsFailure) return Result<IReadOnlyList<AssetEvidenceResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result<IReadOnlyList<AssetEvidenceResponse>>.Failure(Error.NotFound("Aktywo nie istnieje."));
+        var assetAccess = await _assetAuthorization.EnsureCanViewAsync(assetId, cancellationToken);
+        if (assetAccess.IsFailure) return Result<IReadOnlyList<AssetEvidenceResponse>>.Failure(assetAccess.Error!);
 
-        var items = await _evidence.ListByAssetAsync(organizationId, assetId, cancellationToken);
+        var items = await _evidence.ListMetadataByAssetAsync(organizationId, assetId, cancellationToken);
         return Result<IReadOnlyList<AssetEvidenceResponse>>.Success(items.OrderByDescending(x => x.UploadedAt).Select(Map).ToList());
     }
 
@@ -51,11 +53,13 @@ public sealed class AssetEvidenceService
         if (access.IsFailure) return Result<AssetEvidence>.Failure(access.Error!);
 
         var item = await _evidence.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
-        return item is null ? Result<AssetEvidence>.Failure(Error.NotFound("Materiał dowodowy nie istnieje.")) : Result<AssetEvidence>.Success(item);
+        if (item is null) return Result<AssetEvidence>.Failure(Error.NotFound("Materiał dowodowy nie istnieje."));
+        var assetAccess = await _assetAuthorization.EnsureCanViewAsync(item.AssetId, cancellationToken);
+        return assetAccess.IsFailure ? Result<AssetEvidence>.Failure(Error.NotFound("Materiał dowodowy nie istnieje.")) : Result<AssetEvidence>.Success(item);
     }
 
     /// <summary>Publiczny odczyt zdjęcia wydania (spec 6.8). Zwraca wyłącznie materiał należący do
-    /// konkretnego assignment i organizacji — brak izolacji zwracałby zdjęcia innych protokołów.</summary>
+    /// konkretnego assignment i organizacji - brak izolacji zwracałby zdjęcia innych wydań.</summary>
     public async Task<Result<AssetEvidence>> GetPublicAssignmentEvidenceAsync(Guid organizationId, Guid assignmentId, Guid id, CancellationToken cancellationToken)
     {
         var assignment = await _assignments.GetAsync(organizationId, assignmentId, cancellationToken);
@@ -94,10 +98,9 @@ public sealed class AssetEvidenceService
         var organizationId = _currentUser.OrganizationId;
         try
         {
-            // Count + insert + SaveChanges are serialized in one DB transaction. The organization lock is
-            // deliberately stronger than a per-asset lock: it closes the race for every evidence entry point
-            // (authenticated, public, assignment batch) with the existing tested UoW primitive.
-            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            // Count + insert + SaveChanges are serialized per asset. This keeps the evidence limit check atomic
+            // without blocking unrelated uploads and writes performed by other users in the same organization.
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "asset", [assetId], async ct =>
             {
                 var asset = await _assets.GetAsync(organizationId, assetId, ct);
                 if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
@@ -131,7 +134,7 @@ public sealed class AssetEvidenceService
         }
     }
 
-    /// <summary>Upload zdjęcia przez publiczny token offboardingu (spec 4.6) — bez AccessPolicy/ICurrentUser,
+    /// <summary>Upload zdjęcia przez publiczny token offboardingu (spec 4.6) - bez AccessPolicy/ICurrentUser,
     /// z tą samą walidacją formatu/rozmiaru/limitu i sanityzacją EXIF/GPS co <see cref="UploadAsync"/>.
     /// Organizacja/aktor pochodzą z już zweryfikowanego tokenu, nie z zalogowanego użytkownika.</summary>
     public async Task<Result<AssetEvidenceResponse>> UploadViaPublicTokenAsync(Guid organizationId, Guid assetId, Guid offboardingItemId,
@@ -152,7 +155,7 @@ public sealed class AssetEvidenceService
 
         try
         {
-            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "asset", [assetId], async ct =>
             {
                 var asset = await _assets.GetAsync(organizationId, assetId, ct);
                 if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
@@ -176,7 +179,7 @@ public sealed class AssetEvidenceService
         }
     }
 
-    /// <summary>Upload zdjęcia przez publiczny token kampanii audytu aktywów (spec 5.5) — analogicznie do
+    /// <summary>Upload zdjęcia przez publiczny token kampanii audytu aktywów (spec 5.5) - analogicznie do
     /// <see cref="UploadViaPublicTokenAsync"/> dla offboardingu, ale z fazą Audit i AssetAuditItemId zamiast
     /// OffboardingItemId.</summary>
     public async Task<Result<AssetEvidenceResponse>> UploadViaAuditPublicTokenAsync(Guid organizationId, Guid assetId, Guid assetAuditItemId,
@@ -197,7 +200,7 @@ public sealed class AssetEvidenceService
 
         try
         {
-            return await _unitOfWork.ExecuteWithOrganizationLockAsync(organizationId, async ct =>
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "asset", [assetId], async ct =>
             {
                 var asset = await _assets.GetAsync(organizationId, assetId, ct);
                 if (asset is null) return Result<AssetEvidenceResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
@@ -222,7 +225,7 @@ public sealed class AssetEvidenceService
     }
 
     /// <summary>Przygotowuje partię zdjęć do zapisania W RAMACH transakcji zbiorczej (wydanie/zwrot ze zdjęciami).
-    /// Najpierw waliduje i sanityzuje wszystkie pliki, a dopiero potem dodaje encje do repozytorium — dzięki temu
+    /// Najpierw waliduje i sanityzuje wszystkie pliki, a dopiero potem dodaje encje do repozytorium - dzięki temu
     /// błąd dowolnego pliku nie pozostawia częściowo zapisanego materiału. Nie wywołuje SaveChanges; zapisem
     /// (pojedynczym, atomowym) zarządza wywołujący serwis.</summary>
     public async Task<Result<IReadOnlyList<AssetEvidence>>> PrepareEvidenceBatchAsync(
@@ -370,5 +373,8 @@ public sealed class AssetEvidenceService
     }
 
     private static AssetEvidenceResponse Map(AssetEvidence e) =>
+        new(e.Id, e.AssetId, e.AssignmentId, e.Phase, e.FileName, e.ContentType, e.SizeBytes, e.Sha256, e.Caption, e.UploadedAt, e.UploadedBy, e.UploadedVia, e.LockedAt, e.LegalHold, e.RedactedAt);
+
+    private static AssetEvidenceResponse Map(AssetEvidenceMetadata e) =>
         new(e.Id, e.AssetId, e.AssignmentId, e.Phase, e.FileName, e.ContentType, e.SizeBytes, e.Sha256, e.Caption, e.UploadedAt, e.UploadedBy, e.UploadedVia, e.LockedAt, e.LegalHold, e.RedactedAt);
 }

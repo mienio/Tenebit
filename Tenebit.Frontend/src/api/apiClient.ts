@@ -114,16 +114,19 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 }
 
 export async function apiBlob(path: string): Promise<Blob> {
-  const headers = new Headers();
   const token = tokenProvider ? await tokenProvider() : null;
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (languageProvider) headers.set('X-Ui-Language', languageProvider());
-  let response: Response;
-  try {
-    response = await fetch(`${apiBaseUrl}${path}`, { headers, credentials: 'include' });
-  } catch {
-    throw new ApiError(tApi('api.networkError'));
+  const init: RequestInit = { headers: { Accept: 'application/octet-stream,*/*' } };
+  let response = await performFetch(path, init, token);
+
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      response = await performFetch(path, init, newToken);
+    } else if (token) {
+      window.dispatchEvent(new Event('tenebit:session-expired'));
+    }
   }
+
   if (!response.ok) throw new ApiError(tApi('api.downloadFailed'), response.status, 'HTTP_ERROR');
   return response.blob();
 }

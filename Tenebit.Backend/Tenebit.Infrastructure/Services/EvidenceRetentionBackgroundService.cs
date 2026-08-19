@@ -44,7 +44,7 @@ public sealed class EvidenceRetentionBackgroundService : BackgroundService
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 SecurityTelemetry.BackgroundJobFailure();
-                _logger.LogError(ex, "Zadanie retencji materiału dowodowego zakończyło się błędem — spróbuję ponownie przy kolejnym cyklu.");
+                _logger.LogError(ex, "Zadanie retencji materiału dowodowego zakończyło się błędem - spróbuję ponownie przy kolejnym cyklu.");
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));

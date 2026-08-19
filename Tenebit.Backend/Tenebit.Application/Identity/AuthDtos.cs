@@ -3,9 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Tenebit.Application.Identity;
 
-// AUD-007: [Required] łapie null/pusty string przed warstwą Application/Infrastructure — np.
-// OrganizationUserRepository.FindByEmailAsync robił email.Trim() na null i kończył się 500 (potwierdzone
-// w logach audytu). ValidationEndpointFilter waliduje każdy request DTO z atrybutami przed handlerem.
+// AUD-007: [Required] catches null/empty input before Application/Infrastructure code receives it.
 [ValidatedRequest]
 public sealed record RegisterRequest(
     [property: Required, StringLength(160, MinimumLength = 1)] string OrganizationName,
@@ -13,7 +11,8 @@ public sealed record RegisterRequest(
     [property: Required] string Password,
     [property: Required, StringLength(160, MinimumLength = 1)] string DisplayName,
     [property: Required, StringLength(8, MinimumLength = 1)] string Currency,
-    string? Language = null);
+    string? Language = null,
+    bool AcceptTerms = false);
 
 [ValidatedRequest]
 public sealed record LoginRequest(
@@ -28,10 +27,19 @@ public sealed record ExternalUserInfo(string Provider, string ProviderUserId, st
 public sealed record ForgotPasswordRequest([property: Required, EmailAddress, StringLength(240)] string Email);
 
 [ValidatedRequest]
-public sealed record ResetPasswordRequest([property: Required] string Token, [property: Required] string NewPassword);
+public sealed record ResetPasswordRequest(
+    [property: Required, EmailAddress, StringLength(240)] string Email,
+    [property: Required, RegularExpression(@"^\d{6}$")] string Code,
+    [property: Required] string NewPassword);
 
 [ValidatedRequest]
-public sealed record VerifyEmailRequest([property: Required] string Token);
+public sealed record VerifyEmailRequest(
+    [property: Required, EmailAddress, StringLength(240)] string Email,
+    [property: Required, RegularExpression(@"^\d{6}$")] string Code,
+    [property: Required] string NewPassword);
+
+[ValidatedRequest]
+public sealed record ResendVerificationRequest([property: Required, EmailAddress, StringLength(240)] string Email);
 
 public sealed record RefreshResult(AuthUserResponse User, string RefreshToken);
 

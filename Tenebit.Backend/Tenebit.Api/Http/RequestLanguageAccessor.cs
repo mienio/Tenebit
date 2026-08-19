@@ -3,7 +3,7 @@ namespace Tenebit.Api.Http;
 /// <summary>
 /// Small static "ambient" holder for the app's <see cref="IHttpContextAccessor"/>, set once at
 /// startup in Program.cs. Lets static, non-DI code (such as <see cref="ResultExtensions"/>) read the
-/// current request's <c>X-Ui-Language</c> header — mirroring <c>CurrentUser.Language</c> — without
+/// current request's <c>X-Ui-Language</c> header - mirroring <c>CurrentUser.Language</c> - without
 /// requiring every <c>.ToHttpResult()</c> call site across the endpoints to thread the language
 /// through explicitly.
 /// </summary>

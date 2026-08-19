@@ -71,15 +71,15 @@ function LocationAssetNode({ node, byParent, byId, expanded, loading, inventory,
             <button
               type="button"
               key={asset.id}
-              className="listRow"
+              className="assetBrowserRow"
               onClick={() => onSelectAsset(asset.id)}
             >
-              <Package size={14} />
-              <div>
+              <span className="assetBrowserRow__icon" aria-hidden="true"><Package size={16} /></span>
+              <span className="assetBrowserRow__main">
                 <strong>{asset.name}</strong>
                 <small>{asset.assetTag}</small>
-              </div>
-              <StatusBadge status={asset.status} />
+              </span>
+              <span className="assetBrowserRow__meta"><StatusBadge status={asset.status} /></span>
             </button>
           ))}
           {showEmpty && (

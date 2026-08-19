@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Tenebit.Api.Auth;
+using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Application.Identity;
 using Tenebit.Domain.Identity;
@@ -10,6 +11,7 @@ using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Tests.Integration;
 
+[Collection(PostgresIntegrationCollection.Name)]
 public sealed class SecuritySessionIntegrationTests : IClassFixture<TenebitApiFactory>
 {
     private readonly TenebitApiFactory _factory;
@@ -17,7 +19,7 @@ public sealed class SecuritySessionIntegrationTests : IClassFixture<TenebitApiFa
     public SecuritySessionIntegrationTests(TenebitApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task RotatedSecurityStamp_InvalidatesExistingAccessTokenImmediately()
+    public async Task RotatedSecurityStamp_WithCacheInvalidation_InvalidatesExistingAccessTokenImmediately()
     {
         var (_, user, token) = await _factory.SeedTenantAsync("Stamp", TenebitRoles.Owner);
         var client = _factory.CreateAuthenticatedClient(token);
@@ -30,6 +32,7 @@ public sealed class SecuritySessionIntegrationTests : IClassFixture<TenebitApiFa
             var storedUser = await db.OrganizationUsers.SingleAsync(x => x.Id == user.Id);
             storedUser.RotateSecurityStamp();
             await db.SaveChangesAsync();
+            scope.ServiceProvider.GetRequiredService<IUserSecurityStateCache>().Remove(user.Id);
         }
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/assets")).StatusCode);

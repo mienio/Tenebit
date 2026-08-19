@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Download, Eye, FileText, Mail, Plus, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Eye, Mail, Plus, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -408,14 +408,7 @@ function AssetAuditDetailsView({
     try {
       const blob = await api.downloadAssetAuditCsv(campaign.id);
       saveBlob(blob, `audyt-${campaign.id}.csv`);
-    } catch { /* download failed — no explicit error UI for this action */ }
-  }
-
-  async function downloadReport() {
-    try {
-      const blob = await api.downloadAssetAuditReport(campaign.id);
-      saveBlob(blob, `raport-audytu-${campaign.id}.pdf`);
-    } catch { /* download failed — no explicit error UI for this action */ }
+    } catch { /* download failed - no explicit error UI for this action */ }
   }
 
   return (
@@ -463,7 +456,7 @@ function AssetAuditDetailsView({
                 <div className="listRow" key={item.id}>
                   <div>
                     <strong>{item.assetName} ({item.assetTag})</strong>
-                    <small>{item.participantName ?? '—'} · {t(`assetAudits.response.${item.response}`)}</small>
+                    <small>{item.participantName ?? '-'} · {t(`assetAudits.response.${item.response}`)}</small>
                     {item.comment ? <small>{item.comment}</small> : null}
                   </div>
                   <div className="rowActions">
@@ -485,7 +478,6 @@ function AssetAuditDetailsView({
           <Button variant="secondary" onClick={() => navigate('/asset-audits')} icon={<RotateCcw size={16} />}>{t('common.back')}</Button>
           <div className="rowActions">
             <Button variant="secondary" onClick={() => void downloadCsv()} icon={<Download size={16} />}>{t('assetAudits.downloadCsv')}</Button>
-            <Button variant="secondary" onClick={() => void downloadReport()} icon={<FileText size={16} />}>{t('assetAudits.downloadReport')}</Button>
             {campaign.status !== 'Completed' && campaign.status !== 'Cancelled' ? (
               <Button variant="secondary" onClick={() => void onAction('complete', () => api.completeAssetAudit(campaign.id), 'assetAudits.completed')} icon={<CheckCircle2 size={16} />}>{t('assetAudits.completeCampaign')}</Button>
             ) : null}

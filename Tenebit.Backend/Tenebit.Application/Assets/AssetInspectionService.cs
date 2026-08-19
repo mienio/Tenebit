@@ -14,8 +14,9 @@ public sealed class AssetInspectionService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly AssetAuthorizationService _assetAuthorization;
 
-    public AssetInspectionService(IAssetInspectionRepository inspections, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public AssetInspectionService(IAssetInspectionRepository inspections, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssetAuthorizationService assetAuthorization)
     {
         _inspections = inspections;
         _assets = assets;
@@ -23,6 +24,7 @@ public sealed class AssetInspectionService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _assetAuthorization = assetAuthorization;
     }
 
     public async Task<Result<AssetInspectionResponse>> GetPendingForAssetAsync(Guid assetId, CancellationToken cancellationToken)
@@ -31,6 +33,8 @@ public sealed class AssetInspectionService
         if (access.IsFailure) return Result<AssetInspectionResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
+        var assetAccess = await _assetAuthorization.EnsureCanViewAsync(assetId, cancellationToken);
+        if (assetAccess.IsFailure) return Result<AssetInspectionResponse>.Failure(assetAccess.Error!);
         var inspection = await _inspections.GetPendingByAssetAsync(organizationId, assetId, cancellationToken);
         if (inspection is null) return Result<AssetInspectionResponse>.Failure(Error.NotFound("Brak oczekującej kontroli dla tego aktywa."));
         return Result<AssetInspectionResponse>.Success(Map(inspection));

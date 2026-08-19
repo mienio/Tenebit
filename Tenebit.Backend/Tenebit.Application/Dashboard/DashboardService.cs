@@ -8,28 +8,18 @@ namespace Tenebit.Application.Dashboard;
 
 public sealed class DashboardService
 {
-    private readonly IAssetRepository _assets;
-    private readonly IPersonRepository _people;
-    private readonly IAssignmentRepository _assignments;
-    private readonly IAssetCategoryRepository _categories;
-    private readonly ITeamRepository _teams;
+    private readonly IDashboardReadRepository _dashboardRead;
     private readonly IActivityLogRepository _activity;
-    private readonly ILicenseRepository _licenses;
     private readonly IDashboardLayoutRepository _layouts;
     private readonly IDashboardSnapshotRepository _snapshots;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public DashboardService(IAssetRepository assets, IPersonRepository people, IAssignmentRepository assignments, IAssetCategoryRepository categories, ITeamRepository teams, IActivityLogRepository activity, ILicenseRepository licenses, IDashboardLayoutRepository layouts, IDashboardSnapshotRepository snapshots, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public DashboardService(IDashboardReadRepository dashboardRead, IActivityLogRepository activity, IDashboardLayoutRepository layouts, IDashboardSnapshotRepository snapshots, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
-        _assets = assets;
-        _people = people;
-        _assignments = assignments;
-        _categories = categories;
-        _teams = teams;
+        _dashboardRead = dashboardRead;
         _activity = activity;
-        _licenses = licenses;
         _layouts = layouts;
         _snapshots = snapshots;
         _currentUser = currentUser;
@@ -68,73 +58,33 @@ public sealed class DashboardService
         if (access.IsFailure) return Result<DashboardSummaryResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
-        var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-        var people = await _people.ListAsync(organizationId, null, cancellationToken);
-        var assignments = await _assignments.ListAsync(organizationId, cancellationToken);
-        var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var teams = await _teams.ListAsync(organizationId, cancellationToken);
-        var licenses = await _licenses.ListAsync(organizationId, cancellationToken);
-        var recent = await _activity.ListAsync(organizationId, 12, cancellationToken);
         var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
-        var limit = today.AddDays(90);
-
-        var byStatus = assets
-            .GroupBy(asset => asset.Status)
-            .Select(group => new StatusCountResponse(group.Key, group.Count()))
-            .OrderBy(item => item.Status.ToString())
-            .ToList();
-
-        var warranty = assets
-            .Where(asset => asset.WarrantyUntil.HasValue && asset.WarrantyUntil.Value >= today && asset.WarrantyUntil.Value <= limit)
-            .OrderBy(asset => asset.WarrantyUntil)
-            .Take(8)
-            .Select(asset => new UpcomingAssetDateResponse(asset.Id, asset.Name, asset.AssetTag, asset.WarrantyUntil!.Value))
-            .ToList();
+        var summary = await _dashboardRead.GetSummaryAsync(organizationId, today, today.AddDays(90), cancellationToken);
+        var recent = await _activity.ListAsync(organizationId, 12, cancellationToken);
 
         var activity = recent
             .Select(log => new RecentActivityResponse(log.Action, log.EntityType, log.EntityId, log.Details, log.ActorSubject, log.CreatedAt))
             .ToList();
 
-        var byCategory = assets
-            .GroupBy(asset => asset.CategoryId)
-            .Select(group => new CategoryCountResponse(group.Key, categories.FirstOrDefault(c => c.Id == group.Key)?.Name ?? "—", group.Count()))
-            .OrderByDescending(item => item.Count)
-            .ToList();
-
-        var byLocation = assets
-            .Where(asset => !string.IsNullOrWhiteSpace(asset.Location))
-            .GroupBy(asset => asset.Location!)
-            .Select(group => new LocationCountResponse(group.Key, group.Count()))
-            .OrderByDescending(item => item.Count)
-            .Take(10)
-            .ToList();
-
-        var byTeam = assets
-            .Where(asset => asset.TeamId.HasValue)
-            .GroupBy(asset => asset.TeamId!.Value)
-            .Select(group => new TeamCountResponse(group.Key, teams.FirstOrDefault(t => t.Id == group.Key)?.Name ?? "—", group.Count(), group.Sum(asset => asset.PurchasePrice ?? 0)))
-            .OrderByDescending(item => item.Count)
-            .ToList();
-
         return Result<DashboardSummaryResponse>.Success(new DashboardSummaryResponse(
-            assets.Count,
-            assets.Count(asset => asset.Status == AssetStatus.InStock),
-            assets.Count(asset => asset.Status == AssetStatus.Assigned),
-            assets.Count(asset => asset.Status == AssetStatus.InService),
-            assets.Count(asset => asset.AssignedPersonId is null),
-            people.Count,
-            assignments.Count(assignment => assignment.Status is AssignmentStatus.AwaitingAcceptance or AssignmentStatus.Overdue),
-            assignments.Sum(assignment => assignment.ProcedureAcceptances.Count(acceptance => acceptance.Status == AcceptanceStatus.Pending)),
-            assets.Sum(asset => asset.PurchasePrice ?? 0),
-            licenses.Count,
-            licenses.Sum(license => license.Seats.Count),
-            licenses.Sum(license => license.SeatsTotal),
-            byStatus,
-            warranty,
+            summary.TotalAssets,
+            summary.AssetsInStock,
+            summary.AssetsAssigned,
+            summary.AssetsInService,
+            summary.AssetsWithoutOwner,
+            summary.PeopleCount,
+            summary.OpenAssignments,
+            summary.PendingProcedureAcceptances,
+            summary.VisibleAssetValue,
+            summary.TotalLicenses,
+            summary.LicenseSeatsUsed,
+            summary.LicenseSeatsTotal,
+            summary.AssetsByStatus.Select(x => new StatusCountResponse(x.Status, x.Count)).ToList(),
+            summary.WarrantyExpiringSoon.Select(x => new UpcomingAssetDateResponse(x.AssetId, x.Name, x.AssetTag, x.WarrantyUntil)).ToList(),
             activity,
-            byCategory,
-            byLocation,
-            byTeam));
+            summary.AssetsByCategory.Select(x => new CategoryCountResponse(x.CategoryId, x.CategoryName, x.Count)).ToList(),
+            summary.AssetsByLocation.Select(x => new LocationCountResponse(x.Location, x.Count)).ToList(),
+            summary.AssetsByTeam.Select(x => new TeamCountResponse(x.TeamId, x.TeamName, x.Count, x.TotalValue)).ToList()));
     }
 
     public async Task<Result<DashboardComparisonResponse>> GetComparisonAsync(int daysAgo, CancellationToken cancellationToken)
@@ -148,7 +98,7 @@ public sealed class DashboardService
         var snapshot = await _snapshots.GetClosestOnOrBeforeAsync(organizationId, targetDate, cancellationToken);
         if (snapshot is null)
         {
-            return Result<DashboardComparisonResponse>.Failure(Error.NotFound("Za mało danych historycznych do porównania — migawki zbierają się od teraz, spróbuj ponownie za kilka dni."));
+            return Result<DashboardComparisonResponse>.Failure(Error.NotFound("Za mało danych historycznych do porównania - migawki zbierają się od teraz, spróbuj ponownie za kilka dni."));
         }
 
         var current = await GetSummaryAsync(cancellationToken);

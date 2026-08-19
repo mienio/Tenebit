@@ -1,10 +1,11 @@
 import { Camera, CheckCircle2, ChevronRight, ClipboardCheck, Upload } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { ErrorState, LoadingState } from '../components/StateViews';
+import { PublicFooter } from '../components/PublicFooter';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { usePublicCapabilitySession } from '../hooks/usePublicCapabilitySession';
 import { useI18n } from '../i18n/I18nProvider';
 import type { AssetAuditResponse } from '../types/domain';
 
@@ -12,8 +13,8 @@ const responseValues: AssetAuditResponse[] = ['Confirmed', 'Missing', 'Damaged',
 
 export function PublicAssetAuditPage() {
   const { t } = useI18n();
-  const { token } = useParams<{ token: string }>();
-  const loader = useMemo(() => () => (token ? api.publicAssetAudit(token) : Promise.resolve(null)), [token]);
+  const capability = usePublicCapabilitySession('asset-audit');
+  const loader = useMemo(() => () => capability === 'ready' ? api.publicAssetAudit() : Promise.resolve(null), [capability]);
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [step, setStep] = useState<'form' | 'review' | 'submitted'>('form');
   const [answers, setAnswers] = useState<Record<string, { response: AssetAuditResponse; comment: string; uploading: boolean }>>({});
@@ -21,10 +22,9 @@ export function PublicAssetAuditPage() {
   const [submitting, setSubmitting] = useState(false);
 
   async function upload(itemId: string, file: File) {
-    if (!token) return;
     setAnswers(current => ({ ...current, [itemId]: { response: current[itemId]?.response ?? 'Missing', comment: current[itemId]?.comment ?? '', uploading: true } }));
     try {
-      await api.uploadPublicAssetAuditEvidence(token, itemId, file);
+      await api.uploadPublicAssetAuditEvidence(itemId, file);
       setMessage(null);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssetAudit.uploadFailed'));
@@ -34,16 +34,16 @@ export function PublicAssetAuditPage() {
   }
 
   async function submit() {
-    if (!token || !data) return;
+    if (!data) return;
     setSubmitting(true);
     setMessage(null);
     try {
       for (const item of data.items) {
         const answer = answers[item.id];
         if (!answer) continue;
-        await api.submitPublicAssetAuditItemResponse(token, item.id, { response: answer.response, comment: answer.comment || null });
+        await api.submitPublicAssetAuditItemResponse(item.id, { response: answer.response, comment: answer.comment || null });
       }
-      await api.submitPublicAssetAudit(token);
+      await api.submitPublicAssetAudit();
       await reload();
       setStep('submitted');
     } catch (err) {
@@ -53,7 +53,8 @@ export function PublicAssetAuditPage() {
     }
   }
 
-  if (!token) return <ErrorState message={t('publicAssetAudit.invalidLink')} />;
+  if (capability === 'loading') return <LoadingState title={t('publicAssetAudit.loadingTitle')} description={t('publicAssetAudit.loadingDesc')} />;
+  if (capability === 'error') return <ErrorState message={t('publicAssetAudit.invalidLink')} />;
   if (isLoading && !data) return <LoadingState title={t('publicAssetAudit.loadingTitle')} description={t('publicAssetAudit.loadingDesc')} />;
   if (error || !data) return <ErrorState message={error ?? t('publicAssetAudit.invalidLink')} onRetry={reload} />;
 
@@ -82,7 +83,7 @@ export function PublicAssetAuditPage() {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <strong>{t(`publicAssetAudit.response.${answers[item.id]?.response ?? 'Confirmed'}`)}</strong>
-                    <small>{answers[item.id]?.comment || '—'}</small>
+                    <small>{answers[item.id]?.comment || '-'}</small>
                   </div>
                 </div>
               ))}
@@ -141,6 +142,7 @@ export function PublicAssetAuditPage() {
           </>
         )}
       </section>
+      <PublicFooter compact />
     </main>
   );
 }

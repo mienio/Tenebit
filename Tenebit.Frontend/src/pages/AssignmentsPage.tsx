@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Download, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
 import { api, type EvidencePhoto } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -171,22 +171,6 @@ export function AssignmentsPage() {
     }
   }
 
-  async function downloadProtocol(item: Assignment) {
-    try {
-      const blob = await api.downloadAssignmentProtocol(item.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${item.protocolNumber}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('assignments.downloadProtocolFailed') });
-    }
-  }
-
   if (isLoading && !assignments.data) return <LoadingState title={t('assignments.loadingTitle')} description={t('assignments.loadingDesc')} />;
   if (error) return <ErrorState message={error} onRetry={reloadAll} />;
 
@@ -258,7 +242,7 @@ export function AssignmentsPage() {
         <form className="formGrid" onSubmit={returnAssignment} key={selectedAssignment?.id ?? 'return'}>
           {selectedAssignment?.assets.map(asset => (
             <div key={asset.assetId} style={{ gridColumn: '1 / -1', display: 'grid', gap: '8px' }}>
-              <Field label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '—' })}>
+              <Field label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '-' })}>
                 <TextArea name={`returnCondition__${asset.assetId}`} placeholder={t('assignments.returnConditionPlaceholder')} required rows={2} />
               </Field>
               <EvidencePhotoPicker files={returnEvidence[asset.assetId] ?? []} onChange={files => setReturnEvidence(current => ({ ...current, [asset.assetId]: files }))} />
@@ -269,20 +253,20 @@ export function AssignmentsPage() {
         </form>
       </Modal>
 
-      <Modal open={drawerMode === 'details'} title={t('assignments.detailsTitle')} onClose={() => setDrawerMode(null)} width="wide">{selectedAssignment ? <AssignmentDetails assignment={selectedAssignment} onDownload={downloadProtocol} onViewPerson={setViewPersonId} /> : null}</Modal>
+      <Modal open={drawerMode === 'details'} title={t('assignments.detailsTitle')} onClose={() => setDrawerMode(null)} width="wide">{selectedAssignment ? <AssignmentDetails assignment={selectedAssignment} onViewPerson={setViewPersonId} /> : null}</Modal>
       {viewPersonId && <PersonPreviewModal personId={viewPersonId} onClose={() => setViewPersonId(null)} />}
     </div>
   );
 }
 
-function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignment: Assignment; onDownload: (assignment: Assignment) => void; onViewPerson: (personId: string) => void }) {
+function AssignmentDetails({ assignment, onViewPerson }: { assignment: Assignment; onViewPerson: (personId: string) => void }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkCopyFailed, setLinkCopyFailed] = useState(false);
   async function copyLink() {
     try {
-      // Link niesie jednorazowy token (nie jest odtwarzalny z danych wydania) — trzeba go
+      // Link niesie jednorazowy token (nie jest odtwarzalny z danych wydania) - trzeba go
       // wygenerować na żądanie; poprzedni link przestaje działać (patrz AssignmentService.RegenerateAcceptanceLinkAsync).
       const { link } = await api.regenerateAssignmentAcceptanceLink(assignment.id);
       await navigator.clipboard.writeText(link);
@@ -303,7 +287,6 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
         {assignment.status === 'AwaitingAcceptance' || assignment.status === 'Overdue' ? (
           <Button type="button" variant="ghost" onClick={copyLink} icon={<Link2 size={16} />}>{linkCopied ? t('assignments.linkCopied') : linkCopyFailed ? t('assignments.linkCopyFailed') : t('assignments.copyAcceptanceLink')}</Button>
         ) : <div />}
-        <Button variant="secondary" onClick={() => onDownload(assignment)} icon={<Download size={16} />}>{t('assignments.downloadProtocol')}</Button>
       </div>
       <DetailGrid>
         <DetailItem label={t('assignments.colProtocol')} value={assignment.protocolNumber} />
@@ -313,7 +296,7 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
         <DetailItem label={t('assignments.dueLabel')} value={formatDate(assignment.dueDate)} />
         <DetailItem label={t('assignments.notesFieldLabel')} value={assignment.notes ?? t('assignments.notesFallback')} />
       </DetailGrid>
-      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '—'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
+      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '-'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
       <AssignmentEvidence assignment={assignment} />
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><div className="rowActions"><StatusBadge status={item.status} /><button type="button" className="iconButton" aria-label={t('assignments.openProcedureAria')} onClick={() => navigate(`/procedures?open=${item.procedureId}`)}><ExternalLink size={16} /></button></div></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
       <Card className="card--flat">
@@ -321,8 +304,8 @@ function AssignmentDetails({ assignment, onDownload, onViewPerson }: { assignmen
         {assignment.acceptedAt ? (
           <DetailGrid>
             <DetailItem label={t('assignments.issuedLabel')} value={formatDateTime(assignment.acceptedAt)} />
-            <DetailItem label={t('assignments.proofIp')} value={assignment.acceptedIp ?? '—'} />
-            <DetailItem label={t('assignments.proofHash')} value={<code style={{ wordBreak: 'break-all', fontSize: '0.75em' }}>{assignment.acceptanceHash ?? '—'}</code>} />
+            <DetailItem label={t('assignments.proofIp')} value={assignment.acceptedIp ?? '-'} />
+            <DetailItem label={t('assignments.proofHash')} value={<code style={{ wordBreak: 'break-all', fontSize: '0.75em' }}>{assignment.acceptanceHash ?? '-'}</code>} />
             <DetailItem label={t('assignments.proofVerified')} value={assignment.isIntegrityVerified ? '✓' : t('assignments.proofTampered')} />
           </DetailGrid>
         ) : (
@@ -370,7 +353,7 @@ function AssignmentEvidence({ assignment }: { assignment: Assignment }) {
             if (!items.length) return null;
             return (
               <div key={asset.assetId}>
-                <strong>{asset.assetName ?? asset.assetTag ?? '—'}</strong>
+                <strong>{asset.assetName ?? asset.assetTag ?? '-'}</strong>
                 {phases.map(phase => {
                   const ids = items.filter(item => item.phase === phase.key).map(item => item.id);
                   if (!ids.length) return null;

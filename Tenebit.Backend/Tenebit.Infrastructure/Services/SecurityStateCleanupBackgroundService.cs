@@ -36,6 +36,7 @@ public sealed class SecurityStateCleanupBackgroundService : BackgroundService
                     var cutoff = clock.UtcNow.AddHours(-1);
                     await db.OAuthTransactions.Where(x => x.ExpiresAt < cutoff).ExecuteDeleteAsync(ct);
                     await db.TwoFactorChallenges.Where(x => x.ExpiresAt < cutoff).ExecuteDeleteAsync(ct);
+                    await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tenebit.auth_rate_limit_buckets WHERE \"ExpiresAt\" < {clock.UtcNow}", ct);
                 }, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

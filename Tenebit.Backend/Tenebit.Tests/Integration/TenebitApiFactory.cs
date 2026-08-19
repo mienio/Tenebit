@@ -12,7 +12,7 @@ using Tenebit.Infrastructure.Data;
 namespace Tenebit.Tests.Integration;
 
 /// <summary>Uruchamia prawdziwy Tenebit.Api (WebApplicationFactory) na realnym PostgreSQL zamiast
-/// InMemoryRepositories — audyt AUD-040: fake repository nie wykryje złej konfiguracji auth/authz middleware,
+/// InMemoryRepositories - audyt AUD-040: fake repository nie wykryje złej konfiguracji auth/authz middleware,
 /// brakującego query filtra ani wadliwego FK. Baza docelowa: zmienna środowiskowa TENEBIT_TEST_DB_CONNECTION,
 /// domyślnie lokalny dev Postgres (ten sam serwer co appsettings.json, osobna baza "tenebit_test").</summary>
 public sealed class TenebitApiFactory : WebApplicationFactory<Program>
@@ -21,10 +21,10 @@ public sealed class TenebitApiFactory : WebApplicationFactory<Program>
         ?? "Host=localhost;Port=5432;Database=tenebit_test;Username=postgres;Password=postgres";
 
     // Program.cs czyta ConnectionStrings:TenebitDb i rejestruje UseNpgsql(...) SYNCHRONICZNIE w trakcie
-    // wykonywania top-level statements (przed app.Build()) — WebApplicationFactory.ConfigureAppConfiguration
+    // wykonywania top-level statements (przed app.Build()) - WebApplicationFactory.ConfigureAppConfiguration
     // dokłada źródło konfiguracji za późno, żeby to przechwycić. Zmienne środowiskowe są czytane od razu
     // przez WebApplication.CreateBuilder(args), więc trzeba je ustawić zanim host zostanie w ogóle zbudowany
-    // (stąd konstruktor statyczny — działa raz, przed pierwszym użyciem fabryki w tym procesie testowym).
+    // (stąd konstruktor statyczny - działa raz, przed pierwszym użyciem fabryki w tym procesie testowym).
     static TenebitApiFactory()
     {
         Environment.SetEnvironmentVariable("ConnectionStrings__TenebitDb", ConnectionString);
@@ -32,6 +32,7 @@ public sealed class TenebitApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Seed__Enabled", "false");
         Environment.SetEnvironmentVariable("Auth__SigningKey", "integration-test-signing-key-not-for-prod-32c");
         Environment.SetEnvironmentVariable("Alerts__Enabled", "false");
+        Environment.SetEnvironmentVariable("Email__OutboxDispatcherEnabled", "false");
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
     }
 
@@ -41,7 +42,7 @@ public sealed class TenebitApiFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>Zakłada organizację + użytkownika bezpośrednio przez DbContext (bez przechodzenia przez
-    /// rejestrację HTTP) i wystawia dla niego prawdziwy JWT tym samym TokenIssuerem co produkcyjny login —
+    /// rejestrację HTTP) i wystawia dla niego prawdziwy JWT tym samym TokenIssuerem co produkcyjny login -
     /// test więc realnie sprawdza middleware auth/authz, nie tylko warstwę Application.</summary>
     public async Task<(Organization Organization, OrganizationUser User, string Token)> SeedTenantAsync(string namePrefix, params string[] roles)
     {

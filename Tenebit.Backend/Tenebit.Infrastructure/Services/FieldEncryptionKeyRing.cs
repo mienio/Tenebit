@@ -39,12 +39,15 @@ public sealed class FieldEncryptionKeyRing
         return new FieldEncryptionKeyRing(active,keys,legacy,section.GetValue("AllowLegacyPlaintext",true));
     }
 
-    public static IReadOnlyList<string> ValidateProduction(IConfiguration configuration,string? signingKey)
+    public static IReadOnlyList<string> ValidateProduction(IConfiguration configuration,string signingKey) =>
+        ValidateProduction(configuration, [signingKey]);
+
+    public static IReadOnlyList<string> ValidateProduction(IConfiguration configuration,IReadOnlyCollection<string> signingKeys)
     {
         var errors=new List<string>(); FieldEncryptionKeyRing ring;
         try{ring=Load(configuration);}catch(InvalidOperationException ex){errors.Add(ex.Message);return errors;}
         if(ring.ActiveKeyId==DevelopmentKeyId || ring.Keys.Values.Any(x=>Encoding.UTF8.GetString(x)==DevelopmentKey)) errors.Add("Field encryption uses the repository development key.");
-        if(!string.IsNullOrWhiteSpace(signingKey)&&ring.Keys.Values.Any(x=>Encoding.UTF8.GetString(x)==signingKey)) errors.Add("Field encryption key must differ from Auth:SigningKey.");
+        if(signingKeys.Any(signingKey=>!string.IsNullOrWhiteSpace(signingKey)&&ring.Keys.Values.Any(x=>Encoding.UTF8.GetString(x)==signingKey))) errors.Add("Field encryption key must differ from every JWT signing key.");
         if(string.IsNullOrWhiteSpace(ring.LegacyV1KeyId)) errors.Add("Auth:FieldEncryption:LegacyV1KeyId is required until all v1 ciphertext has been re-encrypted.");
         if(ring.AllowLegacyPlaintext) errors.Add("Auth:FieldEncryption:AllowLegacyPlaintext must be false in Production.");
         return errors;

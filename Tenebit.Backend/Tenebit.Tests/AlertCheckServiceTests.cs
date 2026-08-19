@@ -478,7 +478,7 @@ public class AlertCheckServiceTests
         // Digest mode: no immediate SentAlert, one aggregated email to the admin.
         Assert.Empty(ctx.SentAlerts.Alerts);
         var sent = Assert.Single(ctx.EmailSender.Sent);
-        Assert.StartsWith("Tenebit —", sent.Subject);
+        Assert.StartsWith("Tenebit -", sent.Subject);
         Assert.NotNull(digest.LastGeneratedAt);
     }
 
@@ -518,7 +518,7 @@ public class AlertCheckServiceTests
         digest.Update(AlertDigestFrequency.Daily, null, new TimeOnly(8, 0), null, null, AlertDigestBusinessDays.Weekdays, null, false, null);
         ctx.DigestSettings.Add(digest);
 
-        // No matching assets — the digest must not be sent.
+        // No matching assets - the digest must not be sent.
         await ctx.Service.RunAsync(3, CancellationToken.None);
 
         Assert.Empty(ctx.EmailSender.Sent);

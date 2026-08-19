@@ -1,4 +1,4 @@
-﻿using Tenebit.Application.Assets;
+using Tenebit.Application.Assets;
 using Tenebit.Domain.Assets;
 using Tenebit.Tests.Fakes;
 

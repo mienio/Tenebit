@@ -16,8 +16,6 @@ using Tenebit.Application.Common;
 using Tenebit.Infrastructure;
 using Tenebit.Infrastructure.Services;
 
-QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.ValidateProductionSecurityConfiguration(builder.Environment);
@@ -55,6 +53,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -77,7 +76,7 @@ builder.Services.AddScoped<OAuthStateStore>();
 builder.Services.AddScoped<TwoFactorChallengeStore>();
 builder.Services.AddScoped<ExternalAuthService>();
 
-// Defense-in-depth ceiling na wielkość multipart body (audyt P0.4) — Kestrel ma własny domyślny limit
+// Defense-in-depth ceiling na wielkość multipart body (audyt P0.4) - Kestrel ma własny domyślny limit
 // (30 MB), ale w hostingu bez tego domyślnego limitu (np. IIS in-process) formularz byłby buforowany
 // bez ograniczeń. Per-endpoint limity są ustawiane dodatkowo w handlerach uploadów.
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
@@ -94,13 +93,13 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
     options.MultipartHeadersLengthLimit = 8 * 1024;
 });
 
-// Tylko jeden zaufany skok proxy (kontener nginx w tym samym compose) łączy się bezpośrednio z Kestrel —
+// Tylko jeden zaufany skok proxy (kontener nginx w tym samym compose) łączy się bezpośrednio z Kestrel -
 // backend nie jest publicznie eksponowany. KnownNetworks/KnownProxies celowo wyczyszczone (audyt P1.3):
 // bez tego ASP.NET domyślnie ufa wyłącznie loopbackowi i middleware po cichu ignorowałby X-Forwarded-For,
 // przez co RemoteIpAddress dalej pokazywałby adres kontenera nginx zamiast realnego klienta.
 builder.Services.AddTrustedForwardedHeaders(builder.Configuration, builder.Environment);
 
-// Partycjonowanie per-IP (audyt P1.8) — poprzednio "auth"/"public" był jednym globalnym licznikiem
+// Partycjonowanie per-IP (audyt P1.8) - poprzednio "auth"/"public" był jednym globalnym licznikiem
 // współdzielonym przez wszystkich klientów, więc jeden agresywny użytkownik/atakujący wyczerpywał limit
 // logowania dla całej instancji. RemoteIpAddress jest tu wiarygodny dzięki UseForwardedHeaders powyżej.
 static string PartitionKey(HttpContext context) => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -108,21 +107,22 @@ static string PartitionKey(HttpContext context) => context.Connection.RemoteIpAd
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    // Configurable so E2E test runs (many page loads => many /auth/refresh calls in a short
-    // window) don't need to weaken the production default of 10/min to make the suite runnable.
-    var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
-    options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => new FixedWindowRateLimiterOptions
+
+    static FixedWindowRateLimiterOptions Window(int permits) => new()
     {
-        PermitLimit = authPermitLimit,
+        PermitLimit = permits,
         Window = TimeSpan.FromMinutes(1),
         QueueLimit = 0
-    }));
-    options.AddPolicy("public", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => new FixedWindowRateLimiterOptions
-    {
-        PermitLimit = 60,
-        Window = TimeSpan.FromMinutes(1),
-        QueueLimit = 0
-    }));
+    };
+
+    // These are NAT-friendly safety ceilings. Credential-specific brute-force budgets are enforced
+    // separately in PostgreSQL, shared by every replica (IAuthenticationAbuseLimiter).
+    options.AddPolicy("auth-login", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(200)));
+    options.AddPolicy("auth-register", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(60)));
+    options.AddPolicy("auth-refresh", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(1000)));
+    options.AddPolicy("auth-recovery", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(120)));
+    options.AddPolicy("auth-oauth", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(180)));
+    options.AddPolicy("public", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(60)));
 });
 
 builder.Services
@@ -137,7 +137,7 @@ builder.Services
             ValidateAudience = true,
             ValidAudience = JwtIssuerOptions.GetAudience(builder.Configuration),
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = JwtSigningKey.Get(builder.Configuration),
+            IssuerSigningKeyResolver = (_, _, keyId, _) => JwtSigningKey.GetValidationKeys(builder.Configuration, keyId),
             NameClaimType = "name",
             RoleClaimType = "roles"
         };
@@ -157,11 +157,24 @@ builder.Services
                 }
 
                 // Refresh/device tokens are revoked on security-sensitive changes, but an already issued
-                // access JWT would otherwise keep its old roles until expiry. Comparing a per-user stamp
-                // makes role, activity, password and 2FA changes effective on the very next request.
-                var users = context.HttpContext.RequestServices.GetRequiredService<IOrganizationUserRepository>();
-                var user = await users.GetByIdAsync(userId, context.HttpContext.RequestAborted);
-                if (user is null || !user.IsActive || user.OrganizationId != organizationId || user.SecurityStamp != tokenStamp)
+                // access JWT would otherwise keep its old roles until expiry. The short-lived cache removes
+                // the per-request JOIN; application-managed security changes invalidate the cached entry immediately.
+                var cache = context.HttpContext.RequestServices.GetRequiredService<IUserSecurityStateCache>();
+                if (!cache.TryGet(userId, out var securityState))
+                {
+                    var users = context.HttpContext.RequestServices.GetRequiredService<IOrganizationUserRepository>();
+                    var loadedState = await users.GetSecurityStateAsync(userId, context.HttpContext.RequestAborted);
+                    if (loadedState is null)
+                    {
+                        context.Fail("Sesja została unieważniona.");
+                        return;
+                    }
+
+                    securityState = loadedState;
+                    cache.Set(userId, securityState, TimeSpan.FromSeconds(30));
+                }
+
+                if (!securityState.IsActive || !securityState.IsEmailVerified || securityState.OrganizationId != organizationId || securityState.SecurityStamp != tokenStamp)
                 {
                     context.Fail("Sesja została unieważniona.");
                 }
@@ -176,7 +189,17 @@ Tenebit.Api.Http.RequestLanguageAccessor.Configure(app.Services.GetRequiredServi
 
 app.UseForwardedHeaders();
 app.UseCorrelationId();
-app.UseSerilogRequestLogging();
+// Public capability endpoints intentionally do not create a request-log event. Besides the new cookie
+// architecture, this prevents legacy /api/public/.../<secret> requests from ever persisting the bearer
+// credential as RequestPath in structured sinks during the migration window.
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api/public"),
+    branch => branch.UseSerilogRequestLogging(options =>
+    {
+        options.MessageTemplate = "HTTP {RequestMethod} endpoint {EndpointName} responded {StatusCode} in {Elapsed:0.0000} ms";
+        options.EnrichDiagnosticContext = (diagnostic, context) =>
+            diagnostic.Set("EndpointName", context.GetEndpoint()?.DisplayName ?? "unmatched");
+    }));
 
 app.UseExceptionHandler(errorApp =>
 {
@@ -186,7 +209,7 @@ app.UseExceptionHandler(errorApp =>
         var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
         context.Response.ContentType = "application/json";
 
-        // Współbieżna edycja tego samego rekordu jest przewidywalnym przypadkiem biznesowym, nie awarią —
+        // Współbieżna edycja tego samego rekordu jest przewidywalnym przypadkiem biznesowym, nie awarią -
         // klient dostaje 409 z jasnym kodem zamiast nieodróżnialnego od realnej awarii 500 (audyt AUD-028).
         if (feature?.Error is Tenebit.Domain.Common.ConcurrencyException concurrencyEx)
         {
@@ -196,7 +219,7 @@ app.UseExceptionHandler(errorApp =>
         }
 
         // Naruszenie unikalnego indeksu (np. wyścig dwóch requestów tworzących ten sam rekord) jest
-        // przewidywalnym konfliktem biznesowym, nie awarią — wcześniej trafiało w gałąź 500 poniżej,
+        // przewidywalnym konfliktem biznesowym, nie awarią - wcześniej trafiało w gałąź 500 poniżej,
         // nie ujawniając klientowi że to konflikt do powtórzenia z innymi danymi (audyt P1.10).
         if (feature?.Error is Microsoft.EntityFrameworkCore.DbUpdateException dbUpdateEx &&
             dbUpdateEx.InnerException is Npgsql.PostgresException { SqlState: "23505" })
@@ -206,7 +229,7 @@ app.UseExceptionHandler(errorApp =>
             return;
         }
 
-        // Body/multipart przekraczające limit ustawiony per-endpoint (audyt P0.4) — Kestrel przerywa odczyt
+        // Body/multipart przekraczające limit ustawiony per-endpoint (audyt P0.4) - Kestrel przerywa odczyt
         // strumienia zanim cały upload trafi do pamięci, zamiast zwracać nieodróżnialny od awarii 500.
         if (feature?.Error is Microsoft.AspNetCore.Http.BadHttpRequestException badRequestEx)
         {
@@ -224,7 +247,7 @@ app.UseExceptionHandler(errorApp =>
 
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 
-// OpenAPI schema ujawnia pełną mapę endpointów i kontraktów DTO — w Production to rekonesans za darmo
+// OpenAPI schema ujawnia pełną mapę endpointów i kontraktów DTO - w Production to rekonesans za darmo
 // dla atakującego (audyt P1.12), więc trasa zostaje wyłącznie w środowiskach nie-produkcyjnych.
 if (!app.Environment.IsProduction())
 {

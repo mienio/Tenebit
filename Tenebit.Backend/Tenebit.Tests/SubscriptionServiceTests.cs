@@ -168,7 +168,7 @@ public class SubscriptionServiceTests
         Assert.Equal(SubscriptionPlan.Pro.Key, subscriptions.Subscriptions.Single().PlanKey);
         Assert.Single(processedEvents.Events);
 
-        // Stripe retries delivery on timeout — replaying the exact same EventId must not reapply/re-log the change.
+        // Stripe retries delivery on timeout - replaying the exact same EventId must not reapply/re-log the change.
         var activityCountBefore = subscriptions.Subscriptions.Single().UpdatedAt;
         var second = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
 
@@ -223,7 +223,7 @@ public class SubscriptionServiceTests
         Assert.True(result.IsSuccess);
         var subscription = subscriptions.Subscriptions.Single();
         Assert.Equal(SubscriptionPlan.Free.Key, subscription.PlanKey);
-        Assert.False(subscription.HasActiveStripeSubscription);
+        Assert.True(subscription.HasLiveStripeSubscription);
     }
 
     [Fact]
@@ -277,4 +277,55 @@ public class SubscriptionServiceTests
         Assert.True(result.IsSuccess);
         Assert.True(result.Value);
     }
+    [Theory]
+    [InlineData(SubscriptionStatus.PastDue)]
+    [InlineData(SubscriptionStatus.Unknown)]
+    public async Task CreateCheckoutSessionAsync_BlocksSecondSubscription_WhenProviderSubscriptionStillExists(SubscriptionStatus status)
+    {
+        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Pro.Key);
+        existing.SyncFromStripe(SubscriptionPlan.Pro.Key, status, now, now.AddMonths(1), "sub_live", "cus_live", now);
+        subscriptions.Add(existing);
+        paymentGateway.NextCanonicalSubscription = new PaymentSubscriptionState(
+            "cus_live", "sub_live", SubscriptionPlan.Free.Key, status, now, now.AddMonths(1), user.OrganizationId);
+
+        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSessionAsync_AllowsNewCheckoutAfterCanonicalCancellation()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
+        existing.SyncFromStripe(SubscriptionPlan.Free.Key, SubscriptionStatus.Cancelled, now, now, "sub_old", "cus_existing", now);
+        subscriptions.Add(existing);
+        paymentGateway.NextCanonicalSubscription = new PaymentSubscriptionState(
+            "cus_existing", "sub_old", SubscriptionPlan.Free.Key, SubscriptionStatus.Cancelled, now, now, user.OrganizationId);
+
+        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, paymentGateway.CheckoutCreateCalls);
+    }
+
+    [Fact]
+    public async Task RepeatedCheckoutAttempt_UsesStableStripeIdempotencyKey()
+    {
+        var (service, _, _, _, paymentGateway, _) = CreateService();
+
+        var first = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var firstKey = paymentGateway.LastCheckoutIdempotencyKey;
+        var second = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.False(string.IsNullOrWhiteSpace(firstKey));
+        Assert.Equal(firstKey, paymentGateway.LastCheckoutIdempotencyKey);
+    }
+
 }

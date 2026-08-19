@@ -91,6 +91,9 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public Task<IReadOnlyList<Asset>> ListByAssignedPersonAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId && x.AssignedPersonId == personId).ToList());
 
+    public Task<IReadOnlyList<Asset>> ListWarrantyExpiringAsync(Guid organizationId, DateOnly from, DateOnly to, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Asset>>(Assets.Where(x => x.OrganizationId == organizationId && x.WarrantyUntil.HasValue && x.WarrantyUntil.Value >= from && x.WarrantyUntil.Value <= to).ToList());
+
     public Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
@@ -229,12 +232,37 @@ public sealed class InMemoryProcedureRepository : IProcedureRepository
     public Task<Procedure?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Procedures.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
+    public Task<IReadOnlyList<ProcedureDocumentMetadata>> ListDocumentMetadataByProcedureIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> procedureIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ProcedureDocumentMetadata>>(Procedures
+            .Where(x => x.OrganizationId == organizationId && procedureIds.Contains(x.Id))
+            .SelectMany(x => x.Documents)
+            .OrderByDescending(x => x.UploadedAt)
+            .Select(x => new ProcedureDocumentMetadata(x.Id, x.ProcedureId, x.FileName, x.ContentType, x.SizeBytes, x.UploadedAt, x.UploadedBy))
+            .ToList());
+
+    public Task<ProcedureDocumentMetadata?> GetDocumentMetadataAsync(Guid organizationId, Guid procedureId, Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = Procedures.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == procedureId)?.Documents.FirstOrDefault(x => x.Id == documentId);
+        return Task.FromResult(document is null ? null : new ProcedureDocumentMetadata(document.Id, document.ProcedureId, document.FileName, document.ContentType, document.SizeBytes, document.UploadedAt, document.UploadedBy));
+    }
+
+    public Task<bool> HasDocumentsAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken) =>
+        Task.FromResult(Procedures.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == procedureId)?.Documents.Count > 0);
+
     public Task<ProcedureDocument?> GetDocumentAsync(Guid organizationId, Guid procedureId, Guid documentId, CancellationToken cancellationToken) =>
-        Task.FromResult(Procedures.FirstOrDefault(x => x.Id == procedureId)?.Documents.FirstOrDefault(x => x.Id == documentId));
+        Task.FromResult(Procedures.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == procedureId)?.Documents.FirstOrDefault(x => x.Id == documentId));
+
+    public Task<bool> DeleteDocumentAsync(Guid organizationId, Guid procedureId, Guid documentId, CancellationToken cancellationToken)
+    {
+        var procedure = Procedures.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == procedureId);
+        var document = procedure?.Documents.FirstOrDefault(x => x.Id == documentId);
+        if (procedure is null || document is null) return Task.FromResult(false);
+        procedure.Documents.Remove(document);
+        return Task.FromResult(true);
+    }
 
     public void Add(Procedure procedure) => Procedures.Add(procedure);
     public void AddDocument(ProcedureDocument document) { }
-    public void RemoveDocument(ProcedureDocument document) { }
 }
 
 public sealed class InMemoryJobProfileRepository : IJobProfileRepository
@@ -467,11 +495,22 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public PaymentSubscriptionState? NextCanonicalSubscription { get; set; }
     public bool ThrowOnParseWebhookEvent { get; set; }
 
-    public Task<string> CreateCustomerAsync(string email, Guid organizationId, CancellationToken cancellationToken) =>
-        Task.FromResult(NextCustomerId);
+    public string? LastCustomerIdempotencyKey { get; private set; }
+    public string? LastCheckoutIdempotencyKey { get; private set; }
+    public int CheckoutCreateCalls { get; private set; }
 
-    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, CancellationToken cancellationToken) =>
-        Task.FromResult(NextCheckoutUrl);
+    public Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        LastCustomerIdempotencyKey = idempotencyKey;
+        return Task.FromResult(NextCustomerId);
+    }
+
+    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        LastCheckoutIdempotencyKey = idempotencyKey;
+        CheckoutCreateCalls++;
+        return Task.FromResult(NextCheckoutUrl);
+    }
 
     public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken) =>
         Task.FromResult(NextPortalUrl);
@@ -491,19 +530,6 @@ public sealed class FakePaymentGateway : IPaymentGateway
             NextWebhookEvent.CurrentPeriodStart,
             NextWebhookEvent.CurrentPeriodEnd,
             NextWebhookEvent.OrganizationId)));
-}
-
-public sealed class FakePdfProtocolGenerator : IPdfProtocolGenerator
-{
-    public byte[] GenerateHandoverProtocol(ProtocolPdfModel model) => [1, 2, 3];
-    public byte[] GenerateOffboardingProtocol(OffboardingProtocolPdfModel model) => [1, 2, 3];
-    public AssetAuditReportPdfModel? LastAssetAuditReportModel { get; private set; }
-
-    public byte[] GenerateAssetAuditReport(AssetAuditReportPdfModel model)
-    {
-        LastAssetAuditReportModel = model;
-        return [1, 2, 3];
-    }
 }
 
 public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository
@@ -533,6 +559,20 @@ public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository
         return Task.FromResult<(IReadOnlyList<ServiceTicket>, int)>((items, total));
     }
 
+    public Task<(IReadOnlyList<ServiceTicket> Items, int Total)> ListPagedScopedAsync(Guid organizationId, ServiceTicketStatus? status, int page, int pageSize, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken)
+    {
+        // Test fake has no asset navigation. Scope tests populate AllowedScopedAssetIds explicitly.
+        var rows = Tickets
+            .Where(x => x.OrganizationId == organizationId && AllowedScopedAssetIds.Contains(x.AssetId) && (!status.HasValue || x.Status == status.Value))
+            .OrderByDescending(x => x.OpenedAt)
+            .ToList();
+        var total = rows.Count;
+        var items = rows.Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 100)).Take(Math.Clamp(pageSize, 1, 100)).ToList();
+        return Task.FromResult<(IReadOnlyList<ServiceTicket>, int)>((items, total));
+    }
+
+    public HashSet<Guid> AllowedScopedAssetIds { get; } = [];
+
     public void Add(ServiceTicket ticket) => Tickets.Add(ticket);
 }
 
@@ -540,17 +580,34 @@ public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository
 {
     public List<AssetEvidence> Items { get; } = [];
 
-    public Task<IReadOnlyList<AssetEvidence>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId && x.AssetId == assetId).ToList());
+    public Task<IReadOnlyList<AssetEvidence>> ListContentByOffboardingItemAsync(Guid organizationId, Guid offboardingItemId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId && x.OffboardingItemId == offboardingItemId).ToList());
 
-    public Task<IReadOnlyList<AssetEvidence>> ListByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId).ToList());
+    public Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidenceMetadata>>(Items.Where(x => x.OrganizationId == organizationId && x.AssetId == assetId).Select(ToMetadata).ToList());
 
-    public Task<IReadOnlyList<AssetEvidence>> ListByAssignmentIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> assignmentIds, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<AssetEvidence>>(Evidence.Where(x => x.OrganizationId == organizationId && x.AssignmentId.HasValue && assignmentIds.Contains(x.AssignmentId.Value)).ToList());
+    public Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssignmentIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> assignmentIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidenceMetadata>>(Items.Where(x => x.OrganizationId == organizationId && x.AssignmentId.HasValue && assignmentIds.Contains(x.AssignmentId.Value)).Select(ToMetadata).ToList());
 
-    public Task<IReadOnlyList<AssetEvidence>> ListByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<AssetEvidence>>(Items.Where(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId).ToList());
+    public Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidenceMetadata>>(Items.Where(x => x.OrganizationId == organizationId && x.AssignmentId == assignmentId).Select(ToMetadata).ToList());
+
+    public Task<IReadOnlyList<AssetEvidenceRetentionCandidate>> ListRetentionCandidatesAsync(Guid organizationId, DateTimeOffset cutoff, int batchSize, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AssetEvidenceRetentionCandidate>>(Items
+            .Where(x => x.OrganizationId == organizationId && !x.LegalHold && x.RedactedAt is null && x.UploadedAt <= cutoff)
+            .OrderBy(x => x.UploadedAt)
+            .Take(Math.Clamp(batchSize, 1, 2_000))
+            .Select(x => new AssetEvidenceRetentionCandidate(x.Id, x.FileName)).ToList());
+
+    public Task<int> RedactAsync(Guid organizationId, IReadOnlyCollection<Guid> evidenceIds, DateTimeOffset redactedAt, CancellationToken cancellationToken)
+    {
+        var count = 0;
+        foreach (var item in Items.Where(x => x.OrganizationId == organizationId && evidenceIds.Contains(x.Id) && !x.LegalHold && x.RedactedAt is null))
+        {
+            if (item.Redact(redactedAt)) count++;
+        }
+        return Task.FromResult(count);
+    }
 
     public Task<AssetEvidence?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
@@ -560,6 +617,9 @@ public sealed class InMemoryAssetEvidenceRepository : IAssetEvidenceRepository
 
     public void Add(AssetEvidence evidence) => Items.Add(evidence);
     public void Remove(AssetEvidence evidence) => Items.Remove(evidence);
+
+    private static AssetEvidenceMetadata ToMetadata(AssetEvidence x) =>
+        new(x.Id, x.AssetId, x.AssignmentId, x.OffboardingItemId, x.AssetAuditItemId, x.Phase, x.FileName, x.ContentType, x.SizeBytes, x.Sha256, x.Caption, x.UploadedAt, x.UploadedBy, x.UploadedVia, x.LockedAt, x.LegalHold, x.RedactedAt);
 }
 
 public sealed class InMemoryAssetStatusSettingRepository : IAssetStatusSettingRepository

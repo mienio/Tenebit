@@ -41,7 +41,7 @@ public sealed class AssetFieldDefinition
         ? []
         : Options.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    // Aktualizacja w miejscu (bez zmiany Id) — pozwala AssetCategory.ReplaceFieldDefinitions robić
+    // Aktualizacja w miejscu (bez zmiany Id) - pozwala AssetCategory.ReplaceFieldDefinitions robić
     // diff zamiast Clear()+Add(), żeby niezmienione pola nie generowały DELETE+INSERT przy każdym zapisie.
     internal void UpdateDetails(string label, AssetFieldType fieldType, string? options, bool required, int sortOrder)
     {

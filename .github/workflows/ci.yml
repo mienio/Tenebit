@@ -17,6 +17,10 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       TENEBIT_TEST_DB_CONNECTION: Host=localhost;Port=5432;Database=tenebit_test;Username=postgres;Password=postgres
+      Auth__FieldEncryption__ActiveKeyId: ci
+      Auth__FieldEncryption__LegacyV1KeyId: ci
+      Auth__FieldEncryption__AllowLegacyPlaintext: 'false'
+      Auth__FieldEncryption__Keys__ci: ci-only-field-encryption-key-at-least-32-characters
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -25,6 +29,8 @@ jobs:
       - name: Install EF CLI
         run: dotnet tool install --global dotnet-ef --version 10.0.2
       - run: dotnet build Tenebit.Backend/Tenebit.sln -c Release --no-restore /warnaserror
+      - name: AUD9 static security contracts
+        run: ./scripts/verify-audit9-security-contracts.sh
       - name: Unit tests
         run: dotnet test Tenebit.Backend/Tenebit.Tests/Tenebit.Tests.csproj -c Release --no-build --filter 'FullyQualifiedName!~Tenebit.Tests.Integration' --logger trx
       - name: PostgreSQL security/integration suite
@@ -39,6 +45,17 @@ jobs:
         run: dotnet ef database update --project Tenebit.Backend/Tenebit.Infrastructure --startup-project Tenebit.Backend/Tenebit.Api --no-build
         env:
           ConnectionStrings__TenebitDb: Host=localhost;Port=5432;Database=tenebit_migration;Username=postgres;Password=postgres
+      - name: Backup restore + encrypted-data key-ring drill
+        env:
+          PGPASSWORD: postgres
+          ASPNETCORE_ENVIRONMENT: Development
+          TENEBIT_SOURCE_DB_URL: postgresql://postgres:postgres@localhost:5432/tenebit_test
+          TENEBIT_RESTORE_DB_URL: postgresql://postgres:postgres@localhost:5432/tenebit_restore
+          TENEBIT_RESTORE_DB_CONNECTION: Host=localhost;Port=5432;Database=tenebit_restore;Username=postgres;Password=postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE tenebit_restore;'
+          dotnet publish Tenebit.Backend/Tenebit.Api/Tenebit.Api.csproj -c Release --no-restore -o "$RUNNER_TEMP/tenebit-api"
+          TENEBIT_API_DLL="$RUNNER_TEMP/tenebit-api/Tenebit.Api.dll" ./scripts/backup-restore-drill.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: backend-test-results, path: '**/TestResults/*.trx', if-no-files-found: ignore }
@@ -91,19 +108,29 @@ jobs:
 
   container-hardening:
     runs-on: ubuntu-latest
+    env:
+      TENEBIT_DB_PASSWORD: ci-only-database-password
+      TENEBIT_SIGNING_KEY: ci-only-signing-key-at-least-32-characters-long
+      TENEBIT_FIELD_ENCRYPTION_KEY: ci-only-field-encryption-key-at-least-32-characters
+      TENEBIT_PUBLIC_URL: https://tenebit.example.test
+      TENEBIT_ALLOWED_HOSTS: tenebit.example.test
+      TENEBIT_SMTP_HOST: smtp.example.test
+      TENEBIT_SMTP_FROM: no-reply@tenebit.example.test
+      TENEBIT_IMAGE_TAG: ci
+      TENEBIT_HTTP_PORT: 18081
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t tenebit-backend-ci Tenebit.Backend
-      - run: docker build -t tenebit-frontend-ci Tenebit.Frontend
+      - run: docker build -t tenebit-backend:ci Tenebit.Backend
+      - run: docker build -t tenebit-frontend:ci Tenebit.Frontend
       - name: Images declare non-root users
         run: |
-          test "$(docker image inspect tenebit-backend-ci --format '{{.Config.User}}')" != ""
-          test "$(docker image inspect tenebit-backend-ci --format '{{.Config.User}}')" != "root"
-          test "$(docker image inspect tenebit-frontend-ci --format '{{.Config.User}}')" != ""
-          test "$(docker image inspect tenebit-frontend-ci --format '{{.Config.User}}')" != "root"
+          test "$(docker image inspect tenebit-backend:ci --format '{{.Config.User}}')" != ""
+          test "$(docker image inspect tenebit-backend:ci --format '{{.Config.User}}')" != "root"
+          test "$(docker image inspect tenebit-frontend:ci --format '{{.Config.User}}')" != ""
+          test "$(docker image inspect tenebit-frontend:ci --format '{{.Config.User}}')" != "root"
       - name: Frontend works read-only and emits security headers
         run: |
-          id=$(docker run -d --read-only --tmpfs /tmp:size=32m --tmpfs /var/cache/nginx:size=32m -p 18080:8080 tenebit-frontend-ci)
+          id=$(docker run -d --read-only --tmpfs /tmp:size=32m --tmpfs /var/cache/nginx:size=32m -p 18080:8080 tenebit-frontend:ci)
           trap 'docker rm -f "$id"' EXIT
           for i in {1..30}; do curl -fsS http://127.0.0.1:18080/healthz && break || sleep 1; done
           headers=$(curl -fsSI http://127.0.0.1:18080/)
@@ -111,6 +138,37 @@ jobs:
           grep -qi '^Strict-Transport-Security:' <<<"$headers"
           grep -qi '^X-Content-Type-Options: nosniff' <<<"$headers"
       - run: docker compose -f docker-compose.production.yml config >/dev/null
+      - name: Runtime secret-not-in-logs and production stack smoke test
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.production.yml up -d --no-build
+          trap 'docker compose -f docker-compose.production.yml down -v --remove-orphans' EXIT
+          for i in {1..60}; do
+            if curl -fsS -H 'Host: tenebit.example.test' http://127.0.0.1:18081/healthz >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS -H 'Host: tenebit.example.test' http://127.0.0.1:18081/healthz >/dev/null
+
+          secret="RAW_TEST_SECRET_$(openssl rand -hex 16)"
+          # Probe every historical secret-bearing URL shape plus the new one-time POST exchange.
+          # The raw marker must not survive in either API or reverse-proxy logs.
+          for path in \
+            "/api/public/assignments/$secret" \
+            "/api/public/offboarding/$secret" \
+            "/api/public/asset-audits/$secret" \
+            "/reset-password?token=$secret" \
+            "/verify-email?token=$secret"; do
+            curl -sS -o /dev/null -H 'Host: tenebit.example.test' "http://127.0.0.1:18081$path" || true
+          done
+          curl -sS -o /dev/null -H 'Host: tenebit.example.test' -H 'Content-Type: application/json' \
+            --data "{\"purpose\":\"assignment\",\"token\":\"$secret\"}" \
+            http://127.0.0.1:18081/api/public/capability-session || true
+
+          docker compose -f docker-compose.production.yml logs --no-color backend frontend > "$RUNNER_TEMP/runtime.log"
+          if grep -F "$secret" "$RUNNER_TEMP/runtime.log"; then
+            echo 'raw public credential leaked to runtime logs' >&2
+            exit 1
+          fi
 
   release-hygiene:
     runs-on: ubuntu-latest
@@ -118,6 +176,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify source tree hygiene
         run: ./scripts/verify-release-artifact.sh .
+      - name: AUD9-001 scanner self-test
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          printf '%s\n' 'GET /api/public/offboarding/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi_123456789' > "$tmp/leak.log"
+          if ./scripts/scan-sensitive-runtime-artifacts.sh "$tmp" >/dev/null 2>&1; then
+            echo 'incident scanner failed to detect synthetic credential-shaped request target' >&2
+            exit 1
+          fi
+          rm "$tmp/leak.log"
+          ./scripts/scan-sensitive-runtime-artifacts.sh "$tmp"
       - name: Build clean source archive
         run: ./scripts/pack-source.sh "$RUNNER_TEMP/tenebit-source.zip"
       - run: unzip -t "$RUNNER_TEMP/tenebit-source.zip"

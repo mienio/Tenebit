@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect x="4" y="4" width="120" height="120" rx="20" fill="#f6e9e6"/>
+  <!-- "T" monogram built from a shelf plank + upright -->
+  <rect x="26" y="30" width="76" height="14" rx="5" fill="#221d18"/>
+  <rect x="57" y="44" width="14" height="54" rx="5" fill="#221d18"/>
+  <!-- item resting on the shelf -->
+  <rect x="80" y="16" width="16" height="14" rx="3" fill="#a63a2e"/>
+</svg>

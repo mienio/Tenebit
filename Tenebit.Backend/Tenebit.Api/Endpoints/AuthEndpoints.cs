@@ -12,6 +12,7 @@ using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Assignments;
 using Tenebit.Application.Audit;
+using Tenebit.Application.Common;
 using Tenebit.Domain.Alerts;
 using Tenebit.Application.Audits;
 using Tenebit.Domain.Audits;
@@ -41,22 +42,26 @@ public static class AuthEndpoints
 {
     public static RouteGroupBuilder MapAuthEndpoints(this RouteGroupBuilder api)
     {
-        api.MapPost("/auth/register", async (RegisterRequest request, AuthService service, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/register", async (RegisterRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
             {
+                if (!await abuseLimiter.TryAcquireAsync("register", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
+                    return Results.Json(new ErrorResponse("Zbyt wiele prób. Spróbuj ponownie później.", "RATE_LIMITED"), statusCode: 429);
                 var result = await service.RegisterAsync(request, cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 
-                var refreshToken = await service.IssueRefreshTokenAsync(result.Value!.Id, cancellationToken);
-                RefreshTokenCookie.Append(response, refreshToken, env.IsDevelopment());
-                return Results.Ok(new { token = tokens.Issue(result.Value!), user = result.Value });
+                // Registration proves knowledge of a password, not mailbox ownership. Do not issue any
+                // workspace JWT/refresh cookie until the one-time verification code has been consumed.
+                return Results.Accepted(value: new { requiresEmailVerification = service.RequiresEmailVerificationOnRegister });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-register")
             .WithTags("Auth");
 
-        api.MapPost("/auth/login", async (LoginRequest request, HttpRequest httpRequest, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/login", async (LoginRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
-                var deviceTrustToken = httpRequest.Cookies[DeviceTrustCookie.CookieName];
+                if (!await abuseLimiter.TryAcquireAsync("login", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(5), cancellationToken))
+                    return Results.Json(new ErrorResponse("Zbyt wiele prób logowania. Spróbuj ponownie później.", "RATE_LIMITED"), statusCode: 429);
+                var deviceTrustToken = http.Request.Cookies[DeviceTrustCookie.CookieName];
                 var result = await service.LoginAsync(request, deviceTrustToken, cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 
@@ -72,7 +77,7 @@ public static class AuthEndpoints
                 return Results.Ok(new { token = tokens.Issue(user), user });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-login")
             .WithTags("Auth");
 
         api.MapPost("/auth/login/2fa", async (TwoFactorLoginRequest request, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
@@ -98,7 +103,7 @@ public static class AuthEndpoints
                 return Results.Ok(new { token = tokens.Issue(result.Value!), user = result.Value });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-login")
             .WithTags("Auth");
 
         api.MapPost("/auth/refresh", async (HttpRequest request, HttpResponse response, AuthService service, TokenIssuer tokens, IWebHostEnvironment env, CancellationToken cancellationToken) =>
@@ -120,7 +125,7 @@ public static class AuthEndpoints
                 return Results.Ok(new { token = tokens.Issue(result.Value!.User), user = result.Value!.User });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-refresh")
             .WithTags("Auth");
 
         api.MapPost("/auth/logout", async (HttpRequest request, HttpResponse response, AuthService service, IWebHostEnvironment env, CancellationToken cancellationToken) =>
@@ -137,43 +142,46 @@ public static class AuthEndpoints
             .AllowAnonymous()
             .WithTags("Auth");
 
-        api.MapPost("/auth/password/forgot", async (ForgotPasswordRequest request, AuthService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/password/forgot", async (ForgotPasswordRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
             {
-                await service.RequestPasswordResetAsync(request, cancellationToken);
-                return Results.Ok(new { message = "Jeśli podany adres e-mail istnieje w systemie, wysłaliśmy link do resetu hasła." });
+                if (await abuseLimiter.TryAcquireAsync("password-forgot", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
+                    await service.RequestPasswordResetAsync(request, cancellationToken);
+                return Results.Ok(new { message = "Jeśli podany adres e-mail istnieje w systemie, wysłaliśmy kod do resetu hasła." });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
-        api.MapPost("/auth/password/reset", async (ResetPasswordRequest request, AuthService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/password/reset", async (ResetPasswordRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
             {
+                if (!await abuseLimiter.TryAcquireAsync("password-reset-code", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(15), cancellationToken))
+                    return Results.Json(new ErrorResponse(ErrorMessageTranslator.Translate("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", RequestLanguageAccessor.CurrentLanguage), "RATE_LIMITED"), statusCode: 429);
                 var result = await service.ResetPasswordAsync(request, cancellationToken);
                 return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Hasło zostało zmienione." });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
-        api.MapPost("/auth/verify-email", async (VerifyEmailRequest request, AuthService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/verify-email", async (VerifyEmailRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
             {
+                if (!await abuseLimiter.TryAcquireAsync("email-verification-code", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(15), cancellationToken))
+                    return Results.Json(new ErrorResponse(ErrorMessageTranslator.Translate("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", RequestLanguageAccessor.CurrentLanguage), "RATE_LIMITED"), statusCode: 429);
                 var result = await service.VerifyEmailAsync(request, cancellationToken);
                 return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "E-mail został potwierdzony." });
             })
             .AllowAnonymous()
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
-        api.MapPost("/auth/resend-verification", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/resend-verification", async (ResendVerificationRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
             {
-                if (Guid.TryParse(currentUser.Subject, out var userId))
-                {
-                    await service.ResendVerificationEmailAsync(userId, cancellationToken);
-                }
-
-                return Results.Ok(new { message = "Jeśli Twój e-mail nie jest jeszcze potwierdzony, wysłaliśmy nową wiadomość." });
+                if (await abuseLimiter.TryAcquireAsync("verification-resend", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
+                    await service.ResendVerificationEmailAsync(request.Email, cancellationToken);
+                return Results.Ok(new { message = "Jeśli konto oczekuje na potwierdzenie, wysłaliśmy nowy kod." });
             })
-            .RequireRateLimiting("auth")
+            .AllowAnonymous()
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
         api.MapPost("/auth/2fa/setup", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
@@ -186,7 +194,7 @@ public static class AuthEndpoints
                 var result = await service.SetupTwoFactorAsync(userId, cancellationToken);
                 return result.ToHttpResult();
             })
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
         api.MapPost("/auth/2fa/enable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
@@ -205,7 +213,7 @@ public static class AuthEndpoints
                 DeviceTrustCookie.Delete(response, env.IsDevelopment());
                 return Results.Ok(new { recoveryCodes = result.Value.RecoveryCodes, token = tokens.Issue(user), user });
             })
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
         api.MapPost("/auth/2fa/disable", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, TokenIssuer tokens, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
@@ -224,7 +232,7 @@ public static class AuthEndpoints
                 DeviceTrustCookie.Delete(response, env.IsDevelopment());
                 return Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone.", token = tokens.Issue(user), user });
             })
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
         api.MapPost("/auth/2fa/recovery-codes/regenerate", async (TwoFactorCodeRequest request, ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
@@ -237,7 +245,7 @@ public static class AuthEndpoints
                 var result = await service.RegenerateRecoveryCodesAsync(userId, request.Code, cancellationToken);
                 return result.ToHttpResult();
             })
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
         api.MapGet("/auth/2fa/recovery-codes/status", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
@@ -250,7 +258,7 @@ public static class AuthEndpoints
                 var result = await service.GetRecoveryCodesRemainingAsync(userId, cancellationToken);
                 return result.ToHttpResult();
             })
-            .RequireRateLimiting("auth")
+            .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
         return api;

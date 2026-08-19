@@ -3,9 +3,9 @@ using System.Reflection;
 namespace Tenebit.Tests;
 
 /// <summary>
-/// Audyt P2 #12 — testy pilnujące kierunku zależności między warstwami Clean Architecture.
+/// Audyt P2 #12 - testy pilnujące kierunku zależności między warstwami Clean Architecture.
 /// Sprawdzają nazwy assembly referencjonowanych przez każdy projekt (nie tylko .csproj
-/// ProjectReference, które łatwo dodać przypadkiem) — złamanie dowolnej z tych reguł oznacza,
+/// ProjectReference, które łatwo dodać przypadkiem) - złamanie dowolnej z tych reguł oznacza,
 /// że ktoś dodał referencję łamiącą kierunek zależności Domain -> Application -> Infrastructure -> Api.
 /// </summary>
 public class ArchitectureTests

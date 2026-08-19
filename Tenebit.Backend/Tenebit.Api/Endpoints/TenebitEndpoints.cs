@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.RateLimiting;
 using Tenebit.Api.Auth;
 using Tenebit.Api.Http;
+using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
-using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Api.Endpoints;
 
@@ -18,11 +18,11 @@ public static class TenebitEndpoints
             .AllowAnonymous()
             .WithName("Health");
 
-        api.MapGet("/health/ready", async (TenebitDbContext db, ILogger<Program> logger, CancellationToken cancellationToken) =>
+        api.MapGet("/health/ready", async (IDatabaseHealthProbe database, ILogger<Program> logger, CancellationToken cancellationToken) =>
             {
                 try
                 {
-                    var canConnect = await db.Database.CanConnectAsync(cancellationToken);
+                    var canConnect = await database.CanConnectAsync(cancellationToken);
                     return canConnect
                         ? Results.Ok(new { status = "ready", database = "ok" })
                         : Results.Json(new { status = "unready", database = "unreachable" }, statusCode: 503);
@@ -30,7 +30,7 @@ public static class TenebitEndpoints
                 catch (Exception ex)
                 {
                     // AUD-013: nie ujawniamy ex.Message anonimowemu klientowi (nazwa hosta DB, tabeli,
-                    // błąd uwierzytelnienia) — szczegóły trafiają tylko do chronionego logu z correlation id.
+                    // błąd uwierzytelnienia) - szczegóły trafiają tylko do chronionego logu z correlation id.
                     logger.LogError(ex, "Health check /health/ready: baza danych nieosiągalna.");
                     return Results.Json(new { status = "unready", database = "error" }, statusCode: 503);
                 }
@@ -39,6 +39,7 @@ public static class TenebitEndpoints
             .WithName("HealthReady");
 
         api.MapGet("/health/security-metrics", GetSecurityMetrics)
+            .RequireAuthorization(policy => policy.RequireRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Auditor))
             .WithName("SecurityMetrics");
 
         api.MapAuthEndpoints();
@@ -56,6 +57,7 @@ public static class TenebitEndpoints
         api.MapAssignmentsEndpoints();
         api.MapOffboardingEndpoints();
         api.MapAssetAuditsEndpoints();
+        api.MapPublicCapabilityEndpoints();
         api.MapPublicAssignmentsEndpoints();
         api.MapPublicOffboardingEndpoints();
         api.MapPublicAssetAuditsEndpoints();

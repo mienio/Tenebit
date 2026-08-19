@@ -3,17 +3,17 @@ export function formatMoney(value: number | null | undefined, currency = 'PLN') 
 }
 
 export function formatDate(value?: string | null) {
-  if (!value) return '—';
+  if (!value) return '-';
   const normalized = value.length === 10 ? `${value}T00:00:00` : value;
   const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('pl-PL').format(date);
 }
 
 export function formatDateTime(value?: string | null) {
-  if (!value) return '—';
+  if (!value) return '-';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('pl-PL', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 

@@ -1,38 +1,57 @@
-import { BarChart3, Boxes, Check, ClipboardCheck, Headphones, Laptop, Monitor, PackageCheck, QrCode, Smartphone, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  ArrowRight,
+  BarChart3,
+  Boxes,
+  Check,
+  ClipboardCheck,
+  Headphones,
+  Laptop,
+  MailCheck,
+  Monitor,
+  PackageCheck,
+  QrCode,
+  Smartphone,
+  Users
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
-import { useI18n } from '../i18n/I18nProvider';
 import { BrandMark } from '../components/BrandMark';
+import { PublicFooter } from '../components/PublicFooter';
 import { StatusBadge } from '../components/StatusBadge';
+import { useI18n } from '../i18n/I18nProvider';
+import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 
 const previewRows = [
   { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', person: 'Alex Morgan', value: 9800 },
   { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', person: 'Jamie Lee', value: 4200 },
-  { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', person: '—', value: 1650 },
-  { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', person: '—', value: 1400 }
+  { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', person: '-', value: 1650 },
+  { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', person: '-', value: 1400 }
 ];
 
 const features = [
-  { icon: PackageCheck, key: 'assignments' },
-  { icon: ClipboardCheck, key: 'procedures' },
   { icon: Boxes, key: 'assets' },
   { icon: Users, key: 'people' },
+  { icon: PackageCheck, key: 'assignments' },
+  { icon: ClipboardCheck, key: 'procedures' },
   { icon: QrCode, key: 'qr' },
   { icon: BarChart3, key: 'reports' }
-];
+] as const;
+
+type FeatureKey = (typeof features)[number]['key'];
 
 const steps = ['step1', 'step2', 'step3'];
 
 export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
+  const [activeFeature, setActiveFeature] = useState<FeatureKey>('assets');
   const currencyByLanguage: Record<typeof language, { locale: string; currency: string }> = {
     pl: { locale: 'pl-PL', currency: 'PLN' },
     en: { locale: 'en-US', currency: 'USD' },
     es: { locale: 'es-ES', currency: 'EUR' },
     de: { locale: 'de-DE', currency: 'EUR' }
   };
+  const selectedFeature = useMemo(() => features.find(feature => feature.key === activeFeature) ?? features[0], [activeFeature]);
   const formatPreviewValue = (value: number) => {
     const { locale, currency } = currencyByLanguage[language];
     return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
@@ -48,17 +67,17 @@ export function LandingPage() {
   return (
     <div className="landing">
       <header className={`landing__nav${scrolled ? ' landing__nav--scrolled' : ''}`}>
-        <div className="landing__brand">
-          <div className="brand__mark"><BrandMark /></div>
+        <Link to="/" className="landing__brand" aria-label="Tenebit">
+          <span className="brand__mark"><BrandMark /></span>
           <strong>Tenebit</strong>
-        </div>
+        </Link>
         <nav className="landing__navLinks">
           <a href="#funkcje">{t('landing.navFeatures')}</a>
           <a href="#cennik">{t('landing.navPricing')}</a>
         </nav>
         <div className="landing__navActions">
           <LanguageSwitcher />
-          <Link to="/login" className="button button--ghost">{t('landing.navLoginBtn')}</Link>
+          <Link to="/login" className="button button--ghost landing__loginButton">{t('landing.navLoginBtn')}</Link>
           <Link to="/register" className="button button--primary">{t('landing.navRegisterBtn')}</Link>
         </div>
       </header>
@@ -72,7 +91,7 @@ export function LandingPage() {
           <h1>{t('landing.headline')}</h1>
           <p className="landing__lead">{t('landing.lead')}</p>
           <div className="landing__heroActions">
-            <Link to="/register" className="button button--primary">{t('landing.ctaStart')}</Link>
+            <Link to="/register" className="button button--primary">{t('landing.ctaStart')} <ArrowRight size={16} /></Link>
             <Link to="/login" className="button button--secondary">{t('landing.ctaLogin')}</Link>
           </div>
           <div className="landing__trustRow">
@@ -83,9 +102,8 @@ export function LandingPage() {
         </section>
       </div>
 
-      <section className="landing__preview">
+      <section className="landing__preview" aria-label={t('landing.previewAria')}>
         <div className="landing__previewFrame">
-          <span className="landing__previewBadge">{t('landing.previewBadge')}</span>
           <div className="landing__previewChrome"><span /><span /><span /></div>
           <div className="tableWrap">
             <table className="dense-table">
@@ -110,15 +128,65 @@ export function LandingPage() {
       </section>
 
       <section className="landing__features" id="funkcje">
-        <h2>{t('landing.featuresHeadline')}</h2>
-        <div className="landing__featureGrid">
-          {features.map(feature => (
-            <div className="landing__featureCard" key={feature.key}>
-              <div className="landing__featureIcon"><feature.icon size={22} /></div>
-              <h3>{t(`landing.feature.${feature.key}.title`)}</h3>
-              <p>{t(`landing.feature.${feature.key}.text`)}</p>
+        <div className="landing__sectionIntro">
+          <p className="eyebrow">{t('landing.featuresEyebrow')}</p>
+          <h2>{t('landing.featuresHeadline')}</h2>
+          <p>{t('landing.featuresLead')}</p>
+        </div>
+
+        <div className="landing__featureShowcase">
+          <div className="landing__featureTabs" role="tablist" aria-label={t('landing.featuresHeadline')}>
+            {features.map(feature => {
+              const isActive = feature.key === activeFeature;
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`feature-panel-${feature.key}`}
+                  id={`feature-tab-${feature.key}`}
+                  className={`landing__featureTab${isActive ? ' landing__featureTab--active' : ''}`}
+                  key={feature.key}
+                  onClick={() => setActiveFeature(feature.key)}
+                >
+                  <span className="landing__featureTabIcon"><feature.icon size={20} /></span>
+                  <span className="landing__featureTabText">
+                    <strong>{t(`landing.feature.${feature.key}.title`)}</strong>
+                    <small>{t(`landing.feature.${feature.key}.tab`)}</small>
+                  </span>
+                  <ArrowRight size={17} aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+
+          <article
+            className="landing__featurePanel"
+            role="tabpanel"
+            id={`feature-panel-${selectedFeature.key}`}
+            aria-labelledby={`feature-tab-${selectedFeature.key}`}
+          >
+            <div className="landing__featurePanelHead">
+              <span className="landing__featurePanelIcon"><selectedFeature.icon size={26} /></span>
+              <div>
+                <p className="eyebrow">{t('landing.featureShowcase.kicker')}</p>
+                <h3>{t(`landing.feature.${selectedFeature.key}.title`)}</h3>
+              </div>
             </div>
-          ))}
+            <p className="landing__featurePanelText">{t(`landing.feature.${selectedFeature.key}.text`)}</p>
+            <blockquote>{t(`landing.feature.${selectedFeature.key}.example`)}</blockquote>
+            <div className="landing__featureChecklist">
+              {[1, 2, 3].map(index => (
+                <span key={index}><Check size={15} /> {t(`landing.feature.${selectedFeature.key}.point${index}`)}</span>
+              ))}
+            </div>
+            {selectedFeature.key === 'assignments' ? (
+              <div className="landing__mailProof">
+                <MailCheck size={20} />
+                <span>{t('landing.feature.assignments.mailProof')}</span>
+              </div>
+            ) : null}
+          </article>
         </div>
       </section>
 
@@ -165,13 +233,10 @@ export function LandingPage() {
             </ul>
           </div>
         </div>
-        <Link to="/register" className="button button--primary">{t('landing.ctaStart')}</Link>
+        <Link to="/register" className="button button--primary">{t('landing.ctaStart')} <ArrowRight size={16} /></Link>
       </section>
 
-      <footer className="landing__footer">
-        <span>© {new Date().getFullYear()} Tenebit</span>
-        <a href="mailto:kontakt@tenebit.app">kontakt@tenebit.app</a>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

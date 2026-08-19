@@ -16,8 +16,9 @@ public static class SecurityTelemetry
     private static readonly Counter<long> AuthorizationDeniedCounter = Meter.CreateCounter<long>("tenebit.security.authorization.denied");
     private static readonly Counter<long> PublicTokenRejectedCounter = Meter.CreateCounter<long>("tenebit.security.public_token.rejected");
     private static readonly Counter<long> BackgroundJobFailureCounter = Meter.CreateCounter<long>("tenebit.security.background_job.failure");
+    private static readonly Counter<long> EmailOutboxDeadLetterCounter = Meter.CreateCounter<long>("tenebit.security.email_outbox.dead_letter");
 
-    private static long _oauthRejected, _twoFactorRejected, _refreshReuse, _webhookRejected, _encryptionFailure, _reconciliationFailure, _authorizationDenied, _publicTokenRejected, _backgroundJobFailure;
+    private static long _oauthRejected, _twoFactorRejected, _refreshReuse, _webhookRejected, _encryptionFailure, _reconciliationFailure, _authorizationDenied, _publicTokenRejected, _backgroundJobFailure, _emailOutboxDeadLetter;
 
     public static void OAuthRejected() { Interlocked.Increment(ref _oauthRejected); OAuthRejectedCounter.Add(1); }
     public static void TwoFactorRejected() { Interlocked.Increment(ref _twoFactorRejected); TwoFactorRejectedCounter.Add(1); }
@@ -28,11 +29,13 @@ public static class SecurityTelemetry
     public static void AuthorizationDenied() { Interlocked.Increment(ref _authorizationDenied); AuthorizationDeniedCounter.Add(1); }
     public static void PublicTokenRejected() { Interlocked.Increment(ref _publicTokenRejected); PublicTokenRejectedCounter.Add(1); }
     public static void BackgroundJobFailure() { Interlocked.Increment(ref _backgroundJobFailure); BackgroundJobFailureCounter.Add(1); }
+    public static void EmailOutboxDeadLetter() { Interlocked.Increment(ref _emailOutboxDeadLetter); EmailOutboxDeadLetterCounter.Add(1); }
 
     public static SecurityMetricSnapshot Snapshot() => new(
         Interlocked.Read(ref _oauthRejected), Interlocked.Read(ref _twoFactorRejected), Interlocked.Read(ref _refreshReuse),
         Interlocked.Read(ref _webhookRejected), Interlocked.Read(ref _encryptionFailure), Interlocked.Read(ref _reconciliationFailure),
-        Interlocked.Read(ref _authorizationDenied), Interlocked.Read(ref _publicTokenRejected), Interlocked.Read(ref _backgroundJobFailure));
+        Interlocked.Read(ref _authorizationDenied), Interlocked.Read(ref _publicTokenRejected), Interlocked.Read(ref _backgroundJobFailure),
+        Interlocked.Read(ref _emailOutboxDeadLetter));
 }
 
-public sealed record SecurityMetricSnapshot(long OAuthRejected, long TwoFactorRejected, long RefreshReuse, long WebhookRejected, long EncryptionFailure, long ReconciliationFailure, long AuthorizationDenied, long PublicTokenRejected, long BackgroundJobFailure);
+public sealed record SecurityMetricSnapshot(long OAuthRejected, long TwoFactorRejected, long RefreshReuse, long WebhookRejected, long EncryptionFailure, long ReconciliationFailure, long AuthorizationDenied, long PublicTokenRejected, long BackgroundJobFailure, long EmailOutboxDeadLetter);

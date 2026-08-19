@@ -5,7 +5,7 @@ namespace Tenebit.Application.Alerts;
 /// <summary>
 /// Domyślne reguły alertów dla nowo tworzonej organizacji. Trzy typy, które przed wprowadzeniem
 /// konfigurowalnych alertów działały bezwarunkowo (gwarancja, termin zwrotu wydania, brak potwierdzenia
-/// wydania), są domyślnie włączone — żeby wdrożenie nie uciszyło istniejących powiadomień. Pozostałe
+/// wydania), są domyślnie włączone - żeby wdrożenie nie uciszyło istniejących powiadomień. Pozostałe
 /// (nowe kategorie) startują wyłączone i administrator włącza je ręcznie w zakładce Alerty.
 /// </summary>
 public static class StarterAlertRules

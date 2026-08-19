@@ -119,7 +119,7 @@ public sealed class OnboardingService
                 _categories.Add(category);
             }
 
-            var locationResult = await _locationResolver.ResolveAsync(organizationId, locationResult.Value!.FullPath, cancellationToken);
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
             if (locationResult.IsFailure) return Result<StarterPackageResponse>.Failure(locationResult.Error!);
             var person = new Person(organizationId, request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail);
             person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, "Pracownik", request.JobTitle, team.Id, null, locationResult.Value!.FullPath, null);
@@ -139,7 +139,7 @@ public sealed class OnboardingService
 
             var assignment = new Assignment(organizationId, person.Id, CreateProtocolNumber(_clock.UtcNow), _clock.UtcNow, request.ReturnDueDate, "Pakiet utworzony przez onboarding pracownika.", _currentUser.Subject);
             assignment.AddAsset(asset.Id, "Wydane w stanie dobrym");
-            // Procedura jest w szkicu (brak pliku) — akceptacja zostanie dodana dopiero po jej publikacji,
+            // Procedura jest w szkicu (brak pliku) - akceptacja zostanie dodana dopiero po jej publikacji,
             // żeby pracownik nie musiał "zaakceptować" dokumentu, którego jeszcze nie może przeczytać.
             _assignments.Add(assignment);
 
@@ -156,7 +156,7 @@ public sealed class OnboardingService
 
     // Real onboarding flow: resolves the employee's JobProfile into concrete assets (one available asset per
     // asset category still uncovered by an explicit AssetId) and procedures, then delegates the actual
-    // assignment creation (validation, email, protocol number) to AssignmentService so both flows share the
+    // assignment creation (validation, email, reference number) to AssignmentService so both flows share the
     // exact same tamper-evident issuing path.
     public async Task<Result<EmployeePackageResponse>> CreateEmployeePackageAsync(CreateEmployeePackageRequest request, CancellationToken cancellationToken)
     {
@@ -193,7 +193,7 @@ public sealed class OnboardingService
                 var candidate = available.FirstOrDefault(a => a.CategoryId == categoryId && !assetIds.Contains(a.Id));
                 if (candidate is null)
                 {
-                    var categoryName = categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "—";
+                    var categoryName = categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "-";
                     warnings.Add($"Brak dostępnego aktywa w kategorii \"{categoryName}\" z zestawu stanowiskowego \"{profile.Name}\".");
                     continue;
                 }
@@ -203,7 +203,7 @@ public sealed class OnboardingService
             }
         }
 
-        if (assetIds.Count == 0) return Result<EmployeePackageResponse>.Failure(Error.Validation("Zestaw stanowiskowy nie zawiera żadnego dostępnego aktywa — dodaj aktywo ręcznie."));
+        if (assetIds.Count == 0) return Result<EmployeePackageResponse>.Failure(Error.Validation("Zestaw stanowiskowy nie zawiera żadnego dostępnego aktywa - dodaj aktywo ręcznie."));
 
         var createResult = await _assignmentService.CreateAsync(
             new CreateAssignmentRequest(person.Id, assetIds.Select(id => new AssignmentAssetRequest(id, request.AssetConditions?.GetValueOrDefault(id.ToString()))).ToList(), procedureIds, request.DueDate, request.Notes),
@@ -217,7 +217,7 @@ public sealed class OnboardingService
         return Result<EmployeePackageResponse>.Success(new EmployeePackageResponse(assignment.Id, assignment.ProtocolNumber, assignment, warnings));
     }
 
-    // Spec 6.4: onboarding variant of CreateEmployeePackageAsync — identical package resolution (job profile
+    // Spec 6.4: onboarding variant of CreateEmployeePackageAsync - identical package resolution (job profile
     // to assets/procedures), but delegates to AssignmentService.CreateWithEvidenceAsync so the assignment
     // and photos are persisted atomically in a single transaction.
     public async Task<Result<EmployeePackageResponse>> CreateEmployeePackageWithEvidenceAsync(
@@ -259,7 +259,7 @@ public sealed class OnboardingService
                 var candidate = available.FirstOrDefault(a => a.CategoryId == categoryId && !assetIds.Contains(a.Id));
                 if (candidate is null)
                 {
-                    var categoryName = categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "—";
+                    var categoryName = categories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "-";
                     warnings.Add($"Brak dostępnego aktywa w kategorii \"{categoryName}\" z zestawu stanowiskowego \"{profile.Name}\".");
                     continue;
                 }
@@ -269,7 +269,7 @@ public sealed class OnboardingService
             }
         }
 
-        if (assetIds.Count == 0) return Result<EmployeePackageResponse>.Failure(Error.Validation("Zestaw stanowiskowy nie zawiera żadnego dostępnego aktywa — dodaj aktywo ręcznie."));
+        if (assetIds.Count == 0) return Result<EmployeePackageResponse>.Failure(Error.Validation("Zestaw stanowiskowy nie zawiera żadnego dostępnego aktywa - dodaj aktywo ręcznie."));
 
         var createResult = await _assignmentService.CreateWithEvidenceAsync(
             new CreateAssignmentRequest(person.Id, assetIds.Select(id => new AssignmentAssetRequest(id, request.AssetConditions?.GetValueOrDefault(id.ToString()))).ToList(), procedureIds, request.DueDate, request.Notes),
@@ -286,7 +286,7 @@ public sealed class OnboardingService
     }
 
     // Task checklist per employee: one row per asset/procedure across all of their assignments, with a
-    // per-item completion status — this is what makes onboarding a tracked flow instead of a one-off email.
+    // per-item completion status - this is what makes onboarding a tracked flow instead of a one-off email.
     public async Task<Result<OnboardingChecklistResponse>> GetChecklistAsync(Guid personId, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Manager, TenebitRoles.Employee);
@@ -294,7 +294,7 @@ public sealed class OnboardingService
 
         var organizationId = _currentUser.OrganizationId;
 
-        // Employee only sees its own checklist; Manager only its managed team's — the module gate above
+        // Employee only sees its own checklist; Manager only its managed team's - the module gate above
         // only proves the actor holds one of these roles, not that personId belongs to their scope
         // (audyt AUD3-006: Employee/Manager mogli podać dowolny personId w tej samej organizacji).
         if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator))
@@ -340,13 +340,13 @@ public sealed class OnboardingService
             foreach (var item in assignment.Assets)
             {
                 var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-                items.Add(new OnboardingChecklistItemResponse("asset", item.AssetId, asset?.Name ?? "—", assetStatus, assignment.AcceptedAt));
+                items.Add(new OnboardingChecklistItemResponse("asset", item.AssetId, asset?.Name ?? "-", assetStatus, assignment.AcceptedAt));
             }
 
             foreach (var acceptance in assignment.ProcedureAcceptances)
             {
                 var procedure = procedures.FirstOrDefault(x => x.Id == acceptance.ProcedureId);
-                items.Add(new OnboardingChecklistItemResponse("procedure", acceptance.ProcedureId, procedure?.Title ?? "—", acceptance.Status.ToString(), acceptance.AcceptedAt));
+                items.Add(new OnboardingChecklistItemResponse("procedure", acceptance.ProcedureId, procedure?.Title ?? "-", acceptance.Status.ToString(), acceptance.AcceptedAt));
             }
         }
 

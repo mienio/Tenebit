@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Tenebit.Api.Auth;
 using Tenebit.Infrastructure.Services;
 
 internal static class ProductionSecurityConfiguration
@@ -28,10 +29,24 @@ internal static class ProductionSecurityConfiguration
             errors.Add("App:PublicUrl origin must be present in Cors:AllowedOrigins.");
 
         var signingKey = configuration["Auth:SigningKey"];
-        if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32 || signingKey == "tenebit-development-signing-key-change-me-32chars")
-            errors.Add("Production Auth:SigningKey must be unique and at least 32 characters.");
+        var configuredSigningKeys = JwtSigningKey.GetConfiguredSecrets(configuration);
+        var explicitKeyRing = configuration.GetSection("Auth:SigningKeys").GetChildren().Any();
+        if (configuredSigningKeys.Values.Any(key => key.Length < 32 || key == "tenebit-development-signing-key-change-me-32chars") ||
+            configuredSigningKeys.Values.Distinct(StringComparer.Ordinal).Count() != configuredSigningKeys.Count)
+            errors.Add("Every production JWT signing key must be unique and at least 32 characters.");
 
-        errors.AddRange(FieldEncryptionKeyRing.ValidateProduction(configuration, signingKey));
+        if (explicitKeyRing)
+        {
+            var activeSigningKeyId = configuration["Auth:ActiveSigningKeyId"];
+            if (string.IsNullOrWhiteSpace(activeSigningKeyId) || !configuredSigningKeys.ContainsKey(activeSigningKeyId))
+                errors.Add("Production Auth:ActiveSigningKeyId must point to a key in Auth:SigningKeys.");
+        }
+        else if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32 || signingKey == "tenebit-development-signing-key-change-me-32chars")
+        {
+            errors.Add("Production Auth:SigningKey must be unique and at least 32 characters, or configure Auth:SigningKeys with Auth:ActiveSigningKeyId.");
+        }
+
+        errors.AddRange(FieldEncryptionKeyRing.ValidateProduction(configuration, configuredSigningKeys.Values.ToArray()));
 
         var connectionString = configuration.GetConnectionString("TenebitDb") ?? string.Empty;
         if (string.IsNullOrWhiteSpace(connectionString) || connectionString.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase))
@@ -44,6 +59,12 @@ internal static class ProductionSecurityConfiguration
         var emailEnabled = configuration.GetValue("Email:Enabled", false);
         if (emailEnabled && (string.IsNullOrWhiteSpace(configuration["Email:Host"]) || string.IsNullOrWhiteSpace(configuration["Email:FromAddress"])))
             errors.Add("Email is enabled but SMTP host/from address is incomplete.");
+
+        if (!configuration.GetValue("Email:OutboxDispatcherEnabled", true))
+            errors.Add("Production Email:OutboxDispatcherEnabled must be true so durable security e-mails are delivered.");
+
+        if (!configuration.GetValue("Email:UseSsl", true))
+            errors.Add("Production SMTP must use TLS (Email:UseSsl=true).");
 
         if (errors.Count > 0)
             throw new InvalidOperationException("Unsafe Production configuration: " + string.Join(" | ", errors));

@@ -672,9 +672,18 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("SourceIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("SourceIpExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OrganizationId", "CreatedAt");
+
+                    b.HasIndex("SourceIpExpiresAt");
 
                     b.ToTable("activity_logs", "tenebit");
                 });
@@ -1018,84 +1027,28 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Tenebit.Domain.Identity.DeviceTrustToken", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("OrganizationUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ParentTokenId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RevocationReason")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<Guid?>("ReplacedByTokenId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
+                    b.Property<DateTimeOffset?>("RevokedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("TokenHash").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
                     b.HasKey("Id");
-
-                    b.HasIndex("OrganizationUserId", "TokenHash")
-                        .IsUnique();
-
+                    b.HasIndex("OrganizationUserId", "TokenHash").IsUnique();
                     b.ToTable("device_trust_tokens", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.EmailVerificationToken", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("OrganizationUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<DateTimeOffset?>("UsedAt")
-                        .HasColumnType("timestamp with time zone");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
+                    b.Property<string>("TokenHash").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
+                    b.Property<DateTimeOffset?>("UsedAt").HasColumnType("timestamp with time zone");
                     b.HasKey("Id");
-
-                    b.HasIndex("FamilyId");
-
                     b.HasIndex("OrganizationUserId");
-
-                    b.HasIndex("ParentTokenId");
-
-                    b.HasIndex("ReplacedByTokenId");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
+                    b.HasIndex("TokenHash").IsUnique();
                     b.ToTable("email_verification_tokens", "tenebit");
                 });
 
@@ -1178,6 +1131,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                     b.Property<bool>("IsTwoFactorEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<long?>("LastUsedTotpCounter")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
@@ -1279,34 +1235,22 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Tenebit.Domain.Identity.RefreshToken", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("OrganizationUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("FamilyId").HasColumnType("uuid");
+                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
+                    b.Property<Guid?>("ParentTokenId").HasColumnType("uuid");
+                    b.Property<DateTimeOffset?>("RevokedAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("RevocationReason").HasMaxLength(80).HasColumnType("character varying(80)");
+                    b.Property<Guid?>("ReplacedByTokenId").HasColumnType("uuid");
+                    b.Property<string>("TokenHash").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
                     b.HasKey("Id");
-
+                    b.HasIndex("FamilyId");
                     b.HasIndex("OrganizationUserId");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
+                    b.HasIndex("ParentTokenId");
+                    b.HasIndex("ReplacedByTokenId");
+                    b.HasIndex("TokenHash").IsUnique();
                     b.ToTable("refresh_tokens", "tenebit");
                 });
 
@@ -2185,6 +2129,12 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset?>("CancelledAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CheckoutAttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CheckoutAttemptExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2454,6 +2404,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                             b1.Property<string>("ConfirmedIp")
                                 .HasColumnType("text");
+
+                            b1.Property<int>("IntegrityVersion")
+                                .HasColumnType("integer");
 
                             b1.Property<Guid>("OrganizationId")
                                 .HasColumnType("uuid");

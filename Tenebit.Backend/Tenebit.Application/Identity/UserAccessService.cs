@@ -17,11 +17,13 @@ public sealed class UserAccessService
     private readonly IRefreshTokenRepository _refreshTokens;
     private readonly IDeviceTrustTokenRepository _deviceTrustTokens;
     private readonly IEmailSender _emailSender;
+    private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<UserAccessService> _logger;
+    private readonly IUserSecurityStateCache? _securityStateCache;
 
     public UserAccessService(
         IOrganizationUserRepository users,
@@ -36,7 +38,9 @@ public sealed class UserAccessService
         ICurrentUser currentUser,
         IClock clock,
         IUnitOfWork unitOfWork,
-        ILogger<UserAccessService> logger)
+        ILogger<UserAccessService> logger,
+        IEmailOutboxWriter? emailOutbox = null,
+        IUserSecurityStateCache? securityStateCache = null)
     {
         _users = users;
         _people = people;
@@ -46,11 +50,13 @@ public sealed class UserAccessService
         _refreshTokens = refreshTokens;
         _deviceTrustTokens = deviceTrustTokens;
         _emailSender = emailSender;
+        _emailOutbox = emailOutbox;
         _appLinkBuilder = appLinkBuilder;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _securityStateCache = securityStateCache;
     }
 
     public IReadOnlyList<RoleResponse> Roles() => TenebitRoles.All.Select(x => new RoleResponse(x.Key, x.Label, x.Description)).ToArray();
@@ -104,11 +110,12 @@ public sealed class UserAccessService
 
         try
         {
-            // The last-owner check is a check-then-write invariant. It must run under the same
-            // per-organization transaction lock as the update; otherwise two concurrent requests can
-            // each observe the other owner and deactivate both (AUD3-001).
-            return await _unitOfWork.ExecuteWithOrganizationLockAsync(
+            // The last-owner check is a check-then-write invariant. Serialize only membership
+            // changes for this organization instead of blocking every write in the tenant.
+            return await _unitOfWork.ExecuteWithResourceLocksAsync(
                 _currentUser.OrganizationId,
+                "organization-users",
+                [_currentUser.OrganizationId],
                 ct => UpdateUnderOrganizationLockAsync(id, request, ct),
                 cancellationToken);
         }
@@ -169,6 +176,7 @@ public sealed class UserAccessService
         if (securityStateChanged)
         {
             user.RotateSecurityStamp();
+            _securityStateCache?.Remove(user.Id);
             await _refreshTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
             await _deviceTrustTokens.RevokeAllForUserAsync(user.Id, cancellationToken);
         }
@@ -211,19 +219,38 @@ public sealed class UserAccessService
     {
         try
         {
-            var rawToken = TokenHasher.NewRawToken();
-            var token = new PasswordResetToken(user.Id, TokenHasher.Hash(rawToken), _clock.UtcNow.AddHours(24));
-            _passwordResetTokens.Add(token);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-            var link = _appLinkBuilder.BuildPasswordResetLink(rawToken);
+            var code = TokenHasher.NewOneTimeCode();
+            var tokenHash = TokenHasher.HashOneTimeCode(user.Email, code);
+            var now = _clock.UtcNow;
+            var link = _appLinkBuilder.BuildPasswordResetLink(user.Email, code);
             var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
-            var (subject, html) = EmailTemplates.OrganizationInvitation(organization?.Language, link);
-            await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
+            var (subject, html) = EmailTemplates.OrganizationInvitation(organization?.Language, code, link);
+
+            await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                await _passwordResetTokens.RevokeUnusedForUserAsync(user.Id, now, ct);
+                _passwordResetTokens.Add(new PasswordResetToken(user.Id, tokenHash, now.AddHours(24)));
+                if (_emailOutbox is not null)
+                {
+                    await _emailOutbox.EnqueueAsync(
+                        user.OrganizationId,
+                        user.Email,
+                        subject,
+                        html,
+                        "organization-invitation",
+                        $"organization-invitation:{user.Id:N}:{tokenHash}",
+                        ct);
+                }
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (_emailOutbox is null)
+                await _emailSender.SendAsync(user.Email, subject, html, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Nie udało się wysłać e-maila z zaproszeniem dla użytkownika {UserId}", user.Id);
+            _logger.LogWarning(ex, "Nie udało się przygotować lub zakolejkować e-maila z zaproszeniem dla użytkownika {UserId}", user.Id);
         }
     }
 

@@ -2,7 +2,7 @@ using Tenebit.Domain.Audits;
 
 namespace Tenebit.Application.Audits;
 
-/// <summary>Zakres kampanii — dokładnie jeden z wariantów. Serializowany do <see cref="AssetAuditCampaign.ScopeJson"/>
+/// <summary>Zakres kampanii - dokładnie jeden z wariantów. Serializowany do <see cref="AssetAuditCampaign.ScopeJson"/>
 /// jako migawka historyczna do podglądu; NIE jest używany do zapytań przy przeliczaniu uczestników/pozycji.</summary>
 public enum AssetAuditScopeType
 {

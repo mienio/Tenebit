@@ -1,10 +1,8 @@
-import { ArrowDown, ArrowUp, Building2, CircleDot, Download, Eye, FileSpreadsheet, List, Pencil, Plus, Printer, QrCode, RefreshCw, Tag, Trash2, Upload, Users, X } from 'lucide-react';
+import { CircleDot, Download, Pencil, Plus, Printer, RefreshCw, Tag, Upload, Users } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { EvidenceGallery } from '../components/Evidence';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { GroupedAssetBrowser, type AssetGroup } from '../components/GroupedAssetBrowser';
@@ -15,25 +13,25 @@ import { LocationAssetBrowser } from '../components/LocationAssetBrowser';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
 import { PersonPreviewModal } from '../components/PersonPreviewModal';
-import { Pagination } from '../components/Pagination';
-import { SlidePanel } from '../components/SlidePanel';
-import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
-import { StatusBadge } from '../components/StatusBadge';
+import { ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
-import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { Asset, AssetCategoryType, AssetStatus, CreateAssetRequest, LocationType, ServiceTicket, ServiceTicketStatus } from '../types/domain';
-import { csvCell, formatDate, formatDateTime, formatMoney, toNullable } from '../utils/format';
-import { activityLabel, assetStatusValues, categoryTypeValues, locationTypeValues } from '../utils/labels';
-import { CategoryIcon } from '../utils/categoryIcons';
+import type { Asset, AssetCategoryType, AssetStatus, CreateAssetRequest, LocationType, ServiceTicket } from '../types/domain';
+import { csvCell, toNullable } from '../utils/format';
+import { assetStatusValues, categoryTypeValues, locationTypeValues } from '../utils/labels';
 import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
 import { useAuth } from '../auth/AuthProvider';
+import { AssetDetailPanel } from './assets/AssetDetailPanel';
+import { AssetsList } from './assets/AssetsList';
+import { AssetsToolbar } from './assets/AssetsToolbar';
+import { useAssetFilters } from './assets/useAssetFilters';
+import { useAssetImport } from './assets/useAssetImport';
+import { useAssetSelection } from './assets/useAssetSelection';
 
 const pageSize = 25;
 type ViewMode = 'list' | 'location' | 'person' | 'status' | 'category';
 const assetsViewStorageKey = (email: string) => `tenebit_assets_view_${email}`;
 
-type SortKey = 'name' | 'assetTag' | 'status' | 'person' | 'location' | 'value' | 'warranty';
 
 function parseMoney(value: FormDataEntryValue | null) {
   const raw = String(value ?? '').replace(',', '.').trim();
@@ -76,14 +74,10 @@ export function AssetsPage() {
       ? [...statusSettings.data].filter(item => item.isEnabled).sort((a, b) => a.sortOrder - b.sortOrder).map(item => ({ value: item.statusKey, label: item.label }))
       : assetStatusValues.map(value => ({ value, label: t(`status.${value}`) })))
   ], [statusSettings.data, t]);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState(searchParams.get('search') ?? '');
-  const [status, setStatus] = useState<AssetStatus | ''>((searchParams.get('status') as AssetStatus | null) ?? '');
-  const [location, setLocation] = useState(searchParams.get('location') ?? '');
-  const [team, setTeam] = useState(searchParams.get('team') ?? '');
-  const [owner, setOwner] = useState(searchParams.get('owner') ?? '');
-  const [warranty, setWarranty] = useState(searchParams.get('warranty') ?? '');
-  const [page, setPage] = useState(1);
+  const {
+    search, setSearch, status, setStatus, location, setLocation, team, setTeam, owner, setOwner,
+    warranty, setWarranty, page, setPage, sort, toggleSort, debouncedSearch, clearFilters, hasFilters, openAssetId
+  } = useAssetFilters();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selected, setSelected] = useState<Asset | null>(null);
@@ -96,23 +90,19 @@ export function AssetsPage() {
   const [quickAdd, setQuickAdd] = useState<'category' | 'location' | null>(null);
   const [quickAddIcon, setQuickAddIcon] = useState('');
   const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const { importOpen, openImport, closeImport } = useAssetImport();
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [formLocation, setFormLocation] = useState('');
   const [viewLocation, setViewLocation] = useState<string | null>(null);
   const [viewPersonId, setViewPersonId] = useState<string | null>(null);
   const [revealedFields, setRevealedFields] = useState<Record<string, string>>({});
   const [revealingKey, setRevealingKey] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkModal, setBulkModal] = useState<'status' | 'location' | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [pendingBulkOverride, setPendingBulkOverride] = useState<Partial<CreateAssetRequest & { status: AssetStatus }> | null>(null);
   const [batchQr, setBatchQr] = useState<{ asset: Asset; svg: string }[] | null>(null);
   const [batchQrLoading, setBatchQrLoading] = useState(false);
   const openedAssetRef = useRef<string | null>(null);
-  const debouncedSearch = useDebouncedValue(search.trim(), 320);
-
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   const assetsLoader = useMemo(
     () => () => api.assetsPaged({ search: debouncedSearch, status, location, teamId: team, owner, warranty, sort: sort?.key, desc: sort?.dir === -1, page, pageSize }),
     [debouncedSearch, status, location, team, owner, warranty, sort, page]
@@ -125,6 +115,8 @@ export function AssetsPage() {
   const groupCounts = useAsyncData(api.assetGroupCounts, []);
   const rows = useMemo(() => assets.data?.items ?? [], [assets.data]);
   const totalAssets = assets.data?.total ?? 0;
+  const selectionResetKey = `${debouncedSearch}|${status}|${location}|${team}|${owner}|${warranty}|${page}`;
+  const { selectedIds, selectedAssets, allOnPageSelected, toggleSelected, toggleSelectAllOnPage, clearSelection, keepOnly } = useAssetSelection(rows, selectionResetKey);
   const reloadAssets = useCallback(async () => { await Promise.all([assets.reload(), groupCounts.reload()]); }, [assets, groupCounts]);
 
   const personGroups = useMemo<AssetGroup[]>(() => {
@@ -168,29 +160,11 @@ export function AssetsPage() {
     try {
       const asset = await api.getAsset(assetId);
       setSelected(asset);
-    } catch { /* asset lookup failed — selection just stays unchanged */ }
+    } catch { /* asset lookup failed - selection just stays unchanged */ }
   }
 
-  function toggleSort(key: SortKey) {
-    setSort(current => (current?.key === key ? (current.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 }));
-    setPage(1);
-  }
-
-  function SortableTh({ sortKey, children, align }: { sortKey: SortKey; children: React.ReactNode; align?: 'right' }) {
-    const active = sort?.key === sortKey;
-    return (
-      <th style={align === 'right' ? { textAlign: 'right' } : undefined} aria-sort={active ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}>
-        <button type="button" className={active ? 'thSort thSort--active' : 'thSort'} onClick={() => toggleSort(sortKey)}>
-          {children}
-          {active ? (sort.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null}
-        </button>
-      </th>
-    );
-  }
   const categoryTypeLabels: Record<AssetCategoryType, string> = Object.fromEntries(categoryTypeValues.map(value => [value, t(`categoryType.${value}`)])) as Record<AssetCategoryType, string>;
   const locationTypeLabels: Record<LocationType, string> = Object.fromEntries(locationTypeValues.map(value => [value, t(`locationType.${value}`)])) as Record<LocationType, string>;
-  const selectedAssets = useMemo(() => rows.filter(asset => selectedIds.has(asset.id)), [rows, selectedIds]);
-  const allOnPageSelected = rows.length > 0 && rows.every(asset => selectedIds.has(asset.id));
   const historyLoader = useMemo(
     () => () => (selected ? api.activityLog({ entityType: 'asset', entityId: selected.id, pageSize: 10 }) : Promise.resolve(null)),
     [selected]
@@ -288,19 +262,6 @@ export function AssetsPage() {
     }
   }
 
-  function ticketStatusClass(status: ServiceTicketStatus): string {
-    if (status === 'Completed') return 'status status--InStock';
-    if (status === 'Cancelled') return 'status status--Damaged';
-    return 'status status--InService';
-  }
-
-  const serviceTicketStatusLabels: Record<ServiceTicketStatus, string> = {
-    Open: t('serviceTickets.status.Open'),
-    InProgress: t('serviceTickets.status.InProgress'),
-    WaitingForParts: t('serviceTickets.status.WaitingForParts'),
-    Completed: t('serviceTickets.status.Completed'),
-    Cancelled: t('serviceTickets.status.Cancelled')
-  };
   const resultStatusOptions: AssetStatus[] = ['InStock', 'Damaged', 'Retired', 'Disposed'];
   const resultStatusLabels: Record<AssetStatus, string> = Object.fromEntries(resultStatusOptions.map(value => [value, t(`status.${value}`)])) as Record<AssetStatus, string>;
 
@@ -328,23 +289,6 @@ export function AssetsPage() {
     } finally {
       setExporting(false);
     }
-  }
-
-  function toggleSelected(id: string) {
-    setSelectedIds(current => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAllOnPage() {
-    setSelectedIds(current => {
-      const next = new Set(current);
-      if (allOnPageSelected) rows.forEach(asset => next.delete(asset.id));
-      else rows.forEach(asset => next.add(asset.id));
-      return next;
-    });
   }
 
   function buildUpdateBody(asset: Asset, overrides: Partial<CreateAssetRequest & { status: AssetStatus }> = {}): CreateAssetRequest & { status: AssetStatus } {
@@ -383,7 +327,7 @@ export function AssetsPage() {
     setBulkModal(null);
     const failed = failedIds.length;
     setMessage({ type: failed ? 'error' : 'success', text: t(failed ? 'assets.bulkFailedKept' : 'assets.bulkResult', { success, failed }) });
-    setSelectedIds(new Set(failedIds));
+    keepOnly(failedIds);
     await reloadAssets();
   }
 
@@ -421,18 +365,6 @@ export function AssetsPage() {
     }
   }
 
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (debouncedSearch) params.set('search', debouncedSearch);
-    if (status) params.set('status', status);
-    if (location) params.set('location', location);
-    if (team) params.set('team', team);
-    if (owner) params.set('owner', owner);
-    if (warranty) params.set('warranty', warranty);
-    setSearchParams(params, { replace: true });
-    setPage(1);
-    setSelectedIds(new Set());
-  }, [debouncedSearch, location, team, setSearchParams, status, owner, warranty]);
 
   useEffect(() => {
     if (!message) return;
@@ -440,18 +372,14 @@ export function AssetsPage() {
     return () => window.clearTimeout(timeout);
   }, [message]);
 
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [page]);
 
   useEffect(() => {
-    const openAssetId = searchParams.get('openAssetId');
     if (!openAssetId || !assets.data || openedAssetRef.current === openAssetId) return;
     openedAssetRef.current = openAssetId;
     const match = assets.data.items.find(asset => asset.id === openAssetId);
     if (match) setSelected(match);
     else api.getAsset(openAssetId).then(setSelected).catch(() => {});
-  }, [assets.data, searchParams]);
+  }, [assets.data, openAssetId]);
 
   useEffect(() => {
     setRevealedFields({});
@@ -684,7 +612,7 @@ export function AssetsPage() {
             <Button variant="secondary" disabled={exporting} onClick={() => void downloadJson()} icon={<Download size={16} />}>
               {exporting ? t('common.loading') : t('assets.exportJson')}
             </Button>
-            <Button variant="secondary" onClick={() => setImportOpen(true)} icon={<Upload size={16} />}>
+            <Button variant="secondary" onClick={openImport} icon={<Upload size={16} />}>
               {t('assets.import')}
             </Button>
             <Button onClick={openCreate} icon={<Plus size={16} />}>
@@ -700,72 +628,32 @@ export function AssetsPage() {
         </div>
       )}
 
-      {selectedIds.size > 0 && (
-        <Card className="toolbarCard">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <strong>{t('assets.bulkSelectedCount', { count: selectedIds.size })}</strong>
-            <Button variant="secondary" onClick={() => setBulkModal('status')}>{t('assets.bulkChangeStatus')}</Button>
-            <Button variant="secondary" onClick={() => setBulkModal('location')}>{t('assets.bulkMove')}</Button>
-            <Button variant="secondary" onClick={exportSelectedCsv} icon={<FileSpreadsheet size={16} />}>{t('assets.bulkExport')}</Button>
-            <Button variant="secondary" disabled={batchQrLoading} onClick={openBatchQr} icon={<Printer size={16} />}>{batchQrLoading ? t('common.loading') : t('assets.bulkPrintQr')}</Button>
-            <Button variant="ghost" onClick={() => setSelectedIds(new Set())} icon={<X size={16} />}>{t('assets.bulkClear')}</Button>
-          </div>
-        </Card>
-      )}
-
-      {(owner === 'none' || warranty === 'expiring') && (
-        <Card className="toolbarCard">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            {owner === 'none' && <Button variant="secondary" icon={<X size={14} />} onClick={() => setOwner('')}>{t('assets.filterOwnerNone')}</Button>}
-            {warranty === 'expiring' && <Button variant="secondary" icon={<X size={14} />} onClick={() => setWarranty('')}>{t('assets.filterWarrantyExpiring')}</Button>}
-          </div>
-        </Card>
-      )}
-
-      <Card className="toolbarCard">
-        <form className="filters filters--four" onSubmit={event => event.preventDefault()}>
-          <Field label={t('assets.searchLabel')}>
-            <TextInput value={search} onChange={event => setSearch(event.target.value)} placeholder={t('assets.searchPlaceholder')} />
-          </Field>
-          <Field label={t('assets.statusLabel')}>
-            <SelectInput value={status} onChange={event => setStatus(event.target.value as AssetStatus | '')}>
-              {statuses.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </SelectInput>
-          </Field>
-          <Field label={t('assets.locationLabel')}>
-            <SelectInput value={location} onChange={event => setLocation(event.target.value)}>
-              <option value="">{t('assets.allLocations')}</option>
-              {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
-            </SelectInput>
-          </Field>
-          <Field label={t('assets.teamLabel')}>
-            <SelectInput value={team} onChange={event => setTeam(event.target.value)}>
-              <option value="">{t('assets.allTeams')}</option>
-              {teams.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </SelectInput>
-          </Field>
-        </form>
-      </Card>
-
-      <Card className="toolbarCard">
-        <div className="tabs" role="tablist" aria-label={t('assets.listTitle')}>
-          <button type="button" role="tab" aria-selected={viewMode === 'list'} className={viewMode === 'list' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('list')}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><List size={16} />{t('assets.viewList')}</span>
-          </button>
-          <button type="button" role="tab" aria-selected={viewMode === 'location'} className={viewMode === 'location' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('location')}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Building2 size={16} />{t('assets.browseByLocation')}</span>
-          </button>
-          <button type="button" role="tab" aria-selected={viewMode === 'person'} className={viewMode === 'person' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('person')}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Users size={16} />{t('assets.viewPerson')}</span>
-          </button>
-          <button type="button" role="tab" aria-selected={viewMode === 'status'} className={viewMode === 'status' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('status')}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><CircleDot size={16} />{t('assets.viewStatus')}</span>
-          </button>
-          <button type="button" role="tab" aria-selected={viewMode === 'category'} className={viewMode === 'category' ? 'tab tab--active' : 'tab'} onClick={() => setViewMode('category')}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Tag size={16} />{t('assets.viewCategory')}</span>
-          </button>
-        </div>
-      </Card>
+      <AssetsToolbar
+        selectedCount={selectedIds.size}
+        batchQrLoading={batchQrLoading}
+        onBulkStatus={() => setBulkModal('status')}
+        onBulkLocation={() => setBulkModal('location')}
+        onExportSelected={exportSelectedCsv}
+        onBatchQr={openBatchQr}
+        onClearSelection={clearSelection}
+        owner={owner}
+        setOwner={setOwner}
+        warranty={warranty}
+        setWarranty={setWarranty}
+        search={search}
+        setSearch={setSearch}
+        status={status}
+        setStatus={setStatus}
+        location={location}
+        setLocation={setLocation}
+        team={team}
+        setTeam={setTeam}
+        statuses={statuses}
+        locations={locations.data ?? []}
+        teams={teams.data ?? []}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+      />
 
       <div style={{ display: viewMode === 'location' ? undefined : 'none' }}>
         <Card>
@@ -804,270 +692,53 @@ export function AssetsPage() {
       </div>
 
       <div style={{ display: viewMode === 'list' ? undefined : 'none' }}>
-        <Card>
-          <div className="sectionTitle">
-            <div>
-              <h2>{t('assets.listTitle')}</h2>
-              <p>{t('assets.countSummary', { count: totalAssets, pageSize, noun: tPlural('count.assets', totalAssets) })}</p>
-          </div>
-        </div>
-
-        {assets.isLoading && <p className="muted">{t('assets.refreshing')}</p>}
-
-        {!rows.length ? (
-          <EmptyState
-            title={t('assets.emptyTitle')}
-            description={t('assets.emptyDesc')}
-            action={(debouncedSearch || status || location || team || owner || warranty) ? (
-              <Button variant="secondary" icon={<X size={16} />} onClick={() => { setSearch(''); setStatus(''); setLocation(''); setTeam(''); setOwner(''); setWarranty(''); }}>{t('common.clearFilters')}</Button>
-            ) : (
-              <Button onClick={openCreate} icon={<Plus size={16} />}>{t('assets.add')}</Button>
-            )}
-          />
-        ) : (
-          <>
-            <div className="tableWrap tableWrap--cards">
-              <table className="dense-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '32px' }}><input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} onClick={event => event.stopPropagation()} aria-label={t('assets.bulkSelectAll')} /></th>
-                    <th style={{ width: '40px' }}></th>
-                    <SortableTh sortKey="name">{t('assets.colName')}</SortableTh>
-                    <SortableTh sortKey="assetTag">{t('assets.colTag')}</SortableTh>
-                    <SortableTh sortKey="status">{t('assets.statusLabel')}</SortableTh>
-                    <SortableTh sortKey="person">{t('assets.colPerson')}</SortableTh>
-                    <SortableTh sortKey="location">{t('assets.colLocation')}</SortableTh>
-                    <SortableTh sortKey="value" align="right">{t('assets.colValue')}</SortableTh>
-                    <SortableTh sortKey="warranty">{t('assets.colWarranty')}</SortableTh>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(asset => {
-                    const cat = categories.data?.find(c => c.id === asset.categoryId);
-                    return (
-                      <tr
-                        key={asset.id}
-                        tabIndex={0}
-                        onClick={() => setSelected(asset)}
-                        onKeyDown={event => {
-                          if (event.target !== event.currentTarget) return;
-                          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelected(asset); }
-                        }}
-                      >
-                        <td onClick={event => event.stopPropagation()}>
-                          <input type="checkbox" checked={selectedIds.has(asset.id)} onChange={() => toggleSelected(asset.id)} aria-label={t('assets.bulkSelectOne', { name: asset.name })} />
-                        </td>
-                        <td className="cell-icon">
-                          <div className="table-icon">
-                            <CategoryIcon icon={cat?.icon} size={16} />
-                          </div>
-                        </td>
-                        <td data-label={t('assets.colName')}>
-                          <strong>{asset.name}</strong>
-                          <small>{asset.categoryName}</small>
-                        </td>
-                        <td data-label={t('assets.colTag')}>{asset.assetTag}</td>
-                        <td data-label={t('assets.statusLabel')}><StatusBadge status={asset.status} label={statusSettingByKey.get(asset.status)?.label} color={statusSettingByKey.get(asset.status)?.color} backgroundColor={statusSettingByKey.get(asset.status)?.backgroundColor} /></td>
-                        <td data-label={t('assets.colPerson')} onClick={event => event.stopPropagation()}>
-                          {asset.assignedPersonId && asset.assignedPersonName ? (
-                            <button type="button" className="inlineAction" onClick={() => setViewPersonId(asset.assignedPersonId ?? null)}>{asset.assignedPersonName}</button>
-                          ) : <span style={{ color: 'var(--muted)' }}>{t('common.unassigned')}</span>}
-                        </td>
-                        <td data-label={t('assets.colLocation')} onClick={event => event.stopPropagation()}>
-                          {asset.location ? (
-                            <button type="button" className="inlineAction" onClick={() => setViewLocation(asset.location ?? null)}>{asset.location}</button>
-                          ) : <span style={{ color: 'var(--muted)' }}>—</span>}
-                        </td>
-                        <td data-label={t('assets.colValue')} style={{ textAlign: 'right' }}>{asset.purchasePrice != null ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : '—'}</td>
-                        <td data-label={t('assets.colWarranty')}>{formatDate(asset.warrantyUntil)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <Pagination page={page} total={totalAssets} pageSize={pageSize} onPageChange={setPage} />
-          </>
-        )}
-        </Card>
+        <AssetsList
+          rows={rows}
+          categories={categories.data ?? []}
+          statusSettingByKey={statusSettingByKey}
+          isLoading={assets.isLoading}
+          totalAssets={totalAssets}
+          page={page}
+          pageSize={pageSize}
+          filtersActive={hasFilters}
+          onClearFilters={clearFilters}
+          onCreate={openCreate}
+          onSelect={setSelected}
+          onViewPerson={setViewPersonId}
+          onViewLocation={setViewLocation}
+          selectedIds={selectedIds}
+          allOnPageSelected={allOnPageSelected}
+          onToggleSelected={toggleSelected}
+          onToggleSelectAll={toggleSelectAllOnPage}
+          sort={sort}
+          onToggleSort={toggleSort}
+          onPageChange={setPage}
+        />
       </div>
 
-      <SlidePanel open={!!selected} title={selected?.name ?? t('assets.colName')} onClose={() => setSelected(null)} width="wide">
-        {selected && (
-          <div className="modalDetails">
-            <div className="modalToolbar">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className="table-icon" style={{ width: '48px', height: '48px' }}>
-                  <CategoryIcon icon={category?.icon} size={24} />
-                </div>
-                <div>
-                  <strong>{selected.assetTag}</strong>
-                  <small>{selected.categoryName ?? t('assets.noCategory')}</small>
-                </div>
-              </div>
-              <div className="rowActions">
-                <Button variant="secondary" onClick={() => openQr(selected)} icon={<QrCode size={16} />}>
-                  {t('assets.qrCode')}
-                </Button>
-                <Button variant="secondary" onClick={() => openEdit(selected)} icon={<Pencil size={16} />}>
-                  {t('assets.edit')}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setDeleteTarget(selected);
-                    setSelected(null);
-                  }}
-                  icon={<Trash2 size={16} />}
-                >
-                  {t('assets.delete')}
-                </Button>
-              </div>
-            </div>
-
-            <dl className="detailGrid">
-              <div>
-                <dt>{t('assets.statusLabel')}</dt>
-                <dd><StatusBadge status={selected.status} label={statusSettingByKey.get(selected.status)?.label} color={statusSettingByKey.get(selected.status)?.color} backgroundColor={statusSettingByKey.get(selected.status)?.backgroundColor} /></dd>
-              </div>
-              <div>
-                <dt>{t('assets.colPerson')}</dt>
-                <dd>
-                  {selected.assignedPersonId && selected.assignedPersonName ? (
-                    <button type="button" className="inlineAction" onClick={() => setViewPersonId(selected.assignedPersonId ?? null)}>{selected.assignedPersonName}</button>
-                  ) : t('common.unassigned')}
-                </dd>
-              </div>
-              <div>
-                <dt>{t('assets.colLocation')}</dt>
-                <dd>
-                  {selected.location ? (
-                    <button type="button" className="inlineAction" onClick={() => setViewLocation(selected.location ?? null)}>{selected.location}</button>
-                  ) : t('common.noLocation')}
-                </dd>
-              </div>
-              <div>
-                <dt>{t('assets.teamLabel')}</dt>
-                <dd>{selected.teamName ?? t('common.none')}</dd>
-              </div>
-              <div>
-                <dt>{t('assets.serialNumber')}</dt>
-                <dd>{selected.serialNumber ?? t('common.none')}</dd>
-              </div>
-              <div>
-                <dt>{t('assets.manufacturerModel')}</dt>
-                <dd>{[selected.manufacturer, selected.model].filter(Boolean).join(' ') || t('common.none')}</dd>
-              </div>
-              <div>
-                <dt>{t('assets.purchase')}</dt>
-                <dd>
-                  {selected.purchasePrice != null
-                    ? `${formatMoney(selected.purchasePrice, selected.currency ?? 'PLN')} · ${formatDate(selected.purchaseDate)}`
-                    : t('assets.noPurchaseData')}
-                </dd>
-              </div>
-              <div>
-                <dt>{t('assets.warranty')}</dt>
-                <dd>{formatDate(selected.warrantyUntil)}</dd>
-              </div>
-              {selected.categoryFieldDefinitions.map(field => (
-                <div key={field.id}>
-                  <dt>{field.label}</dt>
-                  <dd>
-                    {field.fieldType === 'Boolean' ? (
-                      selected.customFields[field.key] === 'true' ? t('common.yes') : t('common.no')
-                    ) : field.fieldType === 'Sensitive' ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>{revealedFields[field.key] ?? selected.customFields[field.key] ?? t('common.none')}</span>
-                        {revealedFields[field.key] === undefined && selected.customFields[field.key] && (
-                          <button type="button" className="iconButton" aria-label={t('assets.revealField')} title={t('assets.revealField')} disabled={revealingKey === field.key} onClick={() => revealField(field.key)}>
-                            <Eye size={14} />
-                          </button>
-                        )}
-                      </span>
-                    ) : (
-                      selected.customFields[field.key] ?? t('common.none')
-                    )}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-
-            <div className="formSectionTitle">{t('evidence.photos')}</div>
-            {evidence.isLoading ? <p className="muted">{t('common.loading')}</p> : !evidence.data?.length ? (
-              <p className="muted">{t('evidence.noPhotos')}</p>
-            ) : (
-              <div className="pageStack">
-                {(['Issue', 'Return', 'Audit', 'Offboarding'] as const).map(phase => {
-                  const ids = evidence.data!.filter(item => item.phase === phase).map(item => item.id);
-                  if (!ids.length) return null;
-                  return (
-                    <div key={phase}>
-                      <strong>{t(`evidence.phase.${phase}`)}</strong>
-                      <EvidenceGallery ids={ids} getBlob={api.evidenceBlob} />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="formSectionTitle">{t('serviceTickets.title')}</div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-              <Button
-                variant="secondary"
-                onClick={() => setServiceTicketModalOpen(true)}
-                icon={<Plus size={16} />}
-                disabled={selected.status === 'Disposed'}
-                title={selected.status === 'Disposed' ? t('serviceTickets.cannotOpenForDisposed') : undefined}
-              >
-                {t('serviceTickets.open')}
-              </Button>
-            </div>
-            {serviceTickets.isLoading ? <p className="muted">{t('common.loading')}</p> : !serviceTickets.data?.length ? (
-              <p className="muted">{t('serviceTickets.none')}</p>
-            ) : (
-              <div className="listRows">
-                {serviceTickets.data.map(ticket => {
-                  const cost = ticket.actualCost ?? ticket.estimatedCost;
-                  const isOpen = ticket.status === 'Open' || ticket.status === 'InProgress' || ticket.status === 'WaitingForParts';
-                  return (
-                    <div className="listRow" key={ticket.id}>
-                      <div>
-                        <strong>{ticket.vendor}</strong>
-                        <small>
-                          <span className={ticketStatusClass(ticket.status)}>{serviceTicketStatusLabels[ticket.status]}</span>
-                          {' · '}{formatDate(ticket.openedAt)}
-                          {cost != null && ` · ${formatMoney(cost, ticket.currency ?? 'PLN')}`}
-                        </small>
-                      </div>
-                      {isOpen ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <Button variant="secondary" onClick={() => setCompletingTicket(ticket)}>{t('serviceTickets.complete')}</Button>
-                          <Button variant="ghost" onClick={() => setCancellingTicket(ticket)}>{t('serviceTickets.cancel')}</Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="formSectionTitle">{t('assets.historyTitle')}</div>
-            {history.isLoading ? <p className="muted">{t('common.loading')}</p> : !history.data?.items.length ? (
-              <p className="muted">{t('assets.noHistory')}</p>
-            ) : (
-              <div className="listRows">
-                {history.data.items.map(entry => (
-                  <div className="listRow" key={entry.id}>
-                    <div><strong>{activityLabel(t, entry.action)}</strong><small>{entry.actorDisplay}</small></div>
-                    <small>{formatDateTime(entry.createdAt)}</small>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </SlidePanel>
+      <AssetDetailPanel
+        selected={selected}
+        categoryIcon={category?.icon}
+        statusSettingByKey={statusSettingByKey}
+        onClose={() => setSelected(null)}
+        onQr={openQr}
+        onEdit={openEdit}
+        onDelete={asset => { setDeleteTarget(asset); setSelected(null); }}
+        onViewPerson={setViewPersonId}
+        onViewLocation={setViewLocation}
+        revealedFields={revealedFields}
+        revealingKey={revealingKey}
+        onRevealField={revealField}
+        evidence={evidence.data}
+        evidenceLoading={evidence.isLoading}
+        serviceTickets={serviceTickets.data}
+        serviceTicketsLoading={serviceTickets.isLoading}
+        onOpenServiceTicket={() => setServiceTicketModalOpen(true)}
+        onCompleteServiceTicket={setCompletingTicket}
+        onCancelServiceTicket={setCancellingTicket}
+        history={history.data?.items}
+        historyLoading={history.isLoading}
+      />
 
       <Modal
         open={assetModalOpen}
@@ -1206,7 +877,7 @@ export function AssetsPage() {
         onClose={() => setDeleteTarget(null)}
       />
 
-      <Modal open={!!qrTarget} title={qrTarget ? `${t('assets.qrCode')} — ${qrTarget.assetTag}` : t('assets.qrCode')} onClose={() => setQrTarget(null)}>
+      <Modal open={!!qrTarget} title={qrTarget ? `${t('assets.qrCode')} - ${qrTarget.assetTag}` : t('assets.qrCode')} onClose={() => setQrTarget(null)}>
         {qrLoading ? <p className="muted">{t('assets.generatingQr')}</p> : qrSvg ? (
           <div className="qrPreview">
             <div className="qrPreview__image"><img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrSvg)}`} alt="QR" /></div>
@@ -1242,7 +913,7 @@ export function AssetsPage() {
         existingKeys={rows.map(item => item.assetTag.toLowerCase())}
         categories={categories.data ?? []}
         locations={locations.data ?? []}
-        onClose={() => setImportOpen(false)}
+        onClose={closeImport}
         onDone={reloadAssets}
       />
 

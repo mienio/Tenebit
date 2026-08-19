@@ -1,9 +1,10 @@
 import { BarChart3, Boxes, ChevronDown, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { BrandMark } from './BrandMark';
 import { Button } from './Button';
 import { keepFocusInside } from './Modal';
+import { LoadingState } from './StateViews';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 
@@ -124,7 +125,9 @@ export function Layout() {
       </aside>
 
       <main className="content">
-        <Outlet />
+        <Suspense fallback={<LoadingState />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

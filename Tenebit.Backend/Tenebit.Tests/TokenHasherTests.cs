@@ -27,4 +27,20 @@ public class TokenHasherTests
         var b = TokenHasher.NewRawToken();
         Assert.NotEqual(TokenHasher.Hash(a), TokenHasher.Hash(b));
     }
+    [Fact]
+    public void HashOneTimeCode_NormalizesEmailAndFormatting()
+    {
+        var expected = TokenHasher.HashOneTimeCode("person@example.test", "123456");
+        var actual = TokenHasher.HashOneTimeCode(" Person@Example.Test ", "123 456");
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void HashOneTimeCode_IsScopedToEmailAddress()
+    {
+        var first = TokenHasher.HashOneTimeCode("first@example.test", "123456");
+        var second = TokenHasher.HashOneTimeCode("second@example.test", "123456");
+        Assert.NotEqual(first, second);
+    }
+
 }

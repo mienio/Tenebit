@@ -30,7 +30,8 @@ public sealed class TokenIssuer
         }
         claims.AddRange(user.Roles.Select(role => new Claim("roles", role)));
 
-        var credentials = new SigningCredentials(JwtSigningKey.Get(_configuration), SecurityAlgorithms.HmacSha256);
+        var signingKey = JwtSigningKey.GetActive(_configuration);
+        var credentials = new SigningCredentials(signingKey.Key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
             issuer: JwtIssuerOptions.GetIssuer(_configuration),
             audience: JwtIssuerOptions.GetAudience(_configuration),

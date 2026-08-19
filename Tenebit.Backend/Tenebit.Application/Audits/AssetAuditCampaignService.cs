@@ -13,7 +13,7 @@ using Tenebit.Domain.People;
 namespace Tenebit.Application.Audits;
 
 /// <summary>Tworzenie, podgląd i uruchamianie kampanii potwierdzenia aktywów (spec 5.4/5.8), oraz publiczny
-/// przepływ uczestnika (spec 5.5) — token per uczestnik (nie per kampania, w przeciwieństwie do offboardingu).</summary>
+/// przepływ uczestnika (spec 5.5) - token per uczestnik (nie per kampania, w przeciwieństwie do offboardingu).</summary>
 public sealed class AssetAuditCampaignService
 {
     private static readonly JsonSerializerOptions ScopeJsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -31,14 +31,14 @@ public sealed class AssetAuditCampaignService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IOrganizationRepository _organizations;
     private readonly IEmailSender _emailSender;
+    private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly IAppLinkBuilder _linkBuilder;
-    private readonly IPdfProtocolGenerator _pdfGenerator;
 
     public AssetAuditCampaignService(IAssetAuditCampaignRepository campaigns, IAssetAuditParticipantRepository participants,
         IAssetAuditItemRepository items, IPersonRepository people, IAssetRepository assets, IAssetEvidenceRepository evidence,
         AssetEvidenceService evidenceService, IActivityLogRepository activity,
         ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IOrganizationRepository organizations,
-        IEmailSender emailSender, IAppLinkBuilder linkBuilder, IPdfProtocolGenerator pdfGenerator)
+        IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEmailOutboxWriter? emailOutbox = null)
     {
         _campaigns = campaigns;
         _participants = participants;
@@ -53,8 +53,8 @@ public sealed class AssetAuditCampaignService
         _unitOfWork = unitOfWork;
         _organizations = organizations;
         _emailSender = emailSender;
+        _emailOutbox = emailOutbox;
         _linkBuilder = linkBuilder;
-        _pdfGenerator = pdfGenerator;
     }
 
     public async Task<Result<PagedResult<AssetAuditCampaignResponse>>> ListPagedAsync(AssetAuditCampaignStatus? status, int page, int pageSize, CancellationToken cancellationToken)
@@ -101,7 +101,7 @@ public sealed class AssetAuditCampaignService
             var asset = assetLookup.GetValueOrDefault(x.AssetId);
             return new AssetAuditItemAdminResponse(
                 x.Id, x.ParticipantId, participant is null ? null : names.GetValueOrDefault(participant.PersonId),
-                x.AssetId, asset?.Name ?? "—", asset?.AssetTag ?? "—", x.ExpectedLocation,
+                x.AssetId, asset?.Name ?? "-", asset?.AssetTag ?? "-", x.ExpectedLocation,
                 x.Response, x.Comment, x.RespondedAt, x.Resolution, x.ResolutionNotes, x.ResolvedBy, x.ResolvedAt);
         }).ToList();
 
@@ -131,7 +131,7 @@ public sealed class AssetAuditCampaignService
         }
     }
 
-    /// <summary>Edycja dozwolona wyłącznie w Draft — po starcie zakres jest zablokowany (spec 5.4).</summary>
+    /// <summary>Edycja dozwolona wyłącznie w Draft - po starcie zakres jest zablokowany (spec 5.4).</summary>
     public async Task<Result<AssetAuditCampaignDetailsResponse>> UpdateAsync(Guid id, UpdateAssetAuditCampaignRequest request, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
@@ -160,7 +160,7 @@ public sealed class AssetAuditCampaignService
         return await BuildDetailsAsync(id, cancellationToken);
     }
 
-    /// <summary>Wylicza zakres bez zapisu — do ostrzeżenia administratora przed uruchomieniem (spec 5.4 krok 3).</summary>
+    /// <summary>Wylicza zakres bez zapisu - do ostrzeżenia administratora przed uruchomieniem (spec 5.4 krok 3).</summary>
     public async Task<Result<AssetAuditCampaignPreviewResponse>> PreviewAsync(Guid id, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
@@ -203,6 +203,7 @@ public sealed class AssetAuditCampaignService
             // bo dotyczy fizycznego zwrotu sprzętu; tu wyłącznie potwierdzenia online, więc krótszy margines).
             var tokenExpiresAt = campaign.DueDate.AddDays(14);
 
+            var pendingEmails = new List<(Person Person, string RawToken, string TokenHash)>();
             foreach (var (person, assets) in personAssets)
             {
                 var participant = new AssetAuditParticipant(organizationId, campaign.Id, person.Id, person.Email);
@@ -211,26 +212,51 @@ public sealed class AssetAuditCampaignService
                 _participants.Add(participant);
 
                 foreach (var asset in assets)
-                {
-                    var item = new AssetAuditItem(organizationId, campaign.Id, participant.Id, asset.Id, person.Id, asset.Location);
-                    _items.Add(item);
-                }
+                    _items.Add(new AssetAuditItem(organizationId, campaign.Id, participant.Id, asset.Id, person.Id, asset.Location));
 
-                if (!string.IsNullOrWhiteSpace(person.Email))
-                {
-                    await SendLinkAsync(campaign, generated.RawToken, person, now, cancellationToken);
-                }
+                if (!string.IsNullOrWhiteSpace(person.Email)) pendingEmails.Add((person, generated.RawToken, generated.TokenHash));
             }
 
             _activity.Add(new ActivityLog(organizationId, "asset_audit.started", "asset_audit_campaign", campaign.Id, _currentUser.Subject, campaign.Name, now));
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (_emailOutbox is not null)
+            {
+                await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+                {
+                    foreach (var pendingEmail in pendingEmails)
+                        await QueueLinkAsync(campaign, pendingEmail.RawToken, pendingEmail.TokenHash, pendingEmail.Person, now, ct);
+                    await _unitOfWork.SaveChangesAsync(ct);
+                    return true;
+                }, cancellationToken);
+            }
+            else
+            {
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                foreach (var pendingEmail in pendingEmails)
+                    await SendLinkAsync(campaign, pendingEmail.RawToken, pendingEmail.Person, now, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
             return await BuildDetailsAsync(campaign.Id, cancellationToken);
         }
         catch (DomainException ex)
         {
             return Result<AssetAuditCampaignDetailsResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    private async Task QueueLinkAsync(AssetAuditCampaign campaign, string rawToken, string tokenHash, Person person, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var link = _linkBuilder.BuildAssetAuditLink(rawToken);
+        var organization = await _organizations.GetAsync(campaign.OrganizationId, cancellationToken);
+        var (subject, html) = EmailTemplates.AssetAuditLink(organization?.Language, person.FirstName, campaign.DueDate, link);
+        await _emailOutbox!.EnqueueAsync(
+            campaign.OrganizationId,
+            person.Email,
+            subject,
+            html,
+            "asset-audit-public-link",
+            $"asset-audit:{campaign.Id:N}:{person.Id:N}:{tokenHash}",
+            cancellationToken);
+        _activity.Add(new ActivityLog(campaign.OrganizationId, "asset_audit.link_queued", "asset_audit_campaign", campaign.Id, _currentUser.Subject, person.FullName, now));
     }
 
     private async Task SendLinkAsync(AssetAuditCampaign campaign, string rawToken, Person person, DateTimeOffset now, CancellationToken cancellationToken)
@@ -244,14 +270,14 @@ public sealed class AssetAuditCampaignService
             await _emailSender.SendAsync(person.Email, subject, html, cancellationToken);
             _activity.Add(new ActivityLog(campaign.OrganizationId, "asset_audit.link_sent", "asset_audit_campaign", campaign.Id, _currentUser.Subject, person.FullName, now));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             _activity.Add(new ActivityLog(campaign.OrganizationId, "asset_audit.email_failed", "asset_audit_campaign", campaign.Id, _currentUser.Subject, "delivery_failed", now));
         }
     }
 
     /// <summary>Znajduje osoby spełniające zakres i ich przypisane aktywa (ograniczone do kategorii, jeśli zakres
-    /// to AssetCategory). Osoby bez żadnego przypisanego aktywa są pomijane — nie tworzymy pustego uczestnictwa.</summary>
+    /// to AssetCategory). Osoby bez żadnego przypisanego aktywa są pomijane - nie tworzymy pustego uczestnictwa.</summary>
     private async Task<(Dictionary<Person, List<Asset>> PersonAssets, int TotalCandidatePeople)> ResolveScopeAsync(Guid organizationId, AssetAuditScope scope, CancellationToken cancellationToken)
     {
         var allPeople = await _people.ListAsync(organizationId, null, cancellationToken);
@@ -302,13 +328,13 @@ public sealed class AssetAuditCampaignService
         campaign.Id, campaign.Name, campaign.Description, campaign.Status, campaign.DueDate,
         campaign.CreatedAt, campaign.CreatedBy, campaign.StartedAt, campaign.CompletedAt, campaign.CompletedBy);
 
-    /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów audytu — wzorem
+    /// <summary>Wspólna weryfikacja tokenu dla wszystkich publicznych endpointów audytu - wzorem
     /// <c>OffboardingService.ResolveByTokenAsync</c>, ale token jest tutaj przypisany do uczestnika, nie do
     /// kampanii. Zwraca zawsze ten sam generyczny NotFound dla tokenu nieistniejącego/wygasłego/unieważnionego.</summary>
     private async Task<Result<AssetAuditParticipant>> ResolveByTokenAsync(string token, CancellationToken cancellationToken)
     {
         var now = _clock.UtcNow;
-        // Indexed exact-hash lookup instead of scanning every participant with a live token — the old
+        // Indexed exact-hash lookup instead of scanning every participant with a live token - the old
         // approach did O(N) crypto verifications per request, an unauthenticated cost that grew with
         // campaign size (audyt AUD3-009). Campaign status is also rechecked directly, mirroring
         // OffboardingService.ResolveByTokenAsync, so a terminal campaign rejects even a token whose
@@ -345,7 +371,7 @@ public sealed class AssetAuditCampaignService
         foreach (var item in items)
         {
             var asset = await _assets.GetAsync(participant.OrganizationId, item.AssetId, cancellationToken);
-            var photo = (await _evidence.ListByAssetAsync(participant.OrganizationId, item.AssetId, cancellationToken))
+            var photo = (await _evidence.ListMetadataByAssetAsync(participant.OrganizationId, item.AssetId, cancellationToken))
                 .Where(x => x.AssetAuditItemId == item.Id)
                 .OrderByDescending(x => x.UploadedAt)
                 .FirstOrDefault();
@@ -359,7 +385,7 @@ public sealed class AssetAuditCampaignService
         return new PublicAssetAuditResponse(organization?.Name ?? string.Empty, campaign?.Name ?? string.Empty, campaign?.DueDate ?? default, readOnly, itemResponses);
     }
 
-    /// <summary>Do momentu wysłania odpowiedzi pracownik może poprawiać wybory (spec 5.5) — po Submit dalsze
+    /// <summary>Do momentu wysłania odpowiedzi pracownik może poprawiać wybory (spec 5.5) - po Submit dalsze
     /// zmiany są odrzucane, ponowne otwarcie jest możliwe wyłącznie przez administratora.</summary>
     public async Task<Result<PublicAssetAuditResponse>> RecordItemResponseAsync(string token, Guid itemId, SubmitPublicAssetAuditItemRequest request, CancellationToken cancellationToken)
     {
@@ -430,7 +456,7 @@ public sealed class AssetAuditCampaignService
 
     // --- Rozstrzyganie wyjątków / administracja kampanią (spec 5.7) ---
 
-    /// <summary>Wysyła ponowny e-mail do uczestników, którzy jeszcze nie odpowiedzieli (Pending/InProgress) —
+    /// <summary>Wysyła ponowny e-mail do uczestników, którzy jeszcze nie odpowiedzieli (Pending/InProgress) -
     /// Submitted/Reviewed pomijamy, bo już odpowiedzieli. Jeden zbiorczy wpis w ActivityLog, nie per-osoba,
     /// żeby nie zaspamować dziennika przy dużych kampaniach.</summary>
     public async Task<Result<RemindParticipantsResponse>> RemindParticipantsAsync(Guid id, CancellationToken cancellationToken)
@@ -449,39 +475,69 @@ public sealed class AssetAuditCampaignService
         var remindedCount = 0;
         var organization = await _organizations.GetAsync(organizationId, cancellationToken);
 
+        var reminderEmails = new List<(AssetAuditParticipant Participant, Person Person, string RawToken, string TokenHash)>();
         foreach (var participant in pending)
         {
             if (string.IsNullOrWhiteSpace(participant.Email)) continue;
-
             var person = await _people.GetAsync(organizationId, participant.PersonId, cancellationToken);
             if (person is null) continue;
-
-            // PublicTokenService przechowuje wyłącznie hash — poprzedni surowy token nie jest odtwarzalny,
-            // więc przypomnienie (jak resend w offboardingu) wystawia nowy token o tym samym terminie ważności
-            // i unieważnia poprzedni, dając ten sam efekt końcowy: działający link w treści e-maila.
-            try
-            {
-                var generated = PublicTokenService.Generate();
-                participant.SetToken(generated.TokenHash, participant.TokenExpiresAt ?? campaign.DueDate.AddDays(14));
-                var link = _linkBuilder.BuildAssetAuditLink(generated.RawToken);
-                var (subject, html) = EmailTemplates.AssetAuditLink(organization?.Language, person.FirstName, campaign.DueDate, link);
-                await _emailSender.SendAsync(participant.Email, subject, html, cancellationToken);
-                participant.MarkReminded(now);
-                remindedCount++;
-            }
-            catch (Exception)
-            {
-                // Pojedynczy błąd wysyłki nie powinien przerywać przypominania reszty uczestników.
-            }
+            var generated = PublicTokenService.Generate();
+            participant.SetToken(generated.TokenHash, participant.TokenExpiresAt ?? campaign.DueDate.AddDays(14));
+            reminderEmails.Add((participant, person, generated.RawToken, generated.TokenHash));
         }
 
-        _activity.Add(new ActivityLog(organizationId, "asset_audit.reminder_sent", "asset_audit_campaign", campaign.Id, _currentUser.Subject, remindedCount.ToString(), now));
+        if (_emailOutbox is not null)
+        {
+            await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                foreach (var pendingEmail in reminderEmails)
+                {
+                    var link = _linkBuilder.BuildAssetAuditLink(pendingEmail.RawToken);
+                    var (subject, html) = EmailTemplates.AssetAuditLink(organization?.Language, pendingEmail.Person.FirstName, campaign.DueDate, link);
+                    await _emailOutbox.EnqueueAsync(
+                        organizationId,
+                        pendingEmail.Participant.Email!,
+                        subject,
+                        html,
+                        "asset-audit-reminder",
+                        $"asset-audit-reminder:{pendingEmail.Participant.Id:N}:{pendingEmail.TokenHash}",
+                        ct);
+                    pendingEmail.Participant.MarkReminded(now);
+                    remindedCount++;
+                }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                _activity.Add(new ActivityLog(organizationId, "asset_audit.reminder_queued", "asset_audit_campaign", campaign.Id, _currentUser.Subject, remindedCount.ToString(), now));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+        }
+        else
+        {
+            // Unit-test/direct-transport fallback. Production uses the durable branch above.
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            foreach (var pendingEmail in reminderEmails)
+            {
+                try
+                {
+                    var link = _linkBuilder.BuildAssetAuditLink(pendingEmail.RawToken);
+                    var (subject, html) = EmailTemplates.AssetAuditLink(organization?.Language, pendingEmail.Person.FirstName, campaign.DueDate, link);
+                    await _emailSender.SendAsync(pendingEmail.Participant.Email!, subject, html, cancellationToken);
+                    pendingEmail.Participant.MarkReminded(now);
+                    remindedCount++;
+                }
+                catch (Exception)
+                {
+                    // A subsequent reminder can issue a new token; no delivered link can reference rolled-back state.
+                }
+            }
+
+            _activity.Add(new ActivityLog(organizationId, "asset_audit.reminder_sent", "asset_audit_campaign", campaign.Id, _currentUser.Subject, remindedCount.ToString(), now));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
         return Result<RemindParticipantsResponse>.Success(new RemindParticipantsResponse(remindedCount));
     }
 
-    /// <summary>Ponowne otwarcie odpowiedzi jest świadomą decyzją administracyjną (spec 5.5) — celowo węższe
+    /// <summary>Ponowne otwarcie odpowiedzi jest świadomą decyzją administracyjną (spec 5.5) - celowo węższe
     /// uprawnienia niż reszta zarządzania kampanią (tylko Owner/Admin, bez AssetOperator).</summary>
     public async Task<Result<bool>> ReopenParticipantAsync(Guid id, Guid participantId, CancellationToken cancellationToken)
     {
@@ -508,7 +564,7 @@ public sealed class AssetAuditCampaignService
         return Result<bool>.Success(true);
     }
 
-    /// <summary>Rozstrzygnięcie zgłoszonego wyjątku — poza samą decyzją domenową na pozycji, stosuje odpowiedni
+    /// <summary>Rozstrzygnięcie zgłoszonego wyjątku - poza samą decyzją domenową na pozycji, stosuje odpowiedni
     /// efekt na aktywie (spec 5.7). Auditor nie ma dostępu do tej operacji (tylko odczyt/eksport).</summary>
     public async Task<Result<bool>> ResolveItemAsync(Guid id, Guid itemId, ResolveAssetAuditItemRequest request, CancellationToken cancellationToken)
     {
@@ -545,7 +601,7 @@ public sealed class AssetAuditCampaignService
                     asset.ReleaseAssignment(AssetStatus.Lost);
                     break;
                 case AssetAuditResolution.AssetMarkedDamaged:
-                    // Zgłoszenie audytowe uszkodzenia nie jest fizycznym zwrotem — aktywo zostaje przy osobie
+                    // Zgłoszenie audytowe uszkodzenia nie jest fizycznym zwrotem - aktywo zostaje przy osobie
                     // do czasu naprawy/wymiany w osobnym procesie, dlatego zmieniamy TYLKO status.
                     asset.ChangeStatus(AssetStatus.Damaged);
                     break;
@@ -554,7 +610,7 @@ public sealed class AssetAuditCampaignService
                     break;
                 case AssetAuditResolution.Dismissed:
                 case AssetAuditResolution.Accepted:
-                    // Bez zmiany statusu aktywa — administrator uznaje ewidencję za poprawną albo odrzuca zgłoszenie.
+                    // Bez zmiany statusu aktywa - administrator uznaje ewidencję za poprawną albo odrzuca zgłoszenie.
                     break;
             }
         }
@@ -569,7 +625,7 @@ public sealed class AssetAuditCampaignService
         return Result<bool>.Success(true);
     }
 
-    /// <summary>Idempotentny (no-op gdy już Completed) — dozwolony z Active albo Reviewing, administrator może
+    /// <summary>Idempotentny (no-op gdy już Completed) - dozwolony z Active albo Reviewing, administrator może
     /// jawnie zakończyć kampanię z nieudzielonymi odpowiedziami (spec 5.7).</summary>
     public async Task<Result<bool>> CompleteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -598,7 +654,7 @@ public sealed class AssetAuditCampaignService
             _activity.Add(new ActivityLog(organizationId, "asset_audit.completed", "asset_audit_campaign", campaign.Id, _currentUser.Subject, campaign.Name, now));
         }
 
-        // Every participant link must stop working once the campaign is terminal — otherwise a
+        // Every participant link must stop working once the campaign is terminal - otherwise a
         // finished participant's still-live token could keep reading/answering/uploading into a
         // closed campaign (audyt AUD3-009).
         await RevokeAllParticipantTokensAsync(organizationId, campaign.Id, now, cancellationToken);
@@ -668,13 +724,13 @@ public sealed class AssetAuditCampaignService
 
             var row = new[]
             {
-                participant is null ? "—" : personNames.GetValueOrDefault(participant.PersonId, "—"),
-                participant?.Email ?? "—",
-                participant?.Status.ToString() ?? "—",
-                asset?.Name ?? "—",
-                asset?.AssetTag ?? "—",
-                personNames.GetValueOrDefault(item.ExpectedPersonId, "—"),
-                item.ExpectedLocation ?? "—",
+                participant is null ? "-" : personNames.GetValueOrDefault(participant.PersonId, "-"),
+                participant?.Email ?? "-",
+                participant?.Status.ToString() ?? "-",
+                asset?.Name ?? "-",
+                asset?.AssetTag ?? "-",
+                personNames.GetValueOrDefault(item.ExpectedPersonId, "-"),
+                item.ExpectedLocation ?? "-",
                 item.Response.ToString(),
                 item.Comment ?? "",
                 item.Resolution.ToString(),
@@ -688,47 +744,8 @@ public sealed class AssetAuditCampaignService
         return Result<string>.Success(csv.ToString());
     }
 
-    public async Task<Result<byte[]>> GetReportPdfAsync(Guid id, CancellationToken cancellationToken)
-    {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
-        if (access.IsFailure) return Result<byte[]>.Failure(access.Error!);
-
-        var organizationId = _currentUser.OrganizationId;
-        var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
-        if (campaign is null) return Result<byte[]>.Failure(Error.NotFound("Kampania nie istnieje."));
-
-        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-        var (participants, items, personNames, assetLookup) = await LoadCampaignDataAsync(organizationId, campaign, cancellationToken);
-
-        var confirmed = items.Count(x => x.Response == AssetAuditResponse.Confirmed);
-        var missing = items.Count(x => x.Response == AssetAuditResponse.Missing);
-        var damaged = items.Count(x => x.Response == AssetAuditResponse.Damaged);
-        var wrongOwner = items.Count(x => x.Response == AssetAuditResponse.WrongOwner);
-        var nonResponding = participants.Count(p => p.Status is AssetAuditParticipantStatus.Pending or AssetAuditParticipantStatus.InProgress);
-
-        var exceptionResponses = new[] { AssetAuditResponse.Missing, AssetAuditResponse.Damaged, AssetAuditResponse.WrongOwner };
-        var participantsById = participants.ToDictionary(p => p.Id);
-        var exceptions = items
-            .Where(x => exceptionResponses.Contains(x.Response))
-            .Select(x =>
-            {
-                var participant = participantsById.GetValueOrDefault(x.ParticipantId);
-                var asset = assetLookup.GetValueOrDefault(x.AssetId);
-                return new AssetAuditReportExceptionRow(
-                    asset?.Name ?? "—", asset?.AssetTag ?? "—",
-                    participant is null ? "—" : personNames.GetValueOrDefault(participant.PersonId, "—"),
-                    x.Response.ToString(), x.Resolution.ToString(), x.ResolutionNotes, x.ResolvedBy, x.ResolvedAt);
-            })
-            .ToList();
-
-        var model = new AssetAuditReportPdfModel(organization?.Name ?? "Tenebit", campaign.Name, campaign.DueDate, campaign.Status.ToString(),
-            confirmed, missing, damaged, wrongOwner, nonResponding, exceptions);
-
-        return Result<byte[]>.Success(_pdfGenerator.GenerateAssetAuditReport(model));
-    }
-
     /// <summary>Raport/eksport są migawką historyczną: dane pochodzą wyłącznie z AssetAuditItem/Participant
-    /// zapisanych w bazie, a Asset/Person są odpytywane tylko po nazwę do wyświetlenia — jeśli aktywo w
+    /// zapisanych w bazie, a Asset/Person są odpytywane tylko po nazwę do wyświetlenia - jeśli aktywo w
     /// międzyczasie zmieniło przypisanie, zapisany w AssetAuditItem stan (Response/Resolution/ExpectedPersonId)
     /// pozostaje niezmieniony (spec 5.11).</summary>
     private async Task<(IReadOnlyList<AssetAuditParticipant> Participants, IReadOnlyList<AssetAuditItem> Items,

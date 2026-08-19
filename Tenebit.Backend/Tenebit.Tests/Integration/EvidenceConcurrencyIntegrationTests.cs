@@ -12,6 +12,7 @@ using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Tests.Integration;
 
+[Collection(PostgresIntegrationCollection.Name)]
 public sealed class EvidenceConcurrencyIntegrationTests : IClassFixture<TenebitApiFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)

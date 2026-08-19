@@ -7,6 +7,7 @@ namespace Tenebit.Application.Evidence;
 /// <summary>Redaguje materiał dowodowy starszy niż retencja ustawiona dla organizacji, pomijając rekordy objęte legal hold.</summary>
 public sealed class EvidenceRetentionService
 {
+    private const int BatchSize = 500;
     private readonly IOrganizationRepository _organizations;
     private readonly IAssetEvidenceRepository _evidence;
     private readonly IActivityLogRepository _activity;
@@ -34,24 +35,31 @@ public sealed class EvidenceRetentionService
     {
         if (!organization.DefaultEvidenceRetentionMonths.HasValue) return;
 
-        var now = _clock.UtcNow;
-        var cutoff = now.AddMonths(-organization.DefaultEvidenceRetentionMonths.Value);
-        var due = (await _evidence.ListByOrganizationAsync(organization.Id, cancellationToken))
-            .Where(e => !e.LegalHold && e.RedactedAt is null && e.UploadedAt <= cutoff)
-            .ToList();
-        if (due.Count == 0) return;
-
-        var hasChanges = false;
-        foreach (var item in due)
+        var cutoff = _clock.UtcNow.AddMonths(-organization.DefaultEvidenceRetentionMonths.Value);
+        while (!cancellationToken.IsCancellationRequested)
         {
-            if (!item.Redact(now)) continue;
-            _activity.Add(new ActivityLog(organization.Id, "asset_evidence.redacted", "asset_evidence", item.Id, "system", item.FileName, now));
-            hasChanges = true;
-        }
+            var processed = await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+            {
+                // SQL performs the cutoff/legal-hold filter and returns metadata only. Work is capped so a
+                // backlog cannot create a huge parameter list, allocation spike or one hours-long transaction.
+                var due = await _evidence.ListRetentionCandidatesAsync(organization.Id, cutoff, BatchSize, ct);
+                if (due.Count == 0) return 0;
 
-        if (hasChanges)
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+                var now = _clock.UtcNow;
+                var ids = due.Select(x => x.Id).ToArray();
+                var redacted = await _evidence.RedactAsync(organization.Id, ids, now, ct);
+                if (redacted == 0) return due.Count;
+
+                foreach (var item in due)
+                {
+                    _activity.Add(new ActivityLog(organization.Id, "asset_evidence.redacted", "asset_evidence", item.Id, "system", item.FileName, now));
+                }
+
+                await _unitOfWork.SaveChangesAsync(ct);
+                return due.Count;
+            }, cancellationToken);
+
+            if (processed < BatchSize) return;
         }
     }
 }

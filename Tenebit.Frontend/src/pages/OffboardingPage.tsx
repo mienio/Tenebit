@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Copy, Download, Eye, Link2, Mail, Pencil, Plus, RefreshCw, RotateCcw, ShieldCheck, UserRoundX, Wrench, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, Eye, Link2, Mail, Pencil, Plus, RefreshCw, RotateCcw, ShieldCheck, UserRoundX, Wrench, XCircle } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -24,17 +24,6 @@ const resolutionValues: OffboardingItemStatus[] = ['Missing', 'Damaged', 'Retain
 const inspectionOutcomeValues: InspectionOutcome[] = ['ReadyForReuse', 'Damaged', 'Retired', 'Disposed'];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-
-function saveBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
 
 function requiredProgress(items: OffboardingItem[]) {
   const required = items.filter(item => item.required);
@@ -231,10 +220,10 @@ export function OffboardingPage() {
               <tbody>
                 {items.map(item => {
                   const progress = details.data?.case.id === item.id ? requiredProgress(details.data.items) : 0;
-                  const owner = people.data?.find(person => person.id === item.processOwnerId)?.fullName ?? '—';
+                  const owner = people.data?.find(person => person.id === item.processOwnerId)?.fullName ?? '-';
                   return (
                     <tr key={item.id}>
-                      <td data-label={t('offboarding.colPerson')}><strong>{item.personName ?? '—'}</strong></td>
+                      <td data-label={t('offboarding.colPerson')}><strong>{item.personName ?? '-'}</strong></td>
                       <td data-label={t('offboarding.colEmploymentEnds')}>{formatDate(item.employmentEndsAt)}</td>
                       <td data-label={t('offboarding.colReturnDue')}>{formatDate(item.returnDueDate)}</td>
                       <td data-label={t('offboarding.colProgress')}>{progress}%</td>
@@ -388,19 +377,12 @@ function OffboardingDetailsView({
     }
   }
 
-  async function downloadProtocol() {
-    try {
-      const blob = await api.downloadOffboardingProtocol(caseItem.id);
-      saveBlob(blob, `${caseItem.finalProtocolNumber ?? `offboarding-${caseItem.id}`}.pdf`);
-    } catch { /* download failed — no explicit error UI for this action */ }
-  }
-
   return (
     <div className="pageStack">
       <Card>
         <div className="sectionTitle">
           <div>
-            <h2>{caseItem.personName ?? '—'}</h2>
+            <h2>{caseItem.personName ?? '-'}</h2>
             <p>{t('offboarding.detailsSubtitle', { owner })}</p>
           </div>
           <div className="rowActions">
@@ -516,7 +498,7 @@ function OffboardingDetailsView({
             {activityItems.map(entry => (
               <div className="listRow" key={entry.id}>
                 <div><strong>{t(`activity.${entry.action}`)}</strong><small>{entry.actorDisplay} · {formatDateTime(entry.createdAt)}</small></div>
-                <span>{entry.details ?? '—'}</span>
+                <span>{entry.details ?? '-'}</span>
               </div>
             ))}
           </div>
@@ -533,7 +515,6 @@ function OffboardingDetailsView({
             <Button variant="secondary" onClick={() => void onAction('restore', () => api.restoreOffboardingEmployment(caseItem.id), 'offboarding.restored')} icon={<UserRoundX size={16} />}>{t('offboarding.restoreEmployment')}</Button>
             <Button variant="secondary" onClick={onCancel} icon={<XCircle size={16} />}>{t('offboarding.cancelAction')}</Button>
             <Button variant="secondary" onClick={() => void onAction('complete', () => api.completeOffboarding(caseItem.id), 'offboarding.completed')} icon={<CheckCircle2 size={16} />}>{t('offboarding.complete')}</Button>
-            {caseItem.status === 'Completed' ? <Button variant="secondary" onClick={downloadProtocol} icon={<Download size={16} />}>{t('offboarding.downloadProtocol')}</Button> : null}
           </div>
         </div>
       </Card>
@@ -558,7 +539,7 @@ function OffboardingPreviewBlock({ preview, isLoading }: { preview: OffboardingP
     },
     {
       title: t('offboarding.previewOpenAssignments'),
-      rows: preview.openAssignments.map(assignment => ({ key: assignment.id, label: assignment.protocolNumber || '—', sub: formatDateTime(assignment.issuedAt), badgeStatus: assignment.status as string, badgeLabel: undefined }))
+      rows: preview.openAssignments.map(assignment => ({ key: assignment.id, label: assignment.protocolNumber || '-', sub: formatDateTime(assignment.issuedAt), badgeStatus: assignment.status as string, badgeLabel: undefined }))
     },
     {
       title: t('offboarding.previewLicenseSeats'),

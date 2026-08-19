@@ -37,6 +37,20 @@ public sealed class InMemoryOrganizationUserRepository : IOrganizationUserReposi
     public Task<OrganizationUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Users.FirstOrDefault(x => x.Id == id));
 
+    public Task<UserSecurityState?> GetSecurityStateAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var user = Users.FirstOrDefault(x => x.Id == id);
+        return Task.FromResult(user is null ? null : new UserSecurityState(user.OrganizationId, user.SecurityStamp, user.IsActive, user.IsEmailVerified));
+    }
+
+    public Task<bool> TryConsumeTotpCounterAsync(Guid id, long counter, CancellationToken cancellationToken)
+    {
+        var user = Users.FirstOrDefault(x => x.Id == id);
+        if (user is null || (user.LastUsedTotpCounter.HasValue && user.LastUsedTotpCounter.Value >= counter)) return Task.FromResult(false);
+        user.RecordTotpCounter(counter);
+        return Task.FromResult(true);
+    }
+
     public Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingId, CancellationToken cancellationToken) =>
         Task.FromResult(Users.Any(x => x.OrganizationId == organizationId && x.Email == email.Trim().ToLowerInvariant() && (!excludingId.HasValue || x.Id != excludingId.Value)));
 
@@ -66,6 +80,20 @@ public sealed class InMemoryAssetCategoryRepository : IAssetCategoryRepository
 
     public void Add(AssetCategory category) => Categories.Add(category);
     public void Remove(AssetCategory category) => Categories.Remove(category);
+}
+
+public sealed class InMemoryLocationRepository : ILocationRepository
+{
+    public List<Location> Locations { get; } = [];
+
+    public Task<IReadOnlyList<Location>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Location>>(Locations.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<Location?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Locations.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public void Add(Location location) => Locations.Add(location);
+    public void Remove(Location location) => Locations.Remove(location);
 }
 
 public sealed class InMemoryEquipmentReservationRepository : IEquipmentReservationRepository
@@ -163,6 +191,13 @@ public sealed class InMemoryActivityLogRepository : IActivityLogRepository
             x.Action == action &&
             x.CreatedAt >= since));
 
+    public Task<int> DeleteOlderThanAsync(DateTimeOffset cutoff, int batchSize, CancellationToken cancellationToken)
+    {
+        var due = Logs.Where(x => x.CreatedAt < cutoff).OrderBy(x => x.CreatedAt).Take(batchSize).ToList();
+        foreach (var item in due) Logs.Remove(item);
+        return Task.FromResult(due.Count);
+    }
+
     public void Add(ActivityLog log) => Logs.Add(log);
 }
 
@@ -195,9 +230,30 @@ public sealed class InMemoryExternalLoginRepository : IExternalLoginRepository
 public sealed class InMemoryPasswordResetTokenRepository : IPasswordResetTokenRepository
 {
     public List<PasswordResetToken> Tokens { get; } = [];
+    private readonly object _gate = new();
 
     public Task<PasswordResetToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult(Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.IsValid(now)));
+
+    public Task<Guid?> TryConsumeAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var token = Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.IsValid(now));
+            if (token is null) return Task.FromResult<Guid?>(null);
+            token.MarkUsed();
+            return Task.FromResult<Guid?>(token.OrganizationUserId);
+        }
+    }
+
+    public Task RevokeUnusedForUserAsync(Guid organizationUserId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.IsValid(now))) token.MarkUsed();
+        }
+        return Task.CompletedTask;
+    }
 
     public void Add(PasswordResetToken token) => Tokens.Add(token);
 }
@@ -208,6 +264,26 @@ public sealed class InMemoryEmailVerificationTokenRepository : IEmailVerificatio
 
     public Task<EmailVerificationToken?> FindValidAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken) =>
         Task.FromResult(Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.IsValid(now)));
+
+    public Task<Guid?> TryConsumeAsync(string tokenHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (Tokens)
+        {
+            var token = Tokens.FirstOrDefault(x => x.TokenHash == tokenHash && x.UsedAt == null && x.ExpiresAt > now);
+            if (token is null) return Task.FromResult<Guid?>(null);
+            token.MarkUsed();
+            return Task.FromResult<Guid?>(token.OrganizationUserId);
+        }
+    }
+
+    public Task RevokeUnusedForUserAsync(Guid organizationUserId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (Tokens)
+        {
+            foreach (var token in Tokens.Where(x => x.OrganizationUserId == organizationUserId && x.UsedAt == null)) token.MarkUsed();
+        }
+        return Task.CompletedTask;
+    }
 
     public void Add(EmailVerificationToken token) => Tokens.Add(token);
 }
@@ -268,9 +344,21 @@ public sealed class InMemoryDeviceTrustTokenRepository : IDeviceTrustTokenReposi
 public sealed class InMemoryTwoFactorRecoveryCodeRepository : ITwoFactorRecoveryCodeRepository
 {
     public List<TwoFactorRecoveryCode> Codes { get; } = [];
+    private readonly object _gate = new();
 
     public Task<IReadOnlyList<TwoFactorRecoveryCode>> ListAsync(Guid organizationUserId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TwoFactorRecoveryCode>>(Codes.Where(x => x.OrganizationUserId == organizationUserId).ToList());
+
+    public Task<bool> TryConsumeAsync(Guid organizationUserId, string codeHash, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var match = Codes.FirstOrDefault(x => x.OrganizationUserId == organizationUserId && x.CodeHash == codeHash && x.IsUnused);
+            if (match is null) return Task.FromResult(false);
+            match.MarkUsed(now);
+            return Task.FromResult(true);
+        }
+    }
 
     public void AddRange(IEnumerable<TwoFactorRecoveryCode> codes) => Codes.AddRange(codes);
     public void RemoveAll(IEnumerable<TwoFactorRecoveryCode> codes) { foreach (var code in codes.ToList()) Codes.Remove(code); }
@@ -358,12 +446,14 @@ public sealed class FakeEmailSender : IEmailSender
 
 public sealed class FakeAppLinkBuilder : IAppLinkBuilder
 {
-    public string BuildAssignmentAcceptanceLink(string rawToken) => $"https://test/accept/{rawToken}";
+    public string BuildAssignmentAcceptanceLink(string rawToken) => $"https://test/accept#{rawToken}";
     public string BuildAssetScanLink(Guid organizationId, Guid assetId) => $"https://test/scan/{organizationId}/{assetId}";
-    public string BuildPasswordResetLink(string rawToken) => $"https://test/reset-password?token={rawToken}";
-    public string BuildEmailVerificationLink(string rawToken) => $"https://test/verify-email?token={rawToken}";
-    public string BuildOffboardingLink(string rawToken) => $"https://test/exit/{rawToken}";
-    public string BuildAssetAuditLink(string rawToken) => $"https://test/audit/{rawToken}";
+    public string BuildPasswordResetLink(string email, string code) =>
+        $"https://test/reset-password#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
+    public string BuildEmailVerificationLink(string email, string code) =>
+        $"https://test/verify-email#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
+    public string BuildOffboardingLink(string rawToken) => $"https://test/exit#{rawToken}";
+    public string BuildAssetAuditLink(string rawToken) => $"https://test/audit#{rawToken}";
     public string BuildAppUrl(string relativePath) => $"https://test{relativePath}";
 }
 
@@ -394,6 +484,9 @@ public sealed class FakeUnitOfWork : IUnitOfWork
 {
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
 
-    public Task<T> ExecuteWithOrganizationLockAsync<T>(Guid organizationId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken) =>
+    public Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken) =>
+        action(cancellationToken);
+
+    public Task<T> ExecuteWithResourceLocksAsync<T>(Guid organizationId, string resourceType, IReadOnlyCollection<Guid> resourceIds, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken) =>
         action(cancellationToken);
 }

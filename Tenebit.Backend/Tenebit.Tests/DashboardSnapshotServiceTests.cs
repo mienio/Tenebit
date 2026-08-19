@@ -13,7 +13,7 @@ public class DashboardSnapshotServiceTests
         var assignments = new InMemoryAssignmentRepository();
         var snapshots = new InMemoryDashboardSnapshotRepository();
         var clock = new FakeClock();
-        var service = new DashboardSnapshotService(organizations, assets, assignments, snapshots, clock, new FakeUnitOfWork());
+        var service = new DashboardSnapshotService(organizations, new InMemoryDashboardReadRepository(assets, assignments: assignments), snapshots, clock, new FakeUnitOfWork());
         return (service, organizations, assets, assignments, snapshots, clock);
     }
 

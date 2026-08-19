@@ -103,7 +103,7 @@ public sealed record OffboardingCaseResponse(
 
 public sealed record OffboardingCaseDetailsResponse(OffboardingCaseResponse Case, IReadOnlyList<OffboardingItemResponse> Items, IReadOnlyList<ReservationResponse> Reservations);
 
-/// <summary>Podsumowanie przed uruchomieniem sprawy (spec 4.5 krok 2) — co osoba trzyma, bez żadnych mutacji.</summary>
+/// <summary>Podsumowanie przed uruchomieniem sprawy (spec 4.5 krok 2) - co osoba trzyma, bez żadnych mutacji.</summary>
 public sealed record OffboardingPreviewResponse(
     Guid PersonId,
     string PersonName,
