@@ -4,7 +4,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api/apiClient';
 import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
-import { Field, TextInput } from '../components/FormFields';
 import { PublicFooter } from '../components/PublicFooter';
 import { SegmentedCodeInput } from '../components/SegmentedCodeInput';
 import { clearUrlFragment, readRecoveryCodeFragment } from '../hooks/usePublicCapabilitySession';
@@ -15,14 +14,30 @@ export function VerifyEmailPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [fragment] = useState(readRecoveryCodeFragment);
-  const [email, setEmail] = useState(fragment.email);
+  const email = fragment.email;
   const [code, setCode] = useState(fragment.code);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   useEffect(() => {
     clearUrlFragment();
   }, []);
+
+  async function resendCode() {
+    setResending(true);
+    setResent(false);
+    try {
+      await apiRequest('/api/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim() })
+      });
+      setResent(true);
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,24 +65,33 @@ export function VerifyEmailPage() {
         </div>
         <h1>{t('auth.verifyTitle')}</h1>
         <p className="authCard__hint">{t('auth.verifyLead')}</p>
-        <form className="formGrid" onSubmit={submit}>
-          <Field label={t('auth.emailLabel')}>
-            <TextInput type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} />
-          </Field>
-          <SegmentedCodeInput
-            value={code}
-            onChange={setCode}
-            label={t('auth.codeLabel')}
-            pasteLabel={t('auth.codePaste')}
-            disabled={submitting}
-            autoFocus={Boolean(email) && !code}
-          />
-          <p className="formHint authCard__hint">{t('auth.codeHint')}</p>
-          {error ? <p className="formMessage formMessage--error">{error}</p> : null}
-          <Button disabled={submitting || code.length !== 6} icon={<MailCheck size={16} />}>
-            {submitting ? t('auth.verifyLoading') : t('auth.verifyButton')}
-          </Button>
-        </form>
+        {email ? (
+          <form className="formGrid" onSubmit={submit}>
+            <p className="authCard__hint"><strong>{t('auth.verifySentTo')}</strong> {email}</p>
+            <SegmentedCodeInput
+              value={code}
+              onChange={setCode}
+              label={t('auth.codeLabel')}
+              pasteLabel={t('auth.codePaste')}
+              disabled={submitting}
+              autoFocus
+            />
+            <p className="formHint authCard__hint">{t('auth.codeHint')}</p>
+            {error ? <p className="formMessage formMessage--error">{error}</p> : null}
+            <Button disabled={submitting || code.length !== 6} icon={<MailCheck size={16} />}>
+              {submitting ? t('auth.verifyLoading') : t('auth.verifyButton')}
+            </Button>
+            <p className="authCard__hint">
+              {resent ? t('auth.verifyBannerSent') : (
+                <button type="button" className="linkButton" onClick={resendCode} disabled={resending}>
+                  {resending ? t('auth.forgotLoading') : t('auth.verifyBannerAction')}
+                </button>
+              )}
+            </p>
+          </form>
+        ) : (
+          <p className="formMessage formMessage--error">{t('auth.verifyNoEmail')}</p>
+        )}
         <p className="authFooter"><Link to="/login">{t('auth.backToLogin')}</Link></p>
       </section>
       <PublicFooter compact />
