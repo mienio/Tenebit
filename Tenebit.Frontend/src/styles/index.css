@@ -465,7 +465,6 @@ button.authIcon:hover { filter: brightness(0.94); }
 .legalMeta > div:nth-child(2n) { border-right: 0; }
 .legalMeta dt { margin-bottom: 4px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
 .legalMeta dd { margin: 0; overflow-wrap: anywhere; line-height: 1.45; }
-.legalConfigurationWarning { padding: 14px 16px; border: 1px solid #f59e0b; background: #fffbeb; color: #92400e; line-height: 1.5; }
 .legalSections { display: grid; gap: 38px; }
 .legalSections section { scroll-margin-top: 100px; }
 .legalSections h2 { margin: 0 0 14px; font-size: 25px; letter-spacing: -.025em; }
