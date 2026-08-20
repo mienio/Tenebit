@@ -15,16 +15,18 @@ public sealed class LocationService
     private readonly ILocationRepository _locations;
     private readonly IAssetRepository _assets;
     private readonly IPersonRepository _people;
+    private readonly IAssetCategoryRepository _categories;
     private readonly ICurrentUser _currentUser;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
     private readonly ISubscriptionRepository _subscriptions;
 
-    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
+    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, IAssetCategoryRepository categories, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
     {
         _locations = locations;
         _assets = assets;
         _people = people;
+        _categories = categories;
         _currentUser = currentUser;
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
@@ -239,12 +241,13 @@ public sealed class LocationService
                 ? await _people.ListAsync(organizationId, null, cancellationToken)
                 : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         }
+        var categories = await _categories.ListAsync(organizationId, cancellationToken);
         var mapped = MapLocations(rows, assets, people);
         var location = mapped.First(x => x.Id == id);
 
         var locationAssets = assets
             .Where(x => x.LocationId == id)
-            .Select(MapAsset)
+            .Select(asset => MapAsset(asset, categories, people))
             .ToList();
         var locationPeople = people
             .Where(x => x.LocationId == id)
@@ -287,7 +290,12 @@ public sealed class LocationService
         return false;
     }
 
-    private static AssetListItem MapAsset(Asset asset) => new(asset.Id, asset.Name, asset.AssetTag, asset.Status, asset.AssignedPersonId, asset.Location);
+    private static AssetListItem MapAsset(Asset asset, IReadOnlyList<AssetCategory> categories, IReadOnlyList<Person> people)
+    {
+        var category = categories.FirstOrDefault(c => c.Id == asset.CategoryId);
+        var assignedPerson = asset.AssignedPersonId.HasValue ? people.FirstOrDefault(p => p.Id == asset.AssignedPersonId) : null;
+        return new(asset.Id, asset.Name, asset.AssetTag, asset.CategoryId, category?.Name, asset.Status, asset.AssignedPersonId, assignedPerson?.FullName, asset.Location, asset.PurchasePrice, asset.Currency, asset.WarrantyUntil);
+    }
     private static PersonListItem MapPerson(Person person) => new(person.Id, person.FullName, person.Email, person.JobTitle, person.ManagerId, person.Location);
 }
 
@@ -296,6 +304,6 @@ public sealed record CreateLocationRequest(string Name, string? Type, Guid? Pare
 [ValidatedRequest]
 public sealed record UpdateLocationRequest(string Name, string? Type, Guid? ParentId, bool IsActive);
 public sealed record LocationResponse(Guid Id, string Name, string Type, Guid? ParentId, string FullPath, int AssetCount, int PersonCount, bool IsActive);
-public sealed record AssetListItem(Guid Id, string Name, string AssetTag, AssetStatus Status, Guid? AssignedPersonId, string? Location);
+public sealed record AssetListItem(Guid Id, string Name, string AssetTag, Guid CategoryId, string? CategoryName, AssetStatus Status, Guid? AssignedPersonId, string? AssignedPersonName, string? Location, decimal? PurchasePrice, string? Currency, DateOnly? WarrantyUntil);
 public sealed record PersonListItem(Guid Id, string FullName, string Email, string? JobTitle, Guid? ManagerId, string? Location);
 public sealed record LocationInventoryResponse(LocationResponse Location, IReadOnlyList<AssetListItem> Assets, IReadOnlyList<PersonListItem> People);
