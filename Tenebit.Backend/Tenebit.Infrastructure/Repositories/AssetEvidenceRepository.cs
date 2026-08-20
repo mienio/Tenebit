@@ -22,8 +22,9 @@ public sealed class AssetEvidenceRepository : IAssetEvidenceRepository
     public async Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssignmentIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> assignmentIds, CancellationToken cancellationToken)
     {
         if (assignmentIds.Count == 0) return [];
-        return await MetadataQuery(organizationId)
-            .Where(x => x.AssignmentId.HasValue && assignmentIds.Contains(x.AssignmentId.Value))
+        return await _db.AssetEvidence.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.AssignmentId.HasValue && assignmentIds.Contains(x.AssignmentId.Value))
+            .Select(AssetEvidenceMetadataProjection.Select)
             .ToListAsync(cancellationToken);
     }
 

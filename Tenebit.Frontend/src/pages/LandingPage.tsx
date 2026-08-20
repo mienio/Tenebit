@@ -17,6 +17,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BrandMark } from '../components/BrandMark';
+import { PricingCards } from '../components/PricingCards';
 import { PublicFooter } from '../components/PublicFooter';
 import { StatusBadge } from '../components/StatusBadge';
 import { useI18n } from '../i18n/I18nProvider';
@@ -299,45 +300,7 @@ export function LandingPage() {
 
       <section className="landing__pricing" id="cennik">
         <h2>{t('landing.pricingHeadline')}</h2>
-        <div className="landing__pricingGrid">
-          <div className="landing__pricingCard">
-            <span className="pricing-card__badge pricing-card__badge--free">{t('pricing.badge.free')}</span>
-            <h3>Free</h3>
-            <div className="landing__price">0 €<small>{t('landing.perMonth')}</small></div>
-            <ul>
-              <li><Check size={16} /> {t('landing.free.f1')}</li>
-            </ul>
-          </div>
-          <div className="landing__pricingCard">
-            <h3>Starter</h3>
-            <div className="landing__price">12 €<small>{t('landing.perMonth')}</small></div>
-            <ul>
-              <li><Check size={16} /> {t('landing.starter.f1')}</li>
-            </ul>
-          </div>
-          <div className="landing__pricingCard landing__pricingCard--featured">
-            <span className="pricing-card__badge pricing-card__badge--recommended">{t('pricing.badge.recommended')}</span>
-            <h3>Growth</h3>
-            <div className="landing__price">29 €<small>{t('landing.perMonth')}</small></div>
-            <ul>
-              <li><Check size={16} /> {t('landing.growth.f1')}</li>
-            </ul>
-          </div>
-          <div className="landing__pricingCard">
-            <h3>Business</h3>
-            <div className="landing__price">59 €<small>{t('landing.perMonth')}</small></div>
-            <ul>
-              <li><Check size={16} /> {t('landing.business.f1')}</li>
-            </ul>
-          </div>
-          <div className="landing__pricingCard">
-            <h3>Scale</h3>
-            <div className="landing__price">99 €<small>{t('landing.perMonth')}</small></div>
-            <ul>
-              <li><Check size={16} /> {t('landing.enterprise.f1')}</li>
-            </ul>
-          </div>
-        </div>
+        <PricingCards renderCta={() => null} />
         <Link to="/register" className="button button--primary">{t('landing.ctaStart')} <ArrowRight size={16} /></Link>
       </section>
 
