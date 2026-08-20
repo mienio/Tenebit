@@ -67,8 +67,8 @@ const previewBuildingPersonCount = previewFloor1PersonCount + previewFloor2Perso
 // subscriptions below - shown as 1/1 with its key instead of a fake team-wide seat count.
 // Slack/Figma are seat-based SaaS with no license key at all, which is realistic too.
 const previewLicenseRows = [
-  { name: 'Windows 11 Pro', vendor: 'Microsoft', seatsUsed: 1, seatsTotal: 1, status: 'Active', key: 'N7QXM-••••-••••-••••-3ZE9H' },
-  { name: 'Microsoft 365 Business', vendor: 'Microsoft', seatsUsed: 50, seatsTotal: 50, status: 'Active', key: 'K2P9X-••••-••••-D4WNT' },
+  { name: 'Windows 11 Pro', vendor: 'Microsoft', seatsUsed: 1, seatsTotal: 1, status: 'Active', key: 'KSG19-••••-••••-••••-48FTW' },
+  { name: 'Microsoft 365 Business', vendor: 'Microsoft', seatsUsed: 50, seatsTotal: 50, status: 'Active', key: '4835-••••-••••-••••-0407' },
   { name: 'Adobe Creative Cloud', vendor: 'Adobe', seatsUsed: 6, seatsTotal: 15, status: 'Active', key: 'T9V3K-••••-••••-2LWPZ' },
   { name: 'JetBrains All Products', vendor: 'JetBrains', seatsUsed: 18, seatsTotal: 20, status: 'Expired', key: '4KXQL-••••-••••-R2MNC' },
   { name: 'Slack Business+', vendor: 'Slack', seatsUsed: 40, seatsTotal: 50, status: 'Active', key: null },
@@ -152,17 +152,8 @@ const previewProcedureRowsByLanguage: Record<Language, { title: string; version:
   ]
 };
 
-// personIndex 1 (Piotr/Noah/Diego/Jonas) is the freshly onboarded IT Support Specialist - shown
-// still awaiting acceptance, to demo the signature step new hires go through.
-const previewAssignmentRows = [
-  { protocol: 'TEN-20260603-7F2QX9', personIndex: 0, assetCount: 1, status: 'Accepted' },
-  { protocol: 'TEN-20260814-M4K8P2', personIndex: 1, assetCount: 1, status: 'AwaitingAcceptance' },
-  { protocol: 'TEN-20260810-D9N3W5', personIndex: 2, assetCount: 1, status: 'Accepted' }
-] as const;
-
 const previewTabs = [
   { key: 'assets', icon: Boxes },
-  { key: 'assignments', icon: PackageCheck },
   { key: 'licenses', icon: KeyRound },
   { key: 'people', icon: Users },
   { key: 'locations', icon: MapPin },
@@ -354,27 +345,6 @@ export function LandingPage() {
               <div className="locationGroups">
                 {previewLocationNodes.filter(node => !node.parentId).map(root => renderAssetLocationNode(root))}
               </div>
-            )}
-            {previewTab === 'assignments' && (
-              <table className="dense-table">
-                <thead>
-                  <tr><th></th><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th></tr>
-                </thead>
-                <tbody>
-                  {previewAssignmentRows.map(row => {
-                    const person = previewPeopleRows[row.personIndex];
-                    return (
-                      <tr key={row.protocol}>
-                        <td><div className="table-icon"><PackageCheck size={16} /></div></td>
-                        <td><strong>{row.protocol}</strong></td>
-                        <td><span className="personChip"><Avatar name={person.name} photoUrl={previewAvatarUrls[row.personIndex]} size={22} /><span className="personChip__sep">•</span>{person.name}</span></td>
-                        <td><StatusBadge status={row.status} /></td>
-                        <td>{row.assetCount}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
             )}
             {previewTab === 'licenses' && (
               <table className="dense-table">
