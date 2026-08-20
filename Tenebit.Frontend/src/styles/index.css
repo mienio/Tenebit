@@ -60,7 +60,7 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 
 .avatar { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 50%; background: var(--brand-soft); color: #fff; font-weight: 700; font-family: var(--font-mono); letter-spacing: .02em; object-fit: cover; }
 
-.personChip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 10px 3px 3px; border: 1px solid var(--border); border-radius: var(--radius); }
+.personChip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 10px 3px 6px; border: 1px solid var(--border); border-radius: var(--radius); }
 .personChip .avatar { flex: 0 0 auto; }
 .personChip__sep { flex: 0 0 auto; color: var(--muted); }
 .personChip .inlineAction { display: inline-flex; align-items: center; min-height: auto; width: auto; padding: 0; border: none; background: none; }
@@ -413,15 +413,29 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__trustRow svg { color: var(--accent); flex-shrink: 0; }
 
 .landing__preview { margin-top: -40px; position: relative; min-width: 0; }
-.landing__previewFrame { position: relative; max-width: 960px; margin: 0 auto; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); box-shadow: 6px 6px 0 rgba(34, 29, 24, .14); animation: landingFadeUp .7s cubic-bezier(.22, 1, .36, 1) .3s both; overflow: hidden; }
+.landing__previewFrame { position: relative; max-width: 960px; margin: 0; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); box-shadow: 6px 6px 0 rgba(34, 29, 24, .14); animation: landingFadeUp .7s cubic-bezier(.22, 1, .36, 1) .3s both; overflow: hidden; }
 .landing__previewChrome { display: flex; align-items: center; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
 .landing__previewChrome span { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
-.landing__previewTabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
+.landing__previewTabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
 .landing__previewTab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 650; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .landing__previewTab:hover { color: var(--text); }
 .landing__previewTab--active { background: var(--surface); border-color: var(--border-strong); color: var(--accent); }
-.landing__previewFrame .tableWrap { padding: 8px; }
+.landing__previewSubTabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; }
+.landing__previewSubTabs .landing__previewTab { border-color: var(--border); font-size: 12px; padding: 5px 10px; }
+.landing__previewFrame .tableWrap { padding: 8px; max-height: 420px; overflow-y: auto; }
+.landing__previewFrame .locationGroups { margin-top: 0; gap: 6px; }
+.landing__previewFrame .locationGroup { gap: 6px; }
+.landing__previewFrame .locationGroup__children { padding-left: 16px; margin-top: 0; }
+.landing__previewFrame .locationGroup__children > * { margin-bottom: 6px; }
+.landing__previewFrame .locationGroup__children > *:last-child { margin-bottom: 0; }
+.landing__previewFrame .locationGroup__children > .locationGroup::before { left: -16px; width: 16px; top: 26px; }
+.landing__previewFrame .locationGroup__children > .locationGroup::after { left: -16px; bottom: -6px; }
+.landing__previewFrame .locationGroup__children > .locationGroup:last-of-type::after { bottom: auto; height: 26px; }
+.landing__previewFrame .locationRow { padding: 2px 8px 2px 4px; }
+.landing__previewFrame .locationRow__main { padding: 5px 4px; gap: 8px; }
+.landing__previewFrame .locationRow__main small { margin-top: 1px; }
 .landing__previewFrame .dense-table tbody tr:hover { background: none; cursor: default; }
+.landing__previewFrame .locationGroup__children .dense-table { margin-top: 2px; }
 
 .landing__sectionIntro { max-width: 760px; margin-bottom: 30px; }
 .landing__sectionIntro h2, .landing__steps h2, .landing__pricing h2 { font-size: clamp(28px, 3vw, 36px); letter-spacing: -0.035em; text-align: left; margin: 0; }
@@ -578,7 +592,16 @@ button.authIcon:hover { filter: brightness(0.94); }
 .locationsWorkspace { display: grid; gap: 18px; }
 .locationGroups { display: grid; gap: 14px; margin-top: 16px; }
 .locationGroup { display: grid; gap: 8px; }
-.locationGroup__children { display: grid; gap: 8px; margin-top: 8px; padding-left: 22px; border-left: 2px solid var(--border); }
+/* Tree connector: each child draws its own elbow + a vertical run through the gap below it,
+   so the trunk never continues past the last child into empty space underneath it. */
+.locationGroup__children { display: grid; gap: 0; margin-top: 8px; padding-left: 22px; }
+.locationGroup__children > * { position: relative; margin-bottom: 8px; }
+.locationGroup__children > *:last-child { margin-bottom: 0; }
+/* Connectors only ever point at a location row (36px = its measured vertical center) — the leaf
+   asset table under a room is plain content, not a tree node, so it gets no elbow of its own. */
+.locationGroup__children > .locationGroup::before { content: ''; position: absolute; left: -22px; top: 36px; width: 22px; height: 0; border-top: 1px dashed var(--border-strong); }
+.locationGroup__children > .locationGroup::after { content: ''; position: absolute; left: -22px; top: 0; bottom: -8px; border-left: 1px dashed var(--border-strong); }
+.locationGroup__children > .locationGroup:last-of-type::after { bottom: auto; height: 36px; }
 .locationRow { border: 1px solid var(--border); border-radius: 3px; background: #fff; padding: 8px 10px 8px 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px; transition: background .16s ease, border-color .16s ease; }
 .locationRow:hover, .locationRow--active { border-color: var(--border-strong); background: var(--brand-soft); }
 .locationRow__main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; border: none; background: none; padding: 8px; cursor: pointer; color: var(--text); border-radius: 3px; font: inherit; }
@@ -676,7 +699,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-hero p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.6; max-width: 640px; }
 
 .pricing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
-.pricing-card { padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
+.pricing-card { min-width: 0; padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
 .pricing-card--featured { border-color: var(--brand); box-shadow: 8px 8px 0 rgba(34,29,24,.18); background: var(--brand-soft); transform: scale(1.045); z-index: 1; }
 .pricing-card__badge { position: absolute; top: -12px; left: 24px; padding: 6px 12px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
 .pricing-card__badge--recommended { background: var(--brand); color: #fff; }
@@ -686,12 +709,21 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-card h3 { margin: 0; font-size: 24px; font-weight: 700; }
 .pricing-price { font-size: 48px; font-weight: 780; letter-spacing: -0.04em; }
 .pricing-price small { font-size: 18px; color: var(--muted); font-weight: 500; }
-.pricing-value-hint { margin-top: 6px; font-size: 13px; color: var(--success); font-weight: 600; }
 .pricing-features { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
 .pricing-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.5; }
 .pricing-features svg { color: var(--success); flex: 0 0 20px; margin-top: 2px; }
 .pricing-cta { width: 100%; min-height: 48px; }
 .pricing-confirm-detail { margin-top: -4px; padding: 10px 12px; border-radius: var(--radius); background: var(--brand-soft); font-size: 14px; }
+
+@media (max-width: 1024px) {
+  .pricing-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pricing-card--featured { transform: none; }
+  .pricing-card--featured:hover { transform: translateY(-4px); }
+}
+
+@media (max-width: 560px) {
+  .pricing-cards { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 1180px) {
   .sidebar { width: 244px; }

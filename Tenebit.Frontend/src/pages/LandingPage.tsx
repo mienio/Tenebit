@@ -7,6 +7,7 @@ import {
   Headphones,
   KeyRound,
   Laptop,
+  List,
   MapPin,
   Monitor,
   PackageCheck,
@@ -16,26 +17,62 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Avatar } from '../components/Avatar';
 import { BrandMark } from '../components/BrandMark';
+import { LocationTree } from '../components/LocationTree';
 import { PricingCards } from '../components/PricingCards';
 import { PublicFooter } from '../components/PublicFooter';
 import { StatusBadge } from '../components/StatusBadge';
 import { useI18n } from '../i18n/I18nProvider';
 import type { Language } from '../i18n/translations';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
+import type { LocationNode } from '../types/domain';
 
-const previewAssetRows = [
-  { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', person: 'Alex Morgan', value: 9800 },
-  { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', person: 'Jamie Lee', value: 4200 },
-  { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', person: '-', value: 1650 },
-  { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', person: '-', value: 1400 }
+// previewPeopleByLanguage keeps the same gender per index across all 4 locales (index 0/3 female,
+// 1/2/4 male), so one photo per index works for every language.
+const previewAvatarUrls = [
+  'https://randomuser.me/api/portraits/women/65.jpg',
+  'https://randomuser.me/api/portraits/men/32.jpg',
+  'https://randomuser.me/api/portraits/men/86.jpg',
+  'https://randomuser.me/api/portraits/women/44.jpg',
+  'https://randomuser.me/api/portraits/men/76.jpg'
 ];
 
+const previewAssetRows = [
+  { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', personIndex: 0, locationId: 'room101', value: 9800 },
+  { icon: Laptop, name: 'Dell Latitude 5420', tag: 'AST-0156', status: 'Assigned', personIndex: 1, locationId: 'room101', value: 6200 },
+  { icon: Smartphone, name: 'iPhone 15', tag: 'AST-0198', status: 'Assigned', personIndex: 2, locationId: 'room102', value: 4200 },
+  { icon: Monitor, name: 'Dell UltraSharp 27"', tag: 'AST-0071', status: 'InStock', personIndex: null, locationId: 'room201', value: 1650 },
+  { icon: Headphones, name: 'Sony WH-1000XM5', tag: 'AST-0233', status: 'InService', personIndex: null, locationId: 'room202', value: 1400 }
+] as const;
+
+// Single source of truth for where each preview person sits — feeds both the people table's
+// location column and the location tree's counts, so they can never drift out of sync.
+const previewPersonLocationIds = ['room101', 'room101', 'room102', 'room201', 'room202'] as const;
+
+const previewRoomAssetCounts: Record<'room101' | 'room102' | 'room201' | 'room202', number> = { room101: 0, room102: 0, room201: 0, room202: 0 };
+for (const row of previewAssetRows) previewRoomAssetCounts[row.locationId]++;
+
+const previewRoomPersonCounts: Record<'room101' | 'room102' | 'room201' | 'room202', number> = { room101: 0, room102: 0, room201: 0, room202: 0 };
+for (const locationId of previewPersonLocationIds) previewRoomPersonCounts[locationId]++;
+
+const previewFloor1AssetCount = previewRoomAssetCounts.room101 + previewRoomAssetCounts.room102;
+const previewFloor2AssetCount = previewRoomAssetCounts.room201 + previewRoomAssetCounts.room202;
+const previewFloor1PersonCount = previewRoomPersonCounts.room101 + previewRoomPersonCounts.room102;
+const previewFloor2PersonCount = previewRoomPersonCounts.room201 + previewRoomPersonCounts.room202;
+const previewBuildingAssetCount = previewFloor1AssetCount + previewFloor2AssetCount;
+const previewBuildingPersonCount = previewFloor1PersonCount + previewFloor2PersonCount;
+
+// Windows is bound to a single device via one product key, not a shared seat pool like the
+// subscriptions below - shown as 1/1 with its key instead of a fake team-wide seat count.
+// Slack/Figma are seat-based SaaS with no license key at all, which is realistic too.
 const previewLicenseRows = [
-  { name: 'Windows 11 Pro', vendor: 'Microsoft', seatsUsed: 64, seatsTotal: 70, status: 'Active' },
-  { name: 'Microsoft 365', vendor: 'Microsoft', seatsUsed: 50, seatsTotal: 50, status: 'Active' },
-  { name: 'Adobe Creative Cloud', vendor: 'Adobe', seatsUsed: 6, seatsTotal: 15, status: 'Active' },
-  { name: 'JetBrains All Products', vendor: 'JetBrains', seatsUsed: 18, seatsTotal: 20, status: 'Expired' }
+  { name: 'Windows 11 Pro', vendor: 'Microsoft', seatsUsed: 1, seatsTotal: 1, status: 'Active', key: 'H3N2Q-••••-••••-••••-D9F3Y' },
+  { name: 'Microsoft 365 Business', vendor: 'Microsoft', seatsUsed: 50, seatsTotal: 50, status: 'Active', key: 'M365B-••••-••••-7QXP' },
+  { name: 'Adobe Creative Cloud', vendor: 'Adobe', seatsUsed: 6, seatsTotal: 15, status: 'Active', key: 'ADBE-••••-••••-4KRT' },
+  { name: 'JetBrains All Products', vendor: 'JetBrains', seatsUsed: 18, seatsTotal: 20, status: 'Expired', key: 'JBAP-••••-••••-9WZL' },
+  { name: 'Slack Business+', vendor: 'Slack', seatsUsed: 40, seatsTotal: 50, status: 'Active', key: null },
+  { name: 'Figma Organization', vendor: 'Figma', seatsUsed: 12, seatsTotal: 15, status: 'Active', key: null }
 ];
 
 // One office per language/market, split Building -> 2 Floors -> 2 Rooms each, to demo the location
@@ -50,35 +87,86 @@ const previewOfficeByLanguage: Record<Language, { building: string; floor1: stri
 const previewPeopleByLanguage: Record<Language, { name: string; jobTitle: string; team: string }[]> = {
   pl: [
     { name: 'Anna Kowalska', jobTitle: 'Office Manager', team: 'Administracja' },
+    { name: 'Piotr Kaczmarek', jobTitle: 'IT Support Specialist', team: 'IT' },
     { name: 'Marek Wiśniewski', jobTitle: 'DevOps Engineer', team: 'IT' },
     { name: 'Julia Nowak', jobTitle: 'Account Executive', team: 'Sprzedaż' },
     { name: 'Tomasz Zieliński', jobTitle: 'HR Specialist', team: 'Kadry' }
   ],
   en: [
     { name: 'Olivia Bennett', jobTitle: 'Office Manager', team: 'Admin' },
+    { name: 'Noah Clarke', jobTitle: 'IT Support Specialist', team: 'IT' },
     { name: 'James Carter', jobTitle: 'DevOps Engineer', team: 'IT' },
     { name: 'Sophie Turner', jobTitle: 'Account Executive', team: 'Sales' },
     { name: 'Daniel Wright', jobTitle: 'HR Specialist', team: 'People' }
   ],
   es: [
     { name: 'Lucía Fernández', jobTitle: 'Office Manager', team: 'Administración' },
+    { name: 'Diego Torres', jobTitle: 'IT Support Specialist', team: 'IT' },
     { name: 'Javier Martín', jobTitle: 'DevOps Engineer', team: 'IT' },
     { name: 'Marta Sánchez', jobTitle: 'Account Executive', team: 'Ventas' },
     { name: 'Pablo Ruiz', jobTitle: 'HR Specialist', team: 'RRHH' }
   ],
   de: [
     { name: 'Hannah Fischer', jobTitle: 'Office Manager', team: 'Verwaltung' },
+    { name: 'Jonas Becker', jobTitle: 'IT Support Specialist', team: 'IT' },
     { name: 'Lukas Weber', jobTitle: 'DevOps Engineer', team: 'IT' },
     { name: 'Laura Schmidt', jobTitle: 'Account Executive', team: 'Vertrieb' },
     { name: 'Felix Wagner', jobTitle: 'HR Specialist', team: 'Personal' }
   ]
 };
 
+// personIndex 1 is the IT Support Specialist in previewPeopleByLanguage — shown here as the
+// person who just went through onboarding, to demo that procedures get assigned to someone.
+const previewProcedureRowsByLanguage: Record<Language, { title: string; version: string; status: string; personIndex: number | null; scope: string | null }[]> = {
+  pl: [
+    { title: 'Onboarding — sprzęt i BHP', version: 'v3', status: 'Published', personIndex: 1, scope: null },
+    { title: 'Polityka bezpieczeństwa danych', version: 'v2', status: 'Published', personIndex: null, scope: 'Wszyscy pracownicy' },
+    { title: 'Regulamin pracy zdalnej', version: 'v1', status: 'Published', personIndex: null, scope: 'Wszyscy pracownicy' },
+    { title: 'Zgłaszanie awarii sprzętu', version: 'v2', status: 'Published', personIndex: null, scope: 'Dział IT' },
+    { title: 'BHP — stanowisko z monitorem ekranowym', version: 'v4', status: 'Published', personIndex: null, scope: 'Wszyscy pracownicy' },
+    { title: 'Offboarding — zwrot sprzętu', version: 'v1', status: 'Draft', personIndex: null, scope: null }
+  ],
+  en: [
+    { title: 'Onboarding — equipment & safety', version: 'v3', status: 'Published', personIndex: 1, scope: null },
+    { title: 'Data security policy', version: 'v2', status: 'Published', personIndex: null, scope: 'All employees' },
+    { title: 'Remote work policy', version: 'v1', status: 'Published', personIndex: null, scope: 'All employees' },
+    { title: 'Equipment fault reporting', version: 'v2', status: 'Published', personIndex: null, scope: 'IT department' },
+    { title: 'Display screen workstation safety', version: 'v4', status: 'Published', personIndex: null, scope: 'All employees' },
+    { title: 'Offboarding — equipment return', version: 'v1', status: 'Draft', personIndex: null, scope: null }
+  ],
+  es: [
+    { title: 'Incorporación — equipo y seguridad', version: 'v3', status: 'Published', personIndex: 1, scope: null },
+    { title: 'Política de seguridad de datos', version: 'v2', status: 'Published', personIndex: null, scope: 'Todos los empleados' },
+    { title: 'Política de trabajo remoto', version: 'v1', status: 'Published', personIndex: null, scope: 'Todos los empleados' },
+    { title: 'Reporte de averías de equipos', version: 'v2', status: 'Published', personIndex: null, scope: 'Departamento de IT' },
+    { title: 'Seguridad — puesto con pantalla', version: 'v4', status: 'Published', personIndex: null, scope: 'Todos los empleados' },
+    { title: 'Baja — devolución de equipo', version: 'v1', status: 'Draft', personIndex: null, scope: null }
+  ],
+  de: [
+    { title: 'Onboarding — Ausstattung & Sicherheit', version: 'v3', status: 'Published', personIndex: 1, scope: null },
+    { title: 'Datensicherheitsrichtlinie', version: 'v2', status: 'Published', personIndex: null, scope: 'Alle Mitarbeitenden' },
+    { title: 'Richtlinie für Remote-Arbeit', version: 'v1', status: 'Published', personIndex: null, scope: 'Alle Mitarbeitenden' },
+    { title: 'Meldung von Gerätestörungen', version: 'v2', status: 'Published', personIndex: null, scope: 'IT-Abteilung' },
+    { title: 'Arbeitsschutz — Bildschirmarbeitsplatz', version: 'v4', status: 'Published', personIndex: null, scope: 'Alle Mitarbeitenden' },
+    { title: 'Offboarding — Rückgabe der Ausstattung', version: 'v1', status: 'Draft', personIndex: null, scope: null }
+  ]
+};
+
+// personIndex 1 (Piotr/Noah/Diego/Jonas) is the freshly onboarded IT Support Specialist - shown
+// still awaiting acceptance, to demo the signature step new hires go through.
+const previewAssignmentRows = [
+  { protocol: 'TEN-20260603-7F2QX9', personIndex: 0, assetCount: 1, status: 'Accepted' },
+  { protocol: 'TEN-20260814-M4K8P2', personIndex: 1, assetCount: 1, status: 'AwaitingAcceptance' },
+  { protocol: 'TEN-20260810-D9N3W5', personIndex: 2, assetCount: 1, status: 'Accepted' }
+] as const;
+
 const previewTabs = [
   { key: 'assets', icon: Boxes },
+  { key: 'assignments', icon: PackageCheck },
   { key: 'licenses', icon: KeyRound },
   { key: 'people', icon: Users },
-  { key: 'locations', icon: MapPin }
+  { key: 'locations', icon: MapPin },
+  { key: 'procedures', icon: ClipboardCheck }
 ] as const;
 
 type PreviewTab = typeof previewTabs[number]['key'];
@@ -98,26 +186,72 @@ export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
   const [previewTab, setPreviewTab] = useState<PreviewTab>('assets');
+  const [assetView, setAssetView] = useState<'list' | 'byLocation'>('list');
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>('room101');
   const office = previewOfficeByLanguage[language];
+  const officeRoomById: Record<'room101' | 'room102' | 'room201' | 'room202', string> = {
+    room101: `${office.floor1} · ${office.room101}`,
+    room102: `${office.floor1} · ${office.room102}`,
+    room201: `${office.floor2} · ${office.room201}`,
+    room202: `${office.floor2} · ${office.room202}`
+  };
   const previewPeopleRows = previewPeopleByLanguage[language].map((person, index) => ({
     ...person,
-    location: index === 0
-      ? `${office.floor1} · ${office.room101}`
-      : index === 1
-        ? `${office.floor1} · ${office.room102}`
-        : index === 2
-          ? `${office.floor2} · ${office.room201}`
-          : `${office.floor2} · ${office.room202}`
+    location: officeRoomById[previewPersonLocationIds[index]]
   }));
-  const previewLocationRows = [
-    { name: office.building, type: 'Building', assetCount: 70, personCount: 23 },
-    { name: `${office.building} · ${office.floor1}`, type: 'Floor', assetCount: 32, personCount: 11 },
-    { name: `${office.building} · ${office.floor1} · ${office.room101}`, type: 'Room', assetCount: 18, personCount: 6 },
-    { name: `${office.building} · ${office.floor1} · ${office.room102}`, type: 'Room', assetCount: 14, personCount: 5 },
-    { name: `${office.building} · ${office.floor2}`, type: 'Floor', assetCount: 38, personCount: 12 },
-    { name: `${office.building} · ${office.floor2} · ${office.room201}`, type: 'Room', assetCount: 22, personCount: 7 },
-    { name: `${office.building} · ${office.floor2} · ${office.room202}`, type: 'Room', assetCount: 16, personCount: 5 }
+  const previewProcedureRows = previewProcedureRowsByLanguage[language];
+  const previewLocationNodes: LocationNode[] = [
+    { id: 'building', name: office.building, type: 'Building', parentId: null, fullPath: office.building, assetCount: previewBuildingAssetCount, personCount: previewBuildingPersonCount, isActive: true },
+    { id: 'floor1', name: office.floor1, type: 'Floor', parentId: 'building', fullPath: `${office.building} · ${office.floor1}`, assetCount: previewFloor1AssetCount, personCount: previewFloor1PersonCount, isActive: true },
+    { id: 'room101', name: office.room101, type: 'Room', parentId: 'floor1', fullPath: `${office.building} · ${office.floor1} · ${office.room101}`, assetCount: previewRoomAssetCounts.room101, personCount: previewRoomPersonCounts.room101, isActive: true },
+    { id: 'room102', name: office.room102, type: 'Room', parentId: 'floor1', fullPath: `${office.building} · ${office.floor1} · ${office.room102}`, assetCount: previewRoomAssetCounts.room102, personCount: previewRoomPersonCounts.room102, isActive: true },
+    { id: 'floor2', name: office.floor2, type: 'Floor', parentId: 'building', fullPath: `${office.building} · ${office.floor2}`, assetCount: previewFloor2AssetCount, personCount: previewFloor2PersonCount, isActive: true },
+    { id: 'room201', name: office.room201, type: 'Room', parentId: 'floor2', fullPath: `${office.building} · ${office.floor2} · ${office.room201}`, assetCount: previewRoomAssetCounts.room201, personCount: previewRoomPersonCounts.room201, isActive: true },
+    { id: 'room202', name: office.room202, type: 'Room', parentId: 'floor2', fullPath: `${office.building} · ${office.floor2} · ${office.room202}`, assetCount: previewRoomAssetCounts.room202, personCount: previewRoomPersonCounts.room202, isActive: true }
   ];
+  // Identical <tr> markup used by both the flat "list" view and the nested "by location" view,
+  // so an asset row looks the same everywhere instead of drifting into a custom layout.
+  const renderAssetRow = (row: typeof previewAssetRows[number]) => {
+    const personIndex = row.personIndex;
+    const person = personIndex != null ? previewPeopleRows[personIndex] : null;
+    return (
+      <tr key={row.tag}>
+        <td><div className="table-icon"><row.icon size={16} /></div></td>
+        <td><strong>{row.name}</strong></td>
+        <td>{row.tag}</td>
+        <td><StatusBadge status={row.status} /></td>
+        <td>{person && personIndex != null ? <span className="personChip"><Avatar name={person.name} photoUrl={previewAvatarUrls[personIndex]} size={22} /><span className="personChip__sep">•</span>{person.name}</span> : t('common.unassigned')}</td>
+        <td style={{ textAlign: 'right' }}>{formatPreviewValue(row.value)}</td>
+      </tr>
+    );
+  };
+  const renderAssetLocationNode = (node: LocationNode): JSX.Element => {
+    const children = previewLocationNodes.filter(n => n.parentId === node.id);
+    const assetsHere = previewAssetRows.filter(row => row.locationId === node.id);
+    return (
+      <div className="locationGroup" key={node.id}>
+        <div className="locationRow">
+          <div className="locationRow__main">
+            <MapPin size={14} />
+            <span>
+              <strong>{node.name}</strong>
+              <small>{t('locations.assetsCount', { count: node.assetCount })} · {t('locations.peopleCount', { count: node.personCount })}</small>
+            </span>
+          </div>
+        </div>
+        {(children.length > 0 || assetsHere.length > 0) && (
+          <div className="locationGroup__children">
+            {children.map(child => renderAssetLocationNode(child))}
+            {assetsHere.length > 0 && (
+              <table className="dense-table">
+                <tbody>{assetsHere.map(renderAssetRow)}</tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
   const currencyByLanguage: Record<typeof language, { locale: string; currency: string }> = {
     pl: { locale: 'pl-PL', currency: 'PLN' },
     en: { locale: 'en-US', currency: 'USD' },
@@ -189,30 +323,63 @@ export function LandingPage() {
               </button>
             ))}
           </div>
+          {previewTab === 'assets' && (
+            <div className="landing__previewSubTabs">
+              <button
+                type="button"
+                className={`landing__previewTab${assetView === 'list' ? ' landing__previewTab--active' : ''}`}
+                onClick={() => setAssetView('list')}
+              >
+                <List size={14} /> {t('landing.preview.viewList')}
+              </button>
+              <button
+                type="button"
+                className={`landing__previewTab${assetView === 'byLocation' ? ' landing__previewTab--active' : ''}`}
+                onClick={() => setAssetView('byLocation')}
+              >
+                <MapPin size={14} /> {t('landing.preview.viewByLocation')}
+              </button>
+            </div>
+          )}
           <div className="tableWrap">
-            {previewTab === 'assets' && (
+            {previewTab === 'assets' && assetView === 'list' && (
               <table className="dense-table">
                 <thead>
                   <tr><th></th><th>{t('assets.nameLabel')}</th><th>{t('assets.colTag')}</th><th>{t('assets.statusLabel')}</th><th>{t('assets.colPerson')}</th><th style={{ textAlign: 'right' }}>{t('assets.colValue')}</th></tr>
                 </thead>
+                <tbody>{previewAssetRows.map(renderAssetRow)}</tbody>
+              </table>
+            )}
+            {previewTab === 'assets' && assetView === 'byLocation' && (
+              <div className="locationGroups">
+                {previewLocationNodes.filter(node => !node.parentId).map(root => renderAssetLocationNode(root))}
+              </div>
+            )}
+            {previewTab === 'assignments' && (
+              <table className="dense-table">
+                <thead>
+                  <tr><th></th><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th></tr>
+                </thead>
                 <tbody>
-                  {previewAssetRows.map(row => (
-                    <tr key={row.tag}>
-                      <td><div className="table-icon"><row.icon size={16} /></div></td>
-                      <td><strong>{row.name}</strong></td>
-                      <td>{row.tag}</td>
-                      <td><StatusBadge status={row.status} /></td>
-                      <td>{row.person}</td>
-                      <td style={{ textAlign: 'right' }}>{formatPreviewValue(row.value)}</td>
-                    </tr>
-                  ))}
+                  {previewAssignmentRows.map(row => {
+                    const person = previewPeopleRows[row.personIndex];
+                    return (
+                      <tr key={row.protocol}>
+                        <td><div className="table-icon"><PackageCheck size={16} /></div></td>
+                        <td><strong>{row.protocol}</strong></td>
+                        <td><span className="personChip"><Avatar name={person.name} photoUrl={previewAvatarUrls[row.personIndex]} size={22} /><span className="personChip__sep">•</span>{person.name}</span></td>
+                        <td><StatusBadge status={row.status} /></td>
+                        <td>{row.assetCount}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
             {previewTab === 'licenses' && (
               <table className="dense-table">
                 <thead>
-                  <tr><th></th><th>{t('licenses.colName')}</th><th>{t('licenses.colVendor')}</th><th>{t('licenses.colSeats')}</th><th>{t('assets.statusLabel')}</th></tr>
+                  <tr><th></th><th>{t('licenses.colName')}</th><th>{t('licenses.colVendor')}</th><th>{t('licenses.colSeats')}</th><th>{t('licenses.colKey')}</th><th>{t('assets.statusLabel')}</th></tr>
                 </thead>
                 <tbody>
                   {previewLicenseRows.map(row => (
@@ -221,6 +388,7 @@ export function LandingPage() {
                       <td><strong>{row.name}</strong></td>
                       <td>{row.vendor}</td>
                       <td>{row.seatsUsed}/{row.seatsTotal}</td>
+                      <td>{row.key ? <code>{row.key}</code> : '-'}</td>
                       <td><StatusBadge status={row.status} /></td>
                     </tr>
                   ))}
@@ -233,9 +401,9 @@ export function LandingPage() {
                   <tr><th></th><th>{t('people.colFullName')}</th><th>{t('people.colJobTitle')}</th><th>{t('people.colTeam')}</th><th>{t('landing.preview.colLocation')}</th></tr>
                 </thead>
                 <tbody>
-                  {previewPeopleRows.map(row => (
+                  {previewPeopleRows.map((row, index) => (
                     <tr key={row.name}>
-                      <td><div className="table-icon"><Users size={16} /></div></td>
+                      <td className="cell-icon"><Avatar name={row.name} photoUrl={previewAvatarUrls[index]} size={28} /></td>
                       <td><strong>{row.name}</strong></td>
                       <td>{row.jobTitle}</td>
                       <td>{row.team}</td>
@@ -246,20 +414,30 @@ export function LandingPage() {
               </table>
             )}
             {previewTab === 'locations' && (
+              <LocationTree
+                locations={previewLocationNodes}
+                selectedId={selectedLocationId}
+                onSelect={setSelectedLocationId}
+              />
+            )}
+            {previewTab === 'procedures' && (
               <table className="dense-table">
                 <thead>
-                  <tr><th></th><th>{t('assets.nameLabel')}</th><th>{t('landing.preview.colType')}</th><th style={{ textAlign: 'right' }}>{t('landing.preview.colAssets')}</th><th style={{ textAlign: 'right' }}>{t('landing.preview.colPeople')}</th></tr>
+                  <tr><th></th><th>{t('procedures.titleLabel')}</th><th>{t('procedures.versionLabel')}</th><th>{t('assets.statusLabel')}</th><th>{t('procedures.scopeLabel')}</th></tr>
                 </thead>
                 <tbody>
-                  {previewLocationRows.map(row => (
-                    <tr key={row.name}>
-                      <td><div className="table-icon"><MapPin size={16} /></div></td>
-                      <td><strong>{row.name}</strong></td>
-                      <td>{t(`locationType.${row.type}`)}</td>
-                      <td style={{ textAlign: 'right' }}>{row.assetCount}</td>
-                      <td style={{ textAlign: 'right' }}>{row.personCount}</td>
-                    </tr>
-                  ))}
+                  {previewProcedureRows.map(row => {
+                    const person = row.personIndex != null ? previewPeopleRows[row.personIndex] : null;
+                    return (
+                      <tr key={row.title}>
+                        <td><div className="table-icon"><ClipboardCheck size={16} /></div></td>
+                        <td><strong>{row.title}</strong></td>
+                        <td>{row.version}</td>
+                        <td><StatusBadge status={row.status} /></td>
+                        <td>{person && row.personIndex != null ? <span className="personChip"><Avatar name={person.name} photoUrl={previewAvatarUrls[row.personIndex]} size={22} /><span className="personChip__sep">•</span>{person.name}</span> : (row.scope ?? t('procedures.noScope'))}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
