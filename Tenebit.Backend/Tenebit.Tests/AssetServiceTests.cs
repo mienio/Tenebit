@@ -161,6 +161,37 @@ public class AssetServiceTests
     }
 
     [Fact]
+    public async Task DowngradedToFree_OverLimitOrganization_CanStillReadAndEdit_ButNeverCreate()
+    {
+        // Simulates what happens when a paying org stops paying and Stripe drops it back to Free:
+        // it keeps every asset it already had (even if that's above the Free limit), can still view
+        // and edit them, but can never add a new one until it upgrades again.
+        var (service, user, assets, categories, subscriptions) = CreateService();
+        var category = AddCategory(user, categories);
+        subscriptions.Add(new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key));
+
+        Asset? firstAsset = null;
+        for (var i = 0; i < SubscriptionPlan.Free.AssetLimit + 5; i++)
+        {
+            var asset = new Asset(user.OrganizationId, category.Id, $"Legacy asset {i}", $"AT-LEGACY-{i:0000}");
+            firstAsset = firstAsset ?? asset;
+            assets.Add(asset);
+        }
+
+        var readResult = await service.GetAsync(firstAsset!.Id, CancellationToken.None);
+        Assert.True(readResult.IsSuccess);
+
+        var updateRequest = new UpdateAssetRequest("Renamed legacy asset", firstAsset.AssetTag, null, category.Id, firstAsset.Status, null, null, null, null, null, null, null, null, null);
+        var updateResult = await service.UpdateAsync(firstAsset.Id, updateRequest, CancellationToken.None);
+        Assert.True(updateResult.IsSuccess);
+        Assert.Equal("Renamed legacy asset", updateResult.Value!.Name);
+
+        var createResult = await service.CreateAsync(BuildRequest(category.Id, "AT-NEW-AFTER-DOWNGRADE"), CancellationToken.None);
+        Assert.True(createResult.IsFailure);
+        Assert.Contains("Limit aktywów przekroczony", createResult.Error!.Message);
+    }
+
+    [Fact]
     public async Task DeleteAsync_RejectsAssetOperatorRole()
     {
         var (service, user, assets, categories, _) = CreateService();

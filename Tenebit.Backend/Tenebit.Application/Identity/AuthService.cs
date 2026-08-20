@@ -237,6 +237,33 @@ public sealed class AuthService
         return Result<AuthUserResponse>.Success(Map(user, organization));
     }
 
+    public async Task<Result<AuthUserResponse>> UpdateDisplayNameAsync(Guid userId, string displayName, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.NotFound("Nie znaleziono konta."));
+        }
+
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
+        }
+
+        try
+        {
+            user.RenameDisplayName(displayName);
+        }
+        catch (DomainException ex)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation(ex.Message));
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<AuthUserResponse>.Success(Map(user, organization));
+    }
+
     public async Task<Result<TwoFactorSetupResponse>> SetupTwoFactorAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await _users.GetByIdAsync(userId, cancellationToken);
@@ -640,8 +667,16 @@ public sealed class AuthService
         await SendVerificationEmailBestEffortAsync(user, cancellationToken);
     }
 
+    // Smoke-test accounts (releasescripts/smoke-test.sh, deploy.sh) register under this reserved,
+    // non-routable .test domain on every deploy. Sending them a real verification email only produces
+    // an SMTP bounce back into the shared mailbox - never deliver to this domain.
+    private static bool IsInternalSmokeTestEmail(string email) =>
+        email.EndsWith("@tenebit-internal.test", StringComparison.OrdinalIgnoreCase);
+
     private async Task SendVerificationEmailBestEffortAsync(OrganizationUser user, CancellationToken cancellationToken)
     {
+        if (IsInternalSmokeTestEmail(user.Email)) return;
+
         var code = TokenHasher.NewOneTimeCode();
         var tokenHash = TokenHasher.HashOneTimeCode(user.Email, code);
         var now = _clock.UtcNow;

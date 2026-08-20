@@ -5,6 +5,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.People;
 
@@ -19,12 +20,13 @@ public sealed class PeopleService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
     private readonly LocationReferenceResolver _locationResolver;
+    private readonly ISubscriptionRepository _subscriptions;
 
     // Roles in TenebitRoles.PeopleViewers that see the whole organization; Manager alone is scoped
     // to its own team by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor];
 
-    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver)
+    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
     {
         _people = people;
         _teams = teams;
@@ -35,6 +37,7 @@ public sealed class PeopleService
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
         _locationResolver = locationResolver;
+        _subscriptions = subscriptions;
     }
 
     public async Task<Result<IReadOnlyList<PersonResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
@@ -105,9 +108,37 @@ public sealed class PeopleService
             person.Update(request.FirstName, request.LastName, request.Email, request.Phone, request.EmployeeNumber, request.RelationType, request.JobTitle, request.TeamId, request.ManagerId, locationResult.Value!.FullPath, request.CostCenter);
             person.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             person.SetPreferredLanguage(request.PreferredLanguage);
-            _people.Add(person);
-            _activity.Add(new ActivityLog(organizationId, "person.created", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "people-capacity",
+                [organizationId],
+                async ct =>
+            {
+                var currentCount = await _people.CountAsync(organizationId, ct);
+                if (currentCount >= limit) return false;
+
+                _people.Add(person);
+                _activity.Add(new ActivityLog(organizationId, "person.created", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<PersonResponse>.Failure(Error.Validation($"Limit pracowników przekroczony. Plan {plan.Name} pozwala na {limit} pracowników. Przejdź na wyższy plan."));
+            }
+
             return await GetAsync(person.Id, cancellationToken);
         }
         catch (DomainException ex)

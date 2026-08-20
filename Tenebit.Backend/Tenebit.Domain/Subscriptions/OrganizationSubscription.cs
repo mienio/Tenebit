@@ -85,6 +85,10 @@ public sealed class OrganizationSubscription
         return plan?.AssetLimit ?? SubscriptionPlan.Free.AssetLimit;
     }
 
+    /// <summary>Cap shared by every other countable resource (people, locations, procedures) - same
+    /// number as the plan's asset limit. Not surfaced in the pricing UI; see Terms of Service.</summary>
+    public int GetResourceLimit() => GetAssetLimit();
+
     public void AttachStripeCustomer(string stripeCustomerId)
     {
         StripeCustomerId = stripeCustomerId;

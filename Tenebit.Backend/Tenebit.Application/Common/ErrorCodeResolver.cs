@@ -96,6 +96,7 @@ public static class ErrorCodeResolver
         ["Nie można opublikować procedury bez pliku."] = "PROCEDURE_CANNOT_PUBLISH_WITHOUT_FILE",
         ["Nie można opublikować zarchiwizowanej procedury."] = "PROCEDURE_CANNOT_PUBLISH_ARCHIVED",
         ["Nie można ustawić liczby miejsc poniżej liczby już przypisanych."] = "LICENSE_SEATS_BELOW_ASSIGNED",
+        ["Nie można usunąć aktywa powiązanego z wydaniami, kontrolami, zgłoszeniami serwisowymi, rezerwacjami lub offboardingiem."] = "ASSET_IN_USE",
         ["Nie można ustawić lokalizacji podrzędnej jako nadrzędnej - utworzyłoby to cykl."] = "LOCATION_CYCLE_DETECTED",
         ["Nie można usunąć kategorii używanej przez aktywa lub zestawy."] = "ASSET_CATEGORY_IN_USE",
         ["Nie można usunąć lokalizacji z przypisanymi aktywami albo osobami."] = "LOCATION_IN_USE",

@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
+import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/StateViews';
@@ -96,7 +97,11 @@ export function AssetsList(props: AssetsListProps) {
                       <td data-label={t('assets.statusLabel')}><StatusBadge status={asset.status} label={statusSetting?.label} color={statusSetting?.color} backgroundColor={statusSetting?.backgroundColor} /></td>
                       <td data-label={t('assets.colPerson')} onClick={event => event.stopPropagation()}>
                         {asset.assignedPersonId && asset.assignedPersonName ? (
-                          <button type="button" className="inlineAction" onClick={() => props.onViewPerson(asset.assignedPersonId!)}>{asset.assignedPersonName}</button>
+                          <span className="personChip">
+                            <Avatar name={asset.assignedPersonName} size={22} />
+                            <span className="personChip__sep">•</span>
+                            <button type="button" className="inlineAction" onClick={() => props.onViewPerson(asset.assignedPersonId!)}>{asset.assignedPersonName}</button>
+                          </span>
                         ) : <span style={{ color: 'var(--muted)' }}>{t('common.unassigned')}</span>}
                       </td>
                       <td data-label={t('assets.colLocation')} onClick={event => event.stopPropagation()}>

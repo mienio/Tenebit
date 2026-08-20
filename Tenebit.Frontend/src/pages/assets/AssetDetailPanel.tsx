@@ -1,4 +1,5 @@
 import { Eye, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
+import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { EvidenceGallery } from '../../components/Evidence';
 import { SlidePanel } from '../../components/SlidePanel';
@@ -63,7 +64,13 @@ export function AssetDetailPanel(props: AssetDetailPanelProps) {
 
           <dl className="detailGrid">
             <Detail label={t('assets.statusLabel')}><StatusBadge status={selected.status} {...statusProps(props.statusSettingByKey.get(selected.status))} /></Detail>
-            <Detail label={t('assets.colPerson')}>{selected.assignedPersonId && selected.assignedPersonName ? <button type="button" className="inlineAction" onClick={() => props.onViewPerson(selected.assignedPersonId!)}>{selected.assignedPersonName}</button> : t('common.unassigned')}</Detail>
+            <Detail label={t('assets.colPerson')}>{selected.assignedPersonId && selected.assignedPersonName ? (
+              <span className="personChip">
+                <Avatar name={selected.assignedPersonName} size={22} />
+                <span className="personChip__sep">•</span>
+                <button type="button" className="inlineAction" onClick={() => props.onViewPerson(selected.assignedPersonId!)}>{selected.assignedPersonName}</button>
+              </span>
+            ) : t('common.unassigned')}</Detail>
             <Detail label={t('assets.colLocation')}>{selected.location ? <button type="button" className="inlineAction" onClick={() => props.onViewLocation(selected.location!)}>{selected.location}</button> : t('common.noLocation')}</Detail>
             <Detail label={t('assets.teamLabel')}>{selected.teamName ?? t('common.none')}</Detail>
             <Detail label={t('assets.serialNumber')}>{selected.serialNumber ?? t('common.none')}</Detail>

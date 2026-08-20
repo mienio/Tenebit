@@ -16,6 +16,9 @@ public sealed class LicenseRepository : ILicenseRepository
     public Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.Licenses.Include(x => x.Seats).FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        _db.Licenses.AsNoTracking().CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
+
     public void Add(License license) => _db.Licenses.Add(license);
     public void Remove(License license) => _db.Licenses.Remove(license);
 }

@@ -127,9 +127,8 @@ export function AssetsPage() {
       .sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
   }, [people.data, groupCounts.data, t, tPlural]);
   const fetchPersonAssets = useCallback(async (personId: string) => {
-    const workspace = await api.personWorkspace(personId);
-    const items = (workspace?.assets ?? []).map(asset => ({ id: asset.id, name: asset.name, assetTag: asset.assetTag, categoryName: asset.categoryName }));
-    return { items, total: items.length };
+    const result = await api.assetsPaged({ owner: personId, page: 1, pageSize: 100 });
+    return { items: result.items, total: result.total };
   }, []);
 
   const categoryGroups = useMemo<AssetGroup[]>(() => {
@@ -141,7 +140,7 @@ export function AssetsPage() {
   }, [categories.data, groupCounts.data, t, tPlural]);
   const fetchCategoryAssets = useCallback(async (categoryId: string) => {
     const result = await api.assetsPaged({ categoryId, page: 1, pageSize: 100 });
-    return { items: result.items.map(asset => ({ id: asset.id, name: asset.name, assetTag: asset.assetTag, status: asset.status })), total: result.total };
+    return { items: result.items, total: result.total };
   }, []);
 
   const statusGroups = useMemo<AssetGroup[]>(() => {
@@ -153,7 +152,7 @@ export function AssetsPage() {
   }, [statuses, groupCounts.data, t, tPlural]);
   const fetchStatusAssets = useCallback(async (statusValue: string) => {
     const result = await api.assetsPaged({ status: statusValue as AssetStatus, page: 1, pageSize: 100 });
-    return { items: result.items.map(asset => ({ id: asset.id, name: asset.name, assetTag: asset.assetTag, categoryName: asset.categoryName })), total: result.total };
+    return { items: result.items, total: result.total };
   }, []);
 
   async function handleSelectAssetFromTree(assetId: string) {
@@ -660,7 +659,7 @@ export function AssetsPage() {
           <div className="sectionTitle">
             <div><h2>{t('assets.locationTreeTitle')}</h2></div>
           </div>
-          <LocationAssetBrowser locations={locations.data ?? []} onSelectAsset={handleSelectAssetFromTree} />
+          <LocationAssetBrowser locations={locations.data ?? []} categories={categories.data ?? []} onSelectAsset={handleSelectAssetFromTree} />
         </Card>
       </div>
 
@@ -669,7 +668,7 @@ export function AssetsPage() {
           <div className="sectionTitle">
             <div><h2>{t('assets.viewPerson')}</h2></div>
           </div>
-          <GroupedAssetBrowser groups={personGroups} icon={<Users size={16} />} fetchGroupAssets={fetchPersonAssets} onSelectAsset={handleSelectAssetFromTree} />
+          <GroupedAssetBrowser groups={personGroups} icon={<Users size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchPersonAssets} onSelectAsset={handleSelectAssetFromTree} />
         </Card>
       </div>
 
@@ -678,7 +677,7 @@ export function AssetsPage() {
           <div className="sectionTitle">
             <div><h2>{t('assets.viewStatus')}</h2></div>
           </div>
-          <GroupedAssetBrowser groups={statusGroups} icon={<CircleDot size={16} />} fetchGroupAssets={fetchStatusAssets} onSelectAsset={handleSelectAssetFromTree} />
+          <GroupedAssetBrowser groups={statusGroups} icon={<CircleDot size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchStatusAssets} onSelectAsset={handleSelectAssetFromTree} />
         </Card>
       </div>
 
@@ -687,7 +686,7 @@ export function AssetsPage() {
           <div className="sectionTitle">
             <div><h2>{t('assets.viewCategory')}</h2></div>
           </div>
-          <GroupedAssetBrowser groups={categoryGroups} icon={<Tag size={16} />} fetchGroupAssets={fetchCategoryAssets} onSelectAsset={handleSelectAssetFromTree} />
+          <GroupedAssetBrowser groups={categoryGroups} icon={<Tag size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchCategoryAssets} onSelectAsset={handleSelectAssetFromTree} />
         </Card>
       </div>
 

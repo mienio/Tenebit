@@ -22,6 +22,7 @@ namespace Tenebit.Application.Abstractions;
 public interface ILocationRepository
 {
     Task<IReadOnlyList<Location>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<Location?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(Location location);
     void Remove(Location location);

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import { Avatar } from './Avatar';
 import { DetailGrid, DetailItem } from './DetailGrid';
 import { Modal } from './Modal';
 import { StatusBadge } from './StatusBadge';
@@ -20,6 +21,10 @@ export function PersonPreviewModal({ personId, onClose }: { personId: string; on
         <p className="muted">{t('people.notFound')}</p>
       ) : (
         <div className="pageStack">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Avatar name={person.fullName} size={40} />
+            <strong>{person.fullName}</strong>
+          </div>
           <DetailGrid>
             <DetailItem label={t('settings.emailLabel')} value={person.email} />
             <DetailItem label={t('people.phoneLabel')} value={person.phone ?? t('common.none')} />

@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Rocket } from 'lucide-react';
 import { Button } from './Button';
 import { useI18n } from '../i18n/I18nProvider';
 import { useScrollLock } from '../hooks/useScrollLock';
 
 const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function ConfirmDialog({ open, title, description, confirmLabel, confirmDisabled, onConfirm, onClose, children }: { open: boolean; title: string; description: string; confirmLabel?: string; confirmDisabled?: boolean; onConfirm: () => void; onClose: () => void; children?: React.ReactNode }) {
+export function ConfirmDialog({ open, title, description, confirmLabel, confirmDisabled, variant = 'warning', onConfirm, onClose, children }: { open: boolean; title: string; description: string; confirmLabel?: string; confirmDisabled?: boolean; variant?: 'warning' | 'positive'; onConfirm: () => void; onClose: () => void; children?: React.ReactNode }) {
   const { t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
@@ -52,11 +52,11 @@ export function ConfirmDialog({ open, title, description, confirmLabel, confirmD
     <div className="modalOverlay" role="presentation">
       <button className="modalBackdrop" type="button" aria-label={t('common.cancel')} onClick={onClose} />
       <section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} ref={panelRef}>
-        <div className="confirmIcon"><AlertTriangle size={20} /></div>
+        <div className={`confirmIcon${variant === 'positive' ? ' confirmIcon--positive' : ''}`}>{variant === 'positive' ? <Rocket size={20} /> : <AlertTriangle size={20} />}</div>
         <h2 id={titleId}>{title}</h2>
         <p id={descriptionId}>{description}</p>
         {children}
-        <div className="formActions formActions--split"><Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button><Button variant="danger" disabled={confirmDisabled} onClick={onConfirm}>{confirmLabel ?? t('common.confirmDelete')}</Button></div>
+        <div className="formActions formActions--split"><Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button><Button variant={variant === 'positive' ? 'primary' : 'danger'} disabled={confirmDisabled} onClick={onConfirm}>{confirmLabel ?? t('common.confirmDelete')}</Button></div>
       </section>
     </div>
   );

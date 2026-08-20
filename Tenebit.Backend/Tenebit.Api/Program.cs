@@ -225,7 +225,20 @@ app.UseExceptionHandler(errorApp =>
             dbUpdateEx.InnerException is Npgsql.PostgresException { SqlState: "23505" })
         {
             context.Response.StatusCode = StatusCodes.Status409Conflict;
-            await context.Response.WriteAsJsonAsync(new { message = "Rekord z takimi danymi już istnieje.", code = "DUPLICATE", correlationId });
+            var message = Tenebit.Application.Common.ErrorMessageTranslator.Translate("Rekord z takimi danymi już istnieje.", Tenebit.Api.Http.RequestLanguageAccessor.CurrentLanguage);
+            await context.Response.WriteAsJsonAsync(new { message, code = "DUPLICATE", correlationId });
+            return;
+        }
+
+        // Naruszenie klucza obcego (np. usuwanie rekordu, który jest wciąż gdzieś przypisany) jest
+        // przewidywalnym konfliktem biznesowym, nie awarią - serwisy powinny to sprawdzać wcześniej
+        // (IsUsedAsync), ale to jest siatka bezpieczeństwa dla przypadków, których jeszcze nie pokryto.
+        if (feature?.Error is Microsoft.EntityFrameworkCore.DbUpdateException fkUpdateEx &&
+            fkUpdateEx.InnerException is Npgsql.PostgresException { SqlState: "23503" })
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            var message = Tenebit.Application.Common.ErrorMessageTranslator.Translate("Tego rekordu nie można usunąć, ponieważ jest używany w innym miejscu.", Tenebit.Api.Http.RequestLanguageAccessor.CurrentLanguage);
+            await context.Response.WriteAsJsonAsync(new { message, code = "IN_USE", correlationId });
             return;
         }
 
@@ -235,13 +248,15 @@ app.UseExceptionHandler(errorApp =>
         {
             context.Response.StatusCode = badRequestEx.StatusCode;
             var code = badRequestEx.StatusCode == StatusCodes.Status413PayloadTooLarge ? "PAYLOAD_TOO_LARGE" : "BAD_REQUEST";
-            var message = badRequestEx.StatusCode == StatusCodes.Status413PayloadTooLarge ? "Przesłany plik jest za duży." : "Nieprawidłowe żądanie.";
+            var rawMessage = badRequestEx.StatusCode == StatusCodes.Status413PayloadTooLarge ? "Przesłany plik jest za duży." : "Nieprawidłowe żądanie.";
+            var message = Tenebit.Application.Common.ErrorMessageTranslator.Translate(rawMessage, Tenebit.Api.Http.RequestLanguageAccessor.CurrentLanguage);
             await context.Response.WriteAsJsonAsync(new { message, code, correlationId });
             return;
         }
 
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        await context.Response.WriteAsJsonAsync(new { message = "Wystąpił nieoczekiwany błąd aplikacji.", code = "INTERNAL_ERROR", correlationId });
+        var fallbackMessage = Tenebit.Application.Common.ErrorMessageTranslator.Translate("Wystąpił nieoczekiwany błąd aplikacji.", Tenebit.Api.Http.RequestLanguageAccessor.CurrentLanguage);
+        await context.Response.WriteAsJsonAsync(new { message = fallbackMessage, code = "INTERNAL_ERROR", correlationId });
     });
 });
 

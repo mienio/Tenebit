@@ -3,6 +3,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Licenses;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.Licenses;
 
@@ -15,8 +16,9 @@ public sealed class LicenseService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public LicenseService(ILicenseRepository licenses, IPersonRepository people, IRolePermissionRepository rolePermissions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public LicenseService(ILicenseRepository licenses, IPersonRepository people, IRolePermissionRepository rolePermissions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ISubscriptionRepository subscriptions)
     {
         _licenses = licenses;
         _people = people;
@@ -25,6 +27,7 @@ public sealed class LicenseService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _subscriptions = subscriptions;
     }
 
     public async Task<Result<IReadOnlyList<LicenseResponse>>> ListAsync(CancellationToken cancellationToken)
@@ -47,9 +50,37 @@ public sealed class LicenseService
         {
             var organizationId = _currentUser.OrganizationId;
             var license = new License(organizationId, request.Name, request.Vendor, request.LicenseKey, request.SeatsTotal, request.ExpiresAt, request.Notes);
-            _licenses.Add(license);
-            _activity.Add(new ActivityLog(organizationId, "license.created", "license", license.Id, _currentUser.Subject, license.Name, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "license-capacity",
+                [organizationId],
+                async ct =>
+            {
+                var currentCount = await _licenses.CountAsync(organizationId, ct);
+                if (currentCount >= limit) return false;
+
+                _licenses.Add(license);
+                _activity.Add(new ActivityLog(organizationId, "license.created", "license", license.Id, _currentUser.Subject, license.Name, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<LicenseResponse>.Failure(Error.Validation($"Limit licencji przekroczony. Plan {plan.Name} pozwala na {limit} licencji. Przejdź na wyższy plan."));
+            }
+
             var people = await _people.ListAsync(organizationId, null, cancellationToken);
             return Result<LicenseResponse>.Success(Map(license, people, await CanViewLicenseKeysAsync(cancellationToken)));
         }

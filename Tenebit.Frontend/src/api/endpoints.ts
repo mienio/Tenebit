@@ -148,7 +148,7 @@ export const api = {
   // successPath/cancelPath/returnPath are relative paths (e.g. "/dashboard?checkout=success") - the
   // backend builds the actual absolute redirect URL from its own configured origin, never from a
   // client-supplied full URL (audit AUD3-010, open redirect).
-  createCheckoutSession: (successPath: string, cancelPath: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ successUrl: successPath, cancelUrl: cancelPath }) }),
+  createCheckoutSession: (planKey: string, successPath: string, cancelPath: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ planKey, successUrl: successPath, cancelUrl: cancelPath }) }),
   createBillingPortalSession: (returnPath: string) => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST', body: JSON.stringify({ returnUrl: returnPath }) }),
 
   assets: (params?: { search?: string; status?: AssetStatus | ''; location?: string | '' }) => {

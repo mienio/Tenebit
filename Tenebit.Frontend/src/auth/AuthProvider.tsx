@@ -33,6 +33,7 @@ type AuthContextValue = {
   loginWithToken: (token: string) => boolean;
   completeExternalLogin: () => Promise<boolean>;
   logout: () => Promise<boolean>;
+  updateDisplayName: (displayName: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -170,6 +171,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(fromToken);
       setIsLoading(false);
       return true;
+    },
+    updateDisplayName: async (displayName: string) => {
+      const response = await apiRequest<{ token: string }>('/api/auth/display-name', { method: 'PUT', body: JSON.stringify({ displayName }) });
+      const fromToken = userFromToken(response.token);
+      if (fromToken) {
+        setStoredToken(response.token);
+        setUser(fromToken);
+      }
     },
     completeExternalLogin,
     logout

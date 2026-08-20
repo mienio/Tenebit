@@ -16,6 +16,9 @@ public sealed class LocationRepository : ILocationRepository
     public Task<Location?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.Locations.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        _db.Locations.AsNoTracking().CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
+
     public void Add(Location location) => _db.Locations.Add(location);
     public void Remove(Location location) => _db.Locations.Remove(location);
 }

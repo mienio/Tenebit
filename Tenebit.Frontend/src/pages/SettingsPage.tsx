@@ -14,6 +14,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Pagination, paginate } from '../components/Pagination';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { EmailVerificationNotice } from '../components/EmailVerificationBanner';
+import { ProfileCard } from '../components/ProfileCard';
 import { TwoFactorCard } from '../components/TwoFactorCard';
 import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAsyncData } from '../hooks/useAsyncData';
@@ -446,6 +447,7 @@ export function SettingsPage() {
           <div className="sectionTitle"><div><h2>{t('settings.interfaceLanguage')}</h2></div></div>
           <LanguageSwitcher />
         </Card>
+        <ProfileCard />
         <TwoFactorCard />
         <AccountLinksCard />
       </div> : null}

@@ -18,7 +18,7 @@ public class StripePaymentGatewayTests
         {
             ["Stripe:SecretKey"] = "sk_test_fake",
             ["Stripe:WebhookSecret"] = secret,
-            ["Stripe:ProPriceId"] = "price_pro_expected"
+            ["Stripe:Prices:business"] = "price_pro_expected"
         }).Build();
         using var http = new HttpClient();
         var gateway = new StripePaymentGateway(http, configuration, NullLogger<StripePaymentGateway>.Instance);

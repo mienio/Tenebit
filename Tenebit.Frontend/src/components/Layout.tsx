@@ -1,11 +1,14 @@
-import { BarChart3, Boxes, ChevronDown, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X } from 'lucide-react';
+import { BarChart3, Boxes, ChevronDown, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X, Zap } from 'lucide-react';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Avatar } from './Avatar';
 import { BrandMark } from './BrandMark';
 import { Button } from './Button';
 import { keepFocusInside } from './Modal';
 import { LoadingState } from './StateViews';
+import { api } from '../api/endpoints';
 import { useAuth } from '../auth/AuthProvider';
+import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 
 export const navGroups = [
@@ -39,13 +42,14 @@ export function Layout() {
   const auth = useAuth();
   const { t } = useI18n();
   const location = useLocation();
+  const subscription = useAsyncData(api.subscription, []);
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const visibleNav = nav.filter(item => canSee(item.roles, auth.roles));
   const standaloneNav = visibleNav.filter(item => !item.group);
   const groupedNav = navGroups.map(group => ({ group, items: visibleNav.filter(item => item.group === group.key) })).filter(({ items }) => items.length > 0);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ employment: false, reports: false });
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -119,7 +123,16 @@ export function Layout() {
           })}
         </nav>
         <div className="sidebarFooter">
-          <span>{auth.userName}</span>
+          <NavLink to="/settings" className="sidebarProfile" onClick={() => setMobileOpen(false)}>
+            <Avatar name={auth.userName || auth.userEmail} size={32} />
+            <span className="sidebarProfile__name">{auth.userName || auth.userEmail}</span>
+          </NavLink>
+          {subscription.data && (
+            <Link to="/pricing" className="sidebarPlanBadge" onClick={() => setMobileOpen(false)} title={t('nav.managePlan')}>
+              <Zap size={13} />
+              <span>{subscription.data.planName}</span>
+            </Link>
+          )}
           <Button variant="ghost" onClick={auth.logout} icon={<LogOut size={16} />}>{t('nav.logout')}</Button>
         </div>
       </aside>

@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Building2, Plus, Save } from 'lucide-react';
 import { api } from '../api/endpoints';
+import { Avatar } from './Avatar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -200,7 +201,7 @@ export function LocationsManager() {
                 <div className="listRows">{inventory.data.assets.map(asset => (
                   <Link className="listRow" to={`/assets?search=${encodeURIComponent(asset.assetTag)}`} key={asset.id}>
                     <div><strong>{asset.name}</strong><small>{asset.assetTag}</small></div>
-                    <span>{asset.assignedPersonName ?? t('common.unassigned')}</span>
+                    <span>{asset.assignedPersonName ? <span className="personChip"><Avatar name={asset.assignedPersonName} size={22} /><span className="personChip__sep">•</span>{asset.assignedPersonName}</span> : t('common.unassigned')}</span>
                   </Link>
                 ))}</div>
               )}

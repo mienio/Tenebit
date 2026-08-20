@@ -66,8 +66,8 @@ public class SubscriptionServiceTests
     public async Task UpgradeAsync_RejectsFreeDowngradeWhileStripeSubscriptionActive()
     {
         var (service, user, _, subscriptions, _, _) = CreateService();
-        var subscription = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Pro.Key);
-        subscription.SyncFromStripe(SubscriptionPlan.Pro.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "cus_123", DateTimeOffset.UtcNow);
+        var subscription = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        subscription.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "cus_123", DateTimeOffset.UtcNow);
         subscriptions.Add(subscription);
 
         var result = await service.UpgradeAsync("free", CancellationToken.None);
@@ -81,7 +81,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, paymentGateway, _) = CreateService();
         paymentGateway.IsConfigured = false;
 
-        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -93,7 +93,7 @@ public class SubscriptionServiceTests
         paymentGateway.NextCustomerId = "cus_new";
         paymentGateway.NextCheckoutUrl = "https://checkout.stripe.com/session-abc";
 
-        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("https://checkout.stripe.com/session-abc", result.Value);
@@ -110,13 +110,13 @@ public class SubscriptionServiceTests
 
         var periodEnd = DateTimeOffset.UtcNow.AddMonths(1);
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_created_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Pro.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, periodEnd, null);
+            "evt_created_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, periodEnd, null);
 
         var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var subscription = subscriptions.Subscriptions.Single();
-        Assert.Equal(SubscriptionPlan.Pro.Key, subscription.PlanKey);
+        Assert.Equal(SubscriptionPlan.Business.Key, subscription.PlanKey);
         Assert.Equal(SubscriptionStatus.Active, subscription.Status);
         Assert.Equal("sub_123", subscription.StripeSubscriptionId);
     }
@@ -125,12 +125,12 @@ public class SubscriptionServiceTests
     public async Task HandleWebhookAsync_RevertsToFreeOnSubscriptionDeletedEvent()
     {
         var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
-        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Pro.Key);
-        existing.SyncFromStripe(SubscriptionPlan.Pro.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "cus_123", DateTimeOffset.UtcNow.AddMinutes(-10));
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        existing.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "cus_123", DateTimeOffset.UtcNow.AddMinutes(-10));
         subscriptions.Add(existing);
 
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_deleted_1", "customer.subscription.deleted", "cus_123", "sub_123", SubscriptionPlan.Pro.Key, SubscriptionStatus.Cancelled, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+            "evt_deleted_1", "customer.subscription.deleted", "cus_123", "sub_123", SubscriptionPlan.Business.Key, SubscriptionStatus.Cancelled, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
 
         var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
 
@@ -160,12 +160,12 @@ public class SubscriptionServiceTests
         subscriptions.Add(existing);
 
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_replay_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Pro.Key,
+            "evt_replay_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Business.Key,
             SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), null);
 
         var first = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
         Assert.True(first.IsSuccess);
-        Assert.Equal(SubscriptionPlan.Pro.Key, subscriptions.Subscriptions.Single().PlanKey);
+        Assert.Equal(SubscriptionPlan.Business.Key, subscriptions.Subscriptions.Single().PlanKey);
         Assert.Single(processedEvents.Events);
 
         // Stripe retries delivery on timeout - replaying the exact same EventId must not reapply/re-log the change.
@@ -189,20 +189,20 @@ public class SubscriptionServiceTests
         var olderEventTime = newerEventTime.AddMinutes(-10);
 
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_newer", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Pro.Key,
+            "evt_newer", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Business.Key,
             SubscriptionStatus.Active, newerEventTime, newerEventTime, newerEventTime.AddMonths(1), null);
         await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
-        Assert.Equal(SubscriptionPlan.Pro.Key, subscriptions.Subscriptions.Single().PlanKey);
+        Assert.Equal(SubscriptionPlan.Business.Key, subscriptions.Subscriptions.Single().PlanKey);
 
         // A delayed retry of an OLDER event (e.g. the original .created before an .updated already landed)
         // must not revert state a newer event already applied.
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_older_retry", "customer.subscription.deleted", "cus_123", "sub_123", SubscriptionPlan.Pro.Key,
+            "evt_older_retry", "customer.subscription.deleted", "cus_123", "sub_123", SubscriptionPlan.Business.Key,
             SubscriptionStatus.Cancelled, olderEventTime, olderEventTime, olderEventTime, null);
         var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(SubscriptionPlan.Pro.Key, subscriptions.Subscriptions.Single().PlanKey);
+        Assert.Equal(SubscriptionPlan.Business.Key, subscriptions.Subscriptions.Single().PlanKey);
         Assert.Equal(SubscriptionStatus.Active, subscriptions.Subscriptions.Single().Status);
     }
 
@@ -215,7 +215,7 @@ public class SubscriptionServiceTests
         subscriptions.Add(existing);
 
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_unknown_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Pro.Key,
+            "evt_unknown_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Business.Key,
             SubscriptionStatus.Unknown, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), null);
 
         var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
@@ -237,7 +237,7 @@ public class SubscriptionServiceTests
         // Metadata routes the event straight to this organization, but the event's actual Stripe
         // customer does not match the customer already attached to it.
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
-            "evt_mismatch_1", "customer.subscription.created", "cus_belongs_to_another_org", "sub_999", SubscriptionPlan.Pro.Key,
+            "evt_mismatch_1", "customer.subscription.created", "cus_belongs_to_another_org", "sub_999", SubscriptionPlan.Business.Key,
             SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), user.OrganizationId);
 
         var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
@@ -284,13 +284,13 @@ public class SubscriptionServiceTests
     {
         var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
-        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Pro.Key);
-        existing.SyncFromStripe(SubscriptionPlan.Pro.Key, status, now, now.AddMonths(1), "sub_live", "cus_live", now);
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        existing.SyncFromStripe(SubscriptionPlan.Business.Key, status, now, now.AddMonths(1), "sub_live", "cus_live", now);
         subscriptions.Add(existing);
         paymentGateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "cus_live", "sub_live", SubscriptionPlan.Free.Key, status, now, now.AddMonths(1), user.OrganizationId);
 
-        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
@@ -307,7 +307,7 @@ public class SubscriptionServiceTests
         paymentGateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "cus_existing", "sub_old", SubscriptionPlan.Free.Key, SubscriptionStatus.Cancelled, now, now, user.OrganizationId);
 
-        var result = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, paymentGateway.CheckoutCreateCalls);
@@ -318,9 +318,9 @@ public class SubscriptionServiceTests
     {
         var (service, _, _, _, paymentGateway, _) = CreateService();
 
-        var first = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var first = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
         var firstKey = paymentGateway.LastCheckoutIdempotencyKey;
-        var second = await service.CreateCheckoutSessionAsync("/success", "/cancel", CancellationToken.None);
+        var second = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
 
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);

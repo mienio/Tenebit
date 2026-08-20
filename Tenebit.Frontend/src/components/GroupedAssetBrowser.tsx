@@ -1,9 +1,12 @@
-import { ChevronDown, ChevronRight, Loader2, Package } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
+import { Avatar } from './Avatar';
 import { TextInput } from './FormFields';
 import { StatusBadge } from './StatusBadge';
 import { useI18n } from '../i18n/I18nProvider';
-import type { AssetStatus } from '../types/domain';
+import type { Asset, AssetCategory } from '../types/domain';
+import { CategoryIcon } from '../utils/categoryIcons';
+import { formatDate, formatMoney } from '../utils/format';
 
 export interface AssetGroup {
   id: string;
@@ -11,22 +14,17 @@ export interface AssetGroup {
   sublabel?: string | null;
 }
 
-export interface GroupAssetRow {
-  id: string;
-  name: string;
-  assetTag: string;
-  categoryName?: string | null;
-  status?: AssetStatus | null;
-}
+export type GroupAssetRow = Asset;
 
 interface GroupedAssetBrowserProps {
   groups: AssetGroup[];
   icon: ReactNode;
+  categories: AssetCategory[];
   fetchGroupAssets: (groupId: string) => Promise<{ items: GroupAssetRow[]; total: number }>;
   onSelectAsset: (assetId: string) => void;
 }
 
-export function GroupedAssetBrowser({ groups, icon, fetchGroupAssets, onSelectAsset }: GroupedAssetBrowserProps) {
+export function GroupedAssetBrowser({ groups, icon, categories, fetchGroupAssets, onSelectAsset }: GroupedAssetBrowserProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState<Set<string>>(() => new Set());
@@ -97,13 +95,29 @@ export function GroupedAssetBrowser({ groups, icon, fetchGroupAssets, onSelectAs
                 {isOpen && (
                   <div className="locationGroup__children">
                     {isLoading && <p className="muted"><Loader2 className="spin" size={14} /> {t('common.loading')}</p>}
-                    {items.map(asset => (
-                      <button type="button" key={asset.id} className="assetBrowserRow" onClick={() => onSelectAsset(asset.id)}>
-                        <span className="assetBrowserRow__icon" aria-hidden="true"><Package size={16} /></span>
-                        <span className="assetBrowserRow__main"><strong>{asset.name}</strong><small>{asset.assetTag}</small></span>
-                        <span className="assetBrowserRow__meta">{asset.status ? <StatusBadge status={asset.status} /> : asset.categoryName}</span>
-                      </button>
-                    ))}
+                    {items.length > 0 && (
+                      <div className="tableWrap tableWrap--cards">
+                        <table className="dense-table">
+                          <tbody>
+                            {items.map(asset => {
+                              const category = categories.find(item => item.id === asset.categoryId);
+                              return (
+                                <tr key={asset.id} tabIndex={0} onClick={() => onSelectAsset(asset.id)}>
+                                  <td className="cell-icon"><div className="table-icon"><CategoryIcon icon={category?.icon} size={16} /></div></td>
+                                  <td data-label={t('assets.colName')}><strong>{asset.name}</strong><small>{asset.categoryName}</small></td>
+                                  <td data-label={t('assets.colTag')}>{asset.assetTag}</td>
+                                  <td data-label={t('assets.statusLabel')}><StatusBadge status={asset.status} /></td>
+                                  <td data-label={t('assets.colPerson')}>{asset.assignedPersonName ? <span className="personChip"><Avatar name={asset.assignedPersonName} size={22} /><span className="personChip__sep">•</span>{asset.assignedPersonName}</span> : t('common.unassigned')}</td>
+                                  <td data-label={t('assets.colLocation')}>{asset.location ?? '-'}</td>
+                                  <td data-label={t('assets.colValue')} style={{ textAlign: 'right' }}>{asset.purchasePrice != null ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : '-'}</td>
+                                  <td data-label={t('assets.colWarranty')}>{formatDate(asset.warrantyUntil)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                     {!isLoading && result && items.length === 0 && <p className="muted">{t('assets.browseGroupEmpty')}</p>}
                     {!isLoading && total > items.length && (
                       <p className="muted">{t('assets.browseMoreHint', { count: total - items.length })}</p>

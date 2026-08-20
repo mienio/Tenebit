@@ -31,6 +31,11 @@ public sealed class OrganizationUser
     public List<OrganizationUserRole> Roles { get; private set; } = [];
 
     public void SetPasswordHash(string passwordHash) => PasswordHash = passwordHash;
+    public void RenameDisplayName(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) throw new DomainException("Imię i nazwisko jest wymagane.");
+        DisplayName = displayName.Trim();
+    }
     public void LinkPerson(Guid? personId) => PersonId = personId;
     public void RotateSecurityStamp() => SecurityStamp = Guid.NewGuid();
     public void MarkEmailVerified() => IsEmailVerified = true;

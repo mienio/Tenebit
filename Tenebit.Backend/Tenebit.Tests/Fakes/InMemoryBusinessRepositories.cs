@@ -19,6 +19,12 @@ namespace Tenebit.Tests.Fakes;
 public sealed class InMemoryAssetRepository : IAssetRepository
 {
     public List<Asset> Assets { get; } = [];
+    public List<Assignment> Assignments { get; } = [];
+    public List<AssetAuditItem> AssetAuditItems { get; } = [];
+    public List<Tenebit.Domain.Reservations.EquipmentReservationItem> ReservationItems { get; } = [];
+    public List<OffboardingItem> OffboardingItems { get; } = [];
+    public List<AssetInspection> AssetInspections { get; } = [];
+    public List<ServiceTicket> ServiceTickets { get; } = [];
 
     public Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
@@ -109,6 +115,15 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId && x.LocationId == locationId));
 
+    public Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(
+            Assignments.Any(a => a.OrganizationId == organizationId && a.Assets.Any(x => x.AssetId == id))
+            || AssetAuditItems.Any(x => x.OrganizationId == organizationId && x.AssetId == id)
+            || ReservationItems.Any(x => x.OrganizationId == organizationId && (x.AssetId == id || x.OriginalAssetId == id))
+            || OffboardingItems.Any(x => x.OrganizationId == organizationId && x.AssetId == id)
+            || AssetInspections.Any(x => x.OrganizationId == organizationId && x.AssetId == id)
+            || ServiceTickets.Any(x => x.OrganizationId == organizationId && x.AssetId == id));
+
     public void Add(Asset asset) => Assets.Add(asset);
     public void Remove(Asset asset) => Assets.Remove(asset);
 }
@@ -156,6 +171,9 @@ public sealed class InMemoryPersonRepository : IPersonRepository
 
     public Task<bool> HasBlockingRelationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken) =>
         Task.FromResult(HasBlockingRelations);
+
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(People.Count(x => x.OrganizationId == organizationId));
 
     public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
         Task.FromResult(People.Count(x => x.OrganizationId == organizationId && x.Location == location));
@@ -219,6 +237,9 @@ public sealed class InMemoryProcedureRepository : IProcedureRepository
 
     public Task<IReadOnlyList<Procedure>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Procedure>>(Procedures.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Procedures.Count(x => x.OrganizationId == organizationId));
 
     public Task<(IReadOnlyList<Procedure> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
     {
@@ -390,8 +411,25 @@ public sealed class InMemoryLicenseRepository : ILicenseRepository
     public Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Licenses.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Licenses.Count(x => x.OrganizationId == organizationId));
+
     public void Add(License license) => Licenses.Add(license);
     public void Remove(License license) => Licenses.Remove(license);
+}
+
+public sealed class InMemoryRolePermissionRepository : IRolePermissionRepository
+{
+    public List<RolePermission> Permissions { get; } = [];
+
+    public Task<IReadOnlyList<RolePermission>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RolePermission>>(Permissions.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<RolePermission?> FindAsync(Guid organizationId, string roleKey, string permissionKey, CancellationToken cancellationToken) =>
+        Task.FromResult(Permissions.FirstOrDefault(x => x.OrganizationId == organizationId && x.RoleKey == roleKey && x.PermissionKey == permissionKey));
+
+    public void Add(RolePermission permission) => Permissions.Add(permission);
+    public void Remove(RolePermission permission) => Permissions.Remove(permission);
 }
 
 public sealed class InMemoryOffboardingCaseRepository : IOffboardingCaseRepository
@@ -488,6 +526,8 @@ public sealed class InMemoryAssetAuditItemRepository : IAssetAuditItemRepository
 public sealed class FakePaymentGateway : IPaymentGateway
 {
     public bool IsConfigured { get; set; } = true;
+    public bool AllPlansConfigured { get; set; } = true;
+    public HashSet<string> ConfiguredPlanKeys { get; } = [];
     public string NextCustomerId { get; set; } = "cus_fake";
     public string NextCheckoutUrl { get; set; } = "https://checkout.stripe.com/fake-session";
     public string NextPortalUrl { get; set; } = "https://billing.stripe.com/fake-portal";
@@ -497,7 +537,10 @@ public sealed class FakePaymentGateway : IPaymentGateway
 
     public string? LastCustomerIdempotencyKey { get; private set; }
     public string? LastCheckoutIdempotencyKey { get; private set; }
+    public string? LastCheckoutPlanKey { get; private set; }
     public int CheckoutCreateCalls { get; private set; }
+
+    public bool IsPlanConfigured(string planKey) => AllPlansConfigured || ConfiguredPlanKeys.Contains(planKey);
 
     public Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken)
     {
@@ -505,9 +548,10 @@ public sealed class FakePaymentGateway : IPaymentGateway
         return Task.FromResult(NextCustomerId);
     }
 
-    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
+    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
     {
         LastCheckoutIdempotencyKey = idempotencyKey;
+        LastCheckoutPlanKey = planKey;
         CheckoutCreateCalls++;
         return Task.FromResult(NextCheckoutUrl);
     }

@@ -58,6 +58,9 @@ public sealed class ProcedureRepository : IProcedureRepository
     public Task<Procedure?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.Procedures.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        BaseQuery(organizationId).CountAsync(cancellationToken);
+
     public async Task<IReadOnlyList<ProcedureDocumentMetadata>> ListDocumentMetadataByProcedureIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> procedureIds, CancellationToken cancellationToken)
     {
         if (procedureIds.Count == 0) return [];

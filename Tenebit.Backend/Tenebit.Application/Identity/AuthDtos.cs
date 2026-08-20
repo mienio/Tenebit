@@ -52,6 +52,9 @@ public sealed record TwoFactorSetupResponse(string Secret, string OtpAuthUri, st
 [ValidatedRequest]
 public sealed record TwoFactorCodeRequest([property: Required] string Code);
 
+[ValidatedRequest]
+public sealed record UpdateDisplayNameRequest([property: Required, StringLength(160, MinimumLength = 1)] string DisplayName);
+
 public sealed record TwoFactorEnableResponse(IReadOnlyList<string> RecoveryCodes, AuthUserResponse User);
 
 public sealed record TwoFactorRecoveryCodesResponse(IReadOnlyList<string> RecoveryCodes, int RemainingUnused);

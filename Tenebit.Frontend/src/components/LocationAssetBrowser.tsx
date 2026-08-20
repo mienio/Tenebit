@@ -1,10 +1,13 @@
-import { Building2, ChevronDown, ChevronRight, Loader2, Package } from 'lucide-react';
+import { Building2, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
+import { Avatar } from './Avatar';
 import { TextInput } from './FormFields';
 import { StatusBadge } from './StatusBadge';
 import { useI18n } from '../i18n/I18nProvider';
-import type { LocationInventory, LocationNode } from '../types/domain';
+import type { AssetCategory, LocationInventory, LocationNode } from '../types/domain';
+import { CategoryIcon } from '../utils/categoryIcons';
+import { formatDate, formatMoney } from '../utils/format';
 
 interface LocationAssetNodeProps {
   node: LocationNode;
@@ -13,13 +16,14 @@ interface LocationAssetNodeProps {
   expanded: Set<string>;
   loading: Set<string>;
   inventory: Record<string, LocationInventory>;
+  categories: AssetCategory[];
   visibleIds: Set<string> | null;
   ancestorIds: Set<string>;
   onToggle: (node: LocationNode) => void;
   onSelectAsset: (assetId: string) => void;
 }
 
-function LocationAssetNode({ node, byParent, byId, expanded, loading, inventory, visibleIds, ancestorIds, onToggle, onSelectAsset }: LocationAssetNodeProps) {
+function LocationAssetNode({ node, byParent, byId, expanded, loading, inventory, categories, visibleIds, ancestorIds, onToggle, onSelectAsset }: LocationAssetNodeProps) {
   const { t } = useI18n();
   if (visibleIds !== null && !visibleIds.has(node.id)) return null;
 
@@ -61,27 +65,36 @@ function LocationAssetNode({ node, byParent, byId, expanded, loading, inventory,
               expanded={expanded}
               loading={loading}
               inventory={inventory}
+              categories={categories}
               visibleIds={visibleIds}
               ancestorIds={ancestorIds}
               onToggle={onToggle}
               onSelectAsset={onSelectAsset}
             />
           ))}
-          {assetsHere.map(asset => (
-            <button
-              type="button"
-              key={asset.id}
-              className="assetBrowserRow"
-              onClick={() => onSelectAsset(asset.id)}
-            >
-              <span className="assetBrowserRow__icon" aria-hidden="true"><Package size={16} /></span>
-              <span className="assetBrowserRow__main">
-                <strong>{asset.name}</strong>
-                <small>{asset.assetTag}</small>
-              </span>
-              <span className="assetBrowserRow__meta"><StatusBadge status={asset.status} /></span>
-            </button>
-          ))}
+          {assetsHere.length > 0 && (
+            <div className="tableWrap tableWrap--cards">
+              <table className="dense-table">
+                <tbody>
+                  {assetsHere.map(asset => {
+                    const category = categories.find(item => item.id === asset.categoryId);
+                    return (
+                      <tr key={asset.id} tabIndex={0} onClick={() => onSelectAsset(asset.id)}>
+                        <td className="cell-icon"><div className="table-icon"><CategoryIcon icon={category?.icon} size={16} /></div></td>
+                        <td data-label={t('assets.colName')}><strong>{asset.name}</strong><small>{asset.categoryName}</small></td>
+                        <td data-label={t('assets.colTag')}>{asset.assetTag}</td>
+                        <td data-label={t('assets.statusLabel')}><StatusBadge status={asset.status} /></td>
+                        <td data-label={t('assets.colPerson')}>{asset.assignedPersonName ? <span className="personChip"><Avatar name={asset.assignedPersonName} size={22} /><span className="personChip__sep">•</span>{asset.assignedPersonName}</span> : t('common.unassigned')}</td>
+                        <td data-label={t('assets.colLocation')}>{asset.location ?? '-'}</td>
+                        <td data-label={t('assets.colValue')} style={{ textAlign: 'right' }}>{asset.purchasePrice != null ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : '-'}</td>
+                        <td data-label={t('assets.colWarranty')}>{formatDate(asset.warrantyUntil)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
           {showEmpty && (
             <p className="muted">{t('assets.locationEmpty')}</p>
           )}
@@ -91,7 +104,7 @@ function LocationAssetNode({ node, byParent, byId, expanded, loading, inventory,
   );
 }
 
-export function LocationAssetBrowser({ locations, onSelectAsset }: { locations: LocationNode[]; onSelectAsset: (assetId: string) => void }) {
+export function LocationAssetBrowser({ locations, categories, onSelectAsset }: { locations: LocationNode[]; categories: AssetCategory[]; onSelectAsset: (assetId: string) => void }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState<Set<string>>(() => new Set());
@@ -194,6 +207,7 @@ export function LocationAssetBrowser({ locations, onSelectAsset }: { locations: 
               expanded={expanded}
               loading={loading}
               inventory={inventory}
+              categories={categories}
               visibleIds={visibleIds}
               ancestorIds={ancestorIds}
               onToggle={toggleNode}

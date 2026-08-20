@@ -184,6 +184,21 @@ public static class AuthEndpoints
             .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
 
+        api.MapPut("/auth/display-name", async (UpdateDisplayNameRequest request, ICurrentUser currentUser, AuthService service, TokenIssuer tokens, CancellationToken cancellationToken) =>
+            {
+                if (!Guid.TryParse(currentUser.Subject, out var userId))
+                {
+                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                }
+
+                var result = await service.UpdateDisplayNameAsync(userId, request.DisplayName, cancellationToken);
+                if (result.IsFailure) return result.ToHttpResult();
+
+                var user = result.Value!;
+                return Results.Ok(new { token = tokens.Issue(user), user });
+            })
+            .WithTags("Auth");
+
         api.MapPost("/auth/2fa/setup", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))

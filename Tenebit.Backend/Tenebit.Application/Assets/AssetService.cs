@@ -271,6 +271,10 @@ public sealed class AssetService
         var organizationId = _currentUser.OrganizationId;
         var asset = await _assets.GetAsync(organizationId, id, cancellationToken);
         if (asset is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
+        if (await _assets.IsUsedAsync(organizationId, id, cancellationToken))
+        {
+            return Result.Failure(Error.Conflict("Nie można usunąć aktywa powiązanego z wydaniami, kontrolami, zgłoszeniami serwisowymi, rezerwacjami lub offboardingiem."));
+        }
 
         _assets.Remove(asset);
         _activity.Add(new ActivityLog(organizationId, "asset.deleted", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));

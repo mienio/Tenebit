@@ -92,6 +92,9 @@ public sealed class InMemoryLocationRepository : ILocationRepository
     public Task<Location?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Locations.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
 
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult(Locations.Count(x => x.OrganizationId == organizationId));
+
     public void Add(Location location) => Locations.Add(location);
     public void Remove(Location location) => Locations.Remove(location);
 }

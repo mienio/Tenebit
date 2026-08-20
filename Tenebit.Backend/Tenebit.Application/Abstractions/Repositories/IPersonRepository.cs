@@ -30,6 +30,7 @@ public interface IPersonRepository
     Task<Person?> FindByEmailAsync(Guid organizationId, string email, CancellationToken cancellationToken);
     Task<bool> EmailExistsAsync(Guid organizationId, string email, Guid? excludingPersonId, CancellationToken cancellationToken);
     Task<bool> HasBlockingRelationsAsync(Guid organizationId, Guid personId, CancellationToken cancellationToken);
+    Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
     Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken);
     void Add(Person person);

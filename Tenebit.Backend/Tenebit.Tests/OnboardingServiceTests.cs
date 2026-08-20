@@ -7,6 +7,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.JobProfiles;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
 namespace Tenebit.Tests;
@@ -20,7 +21,7 @@ public class OnboardingServiceTests
         return locations;
     }
 
-    private static (OnboardingService Service, FakeCurrentUser User, InMemoryPersonRepository People) CreateService()
+    private static (OnboardingService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryProcedureRepository Procedures, InMemorySubscriptionRepository Subscriptions) CreateService()
     {
         var user = new FakeCurrentUser();
         var teams = new InMemoryTeamRepository();
@@ -35,13 +36,14 @@ public class OnboardingServiceTests
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
         var evidence = new InMemoryAssetEvidenceRepository();
+        var subscriptions = new InMemorySubscriptionRepository();
         var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, user, clock, unitOfWork, TestAuthorization.Asset(assets, user));
         var assignmentService = new AssignmentService(assignments, assets, categories, inspections, people, procedures, teams, organizations, activity, user, clock, unitOfWork, new FakeEmailSender(), new FakeAppLinkBuilder(), new InMemoryEquipmentReservationRepository(), evidence, evidenceService,
             new AssetReturnDispositionService(inspections),
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
             new Tenebit.Application.Common.ManagerScopeService(people, teams));
-        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)));
-        return (service, user, people);
+        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)), subscriptions);
+        return (service, user, people, assets, procedures, subscriptions);
     }
 
     [Theory]
@@ -49,7 +51,7 @@ public class OnboardingServiceTests
     [InlineData(EmploymentStatus.Inactive)]
     public async Task CreateEmployeePackageAsync_RejectsPersonWhoIsNotActive(EmploymentStatus status)
     {
-        var (service, user, people) = CreateService();
+        var (service, user, people, _, _, _) = CreateService();
         var person = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
         if (status == EmploymentStatus.Offboarding) person.StartOffboarding(DateTimeOffset.UtcNow.AddDays(7));
         else person.Deactivate(DateTimeOffset.UtcNow);
@@ -64,7 +66,7 @@ public class OnboardingServiceTests
     [Fact]
     public async Task CreateEmployeePackageAsync_DoesNotResolvePersonFromAnotherOrganization()
     {
-        var (service, _, people) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var person = new Person(Guid.NewGuid(), "Jan", "Kowalski", "jan@other.test");
         people.Add(person);
 
@@ -77,7 +79,7 @@ public class OnboardingServiceTests
     [Fact]
     public async Task CreateStarterPackageAsync_CreatesActivePerson()
     {
-        var (service, _, people) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var request = new CreateStarterPackageRequest("IT", "Jan", "Kowalski", "jan@acme.test", "Developer", "Laptop", "AT-001", null, "Laptopy", "Biuro", "Polityka sprzętowa", null, null);
 
         var result = await service.CreateStarterPackageAsync(request, CancellationToken.None);
@@ -89,9 +91,31 @@ public class OnboardingServiceTests
     }
 
     [Fact]
+    public async Task CreateStarterPackageAsync_RejectsWhenAtSubscriptionResourceLimit()
+    {
+        // The starter package creates a Person + Asset + Procedure directly, bypassing
+        // PeopleService/AssetService/ProcedureService.CreateAsync - it must not be a way to add
+        // records past the plan limit just because it goes through a different code path.
+        var (service, user, people, _, _, subscriptions) = CreateService();
+        subscriptions.Add(new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key));
+
+        for (var i = 0; i < SubscriptionPlan.Free.AssetLimit; i++)
+        {
+            people.Add(new Person(user.OrganizationId, "Jan", $"Kowalski{i}", $"jan{i}@acme.test"));
+        }
+
+        var request = new CreateStarterPackageRequest("IT", "Nowy", "Pracownik", "nowy@acme.test", "Developer", "Laptop", "AT-OVER", null, "Laptopy", "Biuro", "Polityka sprzętowa", null, null);
+        var result = await service.CreateStarterPackageAsync(request, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Limit planu", result.Error!.Message);
+        Assert.Equal(SubscriptionPlan.Free.AssetLimit, people.People.Count);
+    }
+
+    [Fact]
     public async Task GetChecklistAsync_EmployeeCannotReadAnotherPersonsChecklist()
     {
-        var (service, user, people) = CreateService();
+        var (service, user, people, _, _, _) = CreateService();
         var self = new Person(user.OrganizationId, "Anna", "Pracownik", user.Email);
         people.Add(self);
         var other = new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test");
@@ -108,7 +132,7 @@ public class OnboardingServiceTests
     [Fact]
     public async Task GetChecklistAsync_EmployeeCanReadOwnChecklist()
     {
-        var (service, user, people) = CreateService();
+        var (service, user, people, _, _, _) = CreateService();
         var self = new Person(user.OrganizationId, "Anna", "Pracownik", user.Email);
         people.Add(self);
 
@@ -156,7 +180,7 @@ public class OnboardingServiceTests
             new AssetReturnDispositionService(inspections),
             new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations),
             new Tenebit.Application.Common.ManagerScopeService(people, teams));
-        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)));
+        var service = new OnboardingService(teams, people, categories, assets, procedures, assignments, new EmptyJobProfileRepository(), activity, user, clock, unitOfWork, assignmentService, new Tenebit.Application.Common.ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(CreateLocations(user.OrganizationId)), new InMemorySubscriptionRepository());
         return (service, user, assets, people, assignments, evidence);
     }
 

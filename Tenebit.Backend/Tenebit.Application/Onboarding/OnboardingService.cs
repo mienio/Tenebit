@@ -8,6 +8,7 @@ using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.Onboarding;
 
@@ -28,8 +29,9 @@ public sealed class OnboardingService
 
     private readonly ManagerScopeService _managerScope;
     private readonly LocationReferenceResolver _locationResolver;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope, LocationReferenceResolver locationResolver)
+    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
     {
         _teams = teams;
         _people = people;
@@ -45,6 +47,7 @@ public sealed class OnboardingService
         _assignmentService = assignmentService;
         _managerScope = managerScope;
         _locationResolver = locationResolver;
+        _subscriptions = subscriptions;
     }
 
     public async Task<Result<OnboardingStatusResponse>> GetStatusAsync(CancellationToken cancellationToken)
@@ -125,26 +128,58 @@ public sealed class OnboardingService
             person.Update(request.EmployeeFirstName, request.EmployeeLastName, request.EmployeeEmail, null, null, "Pracownik", request.JobTitle, team.Id, null, locationResult.Value!.FullPath, null);
             if (!person.CanReceiveNewObligations) return Result<StarterPackageResponse>.Failure(Error.Validation("Pakiet onboardingowy można utworzyć tylko dla aktywnej osoby."));
             person.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
-            _people.Add(person);
 
             var asset = new Asset(organizationId, category.Id, request.AssetName, request.AssetTag);
             asset.UpdateCore(request.AssetName, request.AssetTag, request.SerialNumber, category.Id, locationResult.Value!.FullPath, null, null, null, null, null, null, team.Id);
             asset.SetLocation(locationResult.Value!.Id, locationResult.Value.FullPath);
             asset.AssignTo(person.Id);
-            _assets.Add(asset);
 
             var procedure = new Procedure(organizationId, request.ProcedureTitle, "1.0", "HR / Onboarding", true);
             procedure.Update(request.ProcedureTitle, "1.0", "HR / Onboarding", request.JobTitle, DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime).AddMonths(12), true);
-            _procedures.Add(procedure);
 
             var assignment = new Assignment(organizationId, person.Id, CreateProtocolNumber(_clock.UtcNow), _clock.UtcNow, request.ReturnDueDate, "Pakiet utworzony przez onboarding pracownika.", _currentUser.Subject);
             assignment.AddAsset(asset.Id, "Wydane w stanie dobrym");
-            // Procedura jest w szkicu (brak pliku) - akceptacja zostanie dodana dopiero po jej publikacji,
-            // żeby pracownik nie musiał "zaakceptować" dokumentu, którego jeszcze nie może przeczytać.
-            _assignments.Add(assignment);
 
-            _activity.Add(new ActivityLog(organizationId, "onboarding.starter_package.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            // The starter package creates a Person, an Asset and a Procedure in one shot, bypassing
+            // PeopleService/AssetService/ProcedureService.CreateAsync entirely - it must therefore repeat
+            // their subscription-capacity check itself, otherwise this flow would be a way to add unlimited
+            // records regardless of plan (the exact bypass this whole limit system exists to prevent).
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "onboarding-starter-package",
+                [organizationId],
+                async ct =>
+            {
+                if (await _people.CountAsync(organizationId, ct) >= limit) return false;
+                if (await _assets.CountAsync(organizationId, ct) >= limit) return false;
+                if (await _procedures.CountAsync(organizationId, ct) >= limit) return false;
+
+                _people.Add(person);
+                _assets.Add(asset);
+                _procedures.Add(procedure);
+                // Procedura jest w szkicu (brak pliku) - akceptacja zostanie dodana dopiero po jej publikacji,
+                // żeby pracownik nie musiał "zaakceptować" dokumentu, którego jeszcze nie może przeczytać.
+                _assignments.Add(assignment);
+
+                _activity.Add(new ActivityLog(organizationId, "onboarding.starter_package.created", "assignment", assignment.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<StarterPackageResponse>.Failure(Error.Validation($"Limit planu {plan.Name} ({limit}) został osiągnięty dla pracowników, aktywów lub procedur. Przejdź na wyższy plan."));
+            }
 
             return Result<StarterPackageResponse>.Success(new StarterPackageResponse(person.Id, asset.Id, procedure.Id, assignment.Id, assignment.ProtocolNumber, "Pakiet startowy został przygotowany. Procedura jest w szkicu do czasu dodania pliku i publikacji."));
         }

@@ -23,6 +23,7 @@ public interface ILicenseRepository
 {
     Task<IReadOnlyList<License>> ListAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<License?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
+    Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     void Add(License license);
     void Remove(License license);
 }

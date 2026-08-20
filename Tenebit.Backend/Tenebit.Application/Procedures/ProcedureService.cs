@@ -3,6 +3,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.Procedures;
 
@@ -19,8 +20,9 @@ public sealed class ProcedureService
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public ProcedureService(IProcedureRepository procedures, IAssignmentRepository assignments, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope)
+    public ProcedureService(IProcedureRepository procedures, IAssignmentRepository assignments, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
     {
         _procedures = procedures;
         _assignments = assignments;
@@ -30,6 +32,7 @@ public sealed class ProcedureService
         _clock = clock;
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
+        _subscriptions = subscriptions;
     }
 
     public async Task<Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>> GetAcceptanceStatusAsync(Guid procedureId, CancellationToken cancellationToken)
@@ -150,9 +153,37 @@ public sealed class ProcedureService
             var organizationId = _currentUser.OrganizationId;
             var procedure = new Procedure(organizationId, request.Title, request.Version, request.Owner, request.RequiresAcceptance);
             procedure.Update(request.Title, request.Version, request.Owner, request.AppliesTo, request.ReviewDate, request.RequiresAcceptance);
-            _procedures.Add(procedure);
-            _activity.Add(new ActivityLog(organizationId, "procedure.created", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "procedure-capacity",
+                [organizationId],
+                async ct =>
+            {
+                var currentCount = await _procedures.CountAsync(organizationId, ct);
+                if (currentCount >= limit) return false;
+
+                _procedures.Add(procedure);
+                _activity.Add(new ActivityLog(organizationId, "procedure.created", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<ProcedureResponse>.Failure(Error.Validation($"Limit procedur przekroczony. Plan {plan.Name} pozwala na {limit} procedur. Przejdź na wyższy plan."));
+            }
+
             return Result<ProcedureResponse>.Success(Map(procedure, []));
         }
         catch (DomainException ex)

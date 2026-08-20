@@ -34,12 +34,20 @@ public sealed class StripePaymentGateway : IPaymentGateway
 
     private string? SecretKey => _configuration["Stripe:SecretKey"];
     private string? WebhookSecret => _configuration["Stripe:WebhookSecret"];
-    private string? ProPriceId => _configuration["Stripe:ProPriceId"];
+
+    // One Stripe Price per paid plan, configured under Stripe:Prices:<planKey> (e.g. Stripe:Prices:business).
+    // The Free plan never has a price - it's never looked up here.
+    private IReadOnlyDictionary<string, string> PlanPrices => _configuration.GetSection("Stripe:Prices")
+        .GetChildren()
+        .Where(x => !string.IsNullOrWhiteSpace(x.Value))
+        .ToDictionary(x => x.Key, x => x.Value!, StringComparer.Ordinal);
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(SecretKey) &&
         !string.IsNullOrWhiteSpace(WebhookSecret) &&
-        !string.IsNullOrWhiteSpace(ProPriceId);
+        PlanPrices.Count > 0;
+
+    public bool IsPlanConfigured(string planKey) => PlanPrices.ContainsKey(planKey);
 
     public async Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken)
     {
@@ -55,9 +63,10 @@ public sealed class StripePaymentGateway : IPaymentGateway
         return RequiredString(json, "id");
     }
 
-    public async Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
+    public async Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(ProPriceId)) throw new PaymentGatewayException("Stripe:ProPriceId is not configured.");
+        if (!PlanPrices.TryGetValue(planKey, out var priceId))
+            throw new PaymentGatewayException($"Stripe:Prices:{planKey} is not configured.");
 
         var json = await PostAsync(
             "checkout/sessions",
@@ -68,7 +77,7 @@ public sealed class StripePaymentGateway : IPaymentGateway
                 ["client_reference_id"] = organizationId.ToString(),
                 ["success_url"] = successUrl,
                 ["cancel_url"] = cancelUrl,
-                ["line_items[0][price]"] = ProPriceId,
+                ["line_items[0][price]"] = priceId,
                 ["line_items[0][quantity]"] = "1",
                 ["subscription_data[metadata][organizationId]"] = organizationId.ToString()
             },
@@ -107,15 +116,15 @@ public sealed class StripePaymentGateway : IPaymentGateway
             var customer = RequiredString(obj, "customer");
             var subscription = RequiredString(obj, "id");
             var status = MapStatus(type, obj.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() : null);
-            var hasProPrice = HasConfiguredProPrice(obj);
-            if (status != SubscriptionStatus.Cancelled && !hasProPrice) status = SubscriptionStatus.Unknown;
+            var matchedPlanKey = MatchConfiguredPlan(obj);
+            if (status != SubscriptionStatus.Cancelled && matchedPlanKey is null) status = SubscriptionStatus.Unknown;
 
             return new PaymentWebhookEvent(
                 eventId,
                 type,
                 customer,
                 subscription,
-                hasProPrice ? SubscriptionPlan.Pro.Key : SubscriptionPlan.Free.Key,
+                matchedPlanKey ?? SubscriptionPlan.Free.Key,
                 status,
                 created,
                 RequiredUnix(obj, "current_period_start"),
@@ -139,28 +148,37 @@ public sealed class StripePaymentGateway : IPaymentGateway
         var obj = await GetAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}?expand[]=items.data.price", cancellationToken);
         var customer = RequiredString(obj, "customer");
         var status = MapStatus(string.Empty, obj.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() : null);
-        var hasProPrice = HasConfiguredProPrice(obj);
-        if (status != SubscriptionStatus.Cancelled && !hasProPrice) status = SubscriptionStatus.Unknown;
+        var matchedPlanKey = MatchConfiguredPlan(obj);
+        if (status != SubscriptionStatus.Cancelled && matchedPlanKey is null) status = SubscriptionStatus.Unknown;
 
         return new PaymentSubscriptionState(
             customer,
             RequiredString(obj, "id"),
-            hasProPrice ? SubscriptionPlan.Pro.Key : SubscriptionPlan.Free.Key,
+            matchedPlanKey ?? SubscriptionPlan.Free.Key,
             status,
             RequiredUnix(obj, "current_period_start"),
             RequiredUnix(obj, "current_period_end"),
             ReadOrganizationId(obj));
     }
 
-    private bool HasConfiguredProPrice(JsonElement obj) =>
-        !string.IsNullOrWhiteSpace(ProPriceId) &&
-        obj.TryGetProperty("items", out var items) &&
-        items.TryGetProperty("data", out var data) &&
-        data.ValueKind == JsonValueKind.Array &&
-        data.EnumerateArray().Any(x =>
-            x.TryGetProperty("price", out var price) &&
-            price.TryGetProperty("id", out var priceId) &&
-            priceId.GetString() == ProPriceId);
+    /// <summary>Finds the configured plan whose Stripe Price ID matches one of this subscription's line
+    /// items. Returns null when no configured price matches - callers must treat that as "unknown plan",
+    /// never fall back to trusting whatever Stripe sent (audyt: entitlement must never be inferred from
+    /// unrecognized price data).</summary>
+    private string? MatchConfiguredPlan(JsonElement obj)
+    {
+        if (!obj.TryGetProperty("items", out var items) ||
+            !items.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Array) return null;
+
+        var itemPriceIds = data.EnumerateArray()
+            .Where(x => x.TryGetProperty("price", out var price) && price.TryGetProperty("id", out _))
+            .Select(x => x.GetProperty("price").GetProperty("id").GetString())
+            .ToHashSet(StringComparer.Ordinal);
+
+        var plans = PlanPrices;
+        return plans.FirstOrDefault(kvp => itemPriceIds.Contains(kvp.Value)).Key;
+    }
 
     private SubscriptionStatus MapStatus(string eventType, string? status)
     {

@@ -87,7 +87,7 @@ public sealed class SubscriptionService
 
         if (newPlan.Key != SubscriptionPlan.Free.Key)
         {
-            return Result<SubscriptionResponse>.Failure(Error.Validation("Aby przejść na plan Pro, użyj płatności Stripe (checkout)."));
+            return Result<SubscriptionResponse>.Failure(Error.Validation($"Aby przejść na plan {newPlan.Name}, użyj płatności Stripe (checkout)."));
         }
 
         try
@@ -140,13 +140,18 @@ public sealed class SubscriptionService
         }
     }
 
-    /// <summary>Starts a real Stripe Checkout flow for the Pro plan and returns the hosted checkout URL to redirect to.</summary>
-    public async Task<Result<string>> CreateCheckoutSessionAsync(string successPath, string cancelPath, CancellationToken cancellationToken)
+    /// <summary>Starts a real Stripe Checkout flow for the given paid plan and returns the hosted checkout URL to redirect to.</summary>
+    public async Task<Result<string>> CreateCheckoutSessionAsync(string planKey, string successPath, string cancelPath, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
-        if (!_paymentGateway.IsConfigured)
-            return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane."));
+
+        var targetPlan = SubscriptionPlan.FromKey(planKey);
+        if (targetPlan is null || targetPlan.Key == SubscriptionPlan.Free.Key)
+            return Result<string>.Failure(Error.Validation($"Unknown plan: {planKey}"));
+
+        if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key))
+            return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane dla tego planu."));
 
         var organizationId = _currentUser.OrganizationId;
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
@@ -195,6 +200,7 @@ public sealed class SubscriptionService
         var checkoutUrl = await _paymentGateway.CreateCheckoutSessionAsync(
             subscription.StripeCustomerId!,
             organizationId,
+            targetPlan.Key,
             _appLinkBuilder.BuildAppUrl(successPath),
             _appLinkBuilder.BuildAppUrl(cancelPath),
             $"tenebit-checkout-{attemptId:N}",

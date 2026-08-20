@@ -61,6 +61,9 @@ public sealed class PersonRepository : IPersonRepository
         || await _db.Assignments.AnyAsync(x => x.OrganizationId == organizationId && x.PersonId == personId, cancellationToken)
         || await _db.OrganizationUsers.AnyAsync(x => x.OrganizationId == organizationId && x.PersonId == personId, cancellationToken);
 
+    public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        _db.People.AsNoTracking().CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
+
     public Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken) =>
         _db.People.AsNoTracking().CountAsync(x => x.OrganizationId == organizationId && x.Location == location, cancellationToken);
 

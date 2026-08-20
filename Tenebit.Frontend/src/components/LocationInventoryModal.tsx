@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import { Avatar } from './Avatar';
 import { Modal } from './Modal';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
@@ -27,7 +28,7 @@ export function LocationInventoryModal({ locationPath, onClose }: { locationPath
               <div className="listRows">{inventory.data.assets.map(asset => (
                 <Link className="listRow" to={`/assets?search=${encodeURIComponent(asset.assetTag)}`} key={asset.id} onClick={onClose}>
                   <div><strong>{asset.name}</strong><small>{asset.assetTag}</small></div>
-                  <span>{asset.assignedPersonName ?? t('common.unassigned')}</span>
+                  <span>{asset.assignedPersonName ? <span className="personChip"><Avatar name={asset.assignedPersonName} size={22} /><span className="personChip__sep">•</span>{asset.assignedPersonName}</span> : t('common.unassigned')}</span>
                 </Link>
               ))}</div>
             )}

@@ -209,8 +209,12 @@ if [[ $HEALTH != *"ok"* ]] || [[ -z "$FRONTEND_CHECK" ]]; then
   exit 1
 fi
 
-# === SMOKE TEST (register + login roundtrip) ===
-echo -e "\nSmoke test (rejestracja + logowanie)..."
+# === SMOKE TEST (register acceptance) ===
+# Registration now requires AcceptTerms and (when SMTP is configured, as in prod) returns 202 with
+# requiresEmailVerification instead of a token — there is no verification-code inbox to read here,
+# so a full register->login token roundtrip isn't possible from this script anymore. This checks the
+# endpoints are alive and accept a well-formed request instead.
+echo -e "\nSmoke test (rejestracja)..."
 SMOKE_STAMP="$(date +%s)"
 SMOKE_EMAIL="smoketest+${SMOKE_STAMP}@tenebit-internal.test"
 SMOKE_PASSWORD="SmokeTest-${SMOKE_STAMP}-Pwd9!"
@@ -219,19 +223,14 @@ SMOKE_OK=1
 READY="$(curl -fsS "$DOMAIN/api/health/ready" 2>&1)" || SMOKE_OK=0
 [[ "$READY" == *'"status":"ready"'* ]] || SMOKE_OK=0
 
-REGISTER_BODY="{\"organizationName\":\"Smoke Test ${SMOKE_STAMP}\",\"email\":\"${SMOKE_EMAIL}\",\"password\":\"${SMOKE_PASSWORD}\",\"displayName\":\"Smoke Test\",\"currency\":\"PLN\"}"
+REGISTER_BODY="{\"organizationName\":\"Smoke Test ${SMOKE_STAMP}\",\"email\":\"${SMOKE_EMAIL}\",\"password\":\"${SMOKE_PASSWORD}\",\"displayName\":\"Smoke Test\",\"currency\":\"PLN\",\"acceptTerms\":true}"
 REGISTER_RESPONSE="$(curl -fsS -X POST "$DOMAIN/api/auth/register" -H "Content-Type: application/json" -d "$REGISTER_BODY" 2>&1)" || SMOKE_OK=0
-[[ "$REGISTER_RESPONSE" == *'"token"'* ]] || SMOKE_OK=0
-
-LOGIN_BODY="{\"email\":\"${SMOKE_EMAIL}\",\"password\":\"${SMOKE_PASSWORD}\"}"
-LOGIN_RESPONSE="$(curl -fsS -X POST "$DOMAIN/api/auth/login" -H "Content-Type: application/json" -d "$LOGIN_BODY" 2>&1)" || SMOKE_OK=0
-[[ "$LOGIN_RESPONSE" == *'"token"'* ]] || SMOKE_OK=0
+[[ "$REGISTER_RESPONSE" == *'"requiresEmailVerification"'* ]] || SMOKE_OK=0
 
 if [ "$SMOKE_OK" != "1" ]; then
   echo -e "\n=== FAIL (smoke test) ==="
   echo "health/ready: $READY"
   echo "register: $REGISTER_RESPONSE"
-  echo "login: $LOGIN_RESPONSE"
   echo -e "\nBackend logs:"
   docker logs --tail=80 tenebit-backend
   exit 1

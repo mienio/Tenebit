@@ -157,4 +157,15 @@ public sealed class AssetRepository : IAssetRepository
 
     public Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken) =>
         _db.Assets.CountAsync(x => x.OrganizationId == organizationId && x.LocationId == locationId, cancellationToken);
+
+    public async Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken)
+    {
+        if (await _db.Assignments.AnyAsync(a => a.OrganizationId == organizationId && a.Assets.Any(x => x.AssetId == id), cancellationToken)) return true;
+        if (await _db.AssetAuditItems.AnyAsync(x => x.OrganizationId == organizationId && x.AssetId == id, cancellationToken)) return true;
+        if (await _db.EquipmentReservationItems.AnyAsync(x => x.OrganizationId == organizationId && (x.AssetId == id || x.OriginalAssetId == id), cancellationToken)) return true;
+        if (await _db.OffboardingItems.AnyAsync(x => x.OrganizationId == organizationId && x.AssetId == id, cancellationToken)) return true;
+        if (await _db.AssetInspections.AnyAsync(x => x.OrganizationId == organizationId && x.AssetId == id, cancellationToken)) return true;
+        if (await _db.ServiceTickets.AnyAsync(x => x.OrganizationId == organizationId && x.AssetId == id, cancellationToken)) return true;
+        return false;
+    }
 }

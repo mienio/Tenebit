@@ -2,21 +2,23 @@ using Tenebit.Application.Common;
 using Tenebit.Application.People;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
 namespace Tenebit.Tests;
 
 public class PeopleServiceTests
 {
-    private static (PeopleService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryActivityLogRepository Activity) CreateService()
+    private static (PeopleService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryActivityLogRepository Activity, InMemorySubscriptionRepository Subscriptions) CreateService()
     {
         var currentUser = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
         var teams = new InMemoryTeamRepository();
         var assets = new InMemoryAssetRepository();
         var activity = new InMemoryActivityLogRepository();
-        var service = new PeopleService(people, teams, assets, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()));
-        return (service, currentUser, people, assets, activity);
+        var subscriptions = new InMemorySubscriptionRepository();
+        var service = new PeopleService(people, teams, assets, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()), subscriptions);
+        return (service, currentUser, people, assets, activity, subscriptions);
     }
 
     private static (PeopleService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryTeamRepository Teams) CreateServiceWithTeams()
@@ -24,7 +26,7 @@ public class PeopleServiceTests
         var currentUser = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
         var teams = new InMemoryTeamRepository();
-        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()));
+        var service = new PeopleService(people, teams, new InMemoryAssetRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()), new InMemorySubscriptionRepository());
         return (service, currentUser, people, teams);
     }
 
@@ -34,7 +36,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task CreateAsync_RejectsUserWithoutHrOrAdminRole()
     {
-        var (service, user, _, _, _) = CreateService();
+        var (service, user, _, _, _, _) = CreateService();
         user.Roles = ["employee"];
 
         var result = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
@@ -45,7 +47,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task CreateAsync_RejectsDuplicateEmailWithinOrganization()
     {
-        var (service, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _) = CreateService();
 
         var first = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         Assert.True(first.IsSuccess);
@@ -58,7 +60,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task CreateAsync_SucceedsForHrRole()
     {
-        var (service, user, _, _, _) = CreateService();
+        var (service, user, _, _, _, _) = CreateService();
         user.Roles = ["hr"];
 
         var result = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
@@ -113,7 +115,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task DeleteAsync_RejectsWhenPersonHasBlockingRelations()
     {
-        var (service, _, people, _, _) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         people.HasBlockingRelations = true;
 
@@ -125,7 +127,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task DeleteAsync_SucceedsWhenNoBlockingRelations()
     {
-        var (service, _, people, _, _) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         people.HasBlockingRelations = false;
 
@@ -139,7 +141,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task UpdateAsync_CanDeactivatePerson()
     {
-        var (service, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
 
         var updateRequest = new UpdatePersonRequest("Jan", "Kowalski", "jan@acme.test", null, null, "Pracownik", null, null, null, null, null, false);
@@ -154,7 +156,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task UpdateAsync_PreservesOffboardingWhenLegacyClientSendsIsActiveTrue()
     {
-        var (service, _, people, _, _) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         var person = people.People.Single();
         person.StartOffboarding(DateTimeOffset.UtcNow.AddDays(7));
@@ -214,7 +216,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_RejectsUserWithoutOwnerAdminHrRole()
     {
-        var (service, user, _, _, _) = CreateService();
+        var (service, user, _, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         user.Roles = ["employee"];
 
@@ -226,7 +228,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_SetsOffboardingStatusAndEmploymentEndsAt()
     {
-        var (service, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         var endsAt = DateTimeOffset.UtcNow.AddDays(14);
 
@@ -240,7 +242,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_MovesAssignedAssetsToPendingReturn_KeepsAssignedPersonId()
     {
-        var (service, _, people, assets, _) = CreateService();
+        var (service, _, people, assets, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         var person = people.People.Single();
         var asset = new Asset(person.OrganizationId, Guid.NewGuid(), "Laptop", "AT-1");
@@ -257,7 +259,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_DoesNotTouchUnassignedOrOtherPeoplesAssets()
     {
-        var (service, _, people, assets, _) = CreateService();
+        var (service, _, people, assets, _, _) = CreateService();
         var created1 = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         var created2 = await service.CreateAsync(BuildRequest("anna@acme.test"), CancellationToken.None);
         var person1 = people.People.Single(p => p.Id == created1.Value!.Id);
@@ -279,7 +281,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_RejectsWhenPersonNotActive()
     {
-        var (service, _, people, _, _) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
         var person = people.People.Single();
         person.Deactivate(DateTimeOffset.UtcNow);
@@ -292,7 +294,7 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_WritesActivityLogEntry()
     {
-        var (service, _, _, _, activity) = CreateService();
+        var (service, _, _, _, activity, _) = CreateService();
         var created = await service.CreateAsync(BuildRequest("jan@acme.test"), CancellationToken.None);
 
         await service.StartOffboardingAsync(created.Value!.Id, new StartOffboardingRequest(DateTimeOffset.UtcNow.AddDays(7)), CancellationToken.None);
@@ -329,12 +331,29 @@ public class PeopleServiceTests
     [Fact]
     public async Task StartOffboardingAsync_RejectsCrossOrganizationPersonId()
     {
-        var (service, _, people, _, _) = CreateService();
+        var (service, _, people, _, _, _) = CreateService();
         var otherOrgPerson = new Person(Guid.NewGuid(), "Anna", "Nowak", "anna@other.test");
         people.Add(otherOrgPerson);
 
         var result = await service.StartOffboardingAsync(otherOrgPerson.Id, new StartOffboardingRequest(DateTimeOffset.UtcNow.AddDays(7)), CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsWhenAtSubscriptionResourceLimit()
+    {
+        var (service, user, people, _, _, subscriptions) = CreateService();
+        subscriptions.Add(new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key));
+
+        for (var i = 0; i < SubscriptionPlan.Free.AssetLimit; i++)
+        {
+            people.Add(new Person(user.OrganizationId, "Jan", $"Kowalski{i}", $"jan{i}@acme.test"));
+        }
+
+        var result = await service.CreateAsync(BuildRequest("jan-over-limit@acme.test"), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Limit pracowników przekroczony", result.Error!.Message);
     }
 }

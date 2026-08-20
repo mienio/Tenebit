@@ -3,19 +3,21 @@ using Tenebit.Application.Procedures;
 using Tenebit.Domain.Assignments;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
 namespace Tenebit.Tests;
 
 public sealed class ProcedureServiceAuthorizationTests
 {
-    private static (ProcedureService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryTeamRepository Teams, InMemoryProcedureRepository Procedures, InMemoryAssignmentRepository Assignments) CreateService()
+    private static (ProcedureService Service, FakeCurrentUser User, InMemoryPersonRepository People, InMemoryTeamRepository Teams, InMemoryProcedureRepository Procedures, InMemoryAssignmentRepository Assignments, InMemorySubscriptionRepository Subscriptions) CreateService()
     {
         var user = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
         var teams = new InMemoryTeamRepository();
         var procedures = new InMemoryProcedureRepository();
         var assignments = new InMemoryAssignmentRepository();
+        var subscriptions = new InMemorySubscriptionRepository();
         var service = new ProcedureService(
             procedures,
             assignments,
@@ -24,14 +26,15 @@ public sealed class ProcedureServiceAuthorizationTests
             user,
             new FakeClock(),
             new FakeUnitOfWork(),
-            new ManagerScopeService(people, teams));
-        return (service, user, people, teams, procedures, assignments);
+            new ManagerScopeService(people, teams),
+            subscriptions);
+        return (service, user, people, teams, procedures, assignments, subscriptions);
     }
 
     [Fact]
     public async Task Manager_ListAndGet_OnlyExposeProceduresAssignedToManagedPeople()
     {
-        var (service, user, people, teams, procedures, assignments) = CreateService();
+        var (service, user, people, teams, procedures, assignments, _) = CreateService();
         user.Roles = [TenebitRoles.Manager];
 
         var manager = new Person(user.OrganizationId, "Anna", "Manager", "manager@acme.test");
@@ -69,7 +72,7 @@ public sealed class ProcedureServiceAuthorizationTests
     [Fact]
     public async Task Manager_CannotCreateProcedure()
     {
-        var (service, user, _, _, _, _) = CreateService();
+        var (service, user, _, _, _, _, _) = CreateService();
         user.Roles = [TenebitRoles.Manager];
 
         var result = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
@@ -80,7 +83,7 @@ public sealed class ProcedureServiceAuthorizationTests
     [Fact]
     public async Task Employee_CannotDownloadProcedureAssignedToAnotherPerson()
     {
-        var (service, user, people, _, procedures, assignments) = CreateService();
+        var (service, user, people, _, procedures, assignments, _) = CreateService();
         user.Roles = [TenebitRoles.Employee];
         var self = new Person(user.OrganizationId, "Ela", "Self", "ela@acme.test");
         people.Add(self);
@@ -101,7 +104,7 @@ public sealed class ProcedureServiceAuthorizationTests
     [Fact]
     public async Task PublishedProcedure_CannotBeEditedOrHaveDocumentsChangedThroughService()
     {
-        var (service, _, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _, _) = CreateService();
         var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
         Assert.True(created.IsSuccess);
 
@@ -126,12 +129,29 @@ public sealed class ProcedureServiceAuthorizationTests
     [Fact]
     public async Task ProcedureUpload_RejectsArbitraryExecutablePayload()
     {
-        var (service, _, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _, _) = CreateService();
         var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
         Assert.True(created.IsSuccess);
 
         var result = await service.AttachDocumentAsync(created.Value!.Id, "payload.exe", "application/octet-stream", [0x4D, 0x5A, 0x90, 0x00], CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsWhenAtSubscriptionResourceLimit()
+    {
+        var (service, user, _, _, procedures, _, subscriptions) = CreateService();
+        subscriptions.Add(new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key));
+
+        for (var i = 0; i < SubscriptionPlan.Free.AssetLimit; i++)
+        {
+            procedures.Add(new Procedure(user.OrganizationId, $"Policy {i}", "1.0", "HR", true));
+        }
+
+        var result = await service.CreateAsync(new CreateProcedureRequest("Policy over limit", "1.0", "HR", null, null, true), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Limit procedur przekroczony", result.Error!.Message);
     }
 }

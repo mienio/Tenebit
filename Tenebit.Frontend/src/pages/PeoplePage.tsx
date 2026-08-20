@@ -1,7 +1,8 @@
-import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Trash2, User, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
+import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Trash2, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
+import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -415,9 +416,7 @@ export function PeoplePage() {
                         <input type="checkbox" checked={selectedIds.has(person.id)} onChange={() => toggleSelected(person.id)} aria-label={t('people.bulkSelectOne', { name: person.fullName })} />
                       </td>
                       <td className="cell-icon">
-                        <div className="table-icon">
-                          <User size={16} />
-                        </div>
+                        <Avatar name={person.fullName} size={28} />
                       </td>
                       <td data-label={t('people.colFullName')}>
                         <strong>{person.fullName}</strong>
@@ -473,9 +472,7 @@ export function PeoplePage() {
           <div className="modalDetails">
             <div className="modalToolbar">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className="table-icon" style={{ width: '48px', height: '48px' }}>
-                  <User size={24} />
-                </div>
+                <Avatar name={selected.fullName} size={48} />
                 <div>
                   <strong>{selected.email}</strong>
                   <small>{selected.relationType}</small>

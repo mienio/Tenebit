@@ -3,6 +3,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.Assets;
 
@@ -17,8 +18,9 @@ public sealed class LocationService
     private readonly ICurrentUser _currentUser;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
+    private readonly ISubscriptionRepository _subscriptions;
 
-    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope)
+    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
     {
         _locations = locations;
         _assets = assets;
@@ -26,6 +28,7 @@ public sealed class LocationService
         _currentUser = currentUser;
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
+        _subscriptions = subscriptions;
     }
 
     public async Task<Result<IReadOnlyList<LocationResponse>>> ListAsync(CancellationToken cancellationToken)
@@ -75,8 +78,35 @@ public sealed class LocationService
         try
         {
             var location = new Location(organizationId, request.Name, request.Type, request.ParentId);
-            _locations.Add(location);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "location-capacity",
+                [organizationId],
+                async ct =>
+            {
+                var currentCount = await _locations.CountAsync(organizationId, ct);
+                if (currentCount >= limit) return false;
+
+                _locations.Add(location);
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<LocationResponse>.Failure(Error.Validation($"Limit lokalizacji przekroczony. Plan {plan.Name} pozwala na {limit} lokalizacji. Przejdź na wyższy plan."));
+            }
 
             var all = await _locations.ListAsync(organizationId, cancellationToken);
             var response = MapLocations(all, [], []).First(x => x.Id == location.Id);

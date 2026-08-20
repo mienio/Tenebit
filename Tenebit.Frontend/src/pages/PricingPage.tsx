@@ -7,11 +7,28 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 
+interface PlanDef {
+  key: string;
+  name: string;
+  price: number;
+  limitLabel: string;
+  featureCount: number;
+  badge?: 'free' | 'recommended';
+}
+
+const PLANS: PlanDef[] = [
+  { key: 'free', name: 'Free', price: 0, limitLabel: '10', featureCount: 1, badge: 'free' },
+  { key: 'starter', name: 'Starter', price: 12, limitLabel: '100', featureCount: 1 },
+  { key: 'growth', name: 'Growth', price: 29, limitLabel: '300', featureCount: 1, badge: 'recommended' },
+  { key: 'business', name: 'Business', price: 59, limitLabel: '1000', featureCount: 1 },
+  { key: 'enterprise', name: 'Scale', price: 99, limitLabel: '1000+', featureCount: 1 },
+];
+
 export function PricingPage() {
   const { t } = useI18n();
   const subscription = useAsyncData(api.subscription, []);
   const [upgrading, setUpgrading] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PlanDef | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
 
@@ -22,10 +39,12 @@ export function PricingPage() {
   }, [message]);
 
   async function confirmUpgrade() {
-    setConfirmOpen(false);
+    if (!selectedPlan) return;
+    const plan = selectedPlan;
+    setSelectedPlan(null);
     setUpgrading(true);
     try {
-      const checkoutUrl = await api.createCheckoutSession('/dashboard?checkout=success', '/pricing?checkout=cancelled');
+      const checkoutUrl = await api.createCheckoutSession(plan.key, '/dashboard?checkout=success', '/pricing?checkout=cancelled');
       window.location.assign(checkoutUrl);
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
@@ -47,95 +66,68 @@ export function PricingPage() {
       </div>
 
       <div className="pricing-cards">
-        <Card className="pricing-card">
-          <div>
-            <h3>Free</h3>
-            <div style={{ marginTop: '8px' }}>
-              <span className="pricing-price">
-                $0
-                <small>{t('landing.perMonth')}</small>
-              </span>
-            </div>
-            <p style={{ marginTop: '12px', color: 'var(--muted)' }}>
-              {t('pricing.freeDesc')}
-            </p>
-          </div>
+        {PLANS.map((plan) => {
+          const isCurrent = currentPlanKey === plan.key;
+          const showCta = !isCurrent && plan.key !== 'free';
+          return (
+            <Card key={plan.key} className={`pricing-card${plan.badge === 'recommended' ? ' pricing-card--featured' : ''}`}>
+              {plan.badge === 'recommended' && (
+                <span className="pricing-card__badge pricing-card__badge--recommended">{t('pricing.badge.recommended')}</span>
+              )}
+              {plan.badge === 'free' && (
+                <span className="pricing-card__badge pricing-card__badge--free">{t('pricing.badge.free')}</span>
+              )}
 
-          <ul className="pricing-features">
-            <li><Check size={20} /><span>{t('pricing.free.f1')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.free.f2')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.free.f3')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.free.f4')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.free.f5')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.free.f6')}</span></li>
-          </ul>
+              <div>
+                <h3>{plan.name}</h3>
+                <div style={{ marginTop: '8px' }}>
+                  <span className="pricing-price">
+                    {plan.price === 0 ? '0 €' : `${plan.price} €`}
+                    <small>{t('landing.perMonth')}</small>
+                  </span>
+                </div>
+                <p style={{ marginTop: '12px', color: 'var(--muted)' }}>
+                  {t(`pricing.${plan.key}.desc`)}
+                </p>
+              </div>
 
-          {currentPlanKey !== 'pro' ? (
-            <Button variant="secondary" className="pricing-cta" disabled>
-              {t('pricing.currentPlan')}
-            </Button>
-          ) : null}
-        </Card>
+              <ul className="pricing-features">
+                {Array.from({ length: plan.featureCount }, (_, i) => i + 1).map((n) => (
+                  <li key={n}>
+                    <Check size={20} />
+                    <span>{t(`pricing.${plan.key}.f${n}`)}</span>
+                  </li>
+                ))}
+              </ul>
 
-        <Card className="pricing-card pricing-card--featured">
-          <div>
-            <h3>Pro</h3>
-            <div style={{ marginTop: '8px' }}>
-              <span className="pricing-price">
-                $10
-                <small>{t('landing.perMonth')}</small>
-              </span>
-            </div>
-            <p style={{ marginTop: '12px', color: 'var(--muted)' }}>
-              {t('pricing.proDesc')}
-            </p>
-          </div>
-
-          <ul className="pricing-features">
-            <li><Check size={20} /><span><strong>{t('pricing.pro.f1')}</strong></span></li>
-            <li><Check size={20} /><span><strong>{t('pricing.pro.f2')}</strong></span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f3')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f4')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f5')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f6')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f7')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f8')}</span></li>
-            <li><Check size={20} /><span>{t('pricing.pro.f9')}</span></li>
-          </ul>
-
-          {currentPlanKey === 'pro' ? (
-            <Button variant="secondary" className="pricing-cta" disabled>
-              {t('pricing.currentPlan')}
-            </Button>
-          ) : (
-            <Button
-              onClick={() => setConfirmOpen(true)}
-              disabled={upgrading || subscription.isLoading}
-              icon={<Zap size={18} />}
-              className="pricing-cta"
-            >
-              {upgrading ? t('pricing.processing') : t('pricing.upgrade')}
-            </Button>
-          )}
-        </Card>
+              {isCurrent ? (
+                <Button variant="secondary" className="pricing-cta" disabled>
+                  {t('pricing.currentPlan')}
+                </Button>
+              ) : showCta ? (
+                <Button
+                  onClick={() => setSelectedPlan(plan)}
+                  disabled={upgrading || subscription.isLoading}
+                  icon={<Zap size={18} />}
+                  className="pricing-cta"
+                >
+                  {upgrading ? t('pricing.processing') : t('pricing.upgrade', { plan: plan.name })}
+                </Button>
+              ) : null}
+            </Card>
+          );
+        })}
       </div>
 
       <ConfirmDialog
-        open={confirmOpen}
+        open={selectedPlan !== null}
+        variant="positive"
         title={t('pricing.confirmUpgradeTitle')}
-        description={t('pricing.confirmUpgrade')}
-        confirmLabel={t('pricing.upgrade')}
+        description={selectedPlan ? t('pricing.confirmUpgrade', { plan: selectedPlan.name, price: String(selectedPlan.price) }) : ''}
+        confirmLabel={selectedPlan ? t('pricing.upgrade', { plan: selectedPlan.name }) : ''}
         onConfirm={confirmUpgrade}
-        onClose={() => setConfirmOpen(false)}
+        onClose={() => setSelectedPlan(null)}
       />
-
-      <div style={{ marginTop: '60px', textAlign: 'center', maxWidth: '720px', margin: '60px auto 0' }}>
-        <h2 style={{ fontSize: '28px', marginBottom: '16px' }}>{t('pricing.questionsTitle')}</h2>
-        <p style={{ color: 'var(--muted)', lineHeight: '1.6', marginBottom: '24px' }}>
-          {t('pricing.questionsDesc')}
-        </p>
-        <a href="mailto:kontakt@tenebit.app"><Button variant="secondary">{t('pricing.contactTeam')}</Button></a>
-      </div>
     </div>
   );
 }

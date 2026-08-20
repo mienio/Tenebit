@@ -22,6 +22,7 @@ namespace Tenebit.Application.Abstractions;
 public interface IProcedureRepository
 {
     Task<IReadOnlyList<Procedure>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken);
+    Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<(IReadOnlyList<Procedure> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken);
     Task<IReadOnlyList<Procedure>> GetByIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<Procedure?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);

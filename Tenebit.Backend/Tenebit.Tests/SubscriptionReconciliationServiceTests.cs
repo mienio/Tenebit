@@ -14,9 +14,9 @@ public sealed class SubscriptionReconciliationServiceTests
         var activity = new InMemoryActivityLogRepository();
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
-        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Pro.Key);
+        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Business.Key);
         var webhookAt = clock.UtcNow.AddHours(-1);
-        local.SyncFromStripe(SubscriptionPlan.Pro.Key, SubscriptionStatus.Active, webhookAt, webhookAt.AddMonths(1), "sub_1", "cus_1", webhookAt);
+        local.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, webhookAt, webhookAt.AddMonths(1), "sub_1", "cus_1", webhookAt);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "cus_1",
@@ -44,13 +44,13 @@ public sealed class SubscriptionReconciliationServiceTests
         var activity = new InMemoryActivityLogRepository();
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
-        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Pro.Key);
-        local.SyncFromStripe(SubscriptionPlan.Pro.Key, SubscriptionStatus.Active, clock.UtcNow, clock.UtcNow.AddMonths(1), "sub_1", "cus_1", clock.UtcNow);
+        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Business.Key);
+        local.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, clock.UtcNow, clock.UtcNow.AddMonths(1), "sub_1", "cus_1", clock.UtcNow);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "cus_other",
             "sub_1",
-            SubscriptionPlan.Pro.Key,
+            SubscriptionPlan.Business.Key,
             SubscriptionStatus.Active,
             clock.UtcNow,
             clock.UtcNow.AddMonths(1),

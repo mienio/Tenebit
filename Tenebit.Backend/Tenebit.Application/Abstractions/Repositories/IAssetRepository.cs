@@ -35,6 +35,7 @@ public interface IAssetRepository
     Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
     Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken);
+    Task<bool> IsUsedAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     void Add(Asset asset);
     void Remove(Asset asset);
 }

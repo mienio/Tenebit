@@ -63,7 +63,7 @@ export function DashboardPage() {
   const actionCount = data.openAssignments + data.pendingProcedureAcceptances + data.warrantyExpiringSoon.length;
   const subData = subscription.data;
   const usagePercent = subData ? (subData.currentAssetCount / subData.assetLimit) * 100 : 0;
-  const isNearLimit = usagePercent >= 80;
+  const isNearLimit = usagePercent >= 90;
   const orderedForMobile = [...layout.widgets].sort((a, b) => (a.y - b.y) || (a.x - b.x));
 
   return (
@@ -124,7 +124,7 @@ export function DashboardPage() {
               <span>{t('dashboard.nearLimit')}</span>
               <span className="status">{t('dashboard.assetsOf', { current: subData.currentAssetCount, limit: subData.assetLimit })}</span>
             </div>
-            {subData.planKey === 'free' && (
+            {subData.planKey.toLowerCase() !== 'enterprise' && (
               <Link to="/pricing">
                 <Button icon={<Zap size={16} />}>{t('dashboard.upgradeToPro')}</Button>
               </Link>
