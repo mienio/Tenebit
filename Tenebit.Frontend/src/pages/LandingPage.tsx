@@ -67,10 +67,10 @@ const previewBuildingPersonCount = previewFloor1PersonCount + previewFloor2Perso
 // subscriptions below - shown as 1/1 with its key instead of a fake team-wide seat count.
 // Slack/Figma are seat-based SaaS with no license key at all, which is realistic too.
 const previewLicenseRows = [
-  { name: 'Windows 11 Pro', vendor: 'Microsoft', seatsUsed: 1, seatsTotal: 1, status: 'Active', key: 'H3N2Q-••••-••••-••••-D9F3Y' },
-  { name: 'Microsoft 365 Business', vendor: 'Microsoft', seatsUsed: 50, seatsTotal: 50, status: 'Active', key: 'M365B-••••-••••-7QXP' },
-  { name: 'Adobe Creative Cloud', vendor: 'Adobe', seatsUsed: 6, seatsTotal: 15, status: 'Active', key: 'ADBE-••••-••••-4KRT' },
-  { name: 'JetBrains All Products', vendor: 'JetBrains', seatsUsed: 18, seatsTotal: 20, status: 'Expired', key: 'JBAP-••••-••••-9WZL' },
+  { name: 'Windows 11 Pro', vendor: 'Microsoft', seatsUsed: 1, seatsTotal: 1, status: 'Active', key: 'N7QXM-••••-••••-••••-3ZE9H' },
+  { name: 'Microsoft 365 Business', vendor: 'Microsoft', seatsUsed: 50, seatsTotal: 50, status: 'Active', key: 'K2P9X-••••-••••-D4WNT' },
+  { name: 'Adobe Creative Cloud', vendor: 'Adobe', seatsUsed: 6, seatsTotal: 15, status: 'Active', key: 'T9V3K-••••-••••-2LWPZ' },
+  { name: 'JetBrains All Products', vendor: 'JetBrains', seatsUsed: 18, seatsTotal: 20, status: 'Expired', key: '4KXQL-••••-••••-R2MNC' },
   { name: 'Slack Business+', vendor: 'Slack', seatsUsed: 40, seatsTotal: 50, status: 'Active', key: null },
   { name: 'Figma Organization', vendor: 'Figma', seatsUsed: 12, seatsTotal: 15, status: 'Active', key: null }
 ];
