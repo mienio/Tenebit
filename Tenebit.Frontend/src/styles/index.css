@@ -850,3 +850,50 @@ button.authIcon:hover { filter: brightness(0.94); }
 .alertRule { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: grid; gap: 12px; }
 .alertRule__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .alertRule__head h3 { margin: 0; font-size: 15px; }
+
+/* ---- One-line asset rows -------------------------------------------------
+   A row must never wrap to a second line: scanning a list of equipment depends on every record
+   occupying exactly one line, whatever the window width or browser zoom. Columns that do not fit are
+   reached by scrolling the table sideways, or switched off entirely with the column picker - never by
+   stacking content vertically. */
+.dense-table--oneLine td,
+.dense-table--oneLine th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+.dense-table--oneLine td strong {
+  display: inline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The stacked sub-label is what made rows two lines tall; keep it out of this table for good. */
+.dense-table--oneLine td small { display: none; }
+.dense-table--oneLine .personChip { min-width: 0; }
+.dense-table--oneLine .personChip .inlineAction {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.columnPicker { position: relative; }
+.columnPicker__scrim { position: fixed; inset: 0; background: transparent; border: 0; cursor: default; z-index: 30; }
+.columnPicker__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 31;
+  min-width: 210px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 2px;
+}
+.columnPicker__title { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.columnPicker__row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13px; cursor: pointer; border-radius: 3px; }
+.columnPicker__row:hover { background: var(--surface-soft); }
+.columnPicker__reset { margin-top: 6px; font-size: 12px; text-align: left; }
