@@ -15,13 +15,34 @@ public sealed record SaveAssetFieldDefinitionRequest(
     [property: StringLength(1000)] string? Options,
     bool Required);
 
-public sealed record AssetCategoryResponse(Guid Id, string Name, AssetCategoryType Type, string? Description, string? Icon, bool IsSystem, IReadOnlyList<AssetFieldDefinitionResponse> FieldDefinitions, ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
+public sealed record AssetCategoryResponse(Guid Id, string Name, AssetCategoryType Type, string? Description, string? Icon, bool IsSystem, IReadOnlyList<AssetFieldDefinitionResponse> FieldDefinitions, ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn, int? DepreciationMonths);
 [ValidatedRequest]
 public sealed record CreateAssetCategoryRequest([property: Required, StringLength(120, MinimumLength = 1)] string Name, AssetCategoryType Type, [property: StringLength(600)] string? Description, [property: StringLength(40)] string? Icon);
 [ValidatedRequest]
-public sealed record UpdateAssetCategoryRequest([property: Required, StringLength(120, MinimumLength = 1)] string Name, AssetCategoryType Type, [property: StringLength(600)] string? Description, [property: StringLength(40)] string? Icon);
+public sealed record UpdateAssetCategoryRequest([property: Required, StringLength(120, MinimumLength = 1)] string Name, AssetCategoryType Type, [property: StringLength(600)] string? Description, [property: StringLength(40)] string? Icon, [property: Range(1, 1200)] int? DepreciationMonths = null);
 [ValidatedRequest]
 public sealed record UpdateAssetCategoryReturnPolicyRequest(ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
+
+/// <summary>Book value of the whole fleet, and per category, under each category's depreciation schedule.</summary>
+public sealed record FleetValueResponse(
+    decimal TotalPurchaseValue,
+    decimal TotalCurrentValue,
+    decimal TotalDepreciated,
+    int AssetsWithValue,
+    int AssetsWithoutPrice,
+    string Currency,
+    IReadOnlyList<CategoryValueSlice> ByCategory);
+
+/// <summary>Running totals while grouping assets by category; internal to the fleet-value calculation.</summary>
+internal sealed record CategoryAccumulator(string Name, int? Months, int Count, decimal Purchase, decimal Current);
+
+public sealed record CategoryValueSlice(
+    Guid CategoryId,
+    string CategoryName,
+    int? DepreciationMonths,
+    int AssetCount,
+    decimal PurchaseValue,
+    decimal CurrentValue);
 
 public sealed record AssetResponse(
     Guid Id,

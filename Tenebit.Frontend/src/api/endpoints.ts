@@ -6,6 +6,7 @@ import type {
   Asset,
   AssetCategory,
   AssetCategoryType,
+  FleetValue,
   AssetEvidence,
   AssetFieldDefinition,
   AssetGroupCounts,
@@ -87,7 +88,23 @@ function buildEvidenceForm(request: unknown, photos: EvidencePhoto[]): FormData 
   return form;
 }
 
+export interface SearchHit {
+  kind: 'asset' | 'person' | 'location' | 'license';
+  id: string;
+  title: string;
+  subtitle: string | null;
+  badge: string | null;
+  url: string;
+}
+
+export interface GlobalSearchResponse {
+  query: string;
+  hits: SearchHit[];
+  truncated: boolean;
+}
+
 export const api = {
+  search: (query: string) => apiRequest<GlobalSearchResponse>(`/api/search?q=${encodeURIComponent(query)}`),
   dashboard: () => apiRequest<DashboardSummary>('/api/dashboard'),
   dashboardComparison: (daysAgo: number) => apiRequest<DashboardComparison>(`/api/dashboard/comparison?daysAgo=${daysAgo}`),
   dashboardLayout: () => apiRequest<{ layoutJson: string | null }>('/api/dashboard/layout'),
@@ -107,8 +124,9 @@ export const api = {
   locationInventory: (id: string) => apiRequest<LocationInventory>(`/api/locations/${id}/inventory`),
 
   categories: () => apiRequest<AssetCategory[]>('/api/asset-categories'),
+  fleetValue: () => apiRequest<FleetValue>('/api/assets/fleet-value'),
   createCategory: (body: { name: string; type: AssetCategoryType; description?: string | null; icon?: string | null }) => apiRequest<AssetCategory>('/api/asset-categories', { method: 'POST', body: JSON.stringify(body) }),
-  updateCategory: (id: string, body: { name: string; type: AssetCategoryType; description?: string | null; icon?: string | null }) => apiRequest<AssetCategory>(`/api/asset-categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  updateCategory: (id: string, body: { name: string; type: AssetCategoryType; description?: string | null; icon?: string | null; depreciationMonths?: number | null }) => apiRequest<AssetCategory>(`/api/asset-categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteCategory: (id: string) => apiRequest<void>(`/api/asset-categories/${id}`, { method: 'DELETE' }),
   saveCategoryFields: (categoryId: string, body: SaveAssetFieldDefinitionRequest[]) => apiRequest<AssetFieldDefinition[]>(`/api/asset-categories/${categoryId}/fields`, { method: 'PUT', body: JSON.stringify(body) }),
 

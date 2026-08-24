@@ -13,8 +13,25 @@ using Tenebit.Api.Http;
 using Tenebit.Application;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
+using Tenebit.Application.Identity;
 using Tenebit.Infrastructure;
 using Tenebit.Infrastructure.Services;
+
+// One-time local setup helpers for the platform-admin account (see Admin__* env vars in deploy docs) -
+// pure static calls, no DB/host needed, so they run and exit before the web app builds.
+if (args.Length >= 2 && string.Equals(args[0], "--admin-hash-password", StringComparison.OrdinalIgnoreCase))
+{
+    Console.WriteLine(PasswordHasher.Hash(args[1]));
+    return;
+}
+if (args.Length >= 1 && string.Equals(args[0], "--admin-generate-totp", StringComparison.OrdinalIgnoreCase))
+{
+    var secret = TotpService.GenerateSecret();
+    var email = args.Length >= 2 ? args[1] : "admin@tenebit";
+    Console.WriteLine($"Secret: {secret}");
+    Console.WriteLine($"otpauth URI (manual entry / QR): {TotpService.BuildOtpAuthUri(secret, email)}");
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,6 +72,9 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+// Singleton: the lockout counter must be shared across all admin sign-in attempts, not per request.
+builder.Services.AddSingleton<AdminLoginGuard>();
+builder.Services.AddScoped<AdminAlertSender>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
@@ -123,6 +143,8 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("auth-recovery", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(120)));
     options.AddPolicy("auth-oauth", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(180)));
     options.AddPolicy("public", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(60)));
+    // Single account, highest-value target: far tighter than the tenant "auth-login" ceiling (200/min).
+    options.AddPolicy("admin-login", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(10)));
 });
 
 builder.Services
@@ -145,6 +167,14 @@ builder.Services
         {
             OnTokenValidated = async context =>
             {
+                // Platform-admin tokens have no backing OrganizationUser row to look up - validated
+                // entirely by signature/issuer/audience/expiry (already checked) plus this explicit scope
+                // claim. TenebitEndpoints separately forbids this scope on every tenant route.
+                if (context.Principal?.FindFirst(PlatformAdminClaims.ScopeClaimType)?.Value == PlatformAdminClaims.ScopeValue)
+                {
+                    return;
+                }
+
                 var subjectClaim = context.Principal?.FindFirst("sub")?.Value;
                 var organizationClaim = context.Principal?.FindFirst("organization_id")?.Value;
                 var stampClaim = context.Principal?.FindFirst("security_stamp")?.Value;
@@ -181,7 +211,10 @@ builder.Services
             }
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("PlatformAdmin", policy => policy.RequireClaim(PlatformAdminClaims.ScopeClaimType, PlatformAdminClaims.ScopeValue));
+});
 
 var app = builder.Build();
 
@@ -281,6 +314,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapTenebitApi();
+app.MapAdminEndpoints();
 
 var verifyEncryptedDataOnly = args.Any(arg => string.Equals(arg, "--verify-encrypted-data", StringComparison.OrdinalIgnoreCase));
 if (verifyEncryptedDataOnly)

@@ -62,7 +62,7 @@ public static class AuthEndpoints
                 if (!await abuseLimiter.TryAcquireAsync("login", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(5), cancellationToken))
                     return Results.Json(new ErrorResponse("Zbyt wiele prób logowania. Spróbuj ponownie później.", "RATE_LIMITED"), statusCode: 429);
                 var deviceTrustToken = http.Request.Cookies[DeviceTrustCookie.CookieName];
-                var result = await service.LoginAsync(request, deviceTrustToken, cancellationToken);
+                var result = await service.LoginAsync(request, deviceTrustToken, http.ToAuthRequestContext(), cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 
                 if (result.Value!.RequiresTwoFactor)
@@ -80,7 +80,7 @@ public static class AuthEndpoints
             .RequireRateLimiting("auth-login")
             .WithTags("Auth");
 
-        api.MapPost("/auth/login/2fa", async (TwoFactorLoginRequest request, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/login/2fa", async (TwoFactorLoginRequest request, HttpContext http, AuthService service, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
                 var userId = await challenges.ConsumeAsync(request.ChallengeToken, cancellationToken);
                 if (userId is null)
@@ -88,7 +88,7 @@ public static class AuthEndpoints
                     return Results.Json(new ErrorResponse("Sesja logowania wygasła. Zaloguj się ponownie.", "CHALLENGE_EXPIRED"), statusCode: 401);
                 }
 
-                var result = await service.CompleteTwoFactorLoginAsync(userId.Value, request.Code, cancellationToken);
+                var result = await service.CompleteTwoFactorLoginAsync(userId.Value, request.Code, http.ToAuthRequestContext(), cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 
                 var refreshToken = await service.IssueRefreshTokenAsync(result.Value!.Id, cancellationToken);

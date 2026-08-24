@@ -106,6 +106,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<TwoFactorChallenge> TwoFactorChallenges => Set<TwoFactorChallenge>();
     public DbSet<DeviceTrustToken> DeviceTrustTokens => Set<DeviceTrustToken>();
     public DbSet<TwoFactorRecoveryCode> TwoFactorRecoveryCodes => Set<TwoFactorRecoveryCode>();
+    public DbSet<LoginEvent> LoginEvents => Set<LoginEvent>();
+    public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
     public DbSet<AssetStatusSetting> AssetStatusSettings => Set<AssetStatusSetting>();
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
@@ -625,6 +627,36 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.CodeHash).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => x.OrganizationUserId);
         });
+
+        modelBuilder.Entity<LoginEvent>(entity =>
+        {
+            entity.ToTable("login_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.FailureReason).HasMaxLength(64);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(400);
+            // Admin panel reads this newest-first, globally and per organization/account.
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => new { x.OrganizationId, x.CreatedAt });
+            entity.HasIndex(x => new { x.Email, x.CreatedAt });
+            // Drives the retention sweep that clears expired IP addresses.
+            entity.HasIndex(x => x.IpExpiresAt).HasFilter("\"IpExpiresAt\" IS NOT NULL");
+            // No FK to organization_users: failed attempts for a non-existent e-mail have no user row,
+            // and the history must survive the account it refers to being deleted.
+        });
+
+        modelBuilder.Entity<AdminAuditLog>(entity =>
+        {
+            entity.ToTable("admin_audit_logs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.TargetType).HasMaxLength(40);
+            entity.Property(x => x.TargetLabel).HasMaxLength(240);
+            entity.Property(x => x.Details).HasMaxLength(1000);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.HasIndex(x => x.CreatedAt);
+        });
     }
 
     private static void ConfigureAssets(ModelBuilder modelBuilder)
@@ -643,6 +675,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.ReturnChecklistTemplate).HasMaxLength(2000);
             entity.Property(x => x.PhotoOnIssue).HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(x => x.PhotoOnReturn).HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(x => x.DepreciationMonths);
             entity.HasIndex(x => new { x.OrganizationId, x.Name }).IsUnique();
 
             entity.OwnsMany(x => x.FieldDefinitions, owned =>

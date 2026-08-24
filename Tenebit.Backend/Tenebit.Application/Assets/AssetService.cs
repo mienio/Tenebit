@@ -484,6 +484,65 @@ public sealed class AssetService
 
     /// <summary>Eksport listy aktywów do CSV. Dane identyczne jak <see cref="ExportJsonAsync"/> (bez AssetEvidence). Status
     /// eksportowany jako nazwa enuma - brak dedykowanego helpera translacji w warstwie Application.</summary>
+    /// <summary>
+    /// Book value of the fleet today. Finance-facing, so it is gated to the roles that already see asset
+    /// values, and it respects manager scope exactly like the asset list does.
+    /// </summary>
+    public async Task<Result<FleetValueResponse>> GetFleetValueAsync(CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<FleetValueResponse>.Failure(access.Error!);
+
+        var organizationId = _currentUser.OrganizationId;
+        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
+        var assets = scope is null
+            ? await _assets.ListAsync(organizationId, null, null, null, cancellationToken)
+            : await _assets.ListScopedAsync(organizationId, null, null, null, scope.PersonIds, scope.TeamIds, cancellationToken);
+
+        var categories = (await _categories.ListAsync(organizationId, cancellationToken)).ToDictionary(x => x.Id);
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+
+        var slices = new Dictionary<Guid, CategoryAccumulator>();
+        decimal totalPurchase = 0m, totalCurrent = 0m;
+        int withValue = 0, withoutPrice = 0;
+
+        foreach (var asset in assets)
+        {
+            categories.TryGetValue(asset.CategoryId, out var category);
+            var book = DepreciationCalculator.Calculate(asset.PurchasePrice, asset.PurchaseDate, category?.DepreciationMonths, today);
+            if (book is null)
+            {
+                withoutPrice++;
+                continue;
+            }
+
+            withValue++;
+            totalPurchase += book.PurchasePrice;
+            totalCurrent += book.CurrentValue;
+
+            var name = category?.Name ?? "—";
+            var current = slices.TryGetValue(asset.CategoryId, out var existing)
+                ? existing
+                : new CategoryAccumulator(name, category?.DepreciationMonths, 0, 0m, 0m);
+            slices[asset.CategoryId] = current with
+            {
+                Count = current.Count + 1,
+                Purchase = current.Purchase + book.PurchasePrice,
+                Current = current.Current + book.CurrentValue,
+            };
+        }
+
+        var byCategory = slices
+            .Select(pair => new CategoryValueSlice(pair.Key, pair.Value.Name, pair.Value.Months, pair.Value.Count, pair.Value.Purchase, pair.Value.Current))
+            .OrderByDescending(x => x.CurrentValue)
+            .ToArray();
+
+        return Result<FleetValueResponse>.Success(new FleetValueResponse(
+            totalPurchase, totalCurrent, totalPurchase - totalCurrent,
+            withValue, withoutPrice, organization?.Currency ?? "PLN", byCategory));
+    }
+
     public async Task<Result<string>> ExportCsvAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);

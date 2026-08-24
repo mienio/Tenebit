@@ -35,6 +35,16 @@ public sealed class AuthService
     private readonly IUserSecurityStateCache? _securityStateCache;
     private readonly IEmailAvailability? _emailAvailability;
 
+    // Optional so existing test fixtures that construct AuthService directly keep compiling; when absent
+    // (unit tests) sign-in still works, it simply is not recorded.
+    private readonly IAdminRepository? _adminRepository;
+
+    /// <summary>
+    /// How long a recorded sign-in keeps its IP address. Retained under legitimate interest (detecting
+    /// account takeover), then cleared by the retention sweep while the event itself stays.
+    /// </summary>
+    private static readonly TimeSpan LoginIpRetention = TimeSpan.FromDays(90);
+
     public AuthService(
         IOrganizationRepository organizations,
         IOrganizationUserRepository users,
@@ -56,8 +66,10 @@ public sealed class AuthService
         ILogger<AuthService> logger,
         IEmailOutboxWriter? emailOutbox = null,
         IUserSecurityStateCache? securityStateCache = null,
-        IEmailAvailability? emailAvailability = null)
+        IEmailAvailability? emailAvailability = null,
+        IAdminRepository? adminRepository = null)
     {
+        _adminRepository = adminRepository;
         _organizations = organizations;
         _users = users;
         _categories = categories;
@@ -168,13 +180,43 @@ public sealed class AuthService
     }
 
     public async Task<Result<LoginOutcome>> LoginAsync(LoginRequest request, string? deviceTrustToken, CancellationToken cancellationToken)
+        => await LoginAsync(request, deviceTrustToken, null, cancellationToken);
+
+    public async Task<Result<LoginOutcome>> LoginAsync(
+        LoginRequest request,
+        string? deviceTrustToken,
+        AuthRequestContext? context,
+        CancellationToken cancellationToken)
     {
         var user = await _users.FindByEmailAsync(request.Email, cancellationToken);
         var passwordHash = user?.PasswordHash ?? PasswordHasher.DummyHash;
         var passwordValid = PasswordHasher.Verify(request.Password, passwordHash);
         if (user is null || !user.IsActive || !user.IsEmailVerified || !passwordValid)
         {
+            // The caller is always told the same thing, but the recorded reason distinguishes the cases so
+            // the admin panel can tell "wrong password" from "blocked account" without leaking that difference.
+            var reason = user is null ? "unknown_account"
+                : !passwordValid ? "bad_password"
+                : !user.IsActive ? "account_blocked"
+                : "email_unverified";
+            await RecordLoginAttemptAsync(user?.OrganizationId, user?.Id, request.Email, false, reason, context, cancellationToken);
             return Result<LoginOutcome>.Failure(Error.Validation("Nieprawidłowy e-mail lub hasło."));
+        }
+
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            await RecordLoginAttemptAsync(user.OrganizationId, user.Id, request.Email, false, "no_organization", context, cancellationToken);
+            return Result<LoginOutcome>.Failure(Error.Validation("Nieprawidłowy e-mail lub hasło."));
+        }
+
+        // Platform-level suspension: checked after the password so a suspended organization cannot be used
+        // as an account-existence oracle, and stated plainly because the user needs to know why they are out.
+        if (organization.IsSuspended)
+        {
+            await RecordLoginAttemptAsync(user.OrganizationId, user.Id, request.Email, false, "organization_suspended", context, cancellationToken);
+            return Result<LoginOutcome>.Failure(Error.Forbidden(
+                "Dostęp do tej organizacji został zawieszony. Skontaktuj się z pomocą techniczną."));
         }
 
         if (PasswordHasher.NeedsRehash(user.PasswordHash))
@@ -189,16 +231,48 @@ public sealed class AuthService
 
         if (user.IsTwoFactorEnabled && !trustedDevice)
         {
+            // Not a completed sign-in yet - the success row is written once the second factor is accepted.
             return Result<LoginOutcome>.Success(new LoginOutcome(true, user.Id, null));
         }
 
-        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
-        if (organization is null)
-        {
-            return Result<LoginOutcome>.Failure(Error.Validation("Nieprawidłowy e-mail lub hasło."));
-        }
-
+        await RecordLoginAttemptAsync(user.OrganizationId, user.Id, user.Email, true, null, context, cancellationToken);
         return Result<LoginOutcome>.Success(new LoginOutcome(false, null, Map(user, organization)));
+    }
+
+    /// <summary>
+    /// Appends a row to the sign-in history. Failures here must never block authentication, so the write
+    /// is best-effort and swallows its own errors.
+    /// </summary>
+    private async Task RecordLoginAttemptAsync(
+        Guid? organizationId,
+        Guid? userId,
+        string email,
+        bool succeeded,
+        string? failureReason,
+        AuthRequestContext? context,
+        CancellationToken cancellationToken)
+    {
+        if (_adminRepository is null) return;
+
+        try
+        {
+            var now = _clock.UtcNow;
+            _adminRepository.AddLoginEvent(new LoginEvent(
+                organizationId,
+                userId,
+                email,
+                succeeded,
+                failureReason,
+                context?.IpAddress,
+                context?.UserAgent,
+                now,
+                string.IsNullOrWhiteSpace(context?.IpAddress) ? null : now.Add(LoginIpRetention)));
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się zapisać zdarzenia logowania.");
+        }
     }
 
     public async Task<string> IssueDeviceTrustTokenAsync(Guid organizationUserId, CancellationToken cancellationToken)
@@ -215,6 +289,13 @@ public sealed class AuthService
     }
 
     public async Task<Result<AuthUserResponse>> CompleteTwoFactorLoginAsync(Guid userId, string code, CancellationToken cancellationToken)
+        => await CompleteTwoFactorLoginAsync(userId, code, null, cancellationToken);
+
+    public async Task<Result<AuthUserResponse>> CompleteTwoFactorLoginAsync(
+        Guid userId,
+        string code,
+        AuthRequestContext? context,
+        CancellationToken cancellationToken)
     {
         var user = await _users.GetByIdAsync(userId, cancellationToken);
         if (user is null || !user.IsActive || !user.IsEmailVerified || !user.IsTwoFactorEnabled || string.IsNullOrEmpty(user.TotpSecret))
@@ -225,6 +306,7 @@ public sealed class AuthService
         var isValidTotp = await TryConsumeTotpCodeAsync(user, code, cancellationToken);
         if (!isValidTotp && !await TryConsumeRecoveryCodeAsync(userId, code, cancellationToken))
         {
+            await RecordLoginAttemptAsync(user.OrganizationId, user.Id, user.Email, false, "bad_two_factor", context, cancellationToken);
             return Result<AuthUserResponse>.Failure(Error.Validation("Nieprawidłowy kod uwierzytelniający."));
         }
 
@@ -234,6 +316,15 @@ public sealed class AuthService
             return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
         }
 
+        // Re-checked here as well: suspension may have landed between the password step and this one.
+        if (organization.IsSuspended)
+        {
+            await RecordLoginAttemptAsync(user.OrganizationId, user.Id, user.Email, false, "organization_suspended", context, cancellationToken);
+            return Result<AuthUserResponse>.Failure(Error.Forbidden(
+                "Dostęp do tej organizacji został zawieszony. Skontaktuj się z pomocą techniczną."));
+        }
+
+        await RecordLoginAttemptAsync(user.OrganizationId, user.Id, user.Email, true, null, context, cancellationToken);
         return Result<AuthUserResponse>.Success(Map(user, organization));
     }
 

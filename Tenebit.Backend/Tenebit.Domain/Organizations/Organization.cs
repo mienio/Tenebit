@@ -39,6 +39,32 @@ public sealed class Organization
     public bool QrLabelShowName { get; private set; } = true;
     public bool QrLabelShowTag { get; private set; } = true;
 
+    // Platform-level moderation (terms-of-service enforcement), set only from the admin panel.
+    // Suspension blocks every sign-in for the organization but never touches its data, so it is fully
+    // reversible - deliberately the strongest action the panel can take.
+    public bool IsSuspended { get; private set; }
+    public DateTimeOffset? SuspendedAt { get; private set; }
+    public string? SuspendedReason { get; private set; }
+
+    public void Suspend(string reason, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new DomainException("Powód zawieszenia jest wymagany.");
+        }
+
+        IsSuspended = true;
+        SuspendedAt = now;
+        SuspendedReason = reason.Trim()[..Math.Min(reason.Trim().Length, 500)];
+    }
+
+    public void Restore()
+    {
+        IsSuspended = false;
+        SuspendedAt = null;
+        SuspendedReason = null;
+    }
+
     public void UpdateQrLabelSettings(bool showName, bool showTag)
     {
         QrLabelShowName = showName;

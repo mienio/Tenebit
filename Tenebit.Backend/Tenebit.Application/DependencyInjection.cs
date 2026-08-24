@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Tenebit.Application.Admin;
 using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Audit;
@@ -10,6 +11,7 @@ using Tenebit.Application.Onboarding;
 using Tenebit.Application.JobProfiles;
 using Tenebit.Application.Identity;
 using Tenebit.Application.Licenses;
+using Tenebit.Application.Search;
 using Tenebit.Application.Settings;
 using Tenebit.Application.Offboarding;
 using Tenebit.Application.Organizations;
@@ -26,6 +28,9 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<Common.ManagerScopeService>();
+        services.AddScoped<GlobalSearchService>();
+        services.AddScoped<AdminOverviewService>();
+        services.AddScoped<AdminModerationService>();
         services.AddScoped<AssetAuthorizationService>();
         services.AddScoped<AssetService>();
         services.AddScoped<LocationService>();

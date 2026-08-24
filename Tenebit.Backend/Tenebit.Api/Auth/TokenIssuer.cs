@@ -41,4 +41,29 @@ public sealed class TokenIssuer
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    // Platform-admin tokens are not tied to any Organization/OrganizationUser row - deliberately kept
+    // out of the tenant identity model so the single admin account can never be granted through any
+    // tenant-facing API (invite, role assignment, etc). Scope is asserted purely via the token_scope
+    // claim; OnTokenValidated in Program.cs special-cases it and skips the per-user security-state check.
+    public string IssueAdmin(string email, int minutes)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, "platform-admin"),
+            new(PlatformAdminClaims.ScopeClaimType, PlatformAdminClaims.ScopeValue),
+            new("email", email)
+        };
+
+        var signingKey = JwtSigningKey.GetActive(_configuration);
+        var credentials = new SigningCredentials(signingKey.Key, SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer: JwtIssuerOptions.GetIssuer(_configuration),
+            audience: JwtIssuerOptions.GetAudience(_configuration),
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(minutes),
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 }

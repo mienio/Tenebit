@@ -14,6 +14,12 @@ public sealed record RegisterRequest(
     string? Language = null,
     bool AcceptTerms = false);
 
+/// <summary>
+/// Transport details of the sign-in attempt, captured by the endpoint and recorded in the login history.
+/// Not part of the request body - a client must never be able to dictate the IP attributed to it.
+/// </summary>
+public sealed record AuthRequestContext(string? IpAddress, string? UserAgent);
+
 [ValidatedRequest]
 public sealed record LoginRequest(
     [property: Required, EmailAddress, StringLength(240)] string Email,

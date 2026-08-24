@@ -41,6 +41,10 @@ public static class AssetsEndpoints
 {
     public static RouteGroupBuilder MapAssetsEndpoints(this RouteGroupBuilder api)
     {
+        api.MapGet("/assets/fleet-value", async (AssetService service, CancellationToken cancellationToken) =>
+                (await service.GetFleetValueAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Assets");
+
         api.MapGet("/asset-categories", async (AssetCategoryService service, CancellationToken cancellationToken) =>
                 Results.Ok(await service.ListAsync(cancellationToken)))
             .WithTags("Asset categories");

@@ -25,3 +25,6 @@ artifacts/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Deployment artifacts (zips are covered by *.zip; migrate.sql is generated from the migrations)
+Release/
