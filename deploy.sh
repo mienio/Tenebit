@@ -70,9 +70,17 @@ ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health/ready || exit 1
+    CMD curl -f -H "Host: __HEALTH_HOST__" http://localhost:8080/api/health/ready || exit 1
 ENTRYPOINT ["dotnet", "Tenebit.Api.dll"]
 DOCKER
+
+# Dockerfile jest generowany z cytowanego heredoca (bez podstawien), wiec host do healthchecku
+# wstawiamy tutaj. Bez naglowka Host backend odrzuca zapytanie z 400 (AllowedHosts) i kontener jest
+# raportowany jako unhealthy mimo ze API dziala.
+HEALTH_HOST="${DOMAIN#https://}"
+HEALTH_HOST="${HEALTH_HOST#http://}"
+HEALTH_HOST="${HEALTH_HOST%%/*}"
+sed -i "s|__HEALTH_HOST__|${HEALTH_HOST}|g" "$BACKEND/Dockerfile"
 
 echo "  ✓ Backend ready"
 
