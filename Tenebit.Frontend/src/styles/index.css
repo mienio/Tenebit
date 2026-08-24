@@ -975,3 +975,99 @@ button.authIcon:hover { filter: brightness(0.94); }
   .assetTile { gap: 8px; padding: 0 9px; }
   .assetTile__field { font-size: 12px; }
 }
+
+/* ---- Asset search bar ----------------------------------------------------
+   Search is a single line. Status/location/team sit behind a toggle: they are used occasionally, but
+   as four permanently visible labelled fields they collapsed into a half-screen block of chrome above
+   the list on any narrow window. */
+.searchBar { display: flex; align-items: center; gap: 8px; }
+
+.searchBar__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  height: 38px;
+}
+.searchBar__field:focus-within { border-color: var(--border-strong); }
+.searchBar__field .input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  height: 100%;
+  outline: none;
+}
+.searchBar__clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.searchBar__clear:hover { color: var(--text); background: var(--surface-strong); }
+
+.searchBar__toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.searchBar__toggle:hover { border-color: var(--border-strong); color: var(--text); }
+.searchBar__toggle--active { border-color: var(--brand); color: var(--text); background: var(--brand-soft); }
+.searchBar__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--surface);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.searchBar__advanced {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.searchBar__advancedField { display: grid; gap: 4px; min-width: 0; }
+.searchBar__advancedField > span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.searchBar__clearAll { align-self: center; font-size: 12px; text-align: left; }
+
+@media (max-width: 560px) {
+  /* The bar itself stays one line; only the label on the toggle is dropped. */
+  .searchBar__toggle span:not(.searchBar__badge) { display: none; }
+}

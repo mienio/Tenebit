@@ -1,8 +1,8 @@
-import { Building2, CircleDot, FileSpreadsheet, List, Printer, Tag, Users, X } from 'lucide-react';
-import type { Dispatch, SetStateAction } from 'react';
+import { Building2, ChevronDown, CircleDot, FileSpreadsheet, List, Printer, Search, SlidersHorizontal, Tag, Users, X } from 'lucide-react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { Field, SelectInput, TextInput } from '../../components/FormFields';
+import { SelectInput, TextInput } from '../../components/FormFields';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { AssetStatus, LocationNode, Team } from '../../types/domain';
 
@@ -39,6 +39,17 @@ interface AssetsToolbarProps {
 
 export function AssetsToolbar(props: AssetsToolbarProps) {
   const { t } = useI18n();
+  // Advanced filters start collapsed and open themselves only if something is already filtering, so a
+  // shared link or a restored URL does not hide why the list looks incomplete.
+  const activeCount = [props.status, props.location, props.team].filter(Boolean).length;
+  const [advancedOpen, setAdvancedOpen] = useState(activeCount > 0);
+
+  function clearAdvanced() {
+    props.setStatus('');
+    props.setLocation('');
+    props.setTeam('');
+  }
+
   return (
     <>
       {props.selectedCount > 0 && (
@@ -63,29 +74,70 @@ export function AssetsToolbar(props: AssetsToolbarProps) {
         </Card>
       )}
 
+      {/*
+        Search is one line. Status/location/team are secondary - most searches never touch them - so they
+        live behind a toggle instead of permanently occupying four labelled rows, which on a narrow window
+        stacked into half a screen of chrome above the actual list.
+      */}
       <Card className="toolbarCard">
-        <form className="filters filters--four" onSubmit={event => event.preventDefault()}>
-          <Field label={t('assets.searchLabel')}>
-            <TextInput value={props.search} onChange={event => props.setSearch(event.target.value)} placeholder={t('assets.searchPlaceholder')} />
-          </Field>
-          <Field label={t('assets.statusLabel')}>
-            <SelectInput value={props.status} onChange={event => props.setStatus(event.target.value as AssetStatus | '')}>
-              {props.statuses.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </SelectInput>
-          </Field>
-          <Field label={t('assets.locationLabel')}>
-            <SelectInput value={props.location} onChange={event => props.setLocation(event.target.value)}>
-              <option value="">{t('assets.allLocations')}</option>
-              {props.locations.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
-            </SelectInput>
-          </Field>
-          <Field label={t('assets.teamLabel')}>
-            <SelectInput value={props.team} onChange={event => props.setTeam(event.target.value)}>
-              <option value="">{t('assets.allTeams')}</option>
-              {props.teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </SelectInput>
-          </Field>
+        <form className="searchBar" onSubmit={event => event.preventDefault()}>
+          <div className="searchBar__field">
+            <Search size={16} />
+            <TextInput
+              value={props.search}
+              onChange={event => props.setSearch(event.target.value)}
+              placeholder={t('assets.searchPlaceholder')}
+              aria-label={t('assets.searchLabel')}
+            />
+            {props.search ? (
+              <button type="button" className="searchBar__clear" aria-label={t('common.clearFilters')} onClick={() => props.setSearch('')}>
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            className={advancedOpen || activeCount > 0 ? 'searchBar__toggle searchBar__toggle--active' : 'searchBar__toggle'}
+            aria-expanded={advancedOpen}
+            onClick={() => setAdvancedOpen(open => !open)}
+          >
+            <SlidersHorizontal size={15} />
+            <span>{t('assets.filtersAdvanced')}</span>
+            {activeCount > 0 ? <span className="searchBar__badge">{activeCount}</span> : null}
+            <ChevronDown size={14} style={{ transform: advancedOpen ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+          </button>
         </form>
+
+        {advancedOpen ? (
+          <div className="searchBar__advanced">
+            <label className="searchBar__advancedField">
+              <span>{t('assets.statusLabel')}</span>
+              <SelectInput value={props.status} onChange={event => props.setStatus(event.target.value as AssetStatus | '')}>
+                {props.statuses.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </SelectInput>
+            </label>
+            <label className="searchBar__advancedField">
+              <span>{t('assets.locationLabel')}</span>
+              <SelectInput value={props.location} onChange={event => props.setLocation(event.target.value)}>
+                <option value="">{t('assets.allLocations')}</option>
+                {props.locations.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
+              </SelectInput>
+            </label>
+            <label className="searchBar__advancedField">
+              <span>{t('assets.teamLabel')}</span>
+              <SelectInput value={props.team} onChange={event => props.setTeam(event.target.value)}>
+                <option value="">{t('assets.allTeams')}</option>
+                {props.teams.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </SelectInput>
+            </label>
+            {activeCount > 0 ? (
+              <button type="button" className="linkButton searchBar__clearAll" onClick={clearAdvanced}>
+                {t('common.clearFilters')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </Card>
 
       <Card className="toolbarCard">
