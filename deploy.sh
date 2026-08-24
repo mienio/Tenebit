@@ -185,7 +185,17 @@ fi
 echo -e "\n[4/4] Deploy..."
 docker compose -p tenebit up -d
 
-sleep 5
+# Wait for the backend to answer instead of guessing with a fixed sleep. The API needs ~15s to warm up
+# (EF model build + first connection), so a flat `sleep 5` reported a false FAIL on every deploy even
+# though the release was fine.
+echo "  Czekam na gotowosc backendu..."
+for attempt in $(seq 1 40); do
+  if curl -fsS "$DOMAIN/api/health" >/dev/null 2>&1; then
+    echo "  Backend odpowiedzial po $((attempt * 3))s"
+    break
+  fi
+  sleep 3
+done
 
 # === VERIFY ===
 echo -e "\nVerifying..."
@@ -236,6 +246,48 @@ if [ "$SMOKE_OK" != "1" ]; then
   exit 1
 fi
 echo "  OK (konto testowe: $SMOKE_EMAIL)"
+
+# Sprzatanie po smoke tescie. Rejestracja tworzy prawdziwa organizacje, wiec bez tego kroku kazdy
+# deploy zostawial smiec w bazie. Usuwamy WYLACZNIE organizacje utworzona przez ten przebieg -
+# dopasowanie po dokladnej nazwie z timestampem, ktory jest tylko cyframi. Jesli smoke test sie nie
+# powiedzie, skrypt konczy sie wczesniej i dane zostaja do diagnozy.
+echo "  Sprzatanie danych smoke testu..."
+docker exec -i tenebit-db psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+  -v org_name="Smoke Test ${SMOKE_STAMP}" <<'CLEANUP_SQL' >/dev/null 2>&1 || echo "  WARN: nie udalo sie usunac danych smoke testu (nieszkodliwe)"
+BEGIN;
+CREATE TEMP TABLE smoke_org ON COMMIT DROP AS
+SELECT "Id" FROM tenebit.organizations WHERE "Name" = :'org_name';
+
+DO $$
+DECLARE
+  target record;
+  pass int;
+BEGIN
+  FOR pass IN 1..6 LOOP
+    FOR target IN
+      SELECT c.table_schema, c.table_name
+      FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+      WHERE c.column_name = 'OrganizationId'
+        AND c.table_schema = 'tenebit'
+        AND t.table_type = 'BASE TABLE'
+        AND c.table_name <> 'organizations'
+    LOOP
+      BEGIN
+        EXECUTE format(
+          'DELETE FROM %I.%I WHERE "OrganizationId" IN (SELECT "Id" FROM smoke_org)',
+          target.table_schema, target.table_name);
+      EXCEPTION WHEN foreign_key_violation THEN
+        NULL;
+      END;
+    END LOOP;
+  END LOOP;
+  DELETE FROM tenebit.organizations WHERE "Id" IN (SELECT "Id" FROM smoke_org);
+END $$;
+COMMIT;
+CLEANUP_SQL
+echo "  Dane smoke testu usuniete"
 
 echo -e "\n=== SUCCESS ==="
 echo "URL: $DOMAIN"

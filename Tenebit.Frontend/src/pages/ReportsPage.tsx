@@ -76,6 +76,7 @@ export function ReportsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const dashboard = useAsyncData(api.dashboard, []);
+  const fleetValue = useAsyncData(api.fleetValue, []);
   const statusSettings = useAsyncData(api.assetStatuses, []);
   const statusSettingByKey = useMemo(() => {
     const map = new Map<string, { label: string; color: string }>();
@@ -120,6 +121,72 @@ export function ReportsPage() {
               <TrendRow label={t('reports.openAssignments')} current={comparison.data.currentOpenAssignments} previous={comparison.data.previousOpenAssignments} format={value => String(value)} />
               <TrendRow label={t('reports.visibleValue')} current={comparison.data.currentVisibleAssetValue} previous={comparison.data.previousVisibleAssetValue} format={value => formatMoney(value)} />
             </div>
+          </>
+        )}
+      </Card>
+
+      <Card>
+        <div className="sectionTitle">
+          <div>
+            <h2>{t('reports.fleetValueTitle')}</h2>
+            <p>{t('reports.fleetValueHint')}</p>
+          </div>
+        </div>
+        {fleetValue.isLoading ? <p className="muted">{t('common.loading')}</p> : fleetValue.error || !fleetValue.data ? (
+          <p className="muted">{t('reports.fleetValueUnavailable')}</p>
+        ) : fleetValue.data.assetsWithValue === 0 ? (
+          <p className="muted">{t('reports.fleetValueNoPrices')}</p>
+        ) : (
+          <>
+            <div className="listRows">
+              <div className="listRow">
+                <span>{t('reports.fleetPurchaseValue')}</span>
+                <strong>{formatMoney(fleetValue.data.totalPurchaseValue)}</strong>
+              </div>
+              <div className="listRow">
+                <span>{t('reports.fleetCurrentValue')}</span>
+                <strong>{formatMoney(fleetValue.data.totalCurrentValue)}</strong>
+              </div>
+              <div className="listRow">
+                <span>{t('reports.fleetDepreciated')}</span>
+                <strong>{formatMoney(fleetValue.data.totalDepreciated)}</strong>
+              </div>
+            </div>
+
+            <div className="tableWrap" style={{ marginTop: '16px' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('reports.fleetCategory')}</th>
+                  <th>{t('reports.fleetSchedule')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.fleetCount')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.fleetPurchaseValue')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.fleetCurrentValue')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fleetValue.data.byCategory.map(slice => (
+                  <tr key={slice.categoryId}>
+                    <td>{slice.categoryName}</td>
+                    <td className="muted">
+                      {slice.depreciationMonths
+                        ? t('reports.fleetMonths', { months: String(slice.depreciationMonths) })
+                        : t('reports.fleetNoSchedule')}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{slice.assetCount}</td>
+                    <td style={{ textAlign: 'right' }}>{formatMoney(slice.purchaseValue)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatMoney(slice.currentValue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+
+            {fleetValue.data.assetsWithoutPrice > 0 ? (
+              <p className="muted" style={{ marginTop: '12px' }}>
+                {t('reports.fleetMissingPrices', { count: String(fleetValue.data.assetsWithoutPrice) })}
+              </p>
+            ) : null}
           </>
         )}
       </Card>

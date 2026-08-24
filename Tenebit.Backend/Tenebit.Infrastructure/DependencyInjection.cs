@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IProcedureRepository, ProcedureRepository>();
         services.AddScoped<IAssignmentRepository, AssignmentRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<IAdminRepository, AdminRepository>();
         services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
         services.AddScoped<IOrganizationUserRepository, OrganizationUserRepository>();
         services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();

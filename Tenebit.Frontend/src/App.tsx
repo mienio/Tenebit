@@ -32,6 +32,13 @@ const AuditLogPage = lazy(() => import('./pages/AuditLogPage').then(m => ({ defa
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const PricingPage = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
 const LicensesPage = lazy(() => import('./pages/LicensesPage').then(m => ({ default: m.LicensesPage })));
+const AdminLoginPage = lazy(() => import('./admin/AdminLoginPage').then(m => ({ default: m.AdminLoginPage })));
+const AdminDashboardPage = lazy(() => import('./admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
+const AdminOrganizationsPage = lazy(() => import('./admin/AdminOrganizationsPage').then(m => ({ default: m.AdminOrganizationsPage })));
+const AdminOrganizationDetailPage = lazy(() => import('./admin/AdminOrganizationDetailPage').then(m => ({ default: m.AdminOrganizationDetailPage })));
+const AdminUsersPage = lazy(() => import('./admin/AdminUsersPage').then(m => ({ default: m.AdminUsersPage })));
+const AdminLoginsPage = lazy(() => import('./admin/AdminLoginsPage').then(m => ({ default: m.AdminLoginsPage })));
+const AdminAuditPage = lazy(() => import('./admin/AdminAuditPage').then(m => ({ default: m.AdminAuditPage })));
 
 function HomeRoute() {
   const auth = useAuth();
@@ -65,6 +72,13 @@ export function App() {
         <Route path="/exit" element={<PublicOffboardingPage />} />
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
         <Route path="/audit" element={<PublicAssetAuditPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin" element={<AdminDashboardPage />} />
+        <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
+        <Route path="/admin/organizations/:id" element={<AdminOrganizationDetailPage />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
+        <Route path="/admin/logins" element={<AdminLoginsPage />} />
+        <Route path="/admin/audit" element={<AdminAuditPage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<RequireRoles path="/dashboard"><DashboardPage /></RequireRoles>} />
           <Route path="my" element={<MyWorkspacePage />} />

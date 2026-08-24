@@ -57,6 +57,7 @@ public sealed class AssetCategoryService
             if (category is null) return Result<AssetCategoryResponse>.Failure(Error.NotFound("Kategoria nie istnieje."));
             if (await _categories.NameExistsAsync(organizationId, request.Name, id, cancellationToken)) return Result<AssetCategoryResponse>.Failure(Error.Conflict("Kategoria o tej nazwie już istnieje."));
             category.Update(request.Name, request.Type, request.Description, request.Icon);
+            category.SetDepreciation(request.DepreciationMonths);
             _activity.Add(new ActivityLog(organizationId, "asset_category.updated", "asset_category", category.Id, _currentUser.Subject, category.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<AssetCategoryResponse>.Success(Map(category, _currentUser.Language));
@@ -124,7 +125,7 @@ public sealed class AssetCategoryService
     {
         var name = StarterAssetCategoryTranslations.TranslateName(category.IsSystem, language, category.Name);
         var description = StarterAssetCategoryTranslations.TranslateDescription(category.IsSystem, language, category.Name, category.Description ?? string.Empty);
-        return new(category.Id, name, category.Type, description, category.Icon, category.IsSystem, MapFieldDefinitions(category), category.ReturnHandlingMode, category.PostReturnDisposition, category.ReturnChecklistTemplate, category.PhotoOnIssue, category.PhotoOnReturn);
+        return new(category.Id, name, category.Type, description, category.Icon, category.IsSystem, MapFieldDefinitions(category), category.ReturnHandlingMode, category.PostReturnDisposition, category.ReturnChecklistTemplate, category.PhotoOnIssue, category.PhotoOnReturn, category.DepreciationMonths);
     }
 
     private static IReadOnlyList<AssetFieldDefinitionResponse> MapFieldDefinitions(AssetCategory category) => category.FieldDefinitions

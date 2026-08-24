@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, ChevronDown, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X, Zap } from 'lucide-react';
+import { BarChart3, Boxes, ChevronDown, Search as SearchIcon, ClipboardCheck, ClipboardList, FileText, History, KeyRound, LayoutDashboard, LogOut, Menu, PackageCheck, Settings, User, UserRoundX, Users, X, Zap } from 'lucide-react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Avatar } from './Avatar';
@@ -8,6 +8,7 @@ import { keepFocusInside } from './Modal';
 import { LoadingState } from './StateViews';
 import { api } from '../api/endpoints';
 import { useAuth } from '../auth/AuthProvider';
+import { SearchPalette, openSearchPalette } from './SearchPalette';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 
@@ -75,6 +76,7 @@ export function Layout() {
 
   return (
     <div className={mobileOpen ? 'appShell appShell--menuOpen' : 'appShell'}>
+      <SearchPalette />
       <header className="mobileTopbar">
         <div className="brand brand--compact">
           <div className="brand__mark"><BrandMark /></div>
@@ -93,6 +95,11 @@ export function Layout() {
             <small>{t('nav.sidebarTagline')}</small>
           </div>
         </div>
+        <button type="button" className="sidebarSearch" onClick={openSearchPalette}>
+          <SearchIcon size={16} />
+          <span>{t('search.shortcutHint')}</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <nav className="nav" aria-label={t('nav.mainNavAria')}>
           {standaloneNav.filter(item => item.to !== '/settings').map(item => {
             const Icon = item.icon;

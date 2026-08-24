@@ -99,6 +99,27 @@ export interface AssetCategory {
   icon?: string | null;
   isSystem: boolean;
   fieldDefinitions: AssetFieldDefinition[];
+  /** Straight-line depreciation period in months; null = category is not depreciated. */
+  depreciationMonths?: number | null;
+}
+
+export interface CategoryValueSlice {
+  categoryId: string;
+  categoryName: string;
+  depreciationMonths: number | null;
+  assetCount: number;
+  purchaseValue: number;
+  currentValue: number;
+}
+
+export interface FleetValue {
+  totalPurchaseValue: number;
+  totalCurrentValue: number;
+  totalDepreciated: number;
+  assetsWithValue: number;
+  assetsWithoutPrice: number;
+  currency: string;
+  byCategory: CategoryValueSlice[];
 }
 
 export interface Asset {

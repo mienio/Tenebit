@@ -33,6 +33,13 @@ public sealed class AssetCategory
     public PhotoRequirement PhotoOnIssue { get; private set; } = PhotoRequirement.Disabled;
     public PhotoRequirement PhotoOnReturn { get; private set; } = PhotoRequirement.Disabled;
 
+    /// <summary>
+    /// Straight-line depreciation period in months for assets of this category (e.g. 36 for laptops,
+    /// 84 for furniture). Null means the category is not depreciated and such assets keep their purchase
+    /// value - useful for things that do not lose book value, and the safe default for existing data.
+    /// </summary>
+    public int? DepreciationMonths { get; private set; }
+
     public void Update(string name, AssetCategoryType type, string? description, string? icon)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -44,6 +51,22 @@ public sealed class AssetCategory
         Type = type;
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
         Icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+    }
+
+    public void SetDepreciation(int? months)
+    {
+        if (months is <= 0)
+        {
+            throw new DomainException("Okres amortyzacji musi być większy od zera.");
+        }
+
+        // A century of monthly steps is well past any plausible schedule and keeps the arithmetic sane.
+        if (months is > 1200)
+        {
+            throw new DomainException("Okres amortyzacji nie może przekraczać 1200 miesięcy.");
+        }
+
+        DepreciationMonths = months;
     }
 
     public void UpdateReturnPolicy(ReturnHandlingMode returnHandlingMode, PostReturnDisposition postReturnDisposition, string? returnChecklistTemplate, PhotoRequirement photoOnIssue, PhotoRequirement photoOnReturn)

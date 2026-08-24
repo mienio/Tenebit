@@ -73,7 +73,7 @@ export function SettingsPage() {
   const [userSaving, setUserSaving] = useState(false);
   const [message, setMessage] = useState<SettingsMessage>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
-  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; type: AssetCategoryType; description: string }>>({});
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, { name: string; type: AssetCategoryType; description: string; depreciationMonths: string }>>({});
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [justCreatedCategoryId, setJustCreatedCategoryId] = useState<string | null>(null);
   const [relationTypeDrafts, setRelationTypeDrafts] = useState<Record<string, string>>({});
@@ -197,7 +197,7 @@ export function SettingsPage() {
     } catch (error) { failure(error, t('settings.companySaveFailed')); }
   }
 
-  function updateCategoryDraft(id: string, patch: Partial<{ name: string; type: AssetCategoryType; description: string }>) {
+  function updateCategoryDraft(id: string, patch: Partial<{ name: string; type: AssetCategoryType; description: string; depreciationMonths: string }>) {
     setCategoryDrafts(current => ({ ...current, [id]: { ...current[id], ...patch } }));
   }
 
@@ -221,7 +221,7 @@ export function SettingsPage() {
     if (!draft.name.trim()) return setMessage({ type: 'error', text: t('settings.categoryNameRequired') });
     if (draft.name === original.name && draft.type === original.type && draft.description === (original.description ?? '')) return;
     try {
-      await api.updateCategory(id, { name: draft.name.trim(), type: draft.type, description: toNullable(draft.description), icon: original.icon ?? null });
+      await api.updateCategory(id, { name: draft.name.trim(), type: draft.type, description: toNullable(draft.description), icon: original.icon ?? null, depreciationMonths: draft.depreciationMonths.trim() ? Number(draft.depreciationMonths) : null });
       success(t('settings.categorySaved'));
       await categories.reload();
     } catch (error) { failure(error, t('settings.categorySaveFailed')); }
@@ -292,7 +292,7 @@ export function SettingsPage() {
     const original = categories.data?.find(item => item.id === id);
     if (!original) return;
     try {
-      await api.updateCategory(id, { name: original.name, type, description: original.description ?? null, icon: original.icon ?? null });
+      await api.updateCategory(id, { name: original.name, type, description: original.description ?? null, icon: original.icon ?? null, depreciationMonths: original.depreciationMonths ?? null });
       success(t('settings.categorySaved'));
       await categories.reload();
     } catch (error) { failure(error, t('settings.categorySaveFailed')); }
@@ -474,7 +474,7 @@ export function SettingsPage() {
             {categories.isLoading ? <p className="muted">{t('settings.loadingCategories')}</p> : categories.error ? <ErrorState message={categories.error} onRetry={categories.reload} /> : !filteredCategories.length ? <EmptyState title={t('settings.emptyCategoriesTitle')} description={t('settings.emptyCategoriesDesc')} /> : (
               <div className="statusList">
                 {filteredCategories.map(category => {
-                  const draft = categoryDrafts[category.id] ?? { name: category.name, type: category.type, description: category.description ?? '' };
+                  const draft = categoryDrafts[category.id] ?? { name: category.name, type: category.type, description: category.description ?? '', depreciationMonths: category.depreciationMonths?.toString() ?? '' };
                   return (
                     <div className="statusTile categoryTile" key={category.id}>
                       <button type="button" className="iconButton" aria-label={t('settings.iconLabel')} title={t('settings.iconLabel')} onClick={() => setIconPickerFor(category.id)}>
@@ -497,6 +497,18 @@ export function SettingsPage() {
                         placeholder={t('settings.descriptionLabel')}
                         value={draft.description}
                         onChange={event => updateCategoryDraft(category.id, { description: event.target.value })}
+                        onBlur={() => saveCategoryDraft(category.id)}
+                      />
+                      <input
+                        className="categoryTile__depreciation"
+                        type="number"
+                        min={1}
+                        max={1200}
+                        aria-label={t('settings.depreciationLabel')}
+                        title={t('settings.depreciationHint')}
+                        placeholder={t('settings.depreciationPlaceholder')}
+                        value={draft.depreciationMonths}
+                        onChange={event => updateCategoryDraft(category.id, { depreciationMonths: event.target.value })}
                         onBlur={() => saveCategoryDraft(category.id)}
                       />
                       <button type="button" className="iconButton" aria-label={t('settings.deleteCategoryAria', { name: category.name })} onClick={() => setDeleteTarget({ kind: 'category', item: category })}><Trash2 size={16} /></button>

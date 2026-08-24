@@ -14,6 +14,20 @@ public static class TenebitEndpoints
         api.RequireAuthorization();
         api.AddEndpointFilter<ValidationEndpointFilter>();
 
+        // A platform-admin token carries no organization_id claim, which would otherwise make every
+        // tenant-scoped EF query filter bypass and return cross-organization data (see
+        // TenebitDbContext.ConfigureTenantQueryFilter). Block it here explicitly rather than relying on
+        // that as the only safeguard - admin tokens are only ever meant to reach /api/admin.
+        api.AddEndpointFilter(async (context, next) =>
+        {
+            if (context.HttpContext.User.HasClaim(PlatformAdminClaims.ScopeClaimType, PlatformAdminClaims.ScopeValue))
+            {
+                return Results.Forbid();
+            }
+
+            return await next(context);
+        });
+
         api.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Tenebit" }))
             .AllowAnonymous()
             .WithName("Health");
@@ -41,6 +55,12 @@ public static class TenebitEndpoints
         api.MapGet("/health/security-metrics", GetSecurityMetrics)
             .RequireAuthorization(policy => policy.RequireRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Auditor))
             .WithName("SecurityMetrics");
+
+        // Quick search for the Ctrl+K palette. Authorization is enforced inside GlobalSearchService by
+        // reusing each module's own service, so no extra role check belongs here.
+        api.MapGet("/search", async (string? q, Tenebit.Application.Search.GlobalSearchService search, CancellationToken cancellationToken) =>
+                Results.Ok(await search.SearchAsync(q, cancellationToken)))
+            .WithTags("Search");
 
         api.MapAuthEndpoints();
         api.MapExternalAuthEndpoints();

@@ -1,0 +1,112 @@
+/* Styles for the platform admin panel (/admin routes).
+   Kept out of styles/index.css on purpose: the panel has its own sidebar layout and shares no chrome
+   with the tenant app, and importing it from AdminShell means it ships in the admin chunk rather than
+   in the bundle every customer downloads. Colours come from the same theme variables, so the panel
+   follows the product's look automatically. */
+
+.adminShell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; background: var(--bg); }
+.adminShell__side { display: flex; flex-direction: column; gap: 18px; padding: 20px 14px; border-right: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; height: 100vh; }
+.adminShell__brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.02em; padding: 4px 8px; }
+.adminShell__nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.adminShell__link { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius); color: var(--muted); text-decoration: none; font-size: 14px; }
+.adminShell__link:hover { background: var(--surface-soft); color: var(--text); }
+.adminShell__link--active { background: var(--brand-soft); color: var(--text); font-weight: 600; }
+.adminShell__logout { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 14px; }
+.adminShell__logout:hover { border-color: var(--border-strong); color: var(--text); }
+.adminShell__main { padding: 26px 28px 60px; min-width: 0; }
+
+.adminPageHeader { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+.adminPageHeader h1 { margin: 0; font-size: clamp(24px, 2.4vw, 32px); letter-spacing: -0.03em; }
+.adminPageHeader p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; line-height: 1.55; }
+.adminPageHeader__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.adminStats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.adminStats--compact { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.adminStat { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.adminStat--warn { border-color: var(--danger); }
+.adminStat__icon { display: inline-flex; color: var(--muted); }
+.adminStat__label { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.adminStat__value { display: block; font-size: 24px; letter-spacing: -0.03em; }
+.adminStat__hint { display: block; font-size: 12px; color: var(--muted); }
+
+.adminCharts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-bottom: 20px; }
+.adminSplit { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.adminSection { margin-top: 22px; }
+.adminCardTitle { margin: 0 0 10px; font-size: 16px; letter-spacing: -0.02em; }
+
+.adminChart { margin: 0; }
+.adminChart__caption { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+.adminChart__caption strong { font-size: 20px; color: var(--text); letter-spacing: -0.02em; }
+/* The SVG keeps its 720x190 viewBox aspect ratio, so in a full-width card it would scale to ~330px
+   tall and dominate the page. Capping the height (and centring what is left) keeps it a chart rather
+   than a poster, without distorting the strokes or text that preserveAspectRatio="none" would. */
+.adminChart__svg { width: 100%; max-height: 240px; height: auto; display: block; margin: 0 auto; }
+.adminChart__axis { font-size: 10px; fill: var(--muted); }
+.adminChart__hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); min-height: 1.2em; }
+
+.adminBars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.adminBars li > div { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.adminBars__track { display: block; height: 6px; background: var(--surface-strong); border-radius: 999px; overflow: hidden; }
+.adminBars__track i { display: block; height: 100%; background: var(--brand); }
+
+.adminList { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.adminList li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; flex-wrap: wrap; }
+
+.adminToolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.adminSearch { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 240px; color: var(--muted); }
+.adminSearch .input { flex: 1; }
+.adminRange { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.adminRange__button { padding: 7px 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; }
+.adminRange__button + .adminRange__button { border-left: 1px solid var(--border); }
+.adminRange__button--active { background: var(--brand-soft); color: var(--text); font-weight: 600; }
+
+.adminDateRange { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adminDateRange__field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.adminDateRange__label { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+.adminDateRange__input { padding: 6px 8px; font-size: 13px; width: auto; }
+
+/* Wide tables scroll inside their own container so the page never scrolls sideways. */
+.adminTableCard { padding: 0; overflow-x: auto; }
+.adminTable { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.adminTable th, .adminTable td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+.adminTable th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.adminTable tbody tr:last-child td { border-bottom: 0; }
+.adminTable__row--muted td { opacity: .58; }
+.adminTable__actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.adminTable__agent { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.adminTag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; background: var(--surface-strong); color: var(--muted); white-space: nowrap; }
+.adminTag--danger { background: var(--accent-soft); color: var(--danger); }
+.adminTag--ok { background: rgba(4, 120, 87, .12); color: var(--success); }
+.adminBlock { display: inline-block; margin-top: 4px; }
+.adminMuted { color: var(--muted); font-size: 13px; }
+.adminBack { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; font-size: 14px; }
+.adminPager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+
+.adminNotice { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-soft); font-size: 14px; margin-bottom: 18px; }
+.adminNotice--danger { border-color: var(--danger); color: var(--danger); background: var(--accent-soft); }
+
+.adminDialog { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+.adminDialog__panel { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 22px; width: min(460px, 100%); box-shadow: var(--shadow); }
+.adminDialog__head { display: flex; align-items: center; gap: 10px; color: var(--danger); }
+.adminDialog__head h2 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+.adminDialog__text { color: var(--muted); line-height: 1.55; font-size: 14px; }
+.adminDialog__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.adminLoginShell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
+.adminLoginCard { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow); }
+.adminLoginCard h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+.adminLoginCard p { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+
+/* The shared .formGrid is a two-column layout, which pushes the submit button up beside the last
+   field. Both admin forms are short vertical stacks, so they override it to a single column. */
+.adminLoginCard .formGrid,
+.adminDialog__panel .formGrid { grid-template-columns: 1fr; }
+.adminDialog__panel .formGrid { margin-top: 16px; }
+
+@media (max-width: 860px) {
+  .adminShell { grid-template-columns: 1fr; }
+  .adminShell__side { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); }
+  .adminShell__nav { flex-direction: row; flex-wrap: wrap; }
+  .adminShell__main { padding: 18px 16px 40px; }
+}
