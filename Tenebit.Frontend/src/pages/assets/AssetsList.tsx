@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, Columns3, Plus, X } from 'lucide-react';
+import { useState } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -9,7 +10,6 @@ import { useI18n } from '../../i18n/I18nProvider';
 import type { Asset, AssetCategory } from '../../types/domain';
 import { CategoryIcon } from '../../utils/categoryIcons';
 import { formatDate, formatMoney } from '../../utils/format';
-import { useState } from 'react';
 import type { AssetSortKey } from './useAssetFilters';
 import { ASSET_COLUMNS, useAssetColumns } from './useAssetColumns';
 
@@ -36,6 +36,24 @@ interface AssetsListProps {
   onPageChange(page: number): void;
 }
 
+const SORT_OPTIONS: { key: AssetSortKey; labelKey: string }[] = [
+  { key: 'name', labelKey: 'assets.colName' },
+  { key: 'assetTag', labelKey: 'assets.colTag' },
+  { key: 'status', labelKey: 'assets.statusLabel' },
+  { key: 'person', labelKey: 'assets.colPerson' },
+  { key: 'location', labelKey: 'assets.colLocation' },
+  { key: 'value', labelKey: 'assets.colValue' },
+  { key: 'warranty', labelKey: 'assets.colWarranty' },
+];
+
+/**
+ * Assets are shown as one tile per record, stacked vertically, and every tile is exactly one line tall.
+ *
+ * This is a browse surface: you scan it to find something, then click through for the detail panel.
+ * Anything that would make a tile grow - wrapping text, a stacked sub-label, a responsive card layout -
+ * is deliberately prevented, because the moment records take two lines the list stops being scannable.
+ * Fields that do not fit are dropped via the column picker, never wrapped onto another line.
+ */
 export function AssetsList(props: AssetsListProps) {
   const { t, tPlural } = useI18n();
   const { visible, toggle, reset } = useAssetColumns();
@@ -84,91 +102,116 @@ export function AssetsList(props: AssetsListProps) {
         />
       ) : (
         <>
-          <div className="tableWrap">
-            <table className="dense-table dense-table--oneLine">
-              <thead>
-                <tr>
-                  <th style={{ width: '32px' }}><input type="checkbox" checked={props.allOnPageSelected} onChange={props.onToggleSelectAll} onClick={event => event.stopPropagation()} aria-label={t('assets.bulkSelectAll')} /></th>
-                  <th style={{ width: '40px' }}></th>
-                  <SortableTh sortKey="name" sort={props.sort} onToggle={props.onToggleSort}>{t('assets.colName')}</SortableTh>
-                  {visible.category ? <th>{t('assets.colCategory')}</th> : null}
-                  {visible.assetTag ? <SortableTh sortKey="assetTag" sort={props.sort} onToggle={props.onToggleSort}>{t('assets.colTag')}</SortableTh> : null}
-                  {visible.status ? <SortableTh sortKey="status" sort={props.sort} onToggle={props.onToggleSort}>{t('assets.statusLabel')}</SortableTh> : null}
-                  {visible.person ? <SortableTh sortKey="person" sort={props.sort} onToggle={props.onToggleSort}>{t('assets.colPerson')}</SortableTh> : null}
-                  {visible.location ? <SortableTh sortKey="location" sort={props.sort} onToggle={props.onToggleSort}>{t('assets.colLocation')}</SortableTh> : null}
-                  {visible.value ? <SortableTh sortKey="value" sort={props.sort} onToggle={props.onToggleSort} align="right">{t('assets.colValue')}</SortableTh> : null}
-                  {visible.warranty ? <SortableTh sortKey="warranty" sort={props.sort} onToggle={props.onToggleSort}>{t('assets.colWarranty')}</SortableTh> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {props.rows.map(asset => {
-                  const category = props.categories.find(item => item.id === asset.categoryId);
-                  const statusSetting = props.statusSettingByKey.get(asset.status);
-                  return (
-                    <tr
-                      key={asset.id}
-                      tabIndex={0}
-                      onClick={() => props.onSelect(asset)}
-                      onKeyDown={event => {
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); props.onSelect(asset); }
-                      }}
-                    >
-                      <td onClick={event => event.stopPropagation()}>
-                        <input type="checkbox" checked={props.selectedIds.has(asset.id)} onChange={() => props.onToggleSelected(asset.id)} aria-label={t('assets.bulkSelectOne', { name: asset.name })} />
-                      </td>
-                      <td className="cell-icon"><div className="table-icon"><CategoryIcon icon={category?.icon} size={16} /></div></td>
-                      <td data-label={t('assets.colName')} title={asset.name}><strong>{asset.name}</strong></td>
-                      {visible.category ? <td data-label={t('assets.colCategory')} title={asset.categoryName ?? undefined}>{asset.categoryName ?? '-'}</td> : null}
-                      {visible.assetTag ? <td data-label={t('assets.colTag')}>{asset.assetTag}</td> : null}
-                      {visible.status ? <td data-label={t('assets.statusLabel')}><StatusBadge status={asset.status} label={statusSetting?.label} color={statusSetting?.color} backgroundColor={statusSetting?.backgroundColor} /></td> : null}
-                      {visible.person ? (
-                      <td data-label={t('assets.colPerson')} onClick={event => event.stopPropagation()}>
+          {/* Sorting lives here because there is no header row to click on any more. */}
+          <div className="tileToolbar">
+            <label className="tileToolbar__all">
+              <input
+                type="checkbox"
+                checked={props.allOnPageSelected}
+                onChange={props.onToggleSelectAll}
+                aria-label={t('assets.bulkSelectAll')}
+              />
+              <span>{t('assets.bulkSelectAll')}</span>
+            </label>
+            <div className="tileToolbar__sort">
+              <span className="tileToolbar__sortLabel">{t('assets.sortBy')}</span>
+              {SORT_OPTIONS.map(option => {
+                const active = props.sort?.key === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={active ? 'sortChip sortChip--active' : 'sortChip'}
+                    onClick={() => props.onToggleSort(option.key)}
+                  >
+                    {t(option.labelKey)}
+                    {active ? (props.sort!.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <ul className="assetTiles">
+            {props.rows.map(asset => {
+              const category = props.categories.find(item => item.id === asset.categoryId);
+              const statusSetting = props.statusSettingByKey.get(asset.status);
+              return (
+                <li key={asset.id}>
+                  <div
+                    className={props.selectedIds.has(asset.id) ? 'assetTile assetTile--selected' : 'assetTile'}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => props.onSelect(asset)}
+                    onKeyDown={event => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); props.onSelect(asset); }
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      className="assetTile__check"
+                      checked={props.selectedIds.has(asset.id)}
+                      onChange={() => props.onToggleSelected(asset.id)}
+                      onClick={event => event.stopPropagation()}
+                      aria-label={t('assets.bulkSelectOne', { name: asset.name })}
+                    />
+
+                    <span className="assetTile__icon"><CategoryIcon icon={category?.icon} size={16} /></span>
+
+                    <span className="assetTile__name" title={asset.name}>{asset.name}</span>
+
+                    {visible.category ? (
+                      <span className="assetTile__field assetTile__field--category" title={asset.categoryName ?? undefined}>{asset.categoryName ?? '-'}</span>
+                    ) : null}
+
+                    {visible.assetTag ? (
+                      <span className="assetTile__field assetTile__field--mono assetTile__field--tag" title={asset.assetTag}>{asset.assetTag}</span>
+                    ) : null}
+
+                    {visible.status ? (
+                      <span className="assetTile__status">
+                        <StatusBadge status={asset.status} label={statusSetting?.label} color={statusSetting?.color} backgroundColor={statusSetting?.backgroundColor} />
+                      </span>
+                    ) : null}
+
+                    {visible.person ? (
+                      <span className="assetTile__field assetTile__field--person" onClick={event => event.stopPropagation()}>
                         {asset.assignedPersonId && asset.assignedPersonName ? (
                           <span className="personChip">
-                            <Avatar name={asset.assignedPersonName} size={22} />
-                            <span className="personChip__sep">•</span>
+                            <Avatar name={asset.assignedPersonName} size={20} />
                             <button type="button" className="inlineAction" onClick={() => props.onViewPerson(asset.assignedPersonId!)}>{asset.assignedPersonName}</button>
                           </span>
-                        ) : <span style={{ color: 'var(--muted)' }}>{t('common.unassigned')}</span>}
-                      </td>
-                      ) : null}
-                      {visible.location ? (
-                      <td data-label={t('assets.colLocation')} onClick={event => event.stopPropagation()}>
+                        ) : <span className="assetTile__muted">{t('common.unassigned')}</span>}
+                      </span>
+                    ) : null}
+
+                    {visible.location ? (
+                      <span className="assetTile__field assetTile__field--location" onClick={event => event.stopPropagation()}>
                         {asset.location ? (
-                          <button type="button" className="inlineAction" onClick={() => props.onViewLocation(asset.location!)}>{asset.location}</button>
-                        ) : <span style={{ color: 'var(--muted)' }}>-</span>}
-                      </td>
-                      ) : null}
-                      {visible.value ? <td data-label={t('assets.colValue')} style={{ textAlign: 'right' }}>{asset.purchasePrice != null ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : '-'}</td> : null}
-                      {visible.warranty ? <td data-label={t('assets.colWarranty')}>{formatDate(asset.warrantyUntil)}</td> : null}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <button type="button" className="inlineAction" title={asset.location} onClick={() => props.onViewLocation(asset.location!)}>{asset.location}</button>
+                        ) : <span className="assetTile__muted">-</span>}
+                      </span>
+                    ) : null}
+
+                    {visible.value ? (
+                      <span className="assetTile__field assetTile__field--right assetTile__field--value">
+                        {asset.purchasePrice != null ? formatMoney(asset.purchasePrice, asset.currency ?? 'PLN') : <span className="assetTile__muted">-</span>}
+                      </span>
+                    ) : null}
+
+                    {visible.warranty ? (
+                      <span className="assetTile__field assetTile__field--right assetTile__field--warranty">{formatDate(asset.warrantyUntil)}</span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
           <Pagination page={props.page} total={props.totalAssets} pageSize={props.pageSize} onPageChange={props.onPageChange} />
         </>
       )}
     </Card>
-  );
-}
-
-function SortableTh({ sortKey, sort, onToggle, children, align }: {
-  sortKey: AssetSortKey;
-  sort: { key: AssetSortKey; dir: 1 | -1 } | null;
-  onToggle(key: AssetSortKey): void;
-  children: React.ReactNode;
-  align?: 'right';
-}) {
-  const active = sort?.key === sortKey;
-  return (
-    <th style={align === 'right' ? { textAlign: 'right' } : undefined} aria-sort={active ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}>
-      <button type="button" className={active ? 'thSort thSort--active' : 'thSort'} onClick={() => onToggle(sortKey)}>
-        {children}
-        {active ? (sort.dir === 1 ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : null}
-      </button>
-    </th>
   );
 }

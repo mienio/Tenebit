@@ -851,32 +851,6 @@ button.authIcon:hover { filter: brightness(0.94); }
 .alertRule__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .alertRule__head h3 { margin: 0; font-size: 15px; }
 
-/* ---- One-line asset rows -------------------------------------------------
-   A row must never wrap to a second line: scanning a list of equipment depends on every record
-   occupying exactly one line, whatever the window width or browser zoom. Columns that do not fit are
-   reached by scrolling the table sideways, or switched off entirely with the column picker - never by
-   stacking content vertically. */
-.dense-table--oneLine td,
-.dense-table--oneLine th {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 280px;
-}
-.dense-table--oneLine td strong {
-  display: inline;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* The stacked sub-label is what made rows two lines tall; keep it out of this table for good. */
-.dense-table--oneLine td small { display: none; }
-.dense-table--oneLine .personChip { min-width: 0; }
-.dense-table--oneLine .personChip .inlineAction {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .columnPicker { position: relative; }
 .columnPicker__scrim { position: fixed; inset: 0; background: transparent; border: 0; cursor: default; z-index: 30; }
 .columnPicker__menu {
@@ -897,3 +871,107 @@ button.authIcon:hover { filter: brightness(0.94); }
 .columnPicker__row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 13px; cursor: pointer; border-radius: 3px; }
 .columnPicker__row:hover { background: var(--surface-soft); }
 .columnPicker__reset { margin-top: 6px; font-size: 12px; text-align: left; }
+
+/* ---- Asset tiles ---------------------------------------------------------
+   One tile per asset, stacked vertically, each exactly one line tall. This is a browse surface: you
+   scan it, then click a tile for the detail panel. Growing to a second line is prevented rather than
+   discouraged - the height is fixed and every field clips - because a list where records vary in
+   height cannot be scanned. Fields that do not fit are removed with the column picker, never wrapped. */
+.assetTiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+
+.assetTile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;               /* fixed: a tile can never grow */
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.assetTile:hover { border-color: var(--border-strong); background: var(--brand-soft); }
+.assetTile:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.assetTile--selected { border-color: var(--brand); background: var(--brand-soft); }
+
+.assetTile__check { flex: 0 0 auto; margin: 0; }
+.assetTile__icon { flex: 0 0 auto; display: inline-flex; color: var(--brand); }
+
+/* Name gets the space that is left; everything else is sized to content and clips. */
+.assetTile__name {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-weight: 680;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Fixed widths, not content widths: the same field must sit at the same x-position on every tile,
+   otherwise the list has no columns to follow and stops being scannable. */
+.assetTile__field {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 13px;
+}
+.assetTile__field--mono { font-family: var(--font-mono); font-size: 12px; }
+.assetTile__field--right { text-align: right; }
+.assetTile__status { flex: 0 0 108px; display: inline-flex; }
+
+/* Per-field column widths, in the order the tile renders them. */
+.assetTile__field--category { flex-basis: 120px; }
+.assetTile__field--tag { flex-basis: 120px; }
+.assetTile__field--person { flex-basis: 190px; }
+.assetTile__field--location { flex-basis: 150px; }
+.assetTile__field--value { flex-basis: 100px; }
+.assetTile__field--warranty { flex-basis: 92px; }
+.assetTile__muted { color: var(--muted); }
+
+/* Nested controls must not introduce their own line breaks or extra height. */
+.assetTile .personChip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.assetTile .personChip .inlineAction,
+.assetTile .inlineAction {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.tileToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.tileToolbar__all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.tileToolbar__sort { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tileToolbar__sortLabel { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 2px; }
+.sortChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.sortChip:hover { border-color: var(--border-strong); color: var(--text); }
+.sortChip--active { background: var(--brand-soft); border-color: var(--brand); color: var(--text); font-weight: 600; }
+
+@media (max-width: 720px) {
+  /* Still one line: the tile keeps its height and simply carries fewer fields. */
+  .assetTile { gap: 8px; padding: 0 9px; }
+  .assetTile__field { font-size: 12px; }
+}
