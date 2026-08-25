@@ -15,7 +15,7 @@ function withCatalogSizing(layout: Layout[]): Layout[] {
 // Widgets added to the default set after users could already have a saved
 // layout: backfill them once so they don't stay permanently invisible.
 // Deliberately NOT re-added if a user removes them afterwards.
-const LEGACY_BACKFILL_WIDGETS: WidgetType[] = ['metric-licenses'];
+const LEGACY_BACKFILL_WIDGETS: WidgetType[] = ['metric-licenses', 'list-maintenance'];
 
 function withLegacyBackfill(layout: Layout[]): Layout[] {
   const missing = LEGACY_BACKFILL_WIDGETS.filter(type => !layout.some(item => item.i === type));

@@ -6,6 +6,7 @@ import { activityLabel } from '../utils/labels';
 import { formatDate, formatMoney } from '../utils/format';
 import { statusColor } from '../utils/statusColors';
 import { WIDGET_CATALOG_MAP, WIDGET_ICONS, type WidgetType } from './widgetCatalog';
+import { MaintenanceWidget } from './MaintenanceWidget';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -81,6 +82,12 @@ export function DashboardWidgetContent({ type, data, editing, t }: { type: Widge
         {bars.length > 0 ? <BarChart items={bars} /> : <p className="muted">{t('dashboard.noActivity')}</p>}
       </>
     );
+  }
+
+  if (type === 'list-maintenance') {
+    // Fetches its own data: maintenance is not part of the dashboard summary payload, and giving the
+    // widget its own source keeps that endpoint unchanged for every other widget.
+    return <MaintenanceWidget editing={editing} />;
   }
 
   if (type === 'list-warranty') {

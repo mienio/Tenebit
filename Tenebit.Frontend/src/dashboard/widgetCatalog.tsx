@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, CalendarClock, CheckCircle2, ClipboardList, History, KeyRound, PackageOpen, PieChart, ShieldCheck, Users } from 'lucide-react';
+import { BarChart3, Boxes, CalendarClock, CheckCircle2, ClipboardList, History, KeyRound, PackageOpen, PieChart, ShieldCheck, Users, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Layout } from 'react-grid-layout';
 
@@ -13,6 +13,7 @@ export type WidgetType =
   | 'chart-byStatus'
   | 'chart-byCategory'
   | 'list-warranty'
+  | 'list-maintenance'
   | 'list-activity';
 
 export interface WidgetDef {
@@ -36,6 +37,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
   { type: 'chart-byStatus', titleKey: 'dashboard.byStatus', defaultSize: { w: 10, h: 5 }, minW: 6, minH: 4 },
   { type: 'chart-byCategory', titleKey: 'dashboard.byCategory', defaultSize: { w: 10, h: 5 }, minW: 6, minH: 4 },
   { type: 'list-warranty', titleKey: 'dashboard.warrantyDeadlines', defaultSize: { w: 10, h: 5 }, minW: 6, minH: 4 },
+  { type: 'list-maintenance', titleKey: 'maintenance.dueTitle', defaultSize: { w: 10, h: 5 }, minW: 6, minH: 4 },
   { type: 'list-activity', titleKey: 'dashboard.recentActivity', defaultSize: { w: 20, h: 6 }, minW: 10, minH: 4 }
 ];
 
@@ -52,6 +54,7 @@ export const WIDGET_ICONS: Record<WidgetType, ReactNode> = {
   'chart-byStatus': <PieChart size={18} />,
   'chart-byCategory': <BarChart3 size={18} />,
   'list-warranty': <CalendarClock size={18} />,
+  'list-maintenance': <Wrench size={18} />,
   'list-activity': <History size={18} />
 };
 
@@ -64,6 +67,7 @@ const DEFAULT_ENABLED: WidgetType[] = [
   'metric-openAssignments',
   'chart-byStatus',
   'chart-byCategory',
+  'list-maintenance',
   'list-activity'
 ];
 

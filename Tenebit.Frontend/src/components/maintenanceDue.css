@@ -1,0 +1,76 @@
+/* Recurring maintenance, shown as one line per schedule.
+   The bar answers "how far through the cycle" and its colour answers "should I care", so the list is
+   readable without reading any dates. */
+
+.dueRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.dueRow__text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.25;
+}
+.dueRow__text strong {
+  font-size: 13px;
+  font-weight: 640;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dueRow__text span {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dueRow__bar {
+  flex: 0 0 84px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+.dueRow__bar i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+
+.dueRow__label {
+  flex: 0 0 auto;
+  min-width: 78px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dueRow__action {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+}
+.dueRow__action:hover { border-color: var(--border-strong); color: var(--text); }
+
+/* Colour only carries urgency, never identity - the label always states it in words too, so this
+   reads the same for anyone who cannot separate the hues. */
+.dueRow--soon .dueRow__bar i { background: #b45309; }
+.dueRow--soon .dueRow__label { color: #b45309; }
+.dueRow--overdue .dueRow__bar i { background: var(--danger); }
+.dueRow--overdue .dueRow__label { color: var(--danger); font-weight: 640; }
+
+.dueList { display: grid; gap: 2px; }
+.dueList__empty { margin: 0; padding: 10px 2px; color: var(--muted); font-size: 13px; }

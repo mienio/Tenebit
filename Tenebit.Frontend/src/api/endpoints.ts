@@ -1,4 +1,5 @@
 import { apiBlob, apiRequest } from './apiClient';
+import type { MaintenanceScheduleItem } from '../components/MaintenanceDue';
 import type {
   AlertDigestSettings,
   AlertRule,
@@ -104,6 +105,13 @@ export interface GlobalSearchResponse {
 }
 
 export const api = {
+  maintenance: () => apiRequest<MaintenanceScheduleItem[]>('/api/maintenance'),
+  maintenanceDue: (days = 90) => apiRequest<MaintenanceScheduleItem[]>(`/api/maintenance/due?days=${days}`),
+  createMaintenance: (body: { assetId: string; name: string; intervalMonths: number; nextDueOn: string }) =>
+    apiRequest<MaintenanceScheduleItem>('/api/maintenance', { method: 'POST', body: JSON.stringify(body) }),
+  completeMaintenance: (id: string, body: { performedOn?: string | null; performedBy?: string | null }) =>
+    apiRequest<MaintenanceScheduleItem>(`/api/maintenance/${id}/complete`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteMaintenance: (id: string) => apiRequest<void>(`/api/maintenance/${id}`, { method: 'DELETE' }),
   search: (query: string) => apiRequest<GlobalSearchResponse>(`/api/search?q=${encodeURIComponent(query)}`),
   dashboard: () => apiRequest<DashboardSummary>('/api/dashboard'),
   dashboardComparison: (daysAgo: number) => apiRequest<DashboardComparison>(`/api/dashboard/comparison?daysAgo=${daysAgo}`),
