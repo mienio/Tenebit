@@ -1,0 +1,99 @@
+/* Maintenance inside the asset detail panel, plus the edge indicator on the asset list. */
+
+.amAdd {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.amList { list-style: none; margin: 0; padding: 0; }
+
+/* Fixed columns so the same field sits at the same place on every row, and one line each. */
+.amRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.amRow:last-child { border-bottom: 0; }
+
+.amRing { position: relative; flex: 0 0 34px; display: inline-flex; align-items: center; justify-content: center; }
+.amRing svg { display: block; }
+.amRing__track { stroke: var(--surface-strong); }
+.amRing__value { stroke: var(--muted); }
+.amRing__text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+.amRing__done {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--success);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.amName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 640; }
+.amEvery { flex: 0 0 90px; color: var(--muted); font-size: 12px; }
+.amDue { flex: 0 0 118px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.amActions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+
+.amRow--soon .amRing__value { stroke: #b45309; }
+.amRow--soon .amRing__text, .amRow--soon .amDue { color: #b45309; }
+.amRow--overdue .amRing__value { stroke: var(--text); }
+.amRow--overdue .amRing__text, .amRow--overdue .amDue { color: var(--text); font-weight: 640; }
+.amRow--done .amDue { color: var(--success); }
+
+.amBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+}
+.amBtn:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+.amBtn:disabled { opacity: .5; cursor: default; }
+.amBtn--icon { padding: 4px 6px; }
+.amBtn--danger { border-color: var(--danger); color: var(--danger); }
+
+/* ---- Edge indicator on the asset tile ------------------------------------
+   A strip on the tile's right edge, not a column: it costs no horizontal space, needs no header, and
+   answers "is this one due" before you read anything. Neutral assets get nothing at all, so the mark
+   only ever appears when it means something. */
+.assetTile { position: relative; }
+.assetTile__due {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  bottom: 6px;
+  width: 4px;
+  border-radius: 999px 0 0 999px;
+}
+.assetTile__due--ok { background: var(--success); }
+.assetTile__due--soon { background: #b45309; }
+/* Overdue reads as black rather than red: it is the most serious state and must not be confused with
+   the red already used for destructive buttons elsewhere. */
+.assetTile__due--overdue { background: var(--text); }

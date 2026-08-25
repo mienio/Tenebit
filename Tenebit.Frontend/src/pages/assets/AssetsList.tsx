@@ -12,6 +12,7 @@ import { CategoryIcon } from '../../utils/categoryIcons';
 import { formatDate, formatMoney } from '../../utils/format';
 import type { AssetSortKey } from './useAssetFilters';
 import { ASSET_COLUMNS, useAssetColumns } from './useAssetColumns';
+import './assetMaintenance.css';
 
 interface AssetsListProps {
   rows: Asset[];
@@ -202,6 +203,15 @@ export function AssetsList(props: AssetsListProps) {
 
                     {visible.warranty ? (
                       <span className="assetTile__field assetTile__field--right assetTile__field--warranty">{formatDate(asset.warrantyUntil)}</span>
+                    ) : null}
+
+                    {/* Edge strip, not a column: appears only when this asset has maintenance due. */}
+                    {asset.maintenanceStatus && asset.maintenanceStatus !== 'none' ? (
+                      <span
+                        className={`assetTile__due assetTile__due--${asset.maintenanceStatus}`}
+                        title={t(`assets.maintenanceHint.${asset.maintenanceStatus}`)}
+                        aria-label={t(`assets.maintenanceHint.${asset.maintenanceStatus}`)}
+                      />
                     ) : null}
                   </div>
                 </li>

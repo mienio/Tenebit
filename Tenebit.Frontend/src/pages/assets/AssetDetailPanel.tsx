@@ -10,6 +10,7 @@ import type { ActivityLogEntry, Asset, AssetEvidence, ServiceTicket, ServiceTick
 import { CategoryIcon } from '../../utils/categoryIcons';
 import { activityLabel } from '../../utils/labels';
 import { formatDate, formatDateTime, formatMoney } from '../../utils/format';
+import { AssetMaintenanceSection } from './AssetMaintenanceSection';
 
 interface AssetDetailPanelProps {
   selected: Asset | null;
@@ -126,6 +127,8 @@ export function AssetDetailPanel(props: AssetDetailPanelProps) {
               })}
             </div>
           )}
+
+          <AssetMaintenanceSection assetId={selected.id} />
 
           <div className="formSectionTitle">{t('assets.historyTitle')}</div>
           {props.historyLoading ? <p className="muted">{t('common.loading')}</p> : !props.history?.length ? (

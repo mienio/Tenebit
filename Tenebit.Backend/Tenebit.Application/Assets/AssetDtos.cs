@@ -66,7 +66,9 @@ public sealed record AssetResponse(
     IReadOnlyDictionary<string, string> CustomFields,
     IReadOnlyList<AssetFieldDefinitionResponse> CategoryFieldDefinitions,
     Guid? TeamId,
-    string? TeamName);
+    string? TeamName,
+    /// <summary>"none" | "ok" | "soon" | "overdue" - drives the edge indicator on the asset list.</summary>
+    string MaintenanceStatus);
 
 [ValidatedRequest]
 public sealed record CreateAssetRequest(

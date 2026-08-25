@@ -29,6 +29,19 @@ public sealed class MaintenanceScheduleRepository : IMaintenanceScheduleReposito
             .OrderBy(x => x.NextDueOn)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyDictionary<Guid, DateOnly>> GetEarliestDueByAssetAsync(Guid organizationId, IReadOnlyCollection<Guid> assetIds, CancellationToken cancellationToken)
+    {
+        if (assetIds.Count == 0) return new Dictionary<Guid, DateOnly>();
+
+        var rows = await _db.MaintenanceSchedules
+            .Where(x => x.OrganizationId == organizationId && x.IsActive && assetIds.Contains(x.AssetId))
+            .GroupBy(x => x.AssetId)
+            .Select(g => new { AssetId = g.Key, Earliest = g.Min(x => x.NextDueOn) })
+            .ToListAsync(cancellationToken);
+
+        return rows.ToDictionary(x => x.AssetId, x => x.Earliest);
+    }
+
     public Task<MaintenanceSchedule?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.MaintenanceSchedules.FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.Id == id, cancellationToken);
 

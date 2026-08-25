@@ -15,6 +15,7 @@ namespace Tenebit.Application.Assets;
 public sealed class AssetService
 {
     private readonly IAssetRepository _assets;
+    private readonly IMaintenanceScheduleRepository _maintenance;
     private readonly IAssetCategoryRepository _categories;
     private readonly IPersonRepository _people;
     private readonly ITeamRepository _teams;
@@ -38,9 +39,10 @@ public sealed class AssetService
     // its own team's assigned assets by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician, TenebitRoles.Hr, TenebitRoles.LicenseManager, TenebitRoles.Finance, TenebitRoles.Auditor];
 
-    public AssetService(IAssetRepository assets, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IEmailOutboxWriter? emailOutbox = null)
+    public AssetService(IAssetRepository assets, IMaintenanceScheduleRepository maintenance, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IEmailOutboxWriter? emailOutbox = null)
     {
         _assets = assets;
+        _maintenance = maintenance;
         _categories = categories;
         _people = people;
         _teams = teams;
@@ -76,7 +78,9 @@ public sealed class AssetService
             ? await _people.ListAsync(organizationId, null, cancellationToken)
             : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
-        return Result<IReadOnlyList<AssetResponse>>.Success(assets.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList());
+        var maintenanceDue = await LoadMaintenanceDueAsync(organizationId, assets.Select(x => x.Id).ToArray(), cancellationToken);
+        var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+        return Result<IReadOnlyList<AssetResponse>>.Success(assets.Select(asset => Map(asset, categories, people, teams, _currentUser.Language, maintenanceDue, today)).ToList());
     }
 
     public async Task<Result<PagedResult<AssetResponse>>> ListPagedAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
@@ -103,7 +107,9 @@ public sealed class AssetService
         var (items, total) = scope is null
             ? await _assets.ListPagedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, cancellationToken)
             : await _assets.ListPagedScopedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, page, pageSize, scope.PersonIds, scope.TeamIds, cancellationToken);
-        return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(items.Select(asset => Map(asset, categories, people, teams, _currentUser.Language)).ToList(), total, page, pageSize));
+        var maintenanceDue = await LoadMaintenanceDueAsync(organizationId, items.Select(x => x.Id).ToArray(), cancellationToken);
+        var maintenanceToday = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+        return Result<PagedResult<AssetResponse>>.Success(new PagedResult<AssetResponse>(items.Select(asset => Map(asset, categories, people, teams, _currentUser.Language, maintenanceDue, maintenanceToday)).ToList(), total, page, pageSize));
     }
 
     public async Task<Result<AssetGroupCountsResponse>> GetGroupCountsAsync(CancellationToken cancellationToken)
@@ -141,7 +147,8 @@ public sealed class AssetService
             ? await _people.ListAsync(organizationId, null, cancellationToken)
             : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
-        return Result<AssetResponse>.Success(Map(asset, categories, people, teams, _currentUser.Language));
+        var maintenanceDue = await LoadMaintenanceDueAsync(organizationId, [asset.Id], cancellationToken);
+        return Result<AssetResponse>.Success(Map(asset, categories, people, teams, _currentUser.Language, maintenanceDue, DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime)));
     }
 
     public async Task<Result<AssetResponse>> CreateAsync(CreateAssetRequest request, CancellationToken cancellationToken)
@@ -419,7 +426,7 @@ public sealed class AssetService
         return Result<Dictionary<string, string>>.Success(values);
     }
 
-    private static AssetResponse Map(Asset asset, IReadOnlyList<AssetCategory> categories, IReadOnlyList<Person> people, IReadOnlyList<Team> teams, string language)
+    private static AssetResponse Map(Asset asset, IReadOnlyList<AssetCategory> categories, IReadOnlyList<Person> people, IReadOnlyList<Team> teams, string language, IReadOnlyDictionary<Guid, DateOnly>? maintenanceDue = null, DateOnly? today = null)
     {
         var category = categories.FirstOrDefault(x => x.Id == asset.CategoryId);
         var categoryName = category is null ? null : StarterAssetCategoryTranslations.TranslateName(category.IsSystem, language, category.Name);
@@ -431,7 +438,35 @@ public sealed class AssetService
             .OrderBy(x => x.SortOrder)
             .Select(x => new AssetFieldDefinitionResponse(x.Id, x.Key, x.Label, x.FieldType, x.OptionList, x.Required))
             .ToList() ?? [];
-        return new AssetResponse(asset.Id, asset.Name, asset.AssetTag, asset.SerialNumber, asset.CategoryId, categoryName, asset.Status, asset.AssignedPersonId, assigned?.FullName, asset.Location, asset.Manufacturer, asset.Model, asset.PurchasePrice, asset.Currency, asset.PurchaseDate, asset.WarrantyUntil, asset.QrCodePayload, asset.UpdatedAt, customFields, fieldDefinitions, asset.TeamId, team?.Name);
+        return new AssetResponse(asset.Id, asset.Name, asset.AssetTag, asset.SerialNumber, asset.CategoryId, categoryName, asset.Status, asset.AssignedPersonId, assigned?.FullName, asset.Location, asset.Manufacturer, asset.Model, asset.PurchasePrice, asset.Currency, asset.PurchaseDate, asset.WarrantyUntil, asset.QrCodePayload, asset.UpdatedAt, customFields, fieldDefinitions, asset.TeamId, team?.Name, MaintenanceStatusOf(asset.Id, maintenanceDue, today));
+    }
+
+    /// <summary>Best-effort: a maintenance lookup failure must never take down the asset list itself.</summary>
+    private async Task<IReadOnlyDictionary<Guid, DateOnly>?> LoadMaintenanceDueAsync(Guid organizationId, IReadOnlyCollection<Guid> assetIds, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _maintenance.GetEarliestDueByAssetAsync(organizationId, assetIds, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się pobrać terminów przeglądów dla listy aktywów.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Buckets the earliest upcoming maintenance into what the edge indicator needs. Thresholds match
+    /// the maintenance list so the same asset never looks urgent in one place and calm in the other.
+    /// </summary>
+    private static string MaintenanceStatusOf(Guid assetId, IReadOnlyDictionary<Guid, DateOnly>? due, DateOnly? today)
+    {
+        if (due is null || today is not { } reference || !due.TryGetValue(assetId, out var nextDue)) return "none";
+
+        var daysRemaining = nextDue.DayNumber - reference.DayNumber;
+        if (daysRemaining < 0) return "overdue";
+        if (daysRemaining <= 14) return "soon";
+        return "ok";
     }
 
     private const string SensitiveMask = "••••••••";

@@ -21,6 +21,7 @@ public class AssetServiceTests
 
         var service = new AssetService(
             assets,
+            new InMemoryMaintenanceScheduleRepository(),
             categories,
             people,
             teams,
@@ -51,6 +52,7 @@ public class AssetServiceTests
 
         var service = new AssetService(
             assets,
+            new InMemoryMaintenanceScheduleRepository(),
             categories,
             people,
             teams,
