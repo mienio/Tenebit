@@ -1,51 +1,39 @@
-/* Recurring maintenance, shown as one line per schedule.
-   The bar answers "how far through the cycle" and its colour answers "should I care", so the list is
-   readable without reading any dates. */
+/* Recurring maintenance, one schedule per line.
+
+   Laid out as ring - label - value with no flexible gap in the middle. The earlier bar version needed
+   a fixed track between the text and the value, which left a dead strip across every row and made the
+   list look ragged; a ring is one compact glyph that sits in the text flow instead. */
 
 .dueRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 40px;
-  padding: 0 2px;
+  gap: 10px;
+  height: 44px;
+  padding: 0 4px;
   white-space: nowrap;
   overflow: hidden;
 }
 
+.dueRing { flex: 0 0 auto; display: block; }
+.dueRing__track { stroke: var(--surface-strong); }
+.dueRing__value { stroke: var(--brand); transition: stroke-dasharray .2s; }
+
+/* Text takes the remaining width and clips, so the value column never moves between rows. */
 .dueRow__text {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
   flex: 1 1 auto;
   min-width: 0;
-  line-height: 1.25;
-}
-.dueRow__text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
-  font-weight: 640;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.2;
 }
-.dueRow__text span {
-  font-size: 11.5px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.dueRow__text strong { font-weight: 640; }
+.dueRow__sep { color: var(--border-strong); margin: 0 5px; }
+.dueRow__asset { color: var(--muted); }
 
-.dueRow__bar {
-  flex: 0 0 84px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--surface-strong);
-  overflow: hidden;
-}
-.dueRow__bar i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
-
+/* Fixed width and tabular figures: the times line up vertically instead of jittering with digit count. */
 .dueRow__label {
-  flex: 0 0 auto;
-  min-width: 78px;
+  flex: 0 0 116px;
   text-align: right;
   font-size: 12.5px;
   color: var(--muted);
@@ -54,7 +42,7 @@
 
 .dueRow__action {
   flex: 0 0 auto;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: transparent;
@@ -65,12 +53,18 @@
 }
 .dueRow__action:hover { border-color: var(--border-strong); color: var(--text); }
 
-/* Colour only carries urgency, never identity - the label always states it in words too, so this
-   reads the same for anyone who cannot separate the hues. */
-.dueRow--soon .dueRow__bar i { background: #b45309; }
+/* Colour only reinforces urgency - the label always states it in words, so this reads the same for
+   anyone who cannot separate the hues. */
+.dueRow--soon .dueRing__value { stroke: #b45309; }
 .dueRow--soon .dueRow__label { color: #b45309; }
-.dueRow--overdue .dueRow__bar i { background: var(--danger); }
+.dueRow--overdue .dueRing__value { stroke: var(--danger); }
 .dueRow--overdue .dueRow__label { color: var(--danger); font-weight: 640; }
 
-.dueList { display: grid; gap: 2px; }
-.dueList__empty { margin: 0; padding: 10px 2px; color: var(--muted); font-size: 13px; }
+.dueList { display: grid; gap: 0; }
+.dueList .dueRow + .dueRow { border-top: 1px solid var(--border); }
+.dueList__empty { margin: 0; padding: 12px 4px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .dueRow__label { flex-basis: 96px; }
+  .dueRow__action { display: none; }
+}
