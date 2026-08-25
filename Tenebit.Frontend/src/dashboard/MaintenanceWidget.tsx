@@ -19,7 +19,7 @@ export function MaintenanceWidget({ editing }: { editing: boolean }) {
   useEffect(() => {
     if (editing) return;
     let cancelled = false;
-    api.maintenanceDue(90)
+    api.maintenanceDue(365)
       .then(result => { if (!cancelled) setItems(result); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
@@ -28,7 +28,7 @@ export function MaintenanceWidget({ editing }: { editing: boolean }) {
   async function complete(item: MaintenanceScheduleItem) {
     try {
       await api.completeMaintenance(item.id, {});
-      const refreshed = await api.maintenanceDue(90);
+      const refreshed = await api.maintenanceDue(365);
       setItems(refreshed);
     } catch {
       setError(true);

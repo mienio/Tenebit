@@ -1,26 +1,47 @@
 /* Recurring maintenance, one schedule per line.
 
-   Laid out as ring - label - value with no flexible gap in the middle. The earlier bar version needed
-   a fixed track between the text and the value, which left a dead strip across every row and made the
-   list look ragged; a ring is one compact glyph that sits in the text flow instead. */
+   The remaining time lives inside the ring rather than in its own column. Keeping them apart meant the
+   number and the progress that produced it sat on opposite sides of the row with a dead gap between,
+   which is what made the list read as two disconnected halves. */
 
 .dueRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 44px;
+  gap: 12px;
+  height: 52px;
   padding: 0 4px;
   white-space: nowrap;
   overflow: hidden;
 }
 
-.dueRing { flex: 0 0 auto; display: block; }
+.dueRing {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.dueRing svg { display: block; }
 .dueRing__track { stroke: var(--surface-strong); }
-.dueRing__value { stroke: var(--brand); transition: stroke-dasharray .2s; }
+.dueRing__value { stroke: var(--muted); transition: stroke-dasharray .2s; }
 
-/* Text takes the remaining width and clips, so the value column never moves between rows. */
+/* Centred over the ring, so the figure and its arc are one object. */
+.dueRing__text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 680;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Shrinks but never grows: stretching it is what pushed everything else to the far edge. */
 .dueRow__text {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -30,18 +51,20 @@
 .dueRow__text strong { font-weight: 640; }
 .dueRow__sep { color: var(--border-strong); margin: 0 5px; }
 .dueRow__asset { color: var(--muted); }
-
-/* Fixed width and tabular figures: the times line up vertically instead of jittering with digit count. */
-.dueRow__label {
-  flex: 0 0 116px;
-  text-align: right;
-  font-size: 12.5px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.dueRow__flag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 640;
 }
 
+/* Trailing space collects after the action, so the row reads left to right and simply stops. */
 .dueRow__action {
   flex: 0 0 auto;
+  margin-right: auto;
   padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -53,18 +76,18 @@
 }
 .dueRow__action:hover { border-color: var(--border-strong); color: var(--text); }
 
-/* Colour only reinforces urgency - the label always states it in words, so this reads the same for
-   anyone who cannot separate the hues. */
+/* Colour only reinforces urgency; overdue rows also carry a word, so this reads the same for anyone
+   who cannot separate the hues. Anything comfortably ahead stays deliberately neutral - if every row
+   is coloured, colour has stopped saying anything. */
 .dueRow--soon .dueRing__value { stroke: #b45309; }
-.dueRow--soon .dueRow__label { color: #b45309; }
+.dueRow--soon .dueRing__text { color: #b45309; }
 .dueRow--overdue .dueRing__value { stroke: var(--danger); }
-.dueRow--overdue .dueRow__label { color: var(--danger); font-weight: 640; }
+.dueRow--overdue .dueRing__text { color: var(--danger); }
 
 .dueList { display: grid; gap: 0; }
 .dueList .dueRow + .dueRow { border-top: 1px solid var(--border); }
 .dueList__empty { margin: 0; padding: 12px 4px; color: var(--muted); font-size: 13px; }
 
 @media (max-width: 560px) {
-  .dueRow__label { flex-basis: 96px; }
   .dueRow__action { display: none; }
 }

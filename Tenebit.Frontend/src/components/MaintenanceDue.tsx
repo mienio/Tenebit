@@ -24,12 +24,7 @@ export function urgencyOf(daysRemaining: number): Urgency {
   return 'ok';
 }
 
-/**
- * Turns a day count into the shortest phrase that still answers "do I need to act?".
- *
- * Deliberately coarse: past a month nobody plans in days, so it rounds to months and stops. Showing
- * "in 87 days" forces the reader to do arithmetic to learn something they only needed roughly.
- */
+/** Full phrase, used for the tooltip and for screen readers. */
 export function useDueLabel() {
   const { t } = useI18n();
 
@@ -41,80 +36,67 @@ export function useDueLabel() {
     if (daysRemaining === 0) return t('maintenance.today');
     if (daysRemaining === 1) return t('maintenance.tomorrow');
     if (daysRemaining < 31) return t('maintenance.inDays', { days: String(daysRemaining) });
-
-    const months = Math.round(daysRemaining / 30);
-    return t('maintenance.inMonths', { months: String(months) });
+    return t('maintenance.inMonths', { months: String(Math.round(daysRemaining / 30)) });
   };
 }
 
-const RING_SIZE = 30;
+/**
+ * The two or three characters that go inside the ring: "9d", "8m", "0d".
+ *
+ * Kept this short on purpose - the number lives inside the ring rather than in its own column, so the
+ * remaining time and the progress that produced it read as one object instead of two things sitting
+ * apart on opposite sides of the row.
+ */
+function ringValue(daysRemaining: number): string {
+  const magnitude = Math.abs(daysRemaining);
+  if (magnitude < 31) return `${magnitude}d`;
+  return `${Math.round(magnitude / 30)}m`;
+}
+
+const RING_SIZE = 40;
 const RING_STROKE = 3;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 /**
- * Cycle progress as a ring rather than a bar.
+ * One schedule as a single compact line: a ring holding the remaining time, then what it is.
  *
- * A bar needs a fixed track width, which left a dead gap between the label and the value and made
- * every row look ragged. A ring is a single compact glyph that sits in the text flow, so the row can
- * be laid out as icon - label - value with nothing floating in between.
- */
-function ProgressRing({ progress, urgency }: { progress: number; urgency: Urgency }) {
-  const clamped = Math.max(0, Math.min(progress, 100));
-  // Drawn from 12 o'clock clockwise: rotating the whole SVG is simpler than recomputing the arc.
-  const filled = (clamped / 100) * RING_CIRCUMFERENCE;
-
-  return (
-    <svg
-      className={`dueRing dueRing--${urgency}`}
-      width={RING_SIZE}
-      height={RING_SIZE}
-      viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
-      aria-hidden="true"
-    >
-      <circle
-        cx={RING_SIZE / 2}
-        cy={RING_SIZE / 2}
-        r={RING_RADIUS}
-        fill="none"
-        className="dueRing__track"
-        strokeWidth={RING_STROKE}
-      />
-      <circle
-        cx={RING_SIZE / 2}
-        cy={RING_SIZE / 2}
-        r={RING_RADIUS}
-        fill="none"
-        className="dueRing__value"
-        strokeWidth={RING_STROKE}
-        strokeLinecap="round"
-        strokeDasharray={`${filled} ${RING_CIRCUMFERENCE - filled}`}
-        transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-      />
-    </svg>
-  );
-}
-
-/**
- * One schedule as a single compact line: ring, what it is, and the time left. Every element has a
- * fixed size so the same thing lands in the same place on every row.
+ * Everything sits flush to the left in reading order. An earlier version stretched the label so the
+ * time landed against the right edge, which left a dead gap across the middle of every row.
  */
 export function MaintenanceDueRow({ item, onComplete }: { item: MaintenanceScheduleItem; onComplete?: (item: MaintenanceScheduleItem) => void }) {
   const { t } = useI18n();
   const dueLabel = useDueLabel();
   const urgency = urgencyOf(item.daysRemaining);
+  const clamped = Math.max(0, Math.min(item.cycleProgress, 100));
+  const filled = (clamped / 100) * RING_CIRCUMFERENCE;
 
   return (
-    <div className={`dueRow dueRow--${urgency}`} title={t('maintenance.nextDue', { date: item.nextDueOn })}>
-      <ProgressRing progress={item.cycleProgress} urgency={urgency} />
+    <div className={`dueRow dueRow--${urgency}`} title={`${item.name} — ${dueLabel(item.daysRemaining)}`}>
+      <span className="dueRing" aria-label={dueLabel(item.daysRemaining)}>
+        <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`} aria-hidden="true">
+          <circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_RADIUS} fill="none" className="dueRing__track" strokeWidth={RING_STROKE} />
+          <circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            fill="none"
+            className="dueRing__value"
+            strokeWidth={RING_STROKE}
+            strokeLinecap="round"
+            strokeDasharray={`${filled} ${RING_CIRCUMFERENCE - filled}`}
+            transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          />
+        </svg>
+        <span className="dueRing__text" aria-hidden="true">{ringValue(item.daysRemaining)}</span>
+      </span>
 
       <span className="dueRow__text">
         <strong>{item.name}</strong>
         <span className="dueRow__sep">·</span>
         <span className="dueRow__asset">{item.assetName}</span>
+        {urgency === 'overdue' ? <span className="dueRow__flag">{t('maintenance.overdueFlag')}</span> : null}
       </span>
-
-      <span className="dueRow__label">{dueLabel(item.daysRemaining)}</span>
 
       {onComplete ? (
         <button type="button" className="dueRow__action" onClick={() => onComplete(item)}>
