@@ -22,6 +22,7 @@ public sealed class AlertCheckService
     private readonly IOrganizationRepository _organizations;
     private readonly IOrganizationUserRepository _users;
     private readonly IAssetRepository _assets;
+    private readonly IMaintenanceScheduleRepository _maintenance;
     private readonly IAssignmentRepository _assignments;
     private readonly IProcedureRepository _procedures;
     private readonly ILicenseRepository _licenses;
@@ -43,6 +44,7 @@ public sealed class AlertCheckService
         IOrganizationRepository organizations,
         IOrganizationUserRepository users,
         IAssetRepository assets,
+        IMaintenanceScheduleRepository maintenance,
         IAssignmentRepository assignments,
         IProcedureRepository procedures,
         ILicenseRepository licenses,
@@ -62,6 +64,7 @@ public sealed class AlertCheckService
         _organizations = organizations;
         _users = users;
         _assets = assets;
+        _maintenance = maintenance;
         _assignments = assignments;
         _procedures = procedures;
         _licenses = licenses;
@@ -107,6 +110,7 @@ public sealed class AlertCheckService
         var hasChanges = false;
 
         hasChanges |= await CheckWarrantyAlertsAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
+        hasChanges |= await CheckMaintenanceDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
         hasChanges |= await CheckLicenseExpiringAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
         hasChanges |= await CheckProcedureReviewDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
         hasChanges |= await CheckAssignmentReturnDueAsync(organization, rules, isQuietHours, digestItems, cancellationToken);
@@ -146,6 +150,44 @@ public sealed class AlertCheckService
         }
 
         return await EmitAsync(organization, rule, AlertType.AssetWarrantyExpiring, events, isQuietHours, digestItems, cancellationToken);
+    }
+
+    /// <summary>
+    /// Recurring maintenance falling due. Overdue schedules are reported under the widest configured
+    /// threshold so a missed inspection keeps surfacing instead of going quiet once its date passes.
+    /// </summary>
+    private async Task<bool> CheckMaintenanceDueAsync(Organization organization, IReadOnlyList<AlertRule> rules, bool isQuietHours, List<DigestItem> digestItems, CancellationToken cancellationToken)
+    {
+        var rule = FindEnabledRule(rules, AlertType.MaintenanceDue);
+        if (rule is null) return false;
+
+        var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+        var thresholds = NormalizeThresholds(rule).ToArray();
+        if (thresholds.Length == 0) return false;
+
+        var widest = thresholds.Max();
+        var schedules = await _maintenance.ListDueAsync(organization.Id, today.AddDays(widest), cancellationToken);
+        var events = new List<AlertEvent>();
+
+        foreach (var schedule in schedules)
+        {
+            var daysRemaining = schedule.NextDueOn.DayNumber - today.DayNumber;
+            // Overdue items ride the widest threshold; upcoming ones use the tightest threshold they fit.
+            var thresholdDays = daysRemaining < 0
+                ? widest
+                : thresholds.Where(t => daysRemaining <= t).DefaultIfEmpty(widest).Min();
+
+            var subject = daysRemaining < 0
+                ? $"Przegląd po terminie ({-daysRemaining} dni) - {schedule.Name}"
+                : $"Przegląd za {daysRemaining} dni - {schedule.Name}";
+            var html = daysRemaining < 0
+                ? $"<p>Przegląd <strong>{Encode(schedule.Name)}</strong> miał zostać wykonany <strong>{schedule.NextDueOn:yyyy-MM-dd}</strong> ({-daysRemaining} dni po terminie).</p>"
+                : $"<p>Przegląd <strong>{Encode(schedule.Name)}</strong> zaplanowano na <strong>{schedule.NextDueOn:yyyy-MM-dd}</strong> ({daysRemaining} dni).</p>";
+
+            events.Add(new AlertEvent(schedule.Id, thresholdDays, schedule.NextDueOn, subject, html, []));
+        }
+
+        return await EmitAsync(organization, rule, AlertType.MaintenanceDue, events, isQuietHours, digestItems, cancellationToken);
     }
 
     private async Task<bool> CheckLicenseExpiringAsync(Organization organization, IReadOnlyList<AlertRule> rules, bool isQuietHours, List<DigestItem> digestItems, CancellationToken cancellationToken)

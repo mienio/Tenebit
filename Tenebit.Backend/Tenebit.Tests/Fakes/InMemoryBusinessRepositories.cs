@@ -705,3 +705,24 @@ public sealed class FakeCurrentUser : ICurrentUser
     public string IpAddress { get; set; } = "127.0.0.1";
     public IReadOnlyCollection<string> Roles { get; set; } = ["owner"];
 }
+
+public sealed class InMemoryMaintenanceScheduleRepository : IMaintenanceScheduleRepository
+{
+    public List<MaintenanceSchedule> Items { get; } = [];
+
+    public Task<IReadOnlyList<MaintenanceSchedule>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MaintenanceSchedule>>(Items.Where(x => x.OrganizationId == organizationId).OrderBy(x => x.NextDueOn).ToList());
+
+    public Task<IReadOnlyList<MaintenanceSchedule>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MaintenanceSchedule>>(Items.Where(x => x.OrganizationId == organizationId && x.AssetId == assetId).ToList());
+
+    public Task<IReadOnlyList<MaintenanceSchedule>> ListDueAsync(Guid organizationId, DateOnly through, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MaintenanceSchedule>>(Items.Where(x => x.OrganizationId == organizationId && x.IsActive && x.NextDueOn <= through).OrderBy(x => x.NextDueOn).ToList());
+
+    public Task<MaintenanceSchedule?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));
+
+    public void Add(MaintenanceSchedule schedule) => Items.Add(schedule);
+
+    public void Remove(MaintenanceSchedule schedule) => Items.Remove(schedule);
+}

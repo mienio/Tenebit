@@ -1112,6 +1112,53 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Tenebit.Domain.Assets.MaintenanceSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("IntervalMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("LastPerformedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LastPerformedBy")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateOnly>("NextDueOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("OrganizationId", "Id");
+
+                    b.HasIndex("OrganizationId", "AssetId");
+
+                    b.HasIndex("OrganizationId", "NextDueOn");
+
+                    b.ToTable("maintenance_schedules", "tenebit");
+                });
+
             modelBuilder.Entity("Tenebit.Domain.Identity.AdminAuditLog", b =>
                 {
                     b.Property<Guid>("Id")

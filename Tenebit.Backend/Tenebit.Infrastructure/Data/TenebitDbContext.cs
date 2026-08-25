@@ -121,6 +121,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<License> Licenses => Set<License>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<AssetEvidence> AssetEvidence => Set<AssetEvidence>();
+    public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
     public DbSet<OffboardingCase> OffboardingCases => Set<OffboardingCase>();
     public DbSet<OffboardingItem> OffboardingItems => Set<OffboardingItem>();
     public DbSet<AssetAuditCampaign> AssetAuditCampaigns => Set<AssetAuditCampaign>();
@@ -136,6 +137,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureIdentity(modelBuilder);
         ConfigureAssets(modelBuilder);
         ConfigureLocations(modelBuilder);
+        ConfigureMaintenance(modelBuilder);
         ConfigurePeople(modelBuilder);
         ConfigureProcedures(modelBuilder);
         ConfigureJobProfiles(modelBuilder);
@@ -787,6 +789,26 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 .HasForeignKey(x => new { x.OrganizationId, x.AssetInspectionId })
                 .HasPrincipalKey(i => new { i.OrganizationId, i.Id })
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureMaintenance(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MaintenanceSchedule>(entity =>
+        {
+            entity.ToTable("maintenance_schedules");
+            entity.HasKey(x => x.Id);
+            entity.HasAlternateKey(x => new { x.OrganizationId, x.Id });
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.LastPerformedBy).HasMaxLength(240);
+            // Drives the "what is due soon" query on the dashboard and the alert sweep.
+            entity.HasIndex(x => new { x.OrganizationId, x.NextDueOn });
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId });
+            // Composite FK so a schedule can never point at an asset owned by another organization.
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

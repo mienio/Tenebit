@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<IAssetCategoryRepository, AssetCategoryRepository>();
         services.AddScoped<IAssetInspectionRepository, AssetInspectionRepository>();
+        services.AddScoped<IMaintenanceScheduleRepository, MaintenanceScheduleRepository>();
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IPersonRelationTypeRepository, PersonRelationTypeRepository>();

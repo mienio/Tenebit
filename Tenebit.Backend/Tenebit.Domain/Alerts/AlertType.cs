@@ -11,5 +11,6 @@ public enum AlertType
     AssetAuditNoResponse,
     ReservationAwaitingApproval,
     ReservationPickupUpcoming,
-    ReservationOverdue
+    ReservationOverdue,
+    MaintenanceDue
 }

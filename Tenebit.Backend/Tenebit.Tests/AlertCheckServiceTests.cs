@@ -58,6 +58,7 @@ public class AlertCheckServiceTests
         var campaigns = new InMemoryAssetAuditCampaignRepository();
         var participants = new InMemoryAssetAuditParticipantRepository();
         var reservations = new InMemoryEquipmentReservationRepository();
+        var maintenance = new InMemoryMaintenanceScheduleRepository();
         var emailSender = new FakeEmailSender();
         var clock = new FakeClock { UtcNow = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero) };
 
@@ -65,6 +66,7 @@ public class AlertCheckServiceTests
             organizations,
             users,
             assets,
+            maintenance,
             assignments,
             procedures,
             licenses,
@@ -532,7 +534,7 @@ public class AlertCheckServiceTests
     {
         var rules = StarterAlertRules.Create(Guid.NewGuid(), DateTimeOffset.UtcNow, "system");
 
-        Assert.Equal(10, rules.Count);
+        Assert.Equal(Enum.GetValues<AlertType>().Length, rules.Count);
         Assert.True(rules.Single(r => r.Type == AlertType.AssetWarrantyExpiring).IsEnabled);
         Assert.True(rules.Single(r => r.Type == AlertType.AssignmentReturnDue).IsEnabled);
         Assert.True(rules.Single(r => r.Type == AlertType.AssignmentNotConfirmed).IsEnabled);
@@ -544,6 +546,11 @@ public class AlertCheckServiceTests
         Assert.False(rules.Single(r => r.Type == AlertType.ReservationAwaitingApproval).IsEnabled);
         Assert.False(rules.Single(r => r.Type == AlertType.ReservationPickupUpcoming).IsEnabled);
         Assert.False(rules.Single(r => r.Type == AlertType.ReservationOverdue).IsEnabled);
+
+        // Maintenance ships enabled, unlike the other later additions: there are no pre-existing
+        // schedules for it to act on, so turning it on cannot suddenly mail anyone about historical
+        // data - it only fires once someone deliberately creates a schedule and would expect reminders.
+        Assert.True(rules.Single(r => r.Type == AlertType.MaintenanceDue).IsEnabled);
 
         Assert.Equal(new[] { 30, 7 }, rules.Single(r => r.Type == AlertType.AssetWarrantyExpiring).ThresholdDays);
     }

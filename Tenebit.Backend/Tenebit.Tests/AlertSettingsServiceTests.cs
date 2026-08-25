@@ -37,7 +37,7 @@ public class AlertSettingsServiceTests
     }
 
     [Fact]
-    public async Task ListAlertRulesAsync_ReturnsAllTenTypes()
+    public async Task ListAlertRulesAsync_ReturnsEveryAlertType()
     {
         var (service, user, _, _, _, _) = CreateService();
         user.Roles = ["owner"];
@@ -45,7 +45,9 @@ public class AlertSettingsServiceTests
         var result = await service.ListAlertRulesAsync(CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(10, result.Value!.Count);
+        // Asserted against the enum rather than a literal, so adding an alert type cannot leave a rule
+        // silently unexposed in settings.
+        Assert.Equal(Enum.GetValues<AlertType>().Length, result.Value!.Count);
     }
 
     [Fact]

@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<LocationReferenceResolver>();
         services.AddScoped<AssetCategoryService>();
         services.AddScoped<AssetInspectionService>();
+        services.AddScoped<MaintenanceService>();
         services.AddScoped<AssetReturnDispositionService>();
         services.AddScoped<PeopleService>();
         services.AddScoped<PersonOffboardingSchedulerService>();

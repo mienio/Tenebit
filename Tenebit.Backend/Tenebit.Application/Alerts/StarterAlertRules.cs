@@ -21,7 +21,8 @@ public static class StarterAlertRules
         (AlertType.AssetAuditNoResponse, false, [7]),
         (AlertType.ReservationAwaitingApproval, false, [1]),
         (AlertType.ReservationPickupUpcoming, false, [1]),
-        (AlertType.ReservationOverdue, false, [0])
+        (AlertType.ReservationOverdue, false, [0]),
+        (AlertType.MaintenanceDue, true, [30, 7])
     ];
 
     public static IReadOnlyList<AlertRule> Create(Guid organizationId, DateTimeOffset createdAt, string createdBy)

@@ -41,6 +41,26 @@ public static class AssetsEndpoints
 {
     public static RouteGroupBuilder MapAssetsEndpoints(this RouteGroupBuilder api)
     {
+        api.MapGet("/maintenance", async (MaintenanceService service, CancellationToken ct) =>
+                (await service.ListAsync(ct)).ToHttpResult())
+            .WithTags("Maintenance");
+
+        api.MapGet("/maintenance/due", async (int? days, MaintenanceService service, CancellationToken ct) =>
+                (await service.ListDueAsync(days ?? 90, ct)).ToHttpResult())
+            .WithTags("Maintenance");
+
+        api.MapPost("/maintenance", async (SaveMaintenanceScheduleRequest request, MaintenanceService service, CancellationToken ct) =>
+                (await service.CreateAsync(request, ct)).ToCreatedResult(response => $"/api/maintenance/{response.Id}"))
+            .WithTags("Maintenance");
+
+        api.MapPost("/maintenance/{id:guid}/complete", async (Guid id, CompleteMaintenanceRequest request, MaintenanceService service, CancellationToken ct) =>
+                (await service.CompleteAsync(id, request, ct)).ToHttpResult())
+            .WithTags("Maintenance");
+
+        api.MapDelete("/maintenance/{id:guid}", async (Guid id, MaintenanceService service, CancellationToken ct) =>
+                (await service.DeleteAsync(id, ct)).ToNoContentResult())
+            .WithTags("Maintenance");
+
         api.MapGet("/assets/fleet-value", async (AssetService service, CancellationToken cancellationToken) =>
                 (await service.GetFleetValueAsync(cancellationToken)).ToHttpResult())
             .WithTags("Assets");
