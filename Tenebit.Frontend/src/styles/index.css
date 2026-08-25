@@ -900,8 +900,11 @@ button.authIcon:hover { filter: brightness(0.94); }
 .assetTile__icon { flex: 0 0 auto; display: inline-flex; color: var(--brand); }
 
 /* Name gets the space that is left; everything else is sized to content and clips. */
+/* Fixed like every other column, not stretching. Letting the name grow pushed the remaining fields
+   to the far right and opened a dead gap across the middle of each tile. Spare width now collects at
+   the end of the row instead of being spread through it. */
 .assetTile__name {
-  flex: 1 1 160px;
+  flex: 22 1 220px;
   min-width: 0;
   font-weight: 680;
   overflow: hidden;
@@ -922,13 +925,15 @@ button.authIcon:hover { filter: brightness(0.94); }
 .assetTile__field--right { text-align: right; }
 .assetTile__status { flex: 0 0 108px; display: inline-flex; }
 
-/* Per-field column widths, in the order the tile renders them. */
-.assetTile__field--category { flex-basis: 120px; }
-.assetTile__field--tag { flex-basis: 120px; }
-.assetTile__field--person { flex-basis: 190px; }
-.assetTile__field--location { flex-basis: 150px; }
-.assetTile__field--value { flex-basis: 100px; }
-.assetTile__field--warranty { flex-basis: 92px; }
+/* Per-field column widths, in the order the tile renders them. Every column grows in proportion to its
+   own width, so spare space on a wide screen is shared across the row instead of collecting into one
+   dead gap. Columns still line up tile-to-tile because they all scale by the same factor. */
+.assetTile__field--category { flex: 12 1 120px; }
+.assetTile__field--tag { flex: 12 1 120px; }
+.assetTile__field--person { flex: 19 1 190px; }
+.assetTile__field--location { flex: 15 1 150px; }
+.assetTile__field--value { flex: 10 1 100px; }
+.assetTile__field--warranty { flex: 9 1 92px; }
 .assetTile__muted { color: var(--muted); }
 
 /* Nested controls must not introduce their own line breaks or extra height. */

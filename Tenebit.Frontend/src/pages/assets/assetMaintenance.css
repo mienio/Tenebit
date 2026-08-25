@@ -83,7 +83,7 @@
    A strip on the tile's right edge, not a column: it costs no horizontal space, needs no header, and
    answers "is this one due" before you read anything. Neutral assets get nothing at all, so the mark
    only ever appears when it means something. */
-.assetTile { position: relative; }
+.assetTile { position: relative; padding-right: 14px; }
 .assetTile__due {
   position: absolute;
   top: 6px;
