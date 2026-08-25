@@ -50,13 +50,18 @@
   justify-content: center;
 }
 
-.amName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 640; }
-.amEvery { flex: 0 0 90px; color: var(--muted); font-size: 12px; }
-.amDue { flex: 0 0 118px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Same rule as the asset tiles: every text column grows in proportion to its own width. Letting the
+   name take all the spare space stretched it across the panel and left the interval and due date
+   marooned on the right. Only the buttons stay a fixed size. */
+.amName { flex: 30 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; font-weight: 640; }
+.amEvery { flex: 12 1 90px; color: var(--muted); font-size: 12px; }
+.amDue { flex: 14 1 118px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .amActions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
 
 .amRow--soon .amRing__value { stroke: #b45309; }
 .amRow--soon .amRing__text, .amRow--soon .amDue { color: #b45309; }
+.amRow--due .amRing__value { stroke: var(--danger); }
+.amRow--due .amRing__text, .amRow--due .amDue { color: var(--danger); }
 .amRow--overdue .amRing__value { stroke: var(--text); }
 .amRow--overdue .amRing__text, .amRow--overdue .amDue { color: var(--text); font-weight: 640; }
 .amRow--done .amDue { color: var(--success); }
@@ -94,6 +99,7 @@
 }
 .assetTile__due--ok { background: var(--success); }
 .assetTile__due--soon { background: #b45309; }
+.assetTile__due--due { background: var(--danger); }
 /* Overdue reads as black rather than red: it is the most serious state and must not be confused with
    the red already used for destructive buttons elsewhere. */
 .assetTile__due--overdue { background: var(--text); }

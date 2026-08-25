@@ -16,11 +16,12 @@ export interface MaintenanceScheduleItem {
   cycleProgress: number;
 }
 
-type Urgency = 'overdue' | 'soon' | 'ok';
+type Urgency = 'overdue' | 'due' | 'soon' | 'ok';
 
 export function urgencyOf(daysRemaining: number): Urgency {
   if (daysRemaining < 0) return 'overdue';
-  if (daysRemaining <= 14) return 'soon';
+  if (daysRemaining <= 7) return 'due';
+  if (daysRemaining <= 30) return 'soon';
   return 'ok';
 }
 

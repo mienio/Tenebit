@@ -464,9 +464,10 @@ public sealed class AssetService
         if (due is null || today is not { } reference || !due.TryGetValue(assetId, out var nextDue)) return "none";
 
         var daysRemaining = nextDue.DayNumber - reference.DayNumber;
-        if (daysRemaining < 0) return "overdue";
-        if (daysRemaining <= 14) return "soon";
-        return "ok";
+        if (daysRemaining < 0) return "overdue";   // black  - the date has passed
+        if (daysRemaining <= 7) return "due";      // red    - act this week
+        if (daysRemaining <= 30) return "soon";    // orange - worth planning
+        return "ok";                               // green  - nothing to do
     }
 
     private const string SensitiveMask = "••••••••";

@@ -81,8 +81,11 @@
    is coloured, colour has stopped saying anything. */
 .dueRow--soon .dueRing__value { stroke: #b45309; }
 .dueRow--soon .dueRing__text { color: #b45309; }
-.dueRow--overdue .dueRing__value { stroke: var(--danger); }
-.dueRow--overdue .dueRing__text { color: var(--danger); }
+.dueRow--due .dueRing__value { stroke: var(--danger); }
+.dueRow--due .dueRing__text { color: var(--danger); }
+/* Black, matching the asset tile: overdue is past red, and red already means "due this week" here. */
+.dueRow--overdue .dueRing__value { stroke: var(--text); }
+.dueRow--overdue .dueRing__text { color: var(--text); }
 
 .dueList { display: grid; gap: 0; }
 .dueList .dueRow + .dueRow { border-top: 1px solid var(--border); }

@@ -124,8 +124,8 @@ export interface FleetValue {
 
 export interface Asset {
   id: string;
-  /** 'none' | 'ok' | 'soon' | 'overdue' - drives the edge strip on the asset tile. */
-  maintenanceStatus?: 'none' | 'ok' | 'soon' | 'overdue';
+  /** Drives the edge strip on the asset tile: green / orange / red / black. */
+  maintenanceStatus?: 'none' | 'ok' | 'soon' | 'due' | 'overdue';
   name: string;
   assetTag: string;
   serialNumber?: string | null;
