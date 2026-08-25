@@ -152,7 +152,7 @@ export function LicensesPage() {
         {!rows.length ? (
           <EmptyState title={t('licenses.emptyTitle')} description={t('licenses.emptyDesc')} action={<Button onClick={openCreate} icon={<Plus size={16} />}>{t('licenses.add')}</Button>} />
         ) : (
-          <div className="tableWrap tableWrap--cards">
+          <div className="tableWrap tableWrap--oneLine">
             <table className="dense-table">
               <thead>
                 <tr>

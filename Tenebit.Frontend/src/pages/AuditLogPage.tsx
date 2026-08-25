@@ -82,7 +82,7 @@ export function AuditLogPage() {
         />
       ) : (
         <Card>
-          <div className="tableWrap tableWrap--cards">
+          <div className="tableWrap tableWrap--oneLine">
             <table>
               <thead><tr><th>{t('audit.colDate')}</th><th>{t('audit.colActor')}</th><th>{t('audit.colAction')}</th><th>{t('audit.colEntity')}</th><th>{t('audit.colDetails')}</th></tr></thead>
               <tbody>

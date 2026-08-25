@@ -386,7 +386,7 @@ export function PeoplePage() {
           />
         ) : (
           <>
-            <div className="tableWrap tableWrap--cards">
+            <div className="tableWrap tableWrap--oneLine">
               <table className="dense-table">
                 <thead>
                   <tr>

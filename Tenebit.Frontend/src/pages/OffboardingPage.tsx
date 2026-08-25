@@ -204,7 +204,7 @@ export function OffboardingPage() {
         />
       ) : (
         <Card>
-          <div className="tableWrap tableWrap--cards">
+          <div className="tableWrap tableWrap--oneLine">
             <table>
               <thead>
                 <tr>

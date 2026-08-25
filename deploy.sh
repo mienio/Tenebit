@@ -212,8 +212,18 @@ echo -e "\nVerifying..."
 echo "Checking frontend files..."
 docker exec tenebit-frontend ls -la /usr/share/nginx/html/ | head -10
 
-HEALTH=$(curl -fsS "$DOMAIN/api/health" 2>/dev/null || echo "FAIL")
-FRONTEND_CHECK=$(curl -fsS "$DOMAIN/" 2>/dev/null | head -20 | grep -E "Tenebit|assets/index|DOCTYPE" || echo "")
+# Retry: the readiness poll can pass while the old frontend container is still up, so this check can
+# otherwise land in the moment nginx is being swapped and report a false FAIL for a healthy release.
+HEALTH="FAIL"
+FRONTEND_CHECK=""
+for attempt in $(seq 1 10); do
+  HEALTH=$(curl -fsS "$DOMAIN/api/health" 2>/dev/null || echo "FAIL")
+  FRONTEND_CHECK=$(curl -fsS "$DOMAIN/" 2>/dev/null | head -20 | grep -E "Tenebit|assets/index|DOCTYPE" || echo "")
+  if [[ $HEALTH == *"ok"* ]] && [[ -n "$FRONTEND_CHECK" ]]; then
+    break
+  fi
+  sleep 3
+done
 
 echo "Backend health: $HEALTH"
 echo "Frontend check: ${FRONTEND_CHECK:0:100}"

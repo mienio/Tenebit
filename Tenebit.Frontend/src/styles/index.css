@@ -1071,3 +1071,27 @@ button.authIcon:hover { filter: brightness(0.94); }
   /* The bar itself stays one line; only the label on the toggle is dropped. */
   .searchBar__toggle span:not(.searchBar__badge) { display: none; }
 }
+
+/* ---- One-line list rows --------------------------------------------------
+   Applied to every record list. A row must stay a row at any width or zoom: the card fallback that
+   used to kick in below 900px turned each record into a tall stacked panel, which makes a list
+   impossible to scan. Text that does not fit is clipped (the full value stays in the title
+   attribute); columns that do not fit are reached by scrolling the table sideways. */
+.tableWrap--oneLine { overflow-x: auto; }
+.tableWrap--oneLine table { min-width: 680px; }
+.tableWrap--oneLine td,
+.tableWrap--oneLine th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+/* The secondary label (tag, e-mail, serial) is what people search by, so it is kept - moved onto the
+   same line instead of stacked underneath, which is what made these rows two lines tall. Both halves
+   need resetting: the name is a block-level <strong> elsewhere, which is what forced the line break. */
+.tableWrap--oneLine td strong { display: inline; }
+.tableWrap--oneLine td small {
+  display: inline;
+  margin: 0 0 0 8px;
+  color: var(--muted);
+}

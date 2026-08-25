@@ -195,7 +195,7 @@ export function AssignmentsPage() {
 
       {!rows.length ? <EmptyState title={t('assignments.emptyTitle')} description={t('assignments.emptyDesc')} action={(debouncedSearch || status) ? <Button variant="secondary" onClick={() => { setSearch(''); setStatus(''); }}>{t('common.clearFilters')}</Button> : <Button onClick={() => setDrawerMode('create')} icon={<Plus size={16} />}>{t('assignments.newAssignment')}</Button>} /> : (
         <Card>
-          <div className="tableWrap tableWrap--cards"><table><thead><tr><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th><th>{t('assignments.colDueDate')}</th><th></th></tr></thead><tbody>
+          <div className="tableWrap tableWrap--oneLine"><table><thead><tr><th>{t('assignments.colProtocol')}</th><th>{t('assignments.colPerson')}</th><th>{t('assets.statusLabel')}</th><th>{t('assignments.colAssets')}</th><th>{t('assignments.colDueDate')}</th><th></th></tr></thead><tbody>
             {rows.map(item => <tr key={item.id}>
               <td data-label={t('assignments.colProtocol')}><strong>{item.protocolNumber}</strong><small>{formatDateTime(item.issuedAt)}</small></td>
               <td data-label={t('assignments.colPerson')}>{item.personId ? <button type="button" className="inlineAction" onClick={() => setViewPersonId(item.personId)}>{item.personName ?? t('assignments.unknownPerson')}</button> : (item.personName ?? t('assignments.unknownPerson'))}</td>
