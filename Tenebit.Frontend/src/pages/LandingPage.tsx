@@ -13,7 +13,8 @@ import {
   PackageCheck,
   QrCode,
   Smartphone,
-  Users
+  Users,
+  Wrench
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -22,6 +23,7 @@ import { BrandMark } from '../components/BrandMark';
 import { LocationTree } from '../components/LocationTree';
 import { PricingCards } from '../components/PricingCards';
 import { PublicFooter } from '../components/PublicFooter';
+import { MaintenanceDueRow } from '../components/MaintenanceDue';
 import { StatusBadge } from '../components/StatusBadge';
 import { useI18n } from '../i18n/I18nProvider';
 import type { Language } from '../i18n/translations';
@@ -152,12 +154,22 @@ const previewProcedureRowsByLanguage: Record<Language, { title: string; version:
   ]
 };
 
+// Mocked schedules for the preview. Chosen to show all three urgency states at once - overdue, due
+// soon and comfortably ahead - because that contrast is what makes the panel legible at a glance.
+const previewMaintenanceRows = [
+  { nameKey: 'landing.preview.maintenance.extinguisher', assetKey: 'landing.preview.maintenance.extinguisherAsset', daysRemaining: -4, cycleProgress: 100 },
+  { nameKey: 'landing.preview.maintenance.ladder', assetKey: 'landing.preview.maintenance.ladderAsset', daysRemaining: 11, cycleProgress: 94 },
+  { nameKey: 'landing.preview.maintenance.electrical', assetKey: 'landing.preview.maintenance.electricalAsset', daysRemaining: 63, cycleProgress: 65 },
+  { nameKey: 'landing.preview.maintenance.hvac', assetKey: 'landing.preview.maintenance.hvacAsset', daysRemaining: 172, cycleProgress: 42 }
+];
+
 const previewTabs = [
   { key: 'assets', icon: Boxes },
   { key: 'licenses', icon: KeyRound },
   { key: 'people', icon: Users },
   { key: 'locations', icon: MapPin },
-  { key: 'procedures', icon: ClipboardCheck }
+  { key: 'procedures', icon: ClipboardCheck },
+  { key: 'maintenance', icon: Wrench }
 ] as const;
 
 type PreviewTab = typeof previewTabs[number]['key'];
@@ -390,6 +402,30 @@ export function LandingPage() {
                 onSelect={setSelectedLocationId}
               />
             )}
+            {previewTab === 'maintenance' && (
+              <div className="dueList landing__previewDue">
+                {previewMaintenanceRows.map(row => (
+                  <MaintenanceDueRow
+                    key={row.nameKey}
+                    item={{
+                      id: row.nameKey,
+                      assetId: row.nameKey,
+                      assetName: t(row.assetKey),
+                      assetTag: null,
+                      name: t(row.nameKey),
+                      intervalMonths: 12,
+                      nextDueOn: '',
+                      lastPerformedOn: null,
+                      lastPerformedBy: null,
+                      isActive: true,
+                      daysRemaining: row.daysRemaining,
+                      cycleProgress: row.cycleProgress
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
             {previewTab === 'procedures' && (
               <table className="dense-table">
                 <thead>
