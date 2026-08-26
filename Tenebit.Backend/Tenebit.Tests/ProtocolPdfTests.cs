@@ -167,4 +167,33 @@ public class ProtocolPdfTests
     {
         Assert.True(SignatureDataUrl.Decode(input).IsFailure);
     }
+
+    // Regresja z produkcji: dekoder przepuszczal podpis, ale zadanie nigdy do niego nie docieralo.
+    // RequestObjectValidator wnioskuje limit dlugosci z NAZWY pola, a "SignatureDataUrl" zawiera "Url",
+    // wiec dostawal limit adresu (2048 znakow) i odrzucal kazdy realny rysunek z canvasu. Testowanie
+    // samego dekodera tego nie widzialo - trzeba przejsc ta sama sciezka, co endpoint.
+    [Fact]
+    public void AcceptRequest_PassesValidator_WithRealSizedSignature()
+    {
+        var png = "data:image/png;base64," + Convert.ToBase64String(new byte[40_000]);
+        Assert.True(png.Length > 2048, "podpis musi byc wiekszy niz stary limit, inaczej test nic nie sprawdza");
+
+        var request = new AcceptPublicAssignmentRequest(png, "Anna Kowalska");
+
+        Assert.Null(Application.Common.RequestObjectValidator.Validate(request));
+    }
+
+    [Fact]
+    public void AcceptRequest_StillRejects_SignatureBeyondTheCap()
+    {
+        var zaDuzy = new AcceptPublicAssignmentRequest(new string('a', 300_001), "Anna Kowalska");
+
+        Assert.NotNull(Application.Common.RequestObjectValidator.Validate(zaDuzy));
+    }
+
+    [Fact]
+    public void AcceptRequest_AllowsEmptyBody()
+    {
+        Assert.Null(Application.Common.RequestObjectValidator.Validate(new AcceptPublicAssignmentRequest(null, null)));
+    }
 }

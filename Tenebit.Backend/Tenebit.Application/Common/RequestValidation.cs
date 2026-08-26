@@ -246,6 +246,9 @@ public static class RequestObjectValidator
         if (propertyName.Equals("Code", StringComparison.OrdinalIgnoreCase) || propertyName.EndsWith("Code", StringComparison.OrdinalIgnoreCase)) return RequestLimits.Code;
         if (propertyName.EndsWith("Email", StringComparison.OrdinalIgnoreCase)) return RequestLimits.Email;
         if (propertyName is "LogoUrl" or "PrivacyNoticeUrl") return 600;
+        // Podpis to `data:image/png;base64,...`, a nie adres - regula od "Url" ponizej dalaby mu 2048
+        // znakow i odrzucala kazdy realny rysunek z canvasu.
+        if (propertyName == "SignatureDataUrl") return RequestLimits.SignatureDataUrl;
         if (propertyName.Contains("Url", StringComparison.OrdinalIgnoreCase) || propertyName.Contains("Uri", StringComparison.OrdinalIgnoreCase)) return RequestLimits.Url;
         if (propertyName.Contains("LayoutJson", StringComparison.OrdinalIgnoreCase)) return RequestLimits.Json;
 
@@ -338,6 +341,10 @@ public static class RequestLimits
     public const int Password = 128;
     public const int Code = 128;
     public const int Url = 2048;
+
+    /// <summary>Podpis odreczny jako PNG w data URL. 200 KB binarnie to ~273 KB w base64; ten sam
+    /// prog pilnuje <see cref="Assignments.SignatureDataUrl"/> i domena wydania.</summary>
+    public const int SignatureDataUrl = 300_000;
     public const int Caption = 500;
     public const int Note = 2000;
     public const int LongText = 4000;

@@ -17,7 +17,7 @@ public sealed class AssetEvidenceRepository : IAssetEvidenceRepository
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken) =>
-        await MetadataQuery(organizationId).Where(x => x.AssetId == assetId).ToListAsync(cancellationToken);
+        await MetadataQuery(organizationId, x => x.AssetId == assetId).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssignmentIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> assignmentIds, CancellationToken cancellationToken)
     {
@@ -29,7 +29,7 @@ public sealed class AssetEvidenceRepository : IAssetEvidenceRepository
     }
 
     public async Task<IReadOnlyList<AssetEvidenceMetadata>> ListMetadataByAssignmentAsync(Guid organizationId, Guid assignmentId, CancellationToken cancellationToken) =>
-        await MetadataQuery(organizationId).Where(x => x.AssignmentId == assignmentId).ToListAsync(cancellationToken);
+        await MetadataQuery(organizationId, x => x.AssignmentId == assignmentId).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AssetEvidenceRetentionCandidate>> ListRetentionCandidatesAsync(Guid organizationId, DateTimeOffset cutoff, int batchSize, CancellationToken cancellationToken) =>
         await _db.AssetEvidence.AsNoTracking()
@@ -59,8 +59,16 @@ public sealed class AssetEvidenceRepository : IAssetEvidenceRepository
     public void Add(AssetEvidence evidence) => _db.AssetEvidence.Add(evidence);
     public void Remove(AssetEvidence evidence) => _db.AssetEvidence.Remove(evidence);
 
-    private IQueryable<AssetEvidenceMetadata> MetadataQuery(Guid organizationId) =>
+    // Filtr musi trafic na encje, PRZED projekcja. Gdy `.Where(...)` szedl na juz zrzutowany
+    // AssetEvidenceMetadata, EF nie umial przetlumaczyc wyrazenia i rzucal InvalidOperationException
+    // w runtime - co wywalalo tworzenie wydania (500) i cala publiczna strone akceptacji dla
+    // pracownika. Sasiednie ListMetadataByAssignmentIdsAsync zawsze filtrowalo poprawnie i dlatego
+    // dzialalo; teraz wszystkie sciezki robia to tak samo.
+    private IQueryable<AssetEvidenceMetadata> MetadataQuery(
+        Guid organizationId,
+        System.Linq.Expressions.Expression<Func<AssetEvidence, bool>> filter) =>
         _db.AssetEvidence.AsNoTracking()
             .Where(x => x.OrganizationId == organizationId)
+            .Where(filter)
             .Select(AssetEvidenceMetadataProjection.Select);
 }
