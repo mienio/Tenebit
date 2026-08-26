@@ -49,6 +49,22 @@ if [ -z "$SRC_BACKEND" ]; then
   exit 1
 fi
 
+# Checked here, before anything on the server is touched, so a package missing its migrations stops
+# the deploy while the running system is still untouched. migrate.sql is idempotent and cumulative,
+# so a release with no schema changes ships the same file as the last one - "no migrations this time"
+# is never a reason for it to be absent. A missing file means the packaging step dropped it, and
+# deploying code against a schema it does not match is how the 2026-08-14 incident started.
+if [ ! -f "$SRC_BACKEND/migrate.sql" ]; then
+  if [ "${ALLOW_MISSING_MIGRATIONS:-0}" = "1" ]; then
+    echo "  UWAGA: brak migrate.sql, kontynuuje bo ALLOW_MISSING_MIGRATIONS=1"
+  else
+    echo "ERROR: ZIP nie zawiera migrate.sql - przerywam przed zmianami."
+    echo "       Dolacz migrate.sql do paczki backendu, albo swiadomie pomin:"
+    echo "       ALLOW_MISSING_MIGRATIONS=1 bash /root/deploy.sh"
+    exit 1
+  fi
+fi
+
 echo "  Replace..."
 rm -rf "$BACKEND"
 mkdir -p "$BACKEND"
@@ -177,16 +193,19 @@ echo "  ✓ Built"
 # Applies pending EF Core migrations before the new backend image goes live. The backend runtime
 # image has no `dotnet ef` (aspnet runtime, not sdk), so this expects an idempotent SQL script
 # (`dotnet ef migrations script --idempotent`) shipped as migrate.sql at the root of the backend
-# zip — generate and include it in every release going forward. Safe to skip if absent (older
-# release zips, or a deploy with no schema changes), but never silently continues on a real
-# failure: deploying app code against a schema it doesn't match is exactly how the "database
-# 'X' does not exist" / "relation does not exist" incident on 2026-08-14 happened.
+# zip. Its presence is verified before any change is made (see the guard after unzip), so this
+# branch runs only when the file really is there, or when the operator asked to skip it explicitly.
+# ON_ERROR_STOP means a failing statement aborts the deploy instead of leaving app code running
+# against a schema it does not match - which is how the "relation does not exist" incident on
+# 2026-08-14 started.
 if [ -f "$BACKEND/migrate.sql" ]; then
   echo -e "\n  Migracja bazy danych ($POSTGRES_DB)..."
   docker exec -i tenebit-db psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 < "$BACKEND/migrate.sql"
   echo "  ✓ Migracja zastosowana"
 else
-  echo -e "\n  Brak migrate.sql w paczce backendu — pomijam migrację (upewnij się że to zamierzone)."
+  # Only reachable with ALLOW_MISSING_MIGRATIONS=1; the guard above stops every other case.
+  echo -e "
+  UWAGA: brak migrate.sql - migracja POMINIETA na wyrazne zadanie."
 fi
 
 # === DEPLOY ===
