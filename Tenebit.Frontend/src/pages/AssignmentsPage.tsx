@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, ChevronDown, ExternalLink, Eye, FileText, Link2, PackageCheck, Plus, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api, type EvidencePhoto } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -25,9 +25,21 @@ const pageSize = 10;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
+function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function AssignmentsPage() {
   const { t, tPlural } = useI18n();
   const { celebrate } = useCelebration();
+  const [searchParams, setSearchParams] = useSearchParams();
   const people = useAsyncData(() => api.people(), []);
   const assets = useAsyncData(() => api.assets({ status: 'InStock' }), []);
   const procedures = useAsyncData(() => api.procedures(), []);
@@ -70,6 +82,17 @@ export function AssignmentsPage() {
     const timeout = window.setTimeout(() => setMessage(null), message.type === 'success' ? 3500 : 6500);
     return () => window.clearTimeout(timeout);
   }, [message]);
+
+  // Wejście z palety komend (Ctrl+K) - otwiera formularz wydania i sprząta parametr, żeby odświeżenie
+  // strony nie otwierało go po raz drugi. Ten sam wzorzec co ?addSelf=1 na stronie osób.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setDrawerMode('create');
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggle(list: string[], value: string) {
     return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
@@ -304,6 +327,17 @@ function AssignmentDetails({ assignment, onViewPerson }: { assignment: Assignmen
   const navigate = useNavigate();
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkCopyFailed, setLinkCopyFailed] = useState(false);
+  const [protocolFailed, setProtocolFailed] = useState(false);
+  async function downloadProtocol() {
+    try {
+      const blob = await api.downloadAssignmentProtocol(assignment.id);
+      saveBlob(blob, `protokol-${assignment.protocolNumber}.pdf`);
+      setProtocolFailed(false);
+    } catch {
+      setProtocolFailed(true);
+      window.setTimeout(() => setProtocolFailed(false), 4000);
+    }
+  }
   async function copyLink() {
     try {
       // Link niesie jednorazowy token (nie jest odtwarzalny z danych wydania) - trzeba go
@@ -327,6 +361,9 @@ function AssignmentDetails({ assignment, onViewPerson }: { assignment: Assignmen
         {assignment.status === 'AwaitingAcceptance' || assignment.status === 'Overdue' ? (
           <Button type="button" variant="ghost" onClick={copyLink} icon={<Link2 size={16} />}>{linkCopied ? t('assignments.linkCopied') : linkCopyFailed ? t('assignments.linkCopyFailed') : t('assignments.copyAcceptanceLink')}</Button>
         ) : <div />}
+        <Button type="button" variant="secondary" onClick={downloadProtocol} icon={<FileText size={16} />}>
+          {protocolFailed ? t('assignments.protocolFailed') : t('assignments.downloadProtocol')}
+        </Button>
       </div>
       <DetailGrid>
         <DetailItem label={t('assignments.colProtocol')} value={assignment.protocolNumber} />

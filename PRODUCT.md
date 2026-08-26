@@ -131,29 +131,17 @@ Stara metoda: Wysyłasz e-mail, czekasz, czasami ludzie nie odpowiadają.
 
 ## Plan cenowy
 
-### **Free** — Dla małych firm lub testów
+Plan wybiera wyłącznie limit aktywów. Funkcje są takie same w każdym planie — role, uprawnienia, pełna historia zdarzeń, potwierdzenia, procedury, inwentaryzacje, kody QR i eksport dostajesz również w planie darmowym. Nie ma funkcji ukrytej za wyższą ceną.
 
-- Do 10 aktywów
-- 1 użytkownik
-- Potwierdzenia odbioru i historia zdarzeń
-- Darmowy start — żadna karta kredytowa
+| Plan | Limit aktywów | Cena |
+|------|---------------|------|
+| **Free** | 10 | 0 € |
+| **Starter** | 100 | 12 €/miesiąc |
+| **Growth** | 300 | 29 €/miesiąc |
+| **Business** | 1000 | 59 €/miesiąc |
+| **Scale** | 1000+ | 99 €/miesiąc |
 
-### **Pro** — Dla większości firm
-
-- Do 1000 aktywów
-- Nieograniczeni użytkownicy
-- Role (admin, manager, viewer)
-- Audyt i pełna historia zdarzeń
-- Integracje API
-- 10 USD/miesiąc
-
-### **Enterprise** — Dla dużych organizacji
-
-- Ponad 1000 aktywów
-- Dedykowane wsparcie
-- Niestandardowe integracje
-- Wersjonowanie i SLA
-- Kontakt w celu wyceny
+Bez karty kredytowej na start, bez zobowiązania, zmiana planu w dowolnym momencie.
 
 ---
 
@@ -183,7 +171,7 @@ Pulpit pokazuje, co wymaga uwagi:
 Nie tracisz już czasu na rozszyfrowywanie, kto ma jaki sprzęt. Onboarding przebiega sprawnie. Audyt to skanowanie, nie szukanie papierów.
 
 ### **Kierownicy IT**
-Masz przegląd licencji, statusu sprzętu i historii. Integracje API pozwalają na automatyzację. Raporty wskazują, gdzie są braki.
+Masz przegląd licencji, statusu sprzętu i historii. Raporty wskazują, gdzie są braki, a eksport CSV/JSON pozwala przenieść dane do własnych narzędzi.
 
 ### **Kadry i HR**
 Offboarding jest kontrolowany. Dokumentacja procedur jest kompletna. Pracownicy mają jasne instrukcje, Ty masz dowody.

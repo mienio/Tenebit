@@ -604,11 +604,25 @@ public sealed class AssignmentService
         return Result<PublicAssignmentResponse>.Success(await _responseBuilder.MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));
     }
 
-    public async Task<Result<PublicAssignmentResponse>> AcceptPublicAsync(string token, CancellationToken cancellationToken)
+    public async Task<Result<PublicAssignmentResponse>> AcceptPublicAsync(string token, CancellationToken cancellationToken) =>
+        await AcceptPublicAsync(token, null, cancellationToken);
+
+    public async Task<Result<PublicAssignmentResponse>> AcceptPublicAsync(string token, AcceptPublicAssignmentRequest? request, CancellationToken cancellationToken)
     {
         var resolved = await ResolveByTokenAsync(token, cancellationToken);
         if (resolved.IsFailure) return Result<PublicAssignmentResponse>.Failure(resolved.Error!);
         var assignment = resolved.Value!;
+
+        byte[]? signature = null;
+        if (!string.IsNullOrWhiteSpace(request?.SignatureDataUrl))
+        {
+            var decoded = SignatureDataUrl.Decode(request.SignatureDataUrl);
+            if (decoded.IsFailure) return Result<PublicAssignmentResponse>.Failure(decoded.Error!);
+
+            var sanitized = _evidenceService.SanitizeSignature(decoded.Value!);
+            if (sanitized.IsFailure) return Result<PublicAssignmentResponse>.Failure(sanitized.Error!);
+            signature = sanitized.Value!.Content;
+        }
 
         try
         {
@@ -619,14 +633,18 @@ public sealed class AssignmentService
             var evidence = assignment.IntegrityVersion >= 2
                 ? await _evidence.ListMetadataByAssignmentAsync(assignment.OrganizationId, assignment.Id, cancellationToken)
                 : null;
-            if (evidence is null)
+            var integrityEntries = evidence?.Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList();
+            if (signature is not null)
+            {
+                assignment.AcceptWithSignature(now, capturedIp.StoredIp, integrityEntries ?? [], signature, request?.SignerName);
+            }
+            else if (integrityEntries is null)
             {
                 assignment.Accept(now, capturedIp.StoredIp);
             }
             else
             {
-                assignment.AcceptWithEvidenceIntegrity(now, capturedIp.StoredIp, evidence
-                    .Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList());
+                assignment.AcceptWithEvidenceIntegrity(now, capturedIp.StoredIp, integrityEntries);
             }
             _activity.Add(new ActivityLog(assignment.OrganizationId, "assignment.accepted", "assignment", assignment.Id, "public-link", assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);

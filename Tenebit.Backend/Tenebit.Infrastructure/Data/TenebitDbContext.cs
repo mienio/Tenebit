@@ -1064,6 +1064,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.ProtocolNumber).HasMaxLength(80).IsRequired();
             entity.Property(x => x.CreatedBy).HasMaxLength(240).IsRequired();
             entity.Property(x => x.PublicTokenHash).HasMaxLength(128);
+            entity.Property(x => x.SignatureSha256).HasMaxLength(64);
+            entity.Property(x => x.SignerName).HasMaxLength(240);
             entity.HasIndex(x => new { x.OrganizationId, x.ProtocolNumber }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.PersonId }).HasDatabaseName("IX_tenant_assignments_person");
             entity.HasIndex(x => x.PublicTokenHash)

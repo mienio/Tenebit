@@ -97,6 +97,13 @@ public static class OffboardingEndpoints
                 (await service.CompleteAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Offboarding");
 
+        api.MapGet("/offboarding/{id:guid}/protocol.pdf", async (Guid id, Tenebit.Application.Protocols.ProtocolPdfService protocols, CancellationToken cancellationToken) =>
+            {
+                var result = await protocols.GetOffboardingProtocolAsync(id, cancellationToken);
+                return result.IsFailure || result.Value is null ? result.ToHttpResult() : Results.File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+            })
+            .WithTags("Offboarding");
+
         api.MapPost("/offboarding/{id:guid}/cancel", async (Guid id, CancelOffboardingCaseRequest request, OffboardingService service, CancellationToken cancellationToken) =>
                 (await service.CancelAsync(id, request, cancellationToken)).ToHttpResult())
             .WithTags("Offboarding");

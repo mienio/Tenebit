@@ -3824,3 +3824,22 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826170000_AssignmentSignature') THEN
+    ALTER TABLE tenebit.assignments
+        ADD COLUMN IF NOT EXISTS "SignatureImage" bytea,
+        ADD COLUMN IF NOT EXISTS "SignatureSha256" character varying(64),
+        ADD COLUMN IF NOT EXISTS "SignerName" character varying(240);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826170000_AssignmentSignature') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260826170000_AssignmentSignature', '10.0.4');
+    END IF;
+END $EF$;
+COMMIT;

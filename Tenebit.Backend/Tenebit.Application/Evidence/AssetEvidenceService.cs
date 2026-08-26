@@ -11,6 +11,9 @@ public sealed class AssetEvidenceService
     private const int MaxPerAssetAndPhase = 5;
     private const long MaxSizeBytes = 5 * 1024 * 1024;
 
+    // Podpis z canvasu to kilkadziesiąt kB; limit trzyma się tego, co przyjmuje domena wydania.
+    private const long MaxSignatureBytes = 200 * 1024;
+
     private readonly IAssetEvidenceRepository _evidence;
     private readonly IAssetRepository _assets;
     private readonly IAssignmentRepository _assignments;
@@ -307,6 +310,32 @@ public sealed class AssetEvidenceService
         return format == DetectedImageFormat.Unknown
             ? Result<DetectedImageFormat>.Failure(Error.Validation("Plik nie jest prawidłowym obrazem JPEG/PNG/WebP."))
             : Result<DetectedImageFormat>.Success(format);
+    }
+
+    /// <summary>
+    /// Sanityzuje podpis narysowany przez pracownika na publicznej stronie akceptacji.
+    ///
+    /// Podpis nie jest materiałem dowodowym per aktywo (nie ma AssetId), więc nie przechodzi przez
+    /// <see cref="UploadAsync"/> - ale przechodzi przez ten sam sanitizer, żeby nic przesłanego przez
+    /// anonimowy endpoint nie trafiło do bazy z oryginalnymi metadanymi. PNG, bo tyle produkuje canvas.
+    /// </summary>
+    public Result<SanitizedImage> SanitizeSignature(byte[] content)
+    {
+        if (content.Length == 0) return Result<SanitizedImage>.Failure(Error.Validation("Podpis jest pusty."));
+        if (content.LongLength > MaxSignatureBytes) return Result<SanitizedImage>.Failure(Error.Validation("Podpis może mieć maksymalnie 200 KB."));
+        if (ImageSignature.Detect(content) != DetectedImageFormat.Png)
+        {
+            return Result<SanitizedImage>.Failure(Error.Validation("Podpis musi być obrazem PNG."));
+        }
+
+        try
+        {
+            return Result<SanitizedImage>.Success(_sanitizer.StripMetadata(DetectedImageFormat.Png, content));
+        }
+        catch (DomainException ex)
+        {
+            return Result<SanitizedImage>.Failure(Error.Validation(ex.Message));
+        }
     }
 
     public async Task<Result<AssetEvidenceResponse>> LockAsync(Guid id, CancellationToken cancellationToken)

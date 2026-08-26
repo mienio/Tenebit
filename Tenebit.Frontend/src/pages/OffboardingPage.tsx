@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Copy, Eye, Link2, Mail, Pencil, Plus, RefreshCw, RotateCcw, ShieldCheck, UserRoundX, Wrench, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, Eye, FileText, Link2, Mail, Pencil, Plus, RefreshCw, RotateCcw, ShieldCheck, UserRoundX, Wrench, XCircle } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -357,6 +357,7 @@ function OffboardingDetailsView({
   const [resolveItem, setResolveItem] = useState<OffboardingItem | null>(null);
   const [waiveItem, setWaiveItem] = useState<OffboardingItem | null>(null);
   const [inspectItem, setInspectItem] = useState<OffboardingItem | null>(null);
+  const [protocolFailed, setProtocolFailed] = useState(false);
 
   const progress = requiredProgress(details.items);
   const caseItem = details.case;
@@ -374,6 +375,24 @@ function OffboardingDetailsView({
       setLinkState('failed');
     } finally {
       window.setTimeout(() => setLinkState('idle'), 3000);
+    }
+  }
+
+  async function downloadProtocol() {
+    try {
+      const blob = await api.downloadOffboardingProtocol(caseItem.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `protokol-zwrotu-${caseItem.finalProtocolNumber ?? caseItem.id.slice(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setProtocolFailed(false);
+    } catch {
+      setProtocolFailed(true);
+      window.setTimeout(() => setProtocolFailed(false), 4000);
     }
   }
 
@@ -515,6 +534,7 @@ function OffboardingDetailsView({
             <Button variant="secondary" onClick={() => void onAction('restore', () => api.restoreOffboardingEmployment(caseItem.id), 'offboarding.restored')} icon={<UserRoundX size={16} />}>{t('offboarding.restoreEmployment')}</Button>
             <Button variant="secondary" onClick={onCancel} icon={<XCircle size={16} />}>{t('offboarding.cancelAction')}</Button>
             <Button variant="secondary" onClick={() => void onAction('complete', () => api.completeOffboarding(caseItem.id), 'offboarding.completed')} icon={<CheckCircle2 size={16} />}>{t('offboarding.complete')}</Button>
+            <Button variant="secondary" onClick={downloadProtocol} icon={<FileText size={16} />}>{protocolFailed ? t('offboarding.protocolFailed') : t('offboarding.downloadProtocol')}</Button>
           </div>
         </div>
       </Card>

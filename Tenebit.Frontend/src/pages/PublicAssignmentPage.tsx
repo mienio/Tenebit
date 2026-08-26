@@ -1,8 +1,10 @@
-import { CheckCircle2, Download, PackageCheck } from 'lucide-react';
+import { CheckCircle2, Download, FileText, PackageCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { EvidenceGallery } from '../components/Evidence';
+import { Field, TextInput } from '../components/FormFields';
+import { SignaturePad } from '../components/SignaturePad';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { PublicFooter } from '../components/PublicFooter';
 import { useAsyncData } from '../hooks/useAsyncData';
@@ -16,18 +18,29 @@ export function PublicAssignmentPage() {
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [accepting, setAccepting] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
+  const [signature, setSignature] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
   async function accept() {
     setAccepting(true);
     setMessage(null);
     try {
-      await api.acceptPublicAssignment();
+      await api.acceptPublicAssignment({ signatureDataUrl: signature, signerName: signerName.trim() || null });
       await reload();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.acceptFailed'));
     } finally {
       setAccepting(false);
+    }
+  }
+
+  async function downloadProtocol() {
+    try {
+      const blob = await api.downloadPublicAssignmentProtocol();
+      saveBlob(blob, `${data?.protocolNumber ?? 'protokol'}.pdf`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : t('publicAssignment.downloadFailed'));
     }
   }
 
@@ -116,13 +129,30 @@ export function PublicAssignmentPage() {
         {message && <p className="formMessage formMessage--error">{message}</p>}
 
         {accepted ? (
-          <div className="formActions">
+          <div className="formActions formActions--split">
             <p style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
               <CheckCircle2 size={18} /> {t('publicAssignment.alreadyAccepted')}
             </p>
+            <Button variant="secondary" onClick={downloadProtocol} icon={<FileText size={16} />}>
+              {t('publicAssignment.downloadProtocol')}
+            </Button>
           </div>
         ) : canAccept ? (
           <>
+            <div className="formSectionTitle">{t('signature.title')}</div>
+            <SignaturePad onChange={setSignature} disabled={accepting} />
+            <div style={{ marginTop: '10px' }}>
+              <Field label={t('signature.nameLabel')}>
+                <TextInput
+                  type="text"
+                  value={signerName}
+                  maxLength={240}
+                  onChange={event => setSignerName(event.target.value)}
+                  placeholder={data.personFirstName}
+                />
+              </Field>
+            </div>
+
             <label className="checkField">
               <input type="checkbox" checked={consentChecked} onChange={event => setConsentChecked(event.target.checked)} />
               {' '}{t('publicAssignment.consentLabel')}

@@ -82,6 +82,18 @@ export function PeoplePage() {
     setSelectedIds(new Set());
   }, [page]);
 
+  // Wejście z palety komend (Ctrl+K): pusty formularz osoby, bez podstawiania danych zalogowanego.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setEditing(null);
+    setSelected(null);
+    setPersonModalOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (searchParams.get('addSelf') !== '1') return;
     const [firstName, ...rest] = (auth.userName ?? '').trim().split(/\s+/);

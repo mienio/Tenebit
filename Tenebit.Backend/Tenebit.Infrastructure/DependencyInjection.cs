@@ -88,6 +88,7 @@ public static class DependencyInjection
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
         services.AddSingleton<IImageSanitizer, ImageSanitizer>();
+        services.AddSingleton<IProtocolPdfGenerator, ProtocolPdfGenerator>();
         services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<IEmailAvailability, EmailAvailability>();

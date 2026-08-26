@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<OffboardingScheduledActionsService>();
         services.AddScoped<OffboardingResponseBuilder>();
         services.AddScoped<OffboardingService>();
+        services.AddScoped<Protocols.ProtocolPdfService>();
         services.AddScoped<AssetAuditCampaignService>();
         services.AddScoped<ServiceTicketService>();
         return services;

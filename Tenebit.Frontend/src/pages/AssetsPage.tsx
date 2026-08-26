@@ -21,6 +21,7 @@ import { assetStatusValues, categoryTypeValues, locationTypeValues } from '../ut
 import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
 import { useAuth } from '../auth/AuthProvider';
+import { useSearchParams } from 'react-router-dom';
 import { AssetDetailPanel } from './assets/AssetDetailPanel';
 import { AssetsList } from './assets/AssetsList';
 import { AssetsToolbar } from './assets/AssetsToolbar';
@@ -54,6 +55,7 @@ function saveBlob(blob: Blob, fileName: string) {
 
 export function AssetsPage() {
   const { t, tPlural } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { celebrate } = useCelebration();
   const { userEmail } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -434,6 +436,17 @@ export function AssetsPage() {
     setFormLocation('');
     setAssetModalOpen(true);
   }
+
+  // Wejście z palety komend (Ctrl+K) - otwiera pusty formularz i sprząta parametr, żeby odświeżenie
+  // strony nie otwierało go po raz drugi. Ten sam wzorzec co ?addSelf=1 na stronie osób.
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    openCreate();
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openEdit(asset: Asset) {
     setEditing(asset);

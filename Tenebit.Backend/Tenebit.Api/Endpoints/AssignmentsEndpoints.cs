@@ -57,6 +57,13 @@ public static class AssignmentsEndpoints
                 (await service.AcceptAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Assignments");
 
+        api.MapGet("/assignments/{id:guid}/protocol.pdf", async (Guid id, Tenebit.Application.Protocols.ProtocolPdfService protocols, CancellationToken cancellationToken) =>
+            {
+                var result = await protocols.GetAssignmentProtocolAsync(id, cancellationToken);
+                return result.IsFailure || result.Value is null ? result.ToHttpResult() : Results.File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+            })
+            .WithTags("Assignments");
+
         api.MapPost("/assignments/{id:guid}/acceptance-link", async (Guid id, AssignmentService service, CancellationToken cancellationToken) =>
                 (await service.RegenerateAcceptanceLinkAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Assignments");
