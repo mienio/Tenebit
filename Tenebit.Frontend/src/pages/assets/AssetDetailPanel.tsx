@@ -1,4 +1,4 @@
-import { Eye, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
+import { Copy, Eye, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { EvidenceGallery } from '../../components/Evidence';
@@ -19,6 +19,7 @@ interface AssetDetailPanelProps {
   onClose(): void;
   onQr(asset: Asset): void;
   onEdit(asset: Asset): void;
+  onDuplicate(asset: Asset): void;
   onDelete(asset: Asset): void;
   onViewPerson(id: string): void;
   onViewLocation(location: string): void;
@@ -59,6 +60,7 @@ export function AssetDetailPanel(props: AssetDetailPanelProps) {
             <div className="rowActions">
               <Button variant="secondary" onClick={() => props.onQr(selected)} icon={<QrCode size={16} />}>{t('assets.qrCode')}</Button>
               <Button variant="secondary" onClick={() => props.onEdit(selected)} icon={<Pencil size={16} />}>{t('assets.edit')}</Button>
+              <Button variant="secondary" onClick={() => props.onDuplicate(selected)} icon={<Copy size={16} />}>{t('assets.duplicate')}</Button>
               <Button variant="secondary" onClick={() => props.onDelete(selected)} icon={<Trash2 size={16} />}>{t('assets.delete')}</Button>
             </div>
           </div>

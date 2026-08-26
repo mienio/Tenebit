@@ -82,6 +82,9 @@ export function AssetsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [editing, setEditing] = useState<Asset | null>(null);
+  // Source for a cloned asset. Kept separate from `editing` on purpose: the form reads both for its
+  // defaults, but only `editing` decides update-vs-create, so a duplicate always saves as a new record.
+  const [duplicating, setDuplicating] = useState<Asset | null>(null);
   const [assetModalOpen, setAssetModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
   const [qrTarget, setQrTarget] = useState<Asset | null>(null);
@@ -404,6 +407,7 @@ export function AssetsPage() {
 
   function openCreate() {
     setEditing(null);
+    setDuplicating(null);
     setSelected(null);
     setSelectedCategoryId('');
     setFormLocation('');
@@ -412,6 +416,23 @@ export function AssetsPage() {
 
   function openEdit(asset: Asset) {
     setEditing(asset);
+    setDuplicating(null);
+    setSelected(null);
+    setSelectedCategoryId(asset.categoryId);
+    setFormLocation(asset.location ?? '');
+    setAssetModalOpen(true);
+  }
+
+  /**
+   * Opens the create form pre-filled from an existing asset.
+   *
+   * Everything that describes the model is copied; everything that identifies the individual unit -
+   * tag, serial number, status, who holds it - is deliberately left blank, because those are exactly
+   * the fields that must differ between two pieces of otherwise identical equipment.
+   */
+  function openDuplicate(asset: Asset) {
+    setEditing(null);
+    setDuplicating(asset);
     setSelected(null);
     setSelectedCategoryId(asset.categoryId);
     setFormLocation(asset.location ?? '');
@@ -421,6 +442,7 @@ export function AssetsPage() {
   function closeAssetModal() {
     setAssetModalOpen(false);
     setEditing(null);
+    setDuplicating(null);
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -468,6 +490,7 @@ export function AssetsPage() {
         : api.createAsset(body));
       setAssetModalOpen(false);
       setEditing(null);
+      setDuplicating(null);
       setSelected(null);
       setMessage({ type: 'success', text: editing ? t('assets.saved') : t('assets.created') });
       if (!editing) {
@@ -594,6 +617,10 @@ export function AssetsPage() {
   if (assets.error) return <ErrorState message={assets.error} onRetry={reloadAssets} />;
 
   const category = selected ? categories.data?.find(c => c.id === selected.categoryId) : null;
+
+  // Descriptive defaults come from whichever asset is in play; identity fields below stay tied to
+  // `editing` so a clone never inherits a tag, serial or status that must be unique to one unit.
+  const prefill = editing ?? duplicating;
 
   return (
     <div className="pageStack">
@@ -722,6 +749,7 @@ export function AssetsPage() {
         onClose={() => setSelected(null)}
         onQr={openQr}
         onEdit={openEdit}
+        onDuplicate={openDuplicate}
         onDelete={asset => { setDeleteTarget(asset); setSelected(null); }}
         onViewPerson={setViewPersonId}
         onViewLocation={setViewLocation}
@@ -745,9 +773,9 @@ export function AssetsPage() {
         onClose={closeAssetModal}
         width="wide"
       >
-        <form className="formGrid" onSubmit={handleSave} key={editing?.id ?? 'new-asset'}>
+        <form className="formGrid" onSubmit={handleSave} key={editing?.id ?? (duplicating ? `dup-${duplicating.id}` : 'new-asset')}>
           <div className="formSectionTitle">{t('assets.identification')}</div>
-          <Field label={t('assets.nameLabel')}><TextInput name="name" defaultValue={editing?.name ?? ''} required /></Field>
+          <Field label={t('assets.nameLabel')}><TextInput name="name" defaultValue={prefill?.name ?? ''} required /></Field>
           <Field label={t('assets.tagLabel')}><TextInput name="assetTag" defaultValue={editing?.assetTag ?? ''} required /></Field>
           <Field label={t('assets.categoryLabel')}>
             <div className="fieldWithAdd">
@@ -776,19 +804,19 @@ export function AssetsPage() {
             </div>
           </Field>
           <Field label={t('assets.teamLabel')}>
-            <SelectInput name="teamId" defaultValue={editing?.teamId ?? ''}>
+            <SelectInput name="teamId" defaultValue={prefill?.teamId ?? ''}>
               <option value="">{t('assets.noTeamOption')}</option>
               {teams.data?.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
             </SelectInput>
           </Field>
 
           <div className="formSectionTitle">{t('assets.descAndDates')}</div>
-          <Field label={t('assets.manufacturerLabel')}><TextInput name="manufacturer" defaultValue={editing?.manufacturer ?? ''} /></Field>
-          <Field label={t('assets.modelLabel')}><TextInput name="model" defaultValue={editing?.model ?? ''} /></Field>
-          <Field label={t('assets.purchasePriceLabel')}><TextInput name="purchasePrice" inputMode="decimal" defaultValue={editing?.purchasePrice ?? ''} /></Field>
-          <Field label={t('assets.currencyLabel')}><TextInput name="currency" defaultValue={editing?.currency ?? 'PLN'} maxLength={3} /></Field>
-          <Field label={t('assets.purchaseDateLabel')}><TextInput name="purchaseDate" type="date" defaultValue={editing?.purchaseDate ?? ''} /></Field>
-          <Field label={t('assets.warrantyUntilLabel')}><TextInput name="warrantyUntil" type="date" defaultValue={editing?.warrantyUntil ?? ''} /></Field>
+          <Field label={t('assets.manufacturerLabel')}><TextInput name="manufacturer" defaultValue={prefill?.manufacturer ?? ''} /></Field>
+          <Field label={t('assets.modelLabel')}><TextInput name="model" defaultValue={prefill?.model ?? ''} /></Field>
+          <Field label={t('assets.purchasePriceLabel')}><TextInput name="purchasePrice" inputMode="decimal" defaultValue={prefill?.purchasePrice ?? ''} /></Field>
+          <Field label={t('assets.currencyLabel')}><TextInput name="currency" defaultValue={prefill?.currency ?? 'PLN'} maxLength={3} /></Field>
+          <Field label={t('assets.purchaseDateLabel')}><TextInput name="purchaseDate" type="date" defaultValue={prefill?.purchaseDate ?? ''} /></Field>
+          <Field label={t('assets.warrantyUntilLabel')}><TextInput name="warrantyUntil" type="date" defaultValue={prefill?.warrantyUntil ?? ''} /></Field>
 
           {selectedCategoryFields.length > 0 && (
             <>
@@ -797,10 +825,10 @@ export function AssetsPage() {
                 <Field key={field.id} label={field.required ? `${field.label} *` : field.label}>
                   {field.fieldType === 'Boolean' ? (
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input type="checkbox" name={`custom__${field.key}`} defaultChecked={editing?.customFields?.[field.key] === 'true'} />
+                      <input type="checkbox" name={`custom__${field.key}`} defaultChecked={prefill?.customFields?.[field.key] === 'true'} />
                     </label>
                   ) : field.fieldType === 'Select' ? (
-                    <SelectInput name={`custom__${field.key}`} defaultValue={editing?.customFields?.[field.key] ?? ''} required={field.required}>
+                    <SelectInput name={`custom__${field.key}`} defaultValue={prefill?.customFields?.[field.key] ?? ''} required={field.required}>
                       <option value="">{t('assets.customFieldChoose')}</option>
                       {field.options.map(option => <option key={option} value={option}>{option}</option>)}
                     </SelectInput>
@@ -808,7 +836,7 @@ export function AssetsPage() {
                     <TextInput
                       name={`custom__${field.key}`}
                       type={field.fieldType === 'Number' ? 'number' : field.fieldType === 'Date' ? 'date' : field.fieldType === 'Sensitive' ? 'password' : 'text'}
-                      defaultValue={field.fieldType === 'Sensitive' ? '' : editing?.customFields?.[field.key] ?? ''}
+                      defaultValue={field.fieldType === 'Sensitive' ? '' : prefill?.customFields?.[field.key] ?? ''}
                       placeholder={field.fieldType === 'Sensitive' && editing ? t('assets.sensitiveKeepPlaceholder') : undefined}
                       required={field.required && !(field.fieldType === 'Sensitive' && editing)}
                     />
