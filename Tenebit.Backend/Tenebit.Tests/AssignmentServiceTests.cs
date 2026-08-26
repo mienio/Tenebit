@@ -8,6 +8,7 @@ using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
 using Tenebit.Tests.Fakes;
+using Tenebit.Domain.Organizations;
 
 namespace Tenebit.Tests;
 
@@ -22,7 +23,16 @@ public class AssignmentServiceTests
         var people = new InMemoryPersonRepository();
         var procedures = new InMemoryProcedureRepository();
         var teams = new InMemoryTeamRepository();
+        // Production can never reach these paths without an organization row - accepting an assignment
+        // reads it to decide how much of the client IP may be stored. Leaving it unseeded made the
+        // service fail with "organizacja nie istnieje" long before the behaviour under test ran.
         var organizations = new InMemoryOrganizationRepository();
+        var organization = new Organization("Acme", "PL", "pl", "PLN", "UTC");
+        organization.UpdatePrivacySettings(PublicIpCaptureMode.Full, 30, null, null, null);
+        // IP capture is off by default (privacy first), but these tests are about the tamper-evident
+        // stamp itself, so the fixture opts in the way an organization that wants it would.
+        organizations.Add(organization);
+        currentUser.OrganizationId = organization.Id;
         var activity = new InMemoryActivityLogRepository();
         var assignments = new InMemoryAssignmentRepository();
         var reservations = new InMemoryEquipmentReservationRepository();

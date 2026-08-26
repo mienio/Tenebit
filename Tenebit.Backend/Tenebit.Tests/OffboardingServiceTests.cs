@@ -517,8 +517,10 @@ public class OffboardingServiceTests
     private static string ExtractRawTokenFromEmail(FakeEmailSender emailSender)
     {
         var body = emailSender.Bodies.Last();
-        var match = System.Text.RegularExpressions.Regex.Match(body, @"https://test/exit/([^""'\s]+)");
+        // The token travels in the URL fragment, not the path: that is what keeps it out of server
+        // logs and Referer headers, so the test has to read it the same way a browser would.
+        var match = System.Text.RegularExpressions.Regex.Match(body, @"https://test/exit#([^""'\s]+)");
         Assert.True(match.Success, "E-mail nie zawierał linku offboardingowego.");
-        return match.Groups[1].Value;
+        return Uri.UnescapeDataString(match.Groups[1].Value);
     }
 }

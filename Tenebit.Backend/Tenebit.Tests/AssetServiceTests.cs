@@ -5,6 +5,7 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
+using Tenebit.Domain.Organizations;
 
 namespace Tenebit.Tests;
 
@@ -13,6 +14,14 @@ public class AssetServiceTests
     private static (AssetService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemoryAssetCategoryRepository Categories, InMemorySubscriptionRepository Subscriptions) CreateService()
     {
         var currentUser = new FakeCurrentUser();
+        // Public issue reports read the organization to decide how much of the reporter's IP may be
+        // kept; without a row the service refuses before reaching the cooldown logic under test.
+        var organizations = new InMemoryOrganizationRepository();
+        var organization = new Organization("Acme", "PL", "pl", "PLN", "UTC");
+        organization.UpdatePrivacySettings(PublicIpCaptureMode.Full, 30, null, null, null);
+        // The cooldown is keyed on the reporter IP, which only exists when the organization opted in.
+        organizations.Add(organization);
+        currentUser.OrganizationId = organization.Id;
         var assets = new InMemoryAssetRepository();
         var categories = new InMemoryAssetCategoryRepository();
         var subscriptions = new InMemorySubscriptionRepository();
@@ -27,7 +36,7 @@ public class AssetServiceTests
             teams,
             new InMemoryActivityLogRepository(),
             subscriptions,
-            new InMemoryOrganizationRepository(),
+            organizations,
             new InMemoryOrganizationUserRepository(),
             currentUser,
             new FakeClock(),
@@ -276,7 +285,7 @@ public class AssetServiceTests
     }
 
     [Fact]
-    public async Task ReportPublicIssueAsync_AllowsReportFromDifferentIpDuringCooldown()
+    public async Task ReportPublicIssueAsync_CooldownIsPerAsset_NotPerReporterIp()
     {
         var (service, user, _, categories, _) = CreateService();
         var category = AddCategory(user, categories);
@@ -290,6 +299,11 @@ public class AssetServiceTests
         var second = await service.ReportPublicIssueAsync(organizationId, assetId, new ReportAssetIssueRequest("Zepsuty ekran"), CancellationToken.None);
 
         Assert.True(first.IsSuccess);
-        Assert.True(second.IsSuccess);
+        // The cooldown is keyed on the asset alone - the activity entry carries the constant
+        // "public-scan" actor, never the reporter. Rotating IP therefore does not buy another mail to
+        // the admins, which is the point: the limit exists to protect their inbox, not the reporter.
+        // The cost is that one report silences other people's reports on that asset for the window.
+        Assert.True(second.IsFailure);
+        Assert.Equal("ASSET_REPORT_RATE_LIMITED", second.Error!.Code);
     }
 }

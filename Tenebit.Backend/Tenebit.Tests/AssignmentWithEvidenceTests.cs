@@ -75,20 +75,25 @@ public class AssignmentWithEvidenceTests
     // ---------- 6.6 Integralność: v1 vs v2 ----------
 
     [Fact]
-    public void Assignment_IntegrityVersion1_IgnoresEvidence()
+    public void Assignment_IntegrityVersion3_SurvivesLaterIpRedaction()
     {
         var orgId = Guid.NewGuid();
         var assetId = Guid.NewGuid();
-        var assignment = new Assignment(orgId, Guid.NewGuid(), "TEN-V1", DateTimeOffset.UtcNow, null, null, "tester");
+        var assignment = new Assignment(orgId, Guid.NewGuid(), "TEN-V3", DateTimeOffset.UtcNow, null, null, "tester");
         assignment.AddAsset(assetId, "ok");
         var evidence = new AssetEvidence(orgId, assetId, assignment.Id, EvidencePhase.Issue, "a.jpg", "image/jpeg", JpegBytes(), Sha("a"), null, "tester", EvidenceUploadSource.AuthenticatedUser, DateTimeOffset.UtcNow);
 
         assignment.Accept(DateTimeOffset.UtcNow, "1.2.3.4", new[] { evidence });
 
-        Assert.Equal(1, assignment.IntegrityVersion);
-        Assert.True(assignment.VerifyIntegrity());
-        // Wersja 1 pomija dowody - inny zestaw zdjęć nie zmienia wyniku weryfikacji.
-        Assert.True(assignment.VerifyIntegrity(Array.Empty<AssetEvidence>()));
+        Assert.Equal(3, assignment.IntegrityVersion);
+        Assert.True(assignment.VerifyIntegrity(new[] { evidence }));
+
+        // The whole point of v3: the IP sits outside the seal, so retention can truncate or drop it
+        // later without turning a genuine acceptance into one that looks tampered with.
+        assignment.ApplyAcceptedIpPrivacy(null, new[] { evidence });
+
+        Assert.Null(assignment.AcceptedIp);
+        Assert.True(assignment.VerifyIntegrity(new[] { evidence }));
     }
 
     [Fact]
@@ -104,9 +109,10 @@ public class AssignmentWithEvidenceTests
 
         assignment.Accept(DateTimeOffset.UtcNow, "1.2.3.4", new[] { evidence });
 
-        Assert.Equal(2, assignment.IntegrityVersion);
+        // Accepting stamps v3; evidence has been part of the seal since v2 and still is.
+        Assert.Equal(3, assignment.IntegrityVersion);
         Assert.True(assignment.VerifyIntegrity(new[] { evidence }));
-        // Brak dowodów przy wersji 2 zmienia hash.
+        // Dropping the evidence changes the hash - that is what makes the seal worth having.
         Assert.False(assignment.VerifyIntegrity(Array.Empty<AssetEvidence>()));
     }
 

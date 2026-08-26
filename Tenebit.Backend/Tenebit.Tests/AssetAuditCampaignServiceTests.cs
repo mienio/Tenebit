@@ -516,8 +516,10 @@ public class AssetAuditCampaignServiceTests
         var index = emailSender.Sent.FindLastIndex(x => x.To == recipient);
         Assert.True(index >= 0, "Nie znaleziono e-maila do wskazanego odbiorcy.");
         var body = emailSender.Bodies[index];
-        var match = System.Text.RegularExpressions.Regex.Match(body, @"https://test/audit/([^""'\s]+)");
+        // The token travels in the URL fragment, not the path: that is what keeps it out of server
+        // logs and Referer headers, so the test has to read it the same way a browser would.
+        var match = System.Text.RegularExpressions.Regex.Match(body, @"https://test/audit#([^""'\s]+)");
         Assert.True(match.Success, "E-mail nie zawierał linku audytowego.");
-        return match.Groups[1].Value;
+        return Uri.UnescapeDataString(match.Groups[1].Value);
     }
 }

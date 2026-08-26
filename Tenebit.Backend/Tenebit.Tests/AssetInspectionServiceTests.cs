@@ -112,9 +112,14 @@ public class AssetInspectionServiceTests
     [Fact]
     public async Task GetPendingForAssetAsync_ReturnsNotFound_WhenNoneExists()
     {
-        var (service, _, _, _) = CreateService();
+        var (service, user, _, assets) = CreateService();
+        // The asset has to exist: visibility is checked before the inspection lookup, so a random id
+        // answers ASSET_NOT_FOUND and never reaches the case this test is about. That ordering is
+        // deliberate - it stops the endpoint confirming an inspection on an asset you cannot see.
+        var asset = new Asset(user.OrganizationId, Guid.NewGuid(), "Laptop", "AT-INS-NONE");
+        assets.Add(asset);
 
-        var result = await service.GetPendingForAssetAsync(Guid.NewGuid(), CancellationToken.None);
+        var result = await service.GetPendingForAssetAsync(asset.Id, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal("ASSET_INSPECTION_NOT_PENDING", result.Error!.Code);

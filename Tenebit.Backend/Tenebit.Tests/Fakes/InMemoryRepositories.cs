@@ -449,14 +449,14 @@ public sealed class FakeEmailSender : IEmailSender
 
 public sealed class FakeAppLinkBuilder : IAppLinkBuilder
 {
-    public string BuildAssignmentAcceptanceLink(string rawToken) => $"https://test/accept#{rawToken}";
+    public string BuildAssignmentAcceptanceLink(string rawToken) => $"https://test/accept#{Uri.EscapeDataString(rawToken)}";
     public string BuildAssetScanLink(Guid organizationId, Guid assetId) => $"https://test/scan/{organizationId}/{assetId}";
     public string BuildPasswordResetLink(string email, string code) =>
         $"https://test/reset-password#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
     public string BuildEmailVerificationLink(string email, string code) =>
         $"https://test/verify-email#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
-    public string BuildOffboardingLink(string rawToken) => $"https://test/exit#{rawToken}";
-    public string BuildAssetAuditLink(string rawToken) => $"https://test/audit#{rawToken}";
+    public string BuildOffboardingLink(string rawToken) => $"https://test/exit#{Uri.EscapeDataString(rawToken)}";
+    public string BuildAssetAuditLink(string rawToken) => $"https://test/audit#{Uri.EscapeDataString(rawToken)}";
     public string BuildAppUrl(string relativePath) => $"https://test{relativePath}";
 }
 
