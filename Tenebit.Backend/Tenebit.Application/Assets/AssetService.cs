@@ -497,21 +497,45 @@ public sealed class AssetService
 
     /// <summary>Eksport listy aktywów do JSON. Zawiera wyłącznie dane z <see cref="AssetResponse"/> - bez materiałów dowodowych (AssetEvidence),
     /// które są danymi własnościowymi organizacji i nie podlegają eksportowi.</summary>
-    public async Task<Result<string>> ExportJsonAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
+    /// <summary>
+    /// The same rows the list would show, for the same filters and in the same order.
+    ///
+    /// Export previously accepted only search/status/location, so a screen narrowed by team, owner or
+    /// warranty silently exported far more than it displayed. Both exports now go through the paged
+    /// query the list itself uses, which keeps the two definitions of "what is on screen" from drifting.
+    /// </summary>
+    private async Task<(IReadOnlyList<Asset> Assets, IReadOnlyList<AssetCategory> Categories, IReadOnlyList<Domain.People.Person> People, IReadOnlyList<Team> Teams)> LoadForExportAsync(
+        string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
-        if (access.IsFailure) return Result<string>.Failure(access.Error!);
-
         var organizationId = _currentUser.OrganizationId;
+        DateOnly? warrantyFrom = null;
+        DateOnly? warrantyTo = null;
+        if (warrantyExpiring)
+        {
+            var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+            warrantyFrom = today;
+            warrantyTo = today.AddDays(90);
+        }
+
         var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
-        var assets = scope is null
-            ? await _assets.ListAsync(organizationId, search, status, location, cancellationToken)
-            : await _assets.ListScopedAsync(organizationId, search, status, location, scope.PersonIds, scope.TeamIds, cancellationToken);
+        var (items, _) = scope is null
+            ? await _assets.ListPagedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, 1, int.MaxValue, cancellationToken)
+            : await _assets.ListPagedScopedAsync(organizationId, search, status, location, teamId, categoryId, unassignedOnly, warrantyFrom, warrantyTo, sortKey, sortDesc, 1, int.MaxValue, scope.PersonIds, scope.TeamIds, cancellationToken);
+
         var categories = await _categories.ListAsync(organizationId, cancellationToken);
         var people = scope is null
             ? await _people.ListAsync(organizationId, null, cancellationToken)
             : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        return (items, categories, people, teams);
+    }
+
+    public async Task<Result<string>> ExportJsonAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+
+        var (assets, categories, people, teams) = await LoadForExportAsync(search, status, location, teamId, categoryId, unassignedOnly, warrantyExpiring, sortKey, sortDesc, cancellationToken);
         var language = _currentUser.Language;
         var payload = assets.Select(asset => Map(asset, categories, people, teams, language)).ToList();
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
@@ -579,49 +603,51 @@ public sealed class AssetService
             withValue, withoutPrice, organization?.Currency ?? "PLN", byCategory));
     }
 
-    public async Task<Result<string>> ExportCsvAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
+    /// <summary>
+    /// CSV columns in fixed order. Keys match the front-end column picker, so an export contains exactly
+    /// the columns the user chose to see rather than everything the record happens to hold.
+    /// </summary>
+    private static readonly (string Key, string Header, Func<AssetResponse, string> Value)[] ExportColumns =
+    [
+        ("name", "Nazwa", a => a.Name),
+        ("assetTag", "Tag", a => a.AssetTag),
+        ("serialNumber", "Numer seryjny", a => a.SerialNumber ?? ""),
+        ("category", "Kategoria", a => a.CategoryName ?? ""),
+        ("status", "Status", a => a.Status.ToString()),
+        ("person", "Osoba", a => a.AssignedPersonName ?? ""),
+        ("location", "Lokalizacja", a => a.Location ?? ""),
+        ("team", "Zespół", a => a.TeamName ?? ""),
+        ("manufacturer", "Producent", a => a.Manufacturer ?? ""),
+        ("model", "Model", a => a.Model ?? ""),
+        ("value", "Cena zakupu", a => a.PurchasePrice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""),
+        ("currency", "Waluta", a => a.Currency ?? ""),
+        ("purchaseDate", "Data zakupu", a => a.PurchaseDate?.ToString("yyyy-MM-dd") ?? ""),
+        ("warranty", "Gwarancja do", a => a.WarrantyUntil?.ToString("yyyy-MM-dd") ?? "")
+    ];
+
+    public async Task<Result<string>> ExportCsvAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, string? columns, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
-        var organizationId = _currentUser.OrganizationId;
-        var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
-        var assets = scope is null
-            ? await _assets.ListAsync(organizationId, search, status, location, cancellationToken)
-            : await _assets.ListScopedAsync(organizationId, search, status, location, scope.PersonIds, scope.TeamIds, cancellationToken);
-        var categories = await _categories.ListAsync(organizationId, cancellationToken);
-        var people = scope is null
-            ? await _people.ListAsync(organizationId, null, cancellationToken)
-            : await _people.ListScopedAsync(organizationId, null, scope.PersonIds, cancellationToken);
-        var teams = await _teams.ListAsync(organizationId, cancellationToken);
+        var (assets, categories, people, teams) = await LoadForExportAsync(search, status, location, teamId, categoryId, unassignedOnly, warrantyExpiring, sortKey, sortDesc, cancellationToken);
         var language = _currentUser.Language;
 
+        // Name is always written: a spreadsheet whose rows cannot be told apart is not an export. Any
+        // other column the caller left out of its list is simply not emitted.
+        var wanted = string.IsNullOrWhiteSpace(columns)
+            ? null
+            : columns.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool Include(string key) => wanted is null || key == "name" || wanted.Contains(key);
+
+        var header = ExportColumns.Where(c => Include(c.Key)).Select(c => c.Header).ToArray();
         var csv = new StringBuilder();
-        CsvWriter.WriteRow(csv, [
-            "Nazwa", "Tag", "Numer seryjny", "Kategoria", "Status", "Osoba", "Lokalizacja", "Zespół",
-            "Producent", "Model", "Cena zakupu", "Waluta", "Data zakupu", "Gwarancja do"
-        ]);
+        CsvWriter.WriteRow(csv, header);
 
         foreach (var asset in assets)
         {
             var mapped = Map(asset, categories, people, teams, language);
-            var row = new[]
-            {
-                mapped.Name,
-                mapped.AssetTag,
-                mapped.SerialNumber ?? "",
-                mapped.CategoryName ?? "",
-                mapped.Status.ToString(),
-                mapped.AssignedPersonName ?? "",
-                mapped.Location ?? "",
-                mapped.TeamName ?? "",
-                mapped.Manufacturer ?? "",
-                mapped.Model ?? "",
-                mapped.PurchasePrice?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "",
-                mapped.Currency ?? "",
-                mapped.PurchaseDate?.ToString("yyyy-MM-dd") ?? "",
-                mapped.WarrantyUntil?.ToString("yyyy-MM-dd") ?? ""
-            };
+            var row = ExportColumns.Where(c => Include(c.Key)).Select(c => c.Value(mapped)).ToArray();
             CsvWriter.WriteRow(csv, row);
         }
 

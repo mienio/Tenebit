@@ -369,19 +369,30 @@ export const api = {
   completeAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/complete`, { method: 'POST' }),
   cancelAssetAudit: (id: string) => apiRequest<unknown>(`/api/asset-audits/${id}/cancel`, { method: 'POST' }),
   downloadAssetAuditCsv: (id: string) => apiBlob(`/api/asset-audits/${id}/export.csv`),
-  downloadAssetsCsv: (params?: { search?: string; status?: string; location?: string }) => {
+  downloadAssetsCsv: (params?: { search?: string; status?: string; location?: string; teamId?: string; unassignedOnly?: boolean; warrantyExpiring?: boolean; sort?: string; desc?: boolean; columns?: string }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
     if (params?.status) query.set('status', params.status);
     if (params?.location) query.set('location', params.location);
+    if (params?.teamId) query.set('teamId', params.teamId);
+    if (params?.unassignedOnly) query.set('unassignedOnly', 'true');
+    if (params?.warrantyExpiring) query.set('warrantyExpiring', 'true');
+    if (params?.sort) query.set('sort', params.sort);
+    if (params?.desc) query.set('desc', 'true');
+    if (params?.columns) query.set('columns', params.columns);
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiBlob(`/api/assets/export.csv${suffix}`);
   },
-  downloadAssetsJson: (params?: { search?: string; status?: string; location?: string }) => {
+  downloadAssetsJson: (params?: { search?: string; status?: string; location?: string; teamId?: string; unassignedOnly?: boolean; warrantyExpiring?: boolean; sort?: string; desc?: boolean; columns?: string }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
     if (params?.status) query.set('status', params.status);
     if (params?.location) query.set('location', params.location);
+    if (params?.teamId) query.set('teamId', params.teamId);
+    if (params?.unassignedOnly) query.set('unassignedOnly', 'true');
+    if (params?.warrantyExpiring) query.set('warrantyExpiring', 'true');
+    if (params?.sort) query.set('sort', params.sort);
+    if (params?.desc) query.set('desc', 'true');
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return apiBlob(`/api/assets/export.json${suffix}`);
   },

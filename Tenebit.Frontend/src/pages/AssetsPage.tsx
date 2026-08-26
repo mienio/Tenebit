@@ -24,6 +24,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { AssetDetailPanel } from './assets/AssetDetailPanel';
 import { AssetsList } from './assets/AssetsList';
 import { AssetsToolbar } from './assets/AssetsToolbar';
+import { ASSET_COLUMNS, readAssetColumns } from './assets/useAssetColumns';
 import { useAssetFilters } from './assets/useAssetFilters';
 import { useAssetImport } from './assets/useAssetImport';
 import { useAssetSelection } from './assets/useAssetSelection';
@@ -267,11 +268,31 @@ export function AssetsPage() {
   const resultStatusOptions: AssetStatus[] = ['InStock', 'Damaged', 'Retired', 'Disposed'];
   const resultStatusLabels: Record<AssetStatus, string> = Object.fromEntries(resultStatusOptions.map(value => [value, t(`status.${value}`)])) as Record<AssetStatus, string>;
 
+  // Export follows the screen: same filters, same order, and for CSV the same columns. Anything else
+  // hands back a file that disagrees with the list the user was looking at when they clicked.
+  function exportFilters() {
+    return {
+      search: debouncedSearch || undefined,
+      status: status || undefined,
+      location: location || undefined,
+      teamId: team || undefined,
+      unassignedOnly: owner === 'none',
+      warrantyExpiring: warranty === 'expiring',
+      sort: sort?.key,
+      desc: sort?.dir === -1,
+    };
+  }
+
+  function exportColumns() {
+    const visible = readAssetColumns();
+    return ['name', ...ASSET_COLUMNS.filter(column => visible[column.key]).map(column => column.key)].join(',');
+  }
+
   async function downloadCsv() {
     if (exporting) return;
     setExporting(true);
     try {
-      const blob = await api.downloadAssetsCsv({ search: debouncedSearch, status: status || undefined, location: location || undefined });
+      const blob = await api.downloadAssetsCsv({ ...exportFilters(), columns: exportColumns() });
       saveBlob(blob, 'assets.csv');
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });
@@ -284,7 +305,7 @@ export function AssetsPage() {
     if (exporting) return;
     setExporting(true);
     try {
-      const blob = await api.downloadAssetsJson({ search: debouncedSearch, status: status || undefined, location: location || undefined });
+      const blob = await api.downloadAssetsJson(exportFilters());
       saveBlob(blob, 'assets.json');
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('common.saveError') });

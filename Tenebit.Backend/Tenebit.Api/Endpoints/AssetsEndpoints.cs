@@ -99,18 +99,18 @@ public static class AssetsEndpoints
                 (await service.GetGroupCountsAsync(cancellationToken)).ToHttpResult())
             .WithTags("Assets");
 
-        api.MapGet("/assets/export.csv", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
+        api.MapGet("/assets/export.csv", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool? unassignedOnly, bool? warrantyExpiring, string? sort, bool? desc, string? columns, CancellationToken cancellationToken) =>
         {
-            var result = await service.ExportCsvAsync(search, status, location, cancellationToken);
+            var result = await service.ExportCsvAsync(search, status, location, teamId, categoryId, unassignedOnly ?? false, warrantyExpiring ?? false, sort, desc ?? false, columns, cancellationToken);
             return result.IsFailure || result.Value is null
                 ? result.ToHttpResult()
                 : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "text/csv", "assets.csv");
         })
             .WithTags("Assets");
 
-        api.MapGet("/assets/export.json", async (AssetService service, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken) =>
+        api.MapGet("/assets/export.json", async (AssetService service, string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool? unassignedOnly, bool? warrantyExpiring, string? sort, bool? desc, CancellationToken cancellationToken) =>
         {
-            var result = await service.ExportJsonAsync(search, status, location, cancellationToken);
+            var result = await service.ExportJsonAsync(search, status, location, teamId, categoryId, unassignedOnly ?? false, warrantyExpiring ?? false, sort, desc ?? false, cancellationToken);
             return result.IsFailure || result.Value is null
                 ? result.ToHttpResult()
                 : Results.File(System.Text.Encoding.UTF8.GetBytes(result.Value), "application/json", "assets.json");

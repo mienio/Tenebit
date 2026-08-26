@@ -27,6 +27,23 @@ const DEFAULTS: Record<AssetColumnKey, boolean> = {
 const STORAGE_KEY = 'tenebit_asset_columns';
 
 /**
+ * Reads the stored choice without subscribing to it.
+ *
+ * For callers outside the list that need the current value at one moment - the CSV export, which must
+ * emit the columns the user is actually looking at. Deliberately not the hook: a second hook instance
+ * would run the write-back effect too, and could overwrite a fresh choice with its own stale copy.
+ */
+export function readAssetColumns(): Record<AssetColumnKey, boolean> {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULTS;
+    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Record<AssetColumnKey, boolean>>) };
+  } catch {
+    return DEFAULTS;
+  }
+}
+
+/**
  * Per-viewer choice of which asset columns are shown.
  *
  * Kept in localStorage rather than on the server: it is a personal display preference, not tenant data,
