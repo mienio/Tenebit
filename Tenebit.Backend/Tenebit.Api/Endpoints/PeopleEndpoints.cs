@@ -95,10 +95,6 @@ public static class PeopleEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
             .WithTags("People");
 
-        api.MapPost("/people/{id:guid}/offboarding", async (Guid id, StartOffboardingRequest request, PeopleService service, CancellationToken cancellationToken) =>
-                (await service.StartOffboardingAsync(id, request, cancellationToken)).ToHttpResult())
-            .WithTags("People");
-
         api.MapGet("/people/{id:guid}/workspace", async (Guid id, MyWorkspaceService service, CancellationToken cancellationToken) =>
                 (await service.GetForPersonAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("People");

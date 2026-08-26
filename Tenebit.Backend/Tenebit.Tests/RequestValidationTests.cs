@@ -91,8 +91,12 @@ public sealed class RequestValidationTests
     [Fact]
     public void Convention_validator_rejects_absurd_dates()
     {
-        var error = RequestObjectValidator.Validate(new StartOffboardingRequest(
-            new DateTimeOffset(2500, 1, 1, 0, 0, 0, TimeSpan.Zero)));
+        // Any validated request carrying a date will do - the rule under test belongs to the convention
+        // validator, not to the request it happens to travel on.
+        var error = RequestObjectValidator.Validate(new UpdateOffboardingCaseRequest(
+            new DateTimeOffset(2500, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2500, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            null, null, null, false, false, false));
         Assert.NotNull(error);
     }
 

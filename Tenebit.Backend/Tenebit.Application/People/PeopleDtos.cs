@@ -54,8 +54,6 @@ public sealed record UpdatePersonRequest(
     bool IsActive,
     string? PreferredLanguage = null);
 
-[ValidatedRequest]
-public sealed record StartOffboardingRequest(DateTimeOffset EmploymentEndsAt);
 
 public sealed record TeamResponse(Guid Id, string Name, Guid? ManagerId, string? CostCenter);
 [ValidatedRequest]

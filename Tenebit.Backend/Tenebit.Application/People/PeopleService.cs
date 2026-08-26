@@ -13,7 +13,6 @@ public sealed class PeopleService
 {
     private readonly IPersonRepository _people;
     private readonly ITeamRepository _teams;
-    private readonly IAssetRepository _assets;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
@@ -26,11 +25,10 @@ public sealed class PeopleService
     // to its own team by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor];
 
-    public PeopleService(IPersonRepository people, ITeamRepository teams, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
+    public PeopleService(IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
     {
         _people = people;
         _teams = teams;
-        _assets = assets;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -209,35 +207,6 @@ public sealed class PeopleService
         _activity.Add(new ActivityLog(organizationId, "person.deleted", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
-    }
-
-    public async Task<Result<PersonResponse>> StartOffboardingAsync(Guid id, StartOffboardingRequest request, CancellationToken cancellationToken)
-    {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
-        if (access.IsFailure) return Result<PersonResponse>.Failure(access.Error!);
-
-        try
-        {
-            var organizationId = _currentUser.OrganizationId;
-            var person = await _people.GetAsync(organizationId, id, cancellationToken);
-            if (person is null) return Result<PersonResponse>.Failure(Error.NotFound("Pracownik nie istnieje."));
-
-            person.StartOffboarding(request.EmploymentEndsAt);
-
-            var assets = await _assets.ListAsync(organizationId, null, null, null, cancellationToken);
-            foreach (var asset in assets.Where(a => a.AssignedPersonId == person.Id && a.Status == AssetStatus.Assigned))
-            {
-                asset.MarkPendingReturn();
-            }
-
-            _activity.Add(new ActivityLog(organizationId, "person.offboarding_started", "person", person.Id, _currentUser.Subject, person.FullName, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return await GetAsync(id, cancellationToken);
-        }
-        catch (DomainException ex)
-        {
-            return Result<PersonResponse>.Failure(Error.Validation(ex.Message));
-        }
     }
 
     private async Task<Error?> ValidateReferencesAsync(Guid organizationId, Guid? teamId, Guid? managerId, Guid? excludingPersonId, CancellationToken cancellationToken)
