@@ -190,6 +190,11 @@ public static class ErrorCodeResolver
         ["Ten status wymaga jawnego rozstrzygnięcia (Missing, Damaged albo Retained)."] = "AUDIT_STATUS_REQUIRES_RESOLUTION",
         ["To aktywo nie należy do tego wydania."] = "ASSIGNMENT_ASSET_NOT_IN_ASSIGNMENT",
         ["To aktywo zostało już zgłoszone niedawno. Spróbuj ponownie później."] = "ASSET_REPORT_RATE_LIMITED",
+        // All three public-report limits answer with one code: the caller is an anonymous member of the
+        // public and only needs "not now", while the wording tells them which situation they are in.
+        ["To aktywo zostało już przez Ciebie zgłoszone niedawno. Spróbuj ponownie później."] = "ASSET_REPORT_RATE_LIMITED",
+        ["To aktywo zostało już zgłoszone wielokrotnie. Zgłoszenie dotarło do administratorów."] = "ASSET_REPORT_RATE_LIMITED",
+        ["Zbyt wiele zgłoszeń w krótkim czasie. Spróbuj ponownie później."] = "ASSET_REPORT_RATE_LIMITED",
         ["To konto nie jest połączone z tym dostawcą."] = "AUTH_ACCOUNT_NOT_LINKED_TO_PROVIDER",
         ["To samo aktywo nie może wystąpić dwa razy w jednym wydaniu."] = "ASSIGNMENT_DUPLICATE_ASSET",
         ["Treść zgłoszenia jest wymagana."] = "REPORT_CONTENT_REQUIRED",

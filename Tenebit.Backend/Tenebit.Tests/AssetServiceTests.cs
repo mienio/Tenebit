@@ -23,6 +23,7 @@ public class AssetServiceTests
         organizations.Add(organization);
         currentUser.OrganizationId = organization.Id;
         var assets = new InMemoryAssetRepository();
+        var throttle = new InMemoryPublicReportThrottleRepository();
         var categories = new InMemoryAssetCategoryRepository();
         var subscriptions = new InMemorySubscriptionRepository();
         var people = new InMemoryPersonRepository();
@@ -30,6 +31,7 @@ public class AssetServiceTests
 
         var service = new AssetService(
             assets,
+            throttle,
             new InMemoryMaintenanceScheduleRepository(),
             categories,
             people,
@@ -61,6 +63,7 @@ public class AssetServiceTests
 
         var service = new AssetService(
             assets,
+            new InMemoryPublicReportThrottleRepository(),
             new InMemoryMaintenanceScheduleRepository(),
             categories,
             people,
@@ -285,7 +288,67 @@ public class AssetServiceTests
     }
 
     [Fact]
-    public async Task ReportPublicIssueAsync_CooldownIsPerAsset_NotPerReporterIp()
+    public async Task ReportPublicIssueAsync_DifferentReporterMayReportSameAsset()
+    {
+        var (service, user, _, categories, _) = CreateService();
+        var category = AddCategory(user, categories);
+        var created = await service.CreateAsync(BuildRequest(category.Id), CancellationToken.None);
+        var assetId = created.Value!.Id;
+
+        user.IpAddress = "10.0.0.1";
+        var first = await service.ReportPublicIssueAsync(user.OrganizationId, assetId, new ReportAssetIssueRequest("Zepsuty ekran"), CancellationToken.None);
+        user.IpAddress = "10.0.0.2";
+        var second = await service.ReportPublicIssueAsync(user.OrganizationId, assetId, new ReportAssetIssueRequest("Nie dziala klawiatura"), CancellationToken.None);
+
+        // The old limit was keyed on a constant actor, so the first report silenced everyone else on
+        // that asset for the whole window. A second person must still be able to get through.
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+    }
+
+    [Fact]
+    public async Task ReportPublicIssueAsync_CapsReportsPerAsset_EvenAcrossReporters()
+    {
+        var (service, user, _, categories, _) = CreateService();
+        var category = AddCategory(user, categories);
+        var created = await service.CreateAsync(BuildRequest(category.Id), CancellationToken.None);
+        var assetId = created.Value!.Id;
+
+        for (var i = 1; i <= 3; i++)
+        {
+            user.IpAddress = $"10.0.0.{i}";
+            var allowed = await service.ReportPublicIssueAsync(user.OrganizationId, assetId, new ReportAssetIssueRequest($"Usterka {i}"), CancellationToken.None);
+            Assert.True(allowed.IsSuccess);
+        }
+
+        // Rotating addresses must not buy an unlimited number of mails to the administrators.
+        user.IpAddress = "10.0.0.99";
+        var blocked = await service.ReportPublicIssueAsync(user.OrganizationId, assetId, new ReportAssetIssueRequest("Usterka 4"), CancellationToken.None);
+
+        Assert.True(blocked.IsFailure);
+        Assert.Equal("ASSET_REPORT_RATE_LIMITED", blocked.Error!.Code);
+    }
+
+    [Fact]
+    public async Task ReportPublicIssueAsync_WithoutReporterAddress_FallsBackToOneSharedBucket()
+    {
+        var (service, user, _, categories, _) = CreateService();
+        var category = AddCategory(user, categories);
+        var created = await service.CreateAsync(BuildRequest(category.Id), CancellationToken.None);
+        var assetId = created.Value!.Id;
+
+        // No address at all: every caller collapses into the anonymous bucket, so the limit gets
+        // stricter rather than disappearing. Privacy settings must never be a way to switch it off.
+        user.IpAddress = "";
+        var first = await service.ReportPublicIssueAsync(user.OrganizationId, assetId, new ReportAssetIssueRequest("Zepsuty ekran"), CancellationToken.None);
+        var second = await service.ReportPublicIssueAsync(user.OrganizationId, assetId, new ReportAssetIssueRequest("Zepsuty ekran"), CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsFailure);
+    }
+
+    [Fact]
+    public async Task ReportPublicIssueAsync_SameReporterCooldownStillApplies()
     {
         var (service, user, _, categories, _) = CreateService();
         var category = AddCategory(user, categories);
@@ -295,15 +358,28 @@ public class AssetServiceTests
 
         user.IpAddress = "10.0.0.1";
         var first = await service.ReportPublicIssueAsync(organizationId, assetId, new ReportAssetIssueRequest("Zepsuty ekran"), CancellationToken.None);
-        user.IpAddress = "10.0.0.2";
         var second = await service.ReportPublicIssueAsync(organizationId, assetId, new ReportAssetIssueRequest("Zepsuty ekran"), CancellationToken.None);
 
+        // Same person, same asset: still one report per cooldown. Opening the limit up to other
+        // reporters must not hand the same reporter a second turn.
         Assert.True(first.IsSuccess);
-        // The cooldown is keyed on the asset alone - the activity entry carries the constant
-        // "public-scan" actor, never the reporter. Rotating IP therefore does not buy another mail to
-        // the admins, which is the point: the limit exists to protect their inbox, not the reporter.
-        // The cost is that one report silences other people's reports on that asset for the window.
         Assert.True(second.IsFailure);
         Assert.Equal("ASSET_REPORT_RATE_LIMITED", second.Error!.Code);
+    }
+
+    [Fact]
+    public void PublicReporterKey_IsStableAndNotReversibleToTheAddress()
+    {
+        var orgA = Guid.NewGuid();
+        var orgB = Guid.NewGuid();
+
+        var a1 = PublicReporterKey.Derive(orgA, "10.0.0.1");
+        var a2 = PublicReporterKey.Derive(orgA, " 10.0.0.1 ");
+        var b1 = PublicReporterKey.Derive(orgB, "10.0.0.1");
+
+        Assert.Equal(a1, a2);                       // whitespace must not buy a fresh quota
+        Assert.NotEqual(a1, b1);                    // salted per organization, so keys cannot be joined across tenants
+        Assert.DoesNotContain("10.0.0.1", a1);      // the address itself is never stored
+        Assert.Equal(PublicReporterKey.AnonymousBucket, PublicReporterKey.Derive(orgA, "not-an-ip"));
     }
 }

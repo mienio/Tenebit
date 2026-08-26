@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Abstractions.Repositories;
 using Tenebit.Infrastructure.Data;
 using Tenebit.Infrastructure.Repositories;
 using Tenebit.Infrastructure.Seed;
@@ -44,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IAssetCategoryRepository, AssetCategoryRepository>();
         services.AddScoped<IAssetInspectionRepository, AssetInspectionRepository>();
         services.AddScoped<IMaintenanceScheduleRepository, MaintenanceScheduleRepository>();
+        services.AddScoped<IPublicReportThrottleRepository, PublicReportThrottleRepository>();
         services.AddScoped<IPersonRepository, PersonRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IPersonRelationTypeRepository, PersonRelationTypeRepository>();

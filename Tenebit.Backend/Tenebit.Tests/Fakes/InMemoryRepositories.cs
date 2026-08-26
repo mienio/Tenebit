@@ -1,4 +1,5 @@
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Abstractions.Repositories;
 using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
@@ -492,4 +493,26 @@ public sealed class FakeUnitOfWork : IUnitOfWork
 
     public Task<T> ExecuteWithResourceLocksAsync<T>(Guid organizationId, string resourceType, IReadOnlyCollection<Guid> resourceIds, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken) =>
         action(cancellationToken);
+}
+
+public sealed class InMemoryPublicReportThrottleRepository : IPublicReportThrottleRepository
+{
+    public List<PublicReportThrottle> Entries { get; } = [];
+
+    public Task<bool> ExistsForReporterAndAssetAsync(Guid organizationId, Guid assetId, string reporterHash, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult(Entries.Any(x => x.OrganizationId == organizationId && x.AssetId == assetId && x.ReporterHash == reporterHash && x.CreatedAt >= since));
+
+    public Task<int> CountForAssetAsync(Guid organizationId, Guid assetId, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult(Entries.Count(x => x.OrganizationId == organizationId && x.AssetId == assetId && x.CreatedAt >= since));
+
+    public Task<int> CountForReporterAsync(Guid organizationId, string reporterHash, DateTimeOffset since, CancellationToken cancellationToken) =>
+        Task.FromResult(Entries.Count(x => x.OrganizationId == organizationId && x.ReporterHash == reporterHash && x.CreatedAt >= since));
+
+    public void Add(PublicReportThrottle entry) => Entries.Add(entry);
+
+    public Task PurgeOlderThanAsync(Guid organizationId, DateTimeOffset cutoff, CancellationToken cancellationToken)
+    {
+        Entries.RemoveAll(x => x.OrganizationId == organizationId && x.CreatedAt < cutoff);
+        return Task.CompletedTask;
+    }
 }

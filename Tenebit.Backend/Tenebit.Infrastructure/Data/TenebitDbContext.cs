@@ -122,6 +122,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<AssetEvidence> AssetEvidence => Set<AssetEvidence>();
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
+    public DbSet<PublicReportThrottle> PublicReportThrottles => Set<PublicReportThrottle>();
     public DbSet<OffboardingCase> OffboardingCases => Set<OffboardingCase>();
     public DbSet<OffboardingItem> OffboardingItems => Set<OffboardingItem>();
     public DbSet<AssetAuditCampaign> AssetAuditCampaigns => Set<AssetAuditCampaign>();
@@ -138,6 +139,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         ConfigureAssets(modelBuilder);
         ConfigureLocations(modelBuilder);
         ConfigureMaintenance(modelBuilder);
+        ConfigurePublicReportThrottle(modelBuilder);
         ConfigurePeople(modelBuilder);
         ConfigureProcedures(modelBuilder);
         ConfigureJobProfiles(modelBuilder);
@@ -805,6 +807,24 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasIndex(x => new { x.OrganizationId, x.NextDueOn });
             entity.HasIndex(x => new { x.OrganizationId, x.AssetId });
             // Composite FK so a schedule can never point at an asset owned by another organization.
+            entity.HasOne<Asset>().WithMany()
+                .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
+                .HasPrincipalKey(x => new { x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigurePublicReportThrottle(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PublicReportThrottle>(entity =>
+        {
+            entity.ToTable("public_report_throttle");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ReporterHash).HasMaxLength(64).IsRequired();
+            // The two lookups the limiter makes on every public report.
+            entity.HasIndex(x => new { x.OrganizationId, x.AssetId, x.CreatedAt });
+            entity.HasIndex(x => new { x.OrganizationId, x.ReporterHash, x.CreatedAt });
+            // Cascade so deleting an asset takes its throttle rows with it; they are worthless alone.
             entity.HasOne<Asset>().WithMany()
                 .HasForeignKey(x => new { x.OrganizationId, x.AssetId })
                 .HasPrincipalKey(x => new { x.OrganizationId, x.Id })

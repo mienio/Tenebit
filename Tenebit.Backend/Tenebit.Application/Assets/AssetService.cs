@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Abstractions.Repositories;
 using Tenebit.Application.Common;
 using Tenebit.Application.Identity;
 using Tenebit.Domain.Assets;
@@ -15,6 +16,7 @@ namespace Tenebit.Application.Assets;
 public sealed class AssetService
 {
     private readonly IAssetRepository _assets;
+    private readonly IPublicReportThrottleRepository _throttle;
     private readonly IMaintenanceScheduleRepository _maintenance;
     private readonly IAssetCategoryRepository _categories;
     private readonly IPersonRepository _people;
@@ -39,9 +41,10 @@ public sealed class AssetService
     // its own team's assigned assets by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician, TenebitRoles.Hr, TenebitRoles.LicenseManager, TenebitRoles.Finance, TenebitRoles.Auditor];
 
-    public AssetService(IAssetRepository assets, IMaintenanceScheduleRepository maintenance, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IEmailOutboxWriter? emailOutbox = null)
+    public AssetService(IAssetRepository assets, IPublicReportThrottleRepository throttle, IMaintenanceScheduleRepository maintenance, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IEmailOutboxWriter? emailOutbox = null)
     {
         _assets = assets;
+        _throttle = throttle;
         _maintenance = maintenance;
         _categories = categories;
         _people = people;
@@ -311,7 +314,17 @@ public sealed class AssetService
         return Result<PublicAssetScanResponse>.Success(new PublicAssetScanResponse(organization.Name));
     }
 
+    /// <summary>
+    /// Three limits, because one number cannot serve two purposes. The per-reporter cooldown stops one
+    /// person re-reporting the same asset; the per-asset cap protects the admins' inbox no matter how
+    /// many people (or addresses) are involved; the per-reporter cap stops someone walking a floor and
+    /// scanning every label. The old single limit conflated these and, keyed on a constant actor, let
+    /// one report silence everybody else on that asset.
+    /// </summary>
     private static readonly TimeSpan PublicIssueReportCooldown = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan PublicIssueBurstWindow = TimeSpan.FromHours(1);
+    private const int PublicIssueMaxPerAsset = 3;
+    private const int PublicIssueMaxPerReporter = 10;
 
     public async Task<Result> ReportPublicIssueAsync(Guid organizationId, Guid assetId, ReportAssetIssueRequest request, CancellationToken cancellationToken)
     {
@@ -327,12 +340,23 @@ public sealed class AssetService
             var now = _clock.UtcNow;
             var capturedIp = PublicIpPrivacyPolicy.Capture(organization, _currentUser.IpAddress, now);
             const string actorSubject = "public-scan";
-            var since = now - PublicIssueReportCooldown;
 
-            // The per-asset advisory lock makes the cooldown check + enqueue + audit write atomic. Two concurrent
-            // public scans can no longer both observe an empty cooldown window and send duplicate notifications.
-            var reportedRecently = await _activity.ExistsRecentAsync(organizationId, "asset", asset.Id, actorSubject, "asset.scan_reported", since, ct);
-            if (reportedRecently) return Result.Failure(Error.TooManyRequests("To aktywo zostało już zgłoszone niedawno. Spróbuj ponownie później."));
+            // Derived from the raw address regardless of the organization's IP retention setting: the
+            // limit must not weaken because a tenant chose not to store addresses. Nothing reversible
+            // is written - see PublicReporterKey.
+            var reporter = PublicReporterKey.Derive(organizationId, _currentUser.IpAddress);
+            var burstSince = now - PublicIssueBurstWindow;
+
+            // The per-asset advisory lock makes the limit checks + enqueue + audit write atomic. Two concurrent
+            // public scans can no longer both observe an empty window and send duplicate notifications.
+            var sameReporterRecently = await _throttle.ExistsForReporterAndAssetAsync(organizationId, asset.Id, reporter, now - PublicIssueReportCooldown, ct);
+            if (sameReporterRecently) return Result.Failure(Error.TooManyRequests("To aktywo zostało już przez Ciebie zgłoszone niedawno. Spróbuj ponownie później."));
+
+            var reportsForAsset = await _throttle.CountForAssetAsync(organizationId, asset.Id, burstSince, ct);
+            if (reportsForAsset >= PublicIssueMaxPerAsset) return Result.Failure(Error.TooManyRequests("To aktywo zostało już zgłoszone wielokrotnie. Zgłoszenie dotarło do administratorów."));
+
+            var reportsFromReporter = await _throttle.CountForReporterAsync(organizationId, reporter, burstSince, ct);
+            if (reportsFromReporter >= PublicIssueMaxPerReporter) return Result.Failure(Error.TooManyRequests("Zbyt wiele zgłoszeń w krótkim czasie. Spróbuj ponownie później."));
 
             var users = await _organizationUsers.ListAsync(organizationId, ct);
             var adminEmails = users
@@ -367,6 +391,10 @@ public sealed class AssetService
             }
 
             _activity.Add(new ActivityLog(organizationId, "asset.scan_reported", "asset", asset.Id, actorSubject, asset.Name, now, capturedIp.StoredIp, capturedIp.ExpiresAt));
+            _throttle.Add(new PublicReportThrottle(organizationId, asset.Id, reporter, now));
+            // Opportunistic cleanup: nothing older than the widest window is ever read again, so the
+            // table stays small without a background job to own.
+            await _throttle.PurgeOlderThanAsync(organizationId, now - PublicIssueBurstWindow - TimeSpan.FromHours(1), ct);
             await _unitOfWork.SaveChangesAsync(ct);
             return Result.Success();
         }, cancellationToken);
