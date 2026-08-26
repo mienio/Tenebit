@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /$
+Allow: /login
+Allow: /register
+Allow: /privacy
+Allow: /terms
+Allow: /cookies
+
+# Linki jednorazowe (token capability w ciasteczku) i panel administracyjny nie maja czego
+# szukac w wynikach wyszukiwania.
+Disallow: /accept
+Disallow: /exit
+Disallow: /audit
+Disallow: /scan
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://skinny-tiger4900.byst.re/sitemap.xml

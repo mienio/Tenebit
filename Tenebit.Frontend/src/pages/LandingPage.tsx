@@ -245,8 +245,10 @@ export function LandingPage() {
         {(children.length > 0 || assetsHere.length > 0) && (
           <div className="locationGroup__children">
             {children.map(child => renderAssetLocationNode(child))}
+            {/* Makieta produktu, nie dane - bez naglowkow kolumn, wiec czytnik ekranu ma ja
+                traktowac jak uklad, a nie jak tabele do nawigowania. */}
             {assetsHere.length > 0 && (
-              <table className="dense-table">
+              <table className="dense-table" role="presentation">
                 <tbody>{assetsHere.map(renderAssetRow)}</tbody>
               </table>
             )}
@@ -290,6 +292,8 @@ export function LandingPage() {
           <Link to="/register" className="button button--primary">{t('landing.navRegisterBtn')}</Link>
         </div>
       </header>
+      {/* `display: contents` - landmark dla czytnikow ekranu bez zmiany siatki `.landing`. */}
+      <main className="landing__main">
 
       <div className="landing__glowWrap">
         <div className="landing__glow landing__glow--one" aria-hidden="true" />
@@ -488,6 +492,7 @@ export function LandingPage() {
         <Link to="/register" className="button button--primary">{t('landing.ctaStart')} <ArrowRight size={16} /></Link>
       </section>
 
+      </main>
       <PublicFooter />
     </div>
   );

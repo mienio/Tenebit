@@ -47,10 +47,13 @@ function HomeRoute() {
   return <Navigate to={dashboard && canSee(dashboard.roles, auth.roles) ? '/dashboard' : '/my'} replace />;
 }
 
-function RequireRoles({ path, children }: { path: string; children: ReactNode }) {
+// Role bierzemy z `nav`, bo menu i dostep do trasy musza sie zgadzac. Trasy spoza menu (np. /pricing)
+// podaja liste jawnie przez `roles`. Brak jednego i drugiego jest traktowany jak brak dostepu: wczesniej
+// literowka w `path` cicho przepuszczala kazdego, bo `nav.find` zwracalo undefined.
+function RequireRoles({ path, roles, children }: { path: string; roles?: string[]; children: ReactNode }) {
   const auth = useAuth();
-  const item = nav.find(entry => entry.to === path);
-  if (item && !canSee(item.roles, auth.roles)) return <ForbiddenPage />;
+  const required = roles ?? nav.find(entry => entry.to === path)?.roles;
+  if (!required || !canSee(required, auth.roles)) return <ForbiddenPage />;
   return <>{children}</>;
 }
 
@@ -93,9 +96,16 @@ export function App() {
           <Route path="asset-audits/:id" element={<RequireRoles path="/asset-audits"><AssetAuditsPage /></RequireRoles>} />
           <Route path="reports" element={<RequireRoles path="/reports"><ReportsPage /></RequireRoles>} />
           <Route path="licenses" element={<RequireRoles path="/licenses"><LicensesPage /></RequireRoles>} />
-          <Route path="audit" element={<RequireRoles path="/audit"><AuditLogPage /></RequireRoles>} />
+          {/* NIE `/audit` - ta sciezka nalezy do publicznej strony kampanii inwentaryzacyjnej (linia
+              wyzej), ktorej adres jest juz rozeslany w mailach do pracownikow. Dopoki dziennik
+              zdarzen tez siedzial na `/audit`, publiczna trasa wygrywala dopasowanie i caly modul
+              byl nieosiagalny z poziomu aplikacji. */}
+          <Route path="activity-log" element={<RequireRoles path="/activity-log"><AuditLogPage /></RequireRoles>} />
           <Route path="settings" element={<RequireRoles path="/settings"><SettingsPage /></RequireRoles>} />
-          <Route path="pricing" element={<RequireRoles path="/pricing"><PricingPage /></RequireRoles>} />
+          {/* Poza menu, wiec role jawnie. Backend i tak przepuszcza checkout/portal platnosci tylko
+              wlascicielowi (SubscriptionService), a to zamyka slepy zaulek: reszta rol nie ogląda juz
+              przyciskow, ktore skoncza sie bledem 403. */}
+          <Route path="pricing" element={<RequireRoles path="/pricing" roles={['owner']}><PricingPage /></RequireRoles>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

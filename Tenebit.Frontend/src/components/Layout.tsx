@@ -30,7 +30,7 @@ export const nav = [
   { to: '/offboarding', labelKey: 'nav.offboarding', icon: UserRoundX, roles: ['owner', 'admin', 'hr', 'asset_operator'], group: 'employment' },
   { to: '/procedures', labelKey: 'nav.procedures', icon: ClipboardCheck, roles: ['owner', 'admin', 'hr', 'manager', 'asset_operator', 'auditor', 'procedure_manager'], group: 'employment' },
   { to: '/reports', labelKey: 'nav.reports', icon: BarChart3, roles: ['owner', 'admin', 'manager', 'finance', 'auditor', 'asset_operator'], group: 'reports' },
-  { to: '/audit', labelKey: 'nav.audit', icon: History, roles: ['owner', 'admin', 'auditor'], group: 'reports' },
+  { to: '/activity-log', labelKey: 'nav.audit', icon: History, roles: ['owner', 'admin', 'auditor'], group: 'reports' },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: [] },
 ];
 

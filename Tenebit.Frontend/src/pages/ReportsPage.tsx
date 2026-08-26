@@ -216,7 +216,7 @@ export function ReportsPage() {
         </Card>
 
         <Card>
-          <div className="sectionTitle"><div><h2>{t('reports.recentActivity')}</h2></div><Link className="inlineAction" to="/audit">{t('reports.viewAuditLog')}</Link></div>
+          <div className="sectionTitle"><div><h2>{t('reports.recentActivity')}</h2></div><Link className="inlineAction" to="/activity-log">{t('reports.viewAuditLog')}</Link></div>
           <div className="listRows">
             {!data.recentActivity.length ? <p className="muted">{t('reports.noActivity')}</p> : data.recentActivity.slice(0, 6).map((item, index) => (
               <div className="listRow" key={`${item.action}-${index}`}>

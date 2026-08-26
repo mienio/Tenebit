@@ -126,11 +126,20 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .button__icon { display: inline-flex; }
 
 .formGrid, .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.filters { grid-template-columns: 1fr 230px; align-items: end; }
-.filters--three { grid-template-columns: minmax(260px, 1fr) 220px 300px; }
-.filters--four { grid-template-columns: minmax(220px, 1fr) 180px 220px 220px; }
-.filters--six { grid-template-columns: minmax(200px, 1fr) 160px 160px 160px minmax(160px, 1fr) minmax(160px, 1fr); }
-.filters--single { grid-template-columns: minmax(260px, 1fr) auto; align-items: end; }
+/* Kolumny filtrów muszą być ściśliwe (`minmax(0, Nfr)`), nie sztywne. Wcześniej `--six` miało
+   min-content 1070px, a obszar treści na laptopie 1280px ma 913px (1265 - 276 sidebar - 76 padding),
+   więc dziennik zdarzeń, inwentaryzacje i offboarding jechały z poziomym scrollem. Breakpoint na
+   1180px nie ratował, bo mierzy viewport i nie wie nic o sidebarze. Proporcje zostają - znika tylko
+   twarda podłoga, która uniemożliwiała zwężenie. */
+.filters { grid-template-columns: minmax(0, 1fr) minmax(0, 230px); align-items: end; }
+.filters--three { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.35fr); }
+.filters--four { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr); }
+.filters--six { grid-template-columns: minmax(0, 1.25fr) repeat(5, minmax(0, 1fr)); }
+.filters--single { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+/* Element grida domyślnie ma `min-width: auto`, czyli nie zwęzi się poniżej wewnętrznej szerokości
+   inputa (~20 znaków). Bez tego powyższe `minmax(0, ...)` nie zadziała. */
+.filters > .field, .filters > * { min-width: 0; }
+.filters .input { min-width: 0; width: 100%; }
 .settingsSearch { margin-bottom: 16px; }
 .toolbarHint { min-height: 42px; display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; justify-self: end; }
 .field { display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 560; }
@@ -386,7 +395,14 @@ button.authIcon:hover { filter: brightness(0.94); }
 .fileDropzone--active { border-color: var(--accent); background: var(--accent-soft); }
 .fileDropzone__hint { color: var(--muted); font-size: 13px; }
 
-.landing { max-width: 1180px; margin: 0 auto; padding: 24px 28px 0; display: grid; gap: 96px; }
+/* `grid-template-columns: minmax(0, 1fr)` jest obowiązkowe, nie kosmetyczne. Domyślna kolumna `auto`
+   ma rozmiar minimalny równy min-content najszerszego dziecka, więc jedna nieściśliwa sekcja rozpycha
+   cały layout ponad `max-width` i robi poziomy scroll na całej stronie głównej. `minmax(0, ...)`
+   pozwala dzieciom się zwęzić i zamyka tę klasę błędu raz na zawsze. */
+.landing { max-width: 1180px; margin: 0 auto; padding: 24px 28px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 96px; }
+/* Landmark <main> dla czytnikow ekranu. `display: contents` sprawia, ze element nie tworzy wlasnego
+   pudelka, wiec sekcje pozostaja bezposrednimi elementami siatki `.landing` i uklad sie nie zmienia. */
+.landing__main { display: contents; }
 .landing__glowWrap { position: relative; }
 .landing__glow { display: none; }
 
@@ -698,7 +714,10 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-hero h1 { margin: 0 0 12px; font-size: clamp(32px, 4.5vw, 46px); font-weight: 730; letter-spacing: -0.045em; }
 .pricing-hero p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.6; max-width: 640px; }
 
-.pricing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
+/* `minmax(min(240px, 100%), 1fr)`, nie `minmax(240px, 1fr)`: twarda podłoga 240px dawała siatce
+   min-content 1296px przy pięciu planach (5x240 + 4x24 przerwy). Siatka nie mogła się zwęzić, rozpychała
+   `.landing` i robiła poziomy scroll na 1280px. `min(...)` zdejmuje podłogę, gdy nie ma na nią miejsca. */
+.pricing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
 .pricing-card { min-width: 0; padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
 .pricing-card--featured { border-color: var(--brand); box-shadow: 8px 8px 0 rgba(34,29,24,.18); background: var(--brand-soft); transform: scale(1.045); z-index: 1; }
 .pricing-card__badge { position: absolute; top: -12px; left: 24px; padding: 6px 12px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
@@ -715,6 +734,12 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-cta { width: 100%; min-height: 48px; }
 .pricing-confirm-detail { margin-top: -4px; padding: 10px 12px; border-radius: var(--radius); background: var(--brand-soft); font-size: 14px; }
 
+/* Pięć planów mieści się obok siebie dopiero od ~1300px. Poniżej schodzimy na trzy kolumny zamiast
+   ściskać karty do nieczytelnej szerokości. */
+@media (max-width: 1300px) {
+  .pricing-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 1024px) {
   .pricing-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pricing-card--featured { transform: none; }
@@ -723,6 +748,17 @@ button.authIcon:hover { filter: brightness(0.94); }
 
 @media (max-width: 560px) {
   .pricing-cards { grid-template-columns: 1fr; }
+}
+
+/* Progi liczone dla obszaru treści, nie dla viewportu: sidebar (276px) i padding (76px) zabierają
+   ~352px, więc laptop 1280px daje na filtry ~913px. Sześć kolumn robi się tam nieczytelne na długo
+   przed progiem 1180px poniżej. */
+@media (max-width: 1460px) {
+  .filters--six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1300px) {
+  .filters--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 1180px) {
