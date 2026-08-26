@@ -1,4 +1,4 @@
-import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Trash2, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
+import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Search, Trash2, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
@@ -357,10 +357,23 @@ export function PeoplePage() {
       )}
 
       <Card className="toolbarCard">
-        <form className="filters filters--single" onSubmit={event => event.preventDefault()}>
-          <Field label={t('common.search')}>
-            <TextInput value={search} onChange={event => setSearch(event.target.value)} placeholder={t('people.searchPlaceholder')} />
-          </Field>
+        {/* One line, same as the asset list: a labelled field stacked its caption above the input and
+            turned a single search box into a two-row block of chrome. */}
+        <form className="searchBar" onSubmit={event => event.preventDefault()}>
+          <div className="searchBar__field">
+            <Search size={16} />
+            <TextInput
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder={t('people.searchPlaceholder')}
+              aria-label={t('common.search')}
+            />
+            {search ? (
+              <button type="button" className="searchBar__clear" aria-label={t('common.clearFilters')} onClick={() => setSearch('')}>
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
         </form>
       </Card>
 

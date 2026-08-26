@@ -88,18 +88,23 @@
    A strip on the tile's right edge, not a column: it costs no horizontal space, needs no header, and
    answers "is this one due" before you read anything. Neutral assets get nothing at all, so the mark
    only ever appears when it means something. */
-.assetTile { position: relative; padding-right: 14px; }
+.assetTile { position: relative; padding-right: 18px; }
 .assetTile__due {
   position: absolute;
-  top: 6px;
+  top: 4px;
   right: 0;
-  bottom: 6px;
-  width: 4px;
+  bottom: 4px;
+  width: 7px;
   border-radius: 999px 0 0 999px;
 }
-.assetTile__due--ok { background: var(--success); }
-.assetTile__due--soon { background: #b45309; }
-.assetTile__due--due { background: var(--danger); }
-/* Overdue reads as black rather than red: it is the most serious state and must not be confused with
-   the red already used for destructive buttons elsewhere. */
-.assetTile__due--overdue { background: var(--text); }
+
+/* Deliberately brighter than the rest of the palette. The muted brand tones are correct for text and
+   chips, but at this size a dark red, a dark orange and a near-black all read as the same brown
+   smudge - the one thing a four-state indicator must never do. These are chosen to stay apart at a
+   glance, and the strip is wide enough to show the hue rather than just a hairline. */
+.assetTile__due--ok { background: #16a34a; }
+.assetTile__due--soon { background: #f59e0b; }
+.assetTile__due--due { background: #ef4444; }
+/* Overdue is black, not a stronger red: past the deadline is a different state, not more urgency, and
+   red is already spoken for by "due this week" one step above it. */
+.assetTile__due--overdue { background: #18120c; }

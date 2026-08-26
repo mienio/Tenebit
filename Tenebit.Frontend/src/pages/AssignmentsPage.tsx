@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ExternalLink, Eye, Link2, PackageCheck, Plus, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api, type EvidencePhoto } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -44,6 +44,7 @@ export function AssignmentsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<AssignmentStatus | ''>('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [viewPersonId, setViewPersonId] = useState<string | null>(null);
   const [assetFilter, setAssetFilter] = useState('');
@@ -181,16 +182,55 @@ export function AssignmentsPage() {
       {message ? <div className="toastStack" aria-live="polite"><div className={`toast toast--${message.type}`}>{message.text}</div></div> : null}
 
       <Card className="toolbarCard">
-        <div className="filters filters--three">
-          <Field label={t('common.search')}><TextInput value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder={t('assignments.searchPlaceholder')} /></Field>
-          <Field label={t('assets.statusLabel')}>
-            <SelectInput value={status} onChange={event => { setStatus(event.target.value as AssignmentStatus | ''); setPage(1); }}>
-              <option value="">{t('assets.allStatuses')}</option>
-              {assignmentStatusValues.map(value => <option key={value} value={value}>{t(`status.${value}`)}</option>)}
-            </SelectInput>
-          </Field>
-          <span className="toolbarHint"><Search size={16} /> {totalAssignments} {tPlural('count.results', totalAssignments)}</span>
-        </div>
+        {/* Search stays on one line; status hides behind the toggle, which carries a badge so a filter
+            left on is never invisible. Same pattern as the asset list. */}
+        <form className="searchBar" onSubmit={event => event.preventDefault()}>
+          <div className="searchBar__field">
+            <Search size={16} />
+            <TextInput
+              value={search}
+              onChange={event => { setSearch(event.target.value); setPage(1); }}
+              placeholder={t('assignments.searchPlaceholder')}
+              aria-label={t('common.search')}
+            />
+            {search ? (
+              <button type="button" className="searchBar__clear" aria-label={t('common.clearFilters')} onClick={() => { setSearch(''); setPage(1); }}>
+                <X size={14} />
+              </button>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            className={filtersOpen || status ? 'searchBar__toggle searchBar__toggle--active' : 'searchBar__toggle'}
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen(open => !open)}
+          >
+            <SlidersHorizontal size={15} />
+            <span>{t('assets.filtersAdvanced')}</span>
+            {status ? <span className="searchBar__badge">1</span> : null}
+            <ChevronDown size={14} style={{ transform: filtersOpen ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+          </button>
+        </form>
+
+        {filtersOpen ? (
+          <div className="searchBar__advanced">
+            <label className="searchBar__advancedField">
+              <span>{t('assets.statusLabel')}</span>
+              <SelectInput value={status} onChange={event => { setStatus(event.target.value as AssignmentStatus | ''); setPage(1); }}>
+                <option value="">{t('assets.allStatuses')}</option>
+                {assignmentStatusValues.map(value => <option key={value} value={value}>{t(`status.${value}`)}</option>)}
+              </SelectInput>
+            </label>
+            {status ? (
+              <button type="button" className="linkButton searchBar__clearAll" onClick={() => { setStatus(''); setPage(1); }}>
+                {t('common.clearFilters')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <span className="toolbarHint"><Search size={16} /> {totalAssignments} {tPlural('count.results', totalAssignments)}</span>
       </Card>
 
       {!rows.length ? <EmptyState title={t('assignments.emptyTitle')} description={t('assignments.emptyDesc')} action={(debouncedSearch || status) ? <Button variant="secondary" onClick={() => { setSearch(''); setStatus(''); }}>{t('common.clearFilters')}</Button> : <Button onClick={() => setDrawerMode('create')} icon={<Plus size={16} />}>{t('assignments.newAssignment')}</Button>} /> : (
