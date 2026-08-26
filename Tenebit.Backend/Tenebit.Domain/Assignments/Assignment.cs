@@ -5,8 +5,6 @@ namespace Tenebit.Domain.Assignments;
 
 public sealed class Assignment
 {
-    private const int MaxSignatureBytes = 200 * 1024;
-
     private Assignment() { }
 
     public Assignment(Guid organizationId, Guid personId, string protocolNumber, DateTimeOffset issuedAt, DateOnly? dueDate, string? notes, string createdBy)
@@ -41,14 +39,6 @@ public sealed class Assignment
     public string? AcceptedIp { get; private set; }
     public string? AcceptanceHash { get; private set; }
     public int IntegrityVersion { get; private set; } = 1;
-
-    /// <summary>PNG of the signature drawn by the employee on the public acceptance page, when they drew one.
-    /// This is part of an electronic acknowledgement (spec 2.4), not a qualified electronic signature.</summary>
-    public byte[]? SignatureImage { get; private set; }
-    public string? SignatureSha256 { get; private set; }
-
-    /// <summary>Name typed by the employee next to the drawn signature, as it should appear on the protocol.</summary>
-    public string? SignerName { get; private set; }
     public string? PublicTokenHash { get; private set; }
     public DateTimeOffset? PublicTokenExpiresAt { get; private set; }
     public DateTimeOffset? PublicTokenRevokedAt { get; private set; }
@@ -141,40 +131,6 @@ public sealed class Assignment
         }
     }
 
-    // Accepting with a drawn signature. The signature is sealed into the acceptance hash (version 4) for the
-    // same reason the issue photos were sealed in version 2: it is part of what the employee confirmed, so a
-    // later swap of the image has to be detectable. Acceptances without a signature stay on version 3 and
-    // hash exactly as before.
-    public void AcceptWithSignature(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidenceIntegrityEntry> evidence, byte[]? signatureImage, string? signerName)
-    {
-        if (Status is not AssignmentStatus.AwaitingAcceptance and not AssignmentStatus.Overdue)
-        {
-            throw new DomainException("Wydanie można zaakceptować tylko wtedy, gdy oczekuje na akceptację albo jest po terminie.");
-        }
-
-        if (signatureImage is { Length: > 0 })
-        {
-            if (signatureImage.Length > MaxSignatureBytes)
-            {
-                throw new DomainException("Podpis może mieć maksymalnie 200 KB.");
-            }
-
-            SignatureImage = signatureImage;
-            SignatureSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(signatureImage)).ToLowerInvariant();
-            SignerName = string.IsNullOrWhiteSpace(signerName) ? null : signerName.Trim();
-        }
-
-        Status = AssignmentStatus.Accepted;
-        AcceptedAt = acceptedAt;
-        AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
-        IntegrityVersion = SignatureSha256 is null ? Math.Max(IntegrityVersion, 3) : 4;
-        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp, evidence);
-        foreach (var acceptance in ProcedureAcceptances)
-        {
-            acceptance.Accept(acceptedAt, ipAddress);
-        }
-    }
-
     public void ApplyAcceptedIpPrivacy(string? storedIp, IReadOnlyList<AssetEvidence>? evidence = null) =>
         ApplyAcceptedIpPrivacyWithEvidenceIntegrity(storedIp, ToIntegrityEntries(evidence));
 
@@ -241,12 +197,6 @@ public sealed class Assignment
             payload = string.Join('|', payload, evidencePart);
         }
 
-        if (IntegrityVersion >= 4)
-        {
-            // Podpis rysowany przez pracownika jest częścią potwierdzenia, więc podmiana obrazka
-            // po akceptacji musi unieważnić hash tak samo jak podmiana zdjęcia wydania.
-            payload = string.Join('|', payload, SignatureSha256 ?? string.Empty, SignerName ?? string.Empty);
-        }
 
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));

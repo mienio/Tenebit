@@ -3,8 +3,6 @@ import { useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { EvidenceGallery } from '../components/Evidence';
-import { Field, TextInput } from '../components/FormFields';
-import { SignaturePad } from '../components/SignaturePad';
 import { ErrorState, LoadingState } from '../components/StateViews';
 import { PublicFooter } from '../components/PublicFooter';
 import { useAsyncData } from '../hooks/useAsyncData';
@@ -18,15 +16,13 @@ export function PublicAssignmentPage() {
   const { data, error, isLoading, reload } = useAsyncData(loader, [loader]);
   const [accepting, setAccepting] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
-  const [signature, setSignature] = useState<string | null>(null);
-  const [signerName, setSignerName] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
   async function accept() {
     setAccepting(true);
     setMessage(null);
     try {
-      await api.acceptPublicAssignment({ signatureDataUrl: signature, signerName: signerName.trim() || null });
+      await api.acceptPublicAssignment();
       await reload();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('publicAssignment.acceptFailed'));
@@ -139,20 +135,6 @@ export function PublicAssignmentPage() {
           </div>
         ) : canAccept ? (
           <>
-            <div className="formSectionTitle">{t('signature.title')}</div>
-            <SignaturePad onChange={setSignature} disabled={accepting} />
-            <div style={{ marginTop: '10px' }}>
-              <Field label={t('signature.nameLabel')}>
-                <TextInput
-                  type="text"
-                  value={signerName}
-                  maxLength={240}
-                  onChange={event => setSignerName(event.target.value)}
-                  placeholder={data.personFirstName}
-                />
-              </Field>
-            </div>
-
             <label className="checkField">
               <input type="checkbox" checked={consentChecked} onChange={event => setConsentChecked(event.target.checked)} />
               {' '}{t('publicAssignment.consentLabel')}

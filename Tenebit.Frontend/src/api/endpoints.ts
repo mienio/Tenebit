@@ -407,9 +407,7 @@ export const api = {
   },
 
   publicAssignment: () => apiRequest<PublicAssignment>('/api/public/assignments'),
-  // Podpis jest opcjonalny - bez niego akceptacja działa dokładnie jak wcześniej.
-  acceptPublicAssignment: (body?: { signatureDataUrl?: string | null; signerName?: string | null }) =>
-    apiRequest<PublicAssignment>('/api/public/assignments/accept', { method: 'POST', body: JSON.stringify(body ?? {}) }),
+  acceptPublicAssignment: () => apiRequest<PublicAssignment>('/api/public/assignments/accept', { method: 'POST' }),
   downloadPublicAssignmentProtocol: () => apiBlob('/api/public/assignments/protocol.pdf'),
   downloadPublicProcedureDocument: (procedureId: string, documentId: string) => apiBlob(`/api/public/assignments/procedures/${procedureId}/documents/${documentId}`),
   publicAssignmentEvidence: (id: string) => apiBlob(`/api/public/assignments/evidence/${id}`),

@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Tenebit.Domain.Assignments;
 
 namespace Tenebit.Application.Assignments;
@@ -49,12 +48,6 @@ public sealed record AssignmentResponse(
 
 public sealed record AssignmentAcceptanceLinkResponse(string Link);
 
-/// <summary>Opcjonalny podpis odręczny składany przy akceptacji. Puste body znaczy "potwierdzam bez
-/// podpisu" i zachowuje dotychczasowe zachowanie linku akceptacyjnego.</summary>
-[ValidatedRequest]
-public sealed record AcceptPublicAssignmentRequest(
-    [property: StringLength(300_000)] string? SignatureDataUrl,
-    [property: StringLength(240)] string? SignerName);
 
 public sealed record PublicAssignmentAssetResponse(string Name, string AssetTag, string IssueCondition, Guid AssetId, IReadOnlyList<Guid> EvidenceIds);
 

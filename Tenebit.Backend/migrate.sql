@@ -3843,3 +3843,22 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826210000_DropAssignmentSignature') THEN
+    ALTER TABLE tenebit.assignments
+        DROP COLUMN IF EXISTS "SignatureImage",
+        DROP COLUMN IF EXISTS "SignatureSha256",
+        DROP COLUMN IF EXISTS "SignerName";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826210000_DropAssignmentSignature') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260826210000_DropAssignmentSignature', '10.0.4');
+    END IF;
+END $EF$;
+COMMIT;

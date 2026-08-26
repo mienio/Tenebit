@@ -155,36 +155,11 @@ public sealed class ProtocolPdfGenerator : IProtocolPdfGenerator
 
             column.Item().PaddingTop(4).Text(labels.LiabilityClause).FontSize(8).LineHeight(1.4f);
 
-            column.Item().PaddingTop(10).Row(row =>
+            column.Item().PaddingTop(10).Column(hash =>
             {
-                row.RelativeItem().Column(signature =>
-                {
-                    signature.Item().Text(labels.Signature).FontSize(8).FontColor(Muted);
-
-                    if (document.SignatureImage is { Length: > 0 })
-                    {
-                        signature.Item().PaddingTop(4).Height(60).Image(document.SignatureImage).FitHeight();
-                    }
-                    else
-                    {
-                        signature.Item().PaddingTop(4).Height(60).AlignBottom().Text(labels.SignatureMissing).FontSize(8).Italic().FontColor(Muted);
-                    }
-
-                    signature.Item().LineHorizontal(1).LineColor(Line);
-                    signature.Item().PaddingTop(3).Text(document.SignerName ?? document.Person.FullName).FontSize(8);
-                });
-
-                row.ConstantItem(20);
-
-                row.RelativeItem().Column(hash =>
-                {
-                    if (string.IsNullOrWhiteSpace(document.ConfirmationHash)) return;
-                    hash.Item().Text(labels.IntegrityHash).FontSize(8).FontColor(Muted);
-                    // Celowo bez kroju monospace: kontener runtime (aspnet:10.0, Debian) nie ma fontów
-                    // systemowych, a QuestPDF osadza tylko Lato. Wymuszenie Consolas działałoby lokalnie
-                    // na Windowsie i wywracało render na produkcji.
-                    hash.Item().PaddingTop(4).Text(document.ConfirmationHash.ToLowerInvariant()).FontSize(7).FontColor(Muted);
-                });
+                if (string.IsNullOrWhiteSpace(document.ConfirmationHash)) return;
+                hash.Item().Text(labels.IntegrityHash).FontSize(8).FontColor(Muted);
+                hash.Item().PaddingTop(4).Text(document.ConfirmationHash.ToLowerInvariant()).FontSize(7).FontColor(Muted);
             });
         });
     }

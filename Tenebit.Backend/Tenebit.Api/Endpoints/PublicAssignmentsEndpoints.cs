@@ -17,10 +17,10 @@ public static class PublicAssignmentsEndpoints
             return token is null ? Results.NotFound() : (await service.GetPublicAsync(token, ct)).ToHttpResult();
         }).AllowAnonymous().RequireRateLimiting("public").WithTags("Public assignments");
 
-        api.MapPost("/public/assignments/accept", async (AcceptPublicAssignmentRequest? body, HttpRequest request, AssignmentService service, IPublicCapabilitySessionProtector protector, IClock clock, CancellationToken ct) =>
+        api.MapPost("/public/assignments/accept", async (HttpRequest request, AssignmentService service, IPublicCapabilitySessionProtector protector, IClock clock, CancellationToken ct) =>
         {
             var token = PublicCapabilityCookie.Read(request, protector, PublicCapabilityCookie.AssignmentPurpose, clock.UtcNow);
-            return token is null ? Results.NotFound() : (await service.AcceptPublicAsync(token, body, ct)).ToHttpResult();
+            return token is null ? Results.NotFound() : (await service.AcceptPublicAsync(token, ct)).ToHttpResult();
         }).AllowAnonymous().RequireRateLimiting("public").WithTags("Public assignments");
 
         // Egzemplarz protokołu dla pracownika. Ten sam dokument, który widzi organizacja - pracownik ma

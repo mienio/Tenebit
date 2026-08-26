@@ -36,8 +36,6 @@ public sealed record ProtocolDocument(
     DateTimeOffset IssuedAt,
     DateTimeOffset? ConfirmedAt,
     string? ConfirmationHash,
-    string? SignerName,
-    byte[]? SignatureImage,
     IReadOnlyList<ProtocolLine> Lines,
     IReadOnlyList<string> Procedures,
     string? Notes,

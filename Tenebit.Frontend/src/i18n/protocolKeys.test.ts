@@ -5,12 +5,6 @@ import { translations } from './translations';
 // ~80 kluczy i lecą na angielskim fallbacku), więc test celowo pilnuje tylko tego zakresu - inaczej
 // czerwieniłby się od pierwszego uruchomienia i nikt by go nie czytał.
 const REQUIRED_KEYS = [
-  'signature.title',
-  'signature.nameLabel',
-  'signature.hint',
-  'signature.drawn',
-  'signature.clear',
-  'signature.ariaLabel',
   'publicAssignment.downloadProtocol',
   'assignments.downloadProtocol',
   'assignments.protocolFailed',
