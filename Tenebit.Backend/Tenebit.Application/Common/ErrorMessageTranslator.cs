@@ -732,6 +732,94 @@ public static class ErrorMessageTranslator
                 "fr" => $"Une valeur du champ {m.Groups["name"].Value} peut comporter au maximum {m.Groups["limit"].Value} caractères.",
                 _ => null,
             }),
+        // Wbudowane komunikaty DataAnnotations ([Required], [EmailAddress], [StringLength]) sa po
+        // ANGIELSKU i nie da sie ich znalezc, szukajac polskiego tekstu - dlatego przetrwaly audyt
+        // pokrycia. Siedza na rejestracji i logowaniu, wiec przeciekaly na najbardziej widocznym
+        // ekranie, i to w obie strony: polski uzytkownik tez dostawal angielski.
+        // Zrodlem jest tu angielski, wiec - inaczej niz reszta pliku - te reguly maja galaz "pl".
+        new TemplateRule(
+            new Regex(@"^The (?<name>.+) field is required\.$"),
+            (m, lang) => lang switch
+            {
+                "pl" => $"Pole {m.Groups["name"].Value} jest wymagane.",
+                "es" => $"El campo {m.Groups["name"].Value} es obligatorio.",
+                "de" => $"Das Feld {m.Groups["name"].Value} ist erforderlich.",
+                "it" => $"Il campo {m.Groups["name"].Value} è obbligatorio.",
+                "fr" => $"Le champ {m.Groups["name"].Value} est obligatoire.",
+                _ => null,
+            }),
+        new TemplateRule(
+            new Regex(@"^The (?<name>.+) field is not a valid e-mail address\.$"),
+            (m, lang) => lang switch
+            {
+                "pl" => $"Pole {m.Groups["name"].Value} nie zawiera prawidłowego adresu e-mail.",
+                "es" => $"El campo {m.Groups["name"].Value} no contiene una dirección de correo válida.",
+                "de" => $"Das Feld {m.Groups["name"].Value} enthält keine gültige E-Mail-Adresse.",
+                "it" => $"Il campo {m.Groups["name"].Value} non contiene un indirizzo e-mail valido.",
+                "fr" => $"Le champ {m.Groups["name"].Value} ne contient pas d'adresse e-mail valide.",
+                _ => null,
+            }),
+        new TemplateRule(
+            new Regex(@"^The field (?<name>.+) must be a string with a minimum length of (?<min>\d+) and a maximum length of (?<max>\d+)\.$"),
+            (m, lang) =>
+            {
+                var (name, min, max) = (m.Groups["name"].Value, m.Groups["min"].Value, m.Groups["max"].Value);
+                return lang switch
+                {
+                    "pl" => $"Pole {name} musi mieć od {min} do {max} znaków.",
+                    "es" => $"El campo {name} debe tener entre {min} y {max} caracteres.",
+                    "de" => $"Das Feld {name} muss zwischen {min} und {max} Zeichen lang sein.",
+                    "it" => $"Il campo {name} deve contenere da {min} a {max} caratteri.",
+                    "fr" => $"Le champ {name} doit comporter entre {min} et {max} caractères.",
+                    _ => null,
+                };
+            }),
+        new TemplateRule(
+            new Regex(@"^The field (?<name>.+) must match the regular expression '(?<pattern>.+)'\.$"),
+            (m, lang) =>
+            {
+                var name = m.Groups["name"].Value;
+                // Surowe wyrazenie regularne nic uzytkownikowi nie mowi. Jedyne uzycie w projekcie to
+                // 6-cyfrowy kod weryfikacyjny, wiec dostaje czytelny warunek; kazdy inny wzorzec
+                // dostaje ogolny komunikat o formacie zamiast wycieku wyrazenia na ekran.
+                var isSixDigitCode = m.Groups["pattern"].Value == @"^\d{6}$";
+                return lang switch
+                {
+                    "pl" => isSixDigitCode ? $"Pole {name} musi być 6-cyfrowym kodem." : $"Pole {name} ma nieprawidłowy format.",
+                    "en" => isSixDigitCode ? $"The {name} field must be a 6-digit code." : $"The {name} field has an invalid format.",
+                    "es" => isSixDigitCode ? $"El campo {name} debe ser un código de 6 dígitos." : $"El campo {name} tiene un formato no válido.",
+                    "de" => isSixDigitCode ? $"Das Feld {name} muss ein 6-stelliger Code sein." : $"Das Feld {name} hat ein ungültiges Format.",
+                    "it" => isSixDigitCode ? $"Il campo {name} deve essere un codice di 6 cifre." : $"Il campo {name} ha un formato non valido.",
+                    "fr" => isSixDigitCode ? $"Le champ {name} doit être un code à 6 chiffres." : $"Le champ {name} a un format invalide.",
+                    _ => null,
+                };
+            }),
+        new TemplateRule(
+            new Regex(@"^The field (?<name>.+) must be between (?<min>[^ ]+) and (?<max>[^ ]+)\.$"),
+            (m, lang) =>
+            {
+                var (name, min, max) = (m.Groups["name"].Value, m.Groups["min"].Value, m.Groups["max"].Value);
+                return lang switch
+                {
+                    "pl" => $"Pole {name} musi mieścić się w zakresie od {min} do {max}.",
+                    "es" => $"El campo {name} debe estar entre {min} y {max}.",
+                    "de" => $"Das Feld {name} muss zwischen {min} und {max} liegen.",
+                    "it" => $"Il campo {name} deve essere compreso tra {min} e {max}.",
+                    "fr" => $"Le champ {name} doit être compris entre {min} et {max}.",
+                    _ => null,
+                };
+            }),
+        new TemplateRule(
+            new Regex(@"^The field (?<name>.+) must be a string with a maximum length of (?<max>\d+)\.$"),
+            (m, lang) => lang switch
+            {
+                "pl" => $"Pole {m.Groups["name"].Value} może mieć maksymalnie {m.Groups["max"].Value} znaków.",
+                "es" => $"El campo {m.Groups["name"].Value} puede tener como máximo {m.Groups["max"].Value} caracteres.",
+                "de" => $"Das Feld {m.Groups["name"].Value} darf höchstens {m.Groups["max"].Value} Zeichen lang sein.",
+                "it" => $"Il campo {m.Groups["name"].Value} può contenere al massimo {m.Groups["max"].Value} caratteri.",
+                "fr" => $"Le champ {m.Groups["name"].Value} peut comporter au maximum {m.Groups["max"].Value} caractères.",
+                _ => null,
+            }),
         // Source message itself is English (a small reverse-leak bug in the otherwise Polish-default
         // backend) so it is translated for pl/es/de and left unchanged for en.
         new TemplateRule(

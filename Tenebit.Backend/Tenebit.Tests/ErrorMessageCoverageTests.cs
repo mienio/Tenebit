@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 using Tenebit.Application.Common;
 
@@ -71,6 +72,55 @@ public class ErrorMessageCoverageTests
         Assert.True(untranslated.Count == 0,
             "Komunikaty bez tlumaczenia (dodaj wpis do ErrorMessageTranslator.Exact albo regule do Templates):\n"
             + string.Join('\n', untranslated));
+    }
+
+    /// <summary>
+    /// Komunikaty wbudowane w DataAnnotations ([Required], [EmailAddress], [StringLength]) sa po
+    /// ANGIELSKU, wiec skan szukajacy polskiego tekstu ich nie widzi - przetrwaly poprzedni audyt
+    /// i przeciekaly na rejestracji oraz logowaniu, takze do polskiego uzytkownika.
+    ///
+    /// Test generuje komunikat kazdego atrybutu walidacji przez FormatErrorMessage i sprawdza, ze
+    /// tlumaczy sie na wszystkie jezyki poza wlasnym zrodlowym. Dzieki temu dodanie nowego atrybutu
+    /// (albo nowego DTO) bez reguly w translatorze zapala sie w CI, zamiast czekac na uzytkownika.
+    /// </summary>
+    [Fact]
+    public void EveryValidationAttributeMessage_IsTranslatable()
+    {
+        var contracts = typeof(ValidatedRequestAttribute).Assembly.GetTypes()
+            .Where(type => type.GetCustomAttributes(typeof(ValidatedRequestAttribute), false).Length != 0);
+
+        var gaps = new List<string>();
+        foreach (var contract in contracts)
+        {
+            foreach (var property in contract.GetProperties())
+            {
+                foreach (ValidationAttribute attribute in property.GetCustomAttributes(typeof(ValidationAttribute), true))
+                {
+                    string message;
+                    try
+                    {
+                        message = attribute.FormatErrorMessage(property.Name);
+                    }
+                    catch (Exception)
+                    {
+                        // Atrybut wymagajacy stanu, ktorego nie mamy poza walidacja - pomijamy.
+                        continue;
+                    }
+
+                    // Jezyk zrodlowy komunikatu zwraca go bez zmian i to jest poprawne zachowanie.
+                    var source = message.Any(PolishLetters.Contains) ? "pl" : "en";
+                    foreach (var language in new[] { "pl", "en", "es", "de", "it", "fr" }.Where(l => l != source))
+                    {
+                        if (ErrorMessageTranslator.Translate(message, language) != message) continue;
+                        gaps.Add($"{contract.Name}.{property.Name} [{attribute.GetType().Name}] ({language}): \"{message}\"");
+                    }
+                }
+            }
+        }
+
+        Assert.True(gaps.Count == 0,
+            "Komunikaty walidacji bez tlumaczenia (dodaj regule do ErrorMessageTranslator.Templates):\n"
+            + string.Join('\n', gaps));
     }
 
     /// <summary>
