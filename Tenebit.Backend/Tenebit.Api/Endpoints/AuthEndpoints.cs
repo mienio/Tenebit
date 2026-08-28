@@ -45,7 +45,7 @@ public static class AuthEndpoints
         api.MapPost("/auth/register", async (RegisterRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
             {
                 if (!await abuseLimiter.TryAcquireAsync("register", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
-                    return Results.Json(new ErrorResponse("Zbyt wiele prób. Spróbuj ponownie później.", "RATE_LIMITED"), statusCode: 429);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Zbyt wiele prób. Spróbuj ponownie później."), "RATE_LIMITED"), statusCode: 429);
                 var result = await service.RegisterAsync(request, cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 
@@ -60,7 +60,7 @@ public static class AuthEndpoints
         api.MapPost("/auth/login", async (LoginRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, TokenIssuer tokens, TwoFactorChallengeStore challenges, HttpResponse response, IWebHostEnvironment env, CancellationToken cancellationToken) =>
             {
                 if (!await abuseLimiter.TryAcquireAsync("login", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(5), cancellationToken))
-                    return Results.Json(new ErrorResponse("Zbyt wiele prób logowania. Spróbuj ponownie później.", "RATE_LIMITED"), statusCode: 429);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Zbyt wiele prób logowania. Spróbuj ponownie później."), "RATE_LIMITED"), statusCode: 429);
                 var deviceTrustToken = http.Request.Cookies[DeviceTrustCookie.CookieName];
                 var result = await service.LoginAsync(request, deviceTrustToken, http.ToAuthRequestContext(), cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
@@ -85,7 +85,7 @@ public static class AuthEndpoints
                 var userId = await challenges.ConsumeAsync(request.ChallengeToken, cancellationToken);
                 if (userId is null)
                 {
-                    return Results.Json(new ErrorResponse("Sesja logowania wygasła. Zaloguj się ponownie.", "CHALLENGE_EXPIRED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Sesja logowania wygasła. Zaloguj się ponownie."), "CHALLENGE_EXPIRED"), statusCode: 401);
                 }
 
                 var result = await service.CompleteTwoFactorLoginAsync(userId.Value, request.Code, http.ToAuthRequestContext(), cancellationToken);
@@ -146,7 +146,7 @@ public static class AuthEndpoints
             {
                 if (await abuseLimiter.TryAcquireAsync("password-forgot", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
                     await service.RequestPasswordResetAsync(request, cancellationToken);
-                return Results.Ok(new { message = "Jeśli podany adres e-mail istnieje w systemie, wysłaliśmy kod do resetu hasła." });
+                return Results.Ok(new { message = ResultExtensions.Localize("Jeśli podany adres e-mail istnieje w systemie, wysłaliśmy kod do resetu hasła.") });
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth-recovery")
@@ -157,7 +157,7 @@ public static class AuthEndpoints
                 if (!await abuseLimiter.TryAcquireAsync("password-reset-code", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(15), cancellationToken))
                     return Results.Json(new ErrorResponse(ErrorMessageTranslator.Translate("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", RequestLanguageAccessor.CurrentLanguage), "RATE_LIMITED"), statusCode: 429);
                 var result = await service.ResetPasswordAsync(request, cancellationToken);
-                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Hasło zostało zmienione." });
+                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = ResultExtensions.Localize("Hasło zostało zmienione.") });
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth-recovery")
@@ -168,7 +168,7 @@ public static class AuthEndpoints
                 if (!await abuseLimiter.TryAcquireAsync("email-verification-code", request.Email, http.Connection.RemoteIpAddress?.ToString(), 10, TimeSpan.FromMinutes(15), cancellationToken))
                     return Results.Json(new ErrorResponse(ErrorMessageTranslator.Translate("Zbyt wiele prób. Poproś o nowy kod lub spróbuj ponownie później.", RequestLanguageAccessor.CurrentLanguage), "RATE_LIMITED"), statusCode: 429);
                 var result = await service.VerifyEmailAsync(request, cancellationToken);
-                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "E-mail został potwierdzony." });
+                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = ResultExtensions.Localize("E-mail został potwierdzony.") });
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth-recovery")
@@ -178,7 +178,7 @@ public static class AuthEndpoints
             {
                 if (await abuseLimiter.TryAcquireAsync("verification-resend", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
                     await service.ResendVerificationEmailAsync(request.Email, cancellationToken);
-                return Results.Ok(new { message = "Jeśli konto oczekuje na potwierdzenie, wysłaliśmy nowy kod." });
+                return Results.Ok(new { message = ResultExtensions.Localize("Jeśli konto oczekuje na potwierdzenie, wysłaliśmy nowy kod.") });
             })
             .AllowAnonymous()
             .RequireRateLimiting("auth-recovery")
@@ -188,7 +188,7 @@ public static class AuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await service.UpdateDisplayNameAsync(userId, request.DisplayName, cancellationToken);
@@ -203,7 +203,7 @@ public static class AuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await service.SetupTwoFactorAsync(userId, cancellationToken);
@@ -216,7 +216,7 @@ public static class AuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await service.EnableTwoFactorAsync(userId, request.Code, cancellationToken);
@@ -235,7 +235,7 @@ public static class AuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await service.DisableTwoFactorAsync(userId, request.Code, cancellationToken);
@@ -245,7 +245,7 @@ public static class AuthEndpoints
                 var refreshToken = await service.IssueRefreshTokenAsync(user.Id, cancellationToken);
                 RefreshTokenCookie.Append(response, refreshToken, env.IsDevelopment());
                 DeviceTrustCookie.Delete(response, env.IsDevelopment());
-                return Results.Ok(new { message = "Dwuskładnikowe uwierzytelnianie zostało wyłączone.", token = tokens.Issue(user), user });
+                return Results.Ok(new { message = ResultExtensions.Localize("Dwuskładnikowe uwierzytelnianie zostało wyłączone."), token = tokens.Issue(user), user });
             })
             .RequireRateLimiting("auth-recovery")
             .WithTags("Auth");
@@ -254,7 +254,7 @@ public static class AuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await service.RegenerateRecoveryCodesAsync(userId, request.Code, cancellationToken);
@@ -267,7 +267,7 @@ public static class AuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await service.GetRecoveryCodesRemainingAsync(userId, cancellationToken);

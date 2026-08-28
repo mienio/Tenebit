@@ -22,7 +22,7 @@ public static class ExternalAuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await authService.ListLinkedProvidersAsync(userId, cancellationToken);
@@ -34,11 +34,11 @@ public static class ExternalAuthEndpoints
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
                 {
-                    return Results.Json(new ErrorResponse("Nieprawidłowa sesja.", "UNAUTHORIZED"), statusCode: 401);
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
                 }
 
                 var result = await authService.UnlinkProviderAsync(userId, provider, cancellationToken);
-                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = "Konto zostało odłączone." });
+                return result.IsFailure ? result.ToNoContentResult() : Results.Ok(new { message = ResultExtensions.Localize("Konto zostało odłączone.") });
             })
             .WithTags("Auth");
 

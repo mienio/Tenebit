@@ -1,3 +1,4 @@
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Application.People;
 using Tenebit.Domain.People;
 using Tenebit.Tests.Fakes;
@@ -11,7 +12,7 @@ public class TeamServiceTests
         var currentUser = new FakeCurrentUser();
         var teams = new InMemoryTeamRepository();
         var people = new InMemoryPersonRepository();
-        var service = new TeamService(teams, people, new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork());
+        var service = new TeamService(teams, people, new InMemorySubscriptionRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork());
         return (service, currentUser, teams, people);
     }
 
@@ -51,5 +52,20 @@ public class TeamServiceTests
         var result = await service.UpdateAsync(team.Id, new UpdateTeamRequest("Zespół IT", otherOrgManager.Id, null), CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsWhenAtSubscriptionResourceLimit()
+    {
+        var (service, user, teams, _) = CreateService();
+        for (var i = 0; i < SubscriptionPlan.Free.AssetLimit; i++)
+        {
+            teams.Add(new Team(user.OrganizationId, $"Zespol {i}", null, null));
+        }
+
+        var result = await service.CreateAsync(new CreateTeamRequest("Zespol ponad limit", null, null), CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("SUBSCRIPTION_RESOURCE_LIMIT_EXCEEDED", result.Error!.Code);
     }
 }

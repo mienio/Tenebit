@@ -5,11 +5,11 @@ import { PublicFooter } from '../components/PublicFooter';
 import { legalConfig } from '../config/legal';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import { useI18n } from '../i18n/I18nProvider';
-import { legalContent, type LegalDocumentKind } from '../legal/legalContent';
+import { legalContentFor, type LegalDocumentKind } from '../legal/legalContent';
 
 export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
-  const { language } = useI18n();
-  const content = legalContent[language];
+  const { language, t } = useI18n();
+  const content = legalContentFor(language);
   const document = content.documents[kind];
   const ui = content.ui;
 
@@ -37,6 +37,9 @@ export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
           <p className="eyebrow">Tenebit</p>
           <h1>{document.title}</h1>
           <p className="legalDocument__lead">{document.description}</p>
+          {content.documentsLanguage !== language && (
+            <p className="toast toast--error">{t('legal.fallbackNotice')}</p>
+          )}
 
           <dl className="legalMeta">
             <div><dt>{ui.effectiveDate}</dt><dd>{legalConfig.effectiveDate}</dd></div>

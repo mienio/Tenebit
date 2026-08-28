@@ -3,20 +3,28 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.Assets;
 
 public sealed class AssetCategoryService
 {
+    // Górny pułap fair-use dla definicji pól własnych w jednej kategorii. Nie jest komunikowany
+    // w cenniku ani w UI - stanowi zabezpieczenie przed nieograniczonym rozrostem schematu kategorii
+    // (i przed jednym żądaniem tworzącym dowolną liczbę wierszy). Opisany w Regulaminie.
+    private const int MaxFieldDefinitionsPerCategory = 200;
+
     private readonly IAssetCategoryRepository _categories;
+    private readonly ISubscriptionRepository _subscriptions;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public AssetCategoryService(IAssetCategoryRepository categories, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public AssetCategoryService(IAssetCategoryRepository categories, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _categories = categories;
+        _subscriptions = subscriptions;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -38,9 +46,40 @@ public sealed class AssetCategoryService
             var organizationId = _currentUser.OrganizationId;
             if (await _categories.NameExistsAsync(organizationId, request.Name, null, cancellationToken)) return Result<AssetCategoryResponse>.Failure(Error.Conflict("Kategoria o tej nazwie już istnieje."));
             var category = new AssetCategory(organizationId, request.Name, request.Type, request.Description, request.Icon);
-            _categories.Add(category);
-            _activity.Add(new ActivityLog(organizationId, "asset_category.created", "asset_category", category.Id, _currentUser.Subject, category.Name, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "asset-category-capacity",
+                [organizationId],
+                async ct =>
+            {
+                // Tylko kategorie utworzone przez organizację liczą się do limitu - katalog systemowy
+                // (StarterAssetCategories) jest zakładany przy rejestracji i sam przekracza limit planu Free.
+                var currentCount = (await _categories.ListAsync(organizationId, ct)).Count(x => !x.IsSystem);
+                if (currentCount >= limit) return false;
+
+                _categories.Add(category);
+                _activity.Add(new ActivityLog(organizationId, "asset_category.created", "asset_category", category.Id, _currentUser.Subject, category.Name, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<AssetCategoryResponse>.Failure(Error.Validation($"Limit kategorii przekroczony. Plan {plan.Name} pozwala na {limit} kategorii. Przejdź na wyższy plan."));
+            }
+
             return Result<AssetCategoryResponse>.Success(Map(category, _currentUser.Language));
         }
         catch (DomainException ex) { return Result<AssetCategoryResponse>.Failure(Error.Validation(ex.Message)); }
@@ -106,6 +145,11 @@ public sealed class AssetCategoryService
             var organizationId = _currentUser.OrganizationId;
             var category = await _categories.GetAsync(organizationId, categoryId, cancellationToken);
             if (category is null) return Result<IReadOnlyList<AssetFieldDefinitionResponse>>.Failure(Error.NotFound("Kategoria nie istnieje."));
+
+            if (request.Count > MaxFieldDefinitionsPerCategory)
+            {
+                return Result<IReadOnlyList<AssetFieldDefinitionResponse>>.Failure(Error.Validation($"Kategoria może mieć maksymalnie {MaxFieldDefinitionsPerCategory} pól własnych."));
+            }
 
             var keys = request.Select(x => x.Key.Trim().ToLowerInvariant()).ToList();
             if (keys.Distinct().Count() != keys.Count)

@@ -26,7 +26,7 @@ internal static class MultipartRequestHelpers
 
         if (json.Length > RequestLimits.Json)
         {
-            validationError = $"Pole '{name}' jest za duże.";
+            validationError = ResultExtensions.Localize($"Pole '{name}' jest za duże.");
             return default;
         }
 
@@ -35,7 +35,7 @@ internal static class MultipartRequestHelpers
             var value = JsonSerializer.Deserialize<T>(json, MultipartJsonOptions);
             if (value is null)
             {
-                validationError = $"Pole '{name}' ma nieprawidłowy format.";
+                validationError = ResultExtensions.Localize($"Pole '{name}' ma nieprawidłowy format.");
                 return default;
             }
 
@@ -44,7 +44,7 @@ internal static class MultipartRequestHelpers
         }
         catch (JsonException)
         {
-            validationError = $"Pole '{name}' ma nieprawidłowy JSON.";
+            validationError = ResultExtensions.Localize($"Pole '{name}' ma nieprawidłowy JSON.");
             return default;
         }
     }
@@ -56,7 +56,7 @@ internal static class MultipartRequestHelpers
         if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, EvidenceManifestEntry>();
         if (json.Length > RequestLimits.Json)
         {
-            validationError = "Manifest zdjęć jest za duży.";
+            validationError = ResultExtensions.Localize("Manifest zdjęć jest za duży.");
             return null;
         }
 
@@ -66,7 +66,7 @@ internal static class MultipartRequestHelpers
                            ?? new Dictionary<string, EvidenceManifestEntry>();
             if (manifest.Count > RequestLimits.Dictionary)
             {
-                validationError = $"Manifest może zawierać maksymalnie {RequestLimits.Dictionary} pozycji.";
+                validationError = ResultExtensions.Localize($"Manifest może zawierać maksymalnie {RequestLimits.Dictionary} pozycji.");
                 return null;
             }
 
@@ -74,7 +74,7 @@ internal static class MultipartRequestHelpers
             {
                 if (string.IsNullOrWhiteSpace(key) || key.Length > RequestLimits.Name)
                 {
-                    validationError = "Manifest zawiera nieprawidłową nazwę pola pliku.";
+                    validationError = ResultExtensions.Localize("Manifest zawiera nieprawidłową nazwę pola pliku.");
                     return null;
                 }
                 var entryError = RequestObjectValidator.Validate(entry);
@@ -89,7 +89,7 @@ internal static class MultipartRequestHelpers
         }
         catch (JsonException)
         {
-            validationError = "Pole 'evidenceManifest' ma nieprawidłowy JSON.";
+            validationError = ResultExtensions.Localize("Pole 'evidenceManifest' ma nieprawidłowy JSON.");
             return null;
         }
     }

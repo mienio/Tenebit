@@ -3,6 +3,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.People;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.People;
 
@@ -10,15 +11,17 @@ public sealed class TeamService
 {
     private readonly ITeamRepository _teams;
     private readonly IPersonRepository _people;
+    private readonly ISubscriptionRepository _subscriptions;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public TeamService(ITeamRepository teams, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public TeamService(ITeamRepository teams, IPersonRepository people, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _teams = teams;
         _people = people;
+        _subscriptions = subscriptions;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -44,9 +47,38 @@ public sealed class TeamService
                 return Result<TeamResponse>.Failure(Error.Validation("Wybrany przełożony nie istnieje."));
             }
             var team = new Team(organizationId, request.Name, request.ManagerId, request.CostCenter);
-            _teams.Add(team);
-            _activity.Add(new ActivityLog(organizationId, "team.created", "team", team.Id, _currentUser.Subject, team.Name, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "team-capacity",
+                [organizationId],
+                async ct =>
+            {
+                var currentCount = (await _teams.ListAsync(organizationId, ct)).Count;
+                if (currentCount >= limit) return false;
+
+                _teams.Add(team);
+                _activity.Add(new ActivityLog(organizationId, "team.created", "team", team.Id, _currentUser.Subject, team.Name, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<TeamResponse>.Failure(Error.Validation($"Limit zespołów przekroczony. Plan {plan.Name} pozwala na {limit} zespołów. Przejdź na wyższy plan."));
+            }
+
             return Result<TeamResponse>.Success(Map(team));
         }
         catch (DomainException ex) { return Result<TeamResponse>.Failure(Error.Validation(ex.Message)); }

@@ -83,7 +83,9 @@ const previewOfficeByLanguage: Record<Language, { building: string; floor1: stri
   pl: { building: 'Warszawa, ul. Prosta 20', floor1: 'Piętro 1', floor2: 'Piętro 2', room101: 'Pokój 101', room102: 'Pokój 102', room201: 'Pokój 201', room202: 'Pokój 202' },
   en: { building: 'London, 24 Borough High St', floor1: 'Floor 1', floor2: 'Floor 2', room101: 'Room 101', room102: 'Room 102', room201: 'Room 201', room202: 'Room 202' },
   es: { building: 'Madrid, Calle de Alcalá 45', floor1: 'Planta 1', floor2: 'Planta 2', room101: 'Sala 101', room102: 'Sala 102', room201: 'Sala 201', room202: 'Sala 202' },
-  de: { building: 'Berlin, Torstraße 15', floor1: 'Etage 1', floor2: 'Etage 2', room101: 'Raum 101', room102: 'Raum 102', room201: 'Raum 201', room202: 'Raum 202' }
+  de: { building: 'Berlin, Torstraße 15', floor1: 'Etage 1', floor2: 'Etage 2', room101: 'Raum 101', room102: 'Raum 102', room201: 'Raum 201', room202: 'Raum 202' },
+  it: { building: 'Milano, Via Torino 12', floor1: 'Piano 1', floor2: 'Piano 2', room101: 'Stanza 101', room102: 'Stanza 102', room201: 'Stanza 201', room202: 'Stanza 202' },
+  fr: { building: 'Paris, 24 rue de Rivoli', floor1: 'Étage 1', floor2: 'Étage 2', room101: 'Salle 101', room102: 'Salle 102', room201: 'Salle 201', room202: 'Salle 202' }
 };
 
 const previewPeopleByLanguage: Record<Language, { name: string; jobTitle: string; team: string }[]> = {
@@ -114,6 +116,20 @@ const previewPeopleByLanguage: Record<Language, { name: string; jobTitle: string
     { name: 'Lukas Weber', jobTitle: 'DevOps Engineer', team: 'IT' },
     { name: 'Laura Schmidt', jobTitle: 'Account Executive', team: 'Vertrieb' },
     { name: 'Felix Wagner', jobTitle: 'HR Specialist', team: 'Personal' }
+  ],
+  it: [
+    { name: 'Giulia Ricci', jobTitle: 'Office Manager', team: 'Amministrazione' },
+    { name: 'Matteo Conti', jobTitle: 'IT Support Specialist', team: 'IT' },
+    { name: 'Luca Ferrari', jobTitle: 'DevOps Engineer', team: 'IT' },
+    { name: 'Sofia Greco', jobTitle: 'Account Executive', team: 'Vendite' },
+    { name: 'Davide Moretti', jobTitle: 'HR Specialist', team: 'Risorse umane' }
+  ],
+  fr: [
+    { name: 'Camille Dubois', jobTitle: 'Office Manager', team: 'Administration' },
+    { name: 'Antoine Lefevre', jobTitle: 'IT Support Specialist', team: 'IT' },
+    { name: 'Hugo Bernard', jobTitle: 'DevOps Engineer', team: 'IT' },
+    { name: 'Chloe Moreau', jobTitle: 'Account Executive', team: 'Ventes' },
+    { name: 'Nicolas Girard', jobTitle: 'HR Specialist', team: 'Ressources humaines' }
   ]
 };
 
@@ -151,6 +167,22 @@ const previewProcedureRowsByLanguage: Record<Language, { title: string; version:
     { title: 'Meldung von Gerätestörungen', version: 'v2', status: 'Published', personIndex: null, scope: 'IT-Abteilung' },
     { title: 'Arbeitsschutz — Bildschirmarbeitsplatz', version: 'v4', status: 'Published', personIndex: null, scope: 'Alle Mitarbeitenden' },
     { title: 'Offboarding — Rückgabe der Ausstattung', version: 'v1', status: 'Draft', personIndex: null, scope: null }
+  ],
+  it: [
+    { title: 'Onboarding — attrezzature e sicurezza', version: 'v3', status: 'Published', personIndex: 1, scope: null },
+    { title: 'Politica di sicurezza dei dati', version: 'v2', status: 'Published', personIndex: null, scope: 'Tutti i dipendenti' },
+    { title: 'Regolamento sul lavoro da remoto', version: 'v1', status: 'Published', personIndex: null, scope: 'Tutti i dipendenti' },
+    { title: 'Segnalazione dei guasti alle attrezzature', version: 'v2', status: 'Published', personIndex: null, scope: 'Reparto IT' },
+    { title: 'Sicurezza — postazione con videoterminale', version: 'v4', status: 'Published', personIndex: null, scope: 'Tutti i dipendenti' },
+    { title: 'Offboarding — restituzione delle attrezzature', version: 'v1', status: 'Draft', personIndex: null, scope: null }
+  ],
+  fr: [
+    { title: 'Intégration — matériel et sécurité', version: 'v3', status: 'Published', personIndex: 1, scope: null },
+    { title: 'Politique de sécurité des données', version: 'v2', status: 'Published', personIndex: null, scope: 'Tous les collaborateurs' },
+    { title: 'Règlement du télétravail', version: 'v1', status: 'Published', personIndex: null, scope: 'Tous les collaborateurs' },
+    { title: 'Signalement des pannes de matériel', version: 'v2', status: 'Published', personIndex: null, scope: 'Service IT' },
+    { title: 'Sécurité — poste avec écran de visualisation', version: 'v4', status: 'Published', personIndex: null, scope: 'Tous les collaborateurs' },
+    { title: 'Départ — restitution du matériel', version: 'v1', status: 'Draft', personIndex: null, scope: null }
   ]
 };
 
@@ -261,7 +293,9 @@ export function LandingPage() {
     pl: { locale: 'pl-PL', currency: 'PLN' },
     en: { locale: 'en-US', currency: 'USD' },
     es: { locale: 'es-ES', currency: 'EUR' },
-    de: { locale: 'de-DE', currency: 'EUR' }
+    de: { locale: 'de-DE', currency: 'EUR' },
+    it: { locale: 'it-IT', currency: 'EUR' },
+    fr: { locale: 'fr-FR', currency: 'EUR' }
   };
   const formatPreviewValue = (value: number) => {
     const { locale, currency } = currencyByLanguage[language];

@@ -893,6 +893,14 @@ export interface PagedActivityLog {
   pageSize: number;
 }
 
+export type LimitedResource = 'assets' | 'people' | 'procedures' | 'licenses' | 'locations' | 'teams' | 'jobProfiles' | 'categories';
+
+export interface ResourceUsage {
+  resource: LimitedResource;
+  current: number;
+  limit: number;
+}
+
 export interface Subscription {
   id: string;
   planKey: string;
@@ -903,6 +911,7 @@ export interface Subscription {
   currentAssetCount: number;
   status: string;
   currentPeriodEnd: string;
+  usage: ResourceUsage[];
 }
 
 export type EquipmentReservationStatus = 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected' | 'Cancelled' | 'ReadyForPickup' | 'CheckedOut' | 'Completed' | 'Expired';

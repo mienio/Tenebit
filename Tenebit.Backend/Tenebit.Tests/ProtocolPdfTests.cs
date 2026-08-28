@@ -48,7 +48,9 @@ public class ProtocolPdfTests
     [InlineData("de", "Übergabeprotokoll für Arbeitsmittel")]
     [InlineData("DE", "Übergabeprotokoll für Arbeitsmittel")]
     [InlineData(null, "Equipment handover protocol")]
-    [InlineData("fr", "Equipment handover protocol")]
+    [InlineData("it", "Verbale di consegna delle attrezzature")]
+    [InlineData("fr", "Procès-verbal de remise du matériel")]
+    [InlineData("cs", "Equipment handover protocol")]
     public void Labels_FollowOrganizationLanguage(string? language, string expectedTitle)
     {
         Assert.Equal(expectedTitle, ProtocolLabels.For(language).HandoverTitle);

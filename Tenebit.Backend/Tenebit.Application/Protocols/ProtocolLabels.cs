@@ -1,3 +1,5 @@
+using Tenebit.Application.Common;
+
 namespace Tenebit.Application.Protocols;
 
 /// <summary>
@@ -133,12 +135,66 @@ public sealed record ProtocolLabels(
         LegalNote: "Dieses Dokument ist eine elektronische Bestätigung (Annahmenachweis), die über einen an die Adresse der mitarbeitenden Person gesendeten Link abgegeben wurde. Es handelt sich nicht um eine qualifizierte elektronische Signatur im Sinne der eIDAS-Verordnung. Die Prüfsumme ermöglicht es, nachträgliche Änderungen am Protokoll zu erkennen.",
         Page: "Seite");
 
-    /// <summary>Cztery języki interfejsu mają własną klauzulę; nieznany język dostaje angielską.</summary>
-    public static ProtocolLabels For(string? language) => (language?.Trim().ToLowerInvariant()) switch
+
+    private static readonly ProtocolLabels Italian = new(
+        HandoverTitle: "Verbale di consegna delle attrezzature",
+        ReturnTitle: "Verbale di restituzione delle attrezzature",
+        Organization: "Organizzazione",
+        Employee: "Dipendente",
+        EmployeeNumber: "Matricola",
+        JobTitle: "Mansione",
+        ProtocolNumber: "Numero del verbale",
+        IssuedAt: "Data di emissione",
+        ConfirmedAt: "Data di conferma",
+        NotConfirmed: "Non confermato",
+        Item: "Bene",
+        AssetTag: "Etichetta",
+        SerialNumber: "Numero di serie",
+        Condition: "Condizioni",
+        Value: "Valore",
+        Status: "Stato",
+        Procedures: "Procedure accettate",
+        Notes: "Note",
+        NoItems: "Nessun bene.",
+        IntegrityHash: "Impronta di verifica della conferma (SHA-256)",
+        LiabilityClause: "Il dipendente conferma di aver ricevuto i beni sopra elencati, li prende in custodia e si impegna a utilizzarli conformemente alla loro destinazione nonché a restituirli su richiesta del datore di lavoro o alla cessazione del rapporto di lavoro.",
+        LegalNote: "Il presente documento costituisce una conferma elettronica (registrazione dell'accettazione) effettuata tramite un collegamento inviato all'indirizzo del dipendente. Non si tratta di una firma elettronica qualificata ai sensi del regolamento eIDAS. L'impronta di verifica consente di rilevare qualsiasi modifica apportata al verbale dopo la conferma.",
+        Page: "Pagina");
+
+    private static readonly ProtocolLabels French = new(
+        HandoverTitle: "Procès-verbal de remise du matériel",
+        ReturnTitle: "Procès-verbal de restitution du matériel",
+        Organization: "Organisation",
+        Employee: "Collaborateur",
+        EmployeeNumber: "Matricule",
+        JobTitle: "Fonction",
+        ProtocolNumber: "Numéro du procès-verbal",
+        IssuedAt: "Date d'émission",
+        ConfirmedAt: "Date de confirmation",
+        NotConfirmed: "Non confirmé",
+        Item: "Bien",
+        AssetTag: "Étiquette",
+        SerialNumber: "Numéro de série",
+        Condition: "État",
+        Value: "Valeur",
+        Status: "Statut",
+        Procedures: "Procédures acceptées",
+        Notes: "Remarques",
+        NoItems: "Aucun bien.",
+        IntegrityHash: "Empreinte de vérification de la confirmation (SHA-256)",
+        LiabilityClause: "Le collaborateur confirme la réception des biens énumérés ci-dessus, en prend la garde et s'engage à les utiliser conformément à leur destination ainsi qu'à les restituer à la demande de l'employeur ou à la fin de la relation de travail.",
+        LegalNote: "Le présent document constitue une confirmation électronique (enregistrement de l'acceptation) effectuée au moyen d'un lien envoyé à l'adresse du collaborateur. Il ne s'agit pas d'une signature électronique qualifiée au sens du règlement eIDAS. L'empreinte de vérification permet de détecter toute modification du procès-verbal postérieure à sa confirmation.",
+        Page: "Page");
+
+    /// <summary>Każdy język interfejsu ma własną klauzulę. Brak języka lub język spoza listy dostaje
+    /// angielską - nie polską, bo protokół czyta osoba, której języka organizacji nie znamy.</summary>
+    public static ProtocolLabels For(string? language) => (AppLanguages.IsSupported(language) ? AppLanguages.Normalize(language) : "") switch
     {
         "pl" => Polish,
         "es" => Spanish,
         "de" => German,
+        "it" => Italian,
+        "fr" => French,
         _ => English
     };
 }

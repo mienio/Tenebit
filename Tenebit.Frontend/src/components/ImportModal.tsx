@@ -4,6 +4,7 @@ import { Button } from './Button';
 import { Field, SelectInput } from './FormFields';
 import { Modal } from './Modal';
 import { api } from '../api/endpoints';
+import { ApiError } from '../api/apiClient';
 import type { AssetCategory, LocationNode, Team } from '../types/domain';
 import { useI18n } from '../i18n/I18nProvider';
 import type { Language } from '../i18n/translations';
@@ -18,25 +19,29 @@ interface FieldDef {
   synonyms: string[];
 }
 
+// Nagłówki są porównywane po normalize() (bez diakrytyków, lowercase), więc synonimy trzymamy już
+// w tej postaci - 'telefono', nie 'teléfono'. Lista pokrywa wszystkie języki interfejsu, bo
+// buildTemplate() generuje szablon w języku użytkownika: bez tego własny szablon aplikacji nie
+// zmapowałby się z powrotem przy wgrywaniu (es/de/it/fr trafiały na "nierozpoznana kolumna").
 const PEOPLE_FIELDS: FieldDef[] = [
-  { key: 'firstName', labelKey: 'import.field.firstName', synonyms: ['imie', 'imię', 'first name', 'firstname'] },
-  { key: 'lastName', labelKey: 'import.field.lastName', synonyms: ['nazwisko', 'last name', 'lastname'] },
-  { key: 'fullName', labelKey: 'import.field.fullName', synonyms: ['imie i nazwisko', 'imię i nazwisko', 'fullname', 'full name', 'name', 'nazwa'] },
-  { key: 'email', labelKey: 'import.field.email', required: true, synonyms: ['email', 'e-mail', 'mail'] },
-  { key: 'phone', labelKey: 'import.field.phone', synonyms: ['telefon', 'phone'] },
-  { key: 'jobTitle', labelKey: 'import.field.jobTitle', synonyms: ['stanowisko', 'job title', 'title'] },
-  { key: 'team', labelKey: 'import.field.team', synonyms: ['zespol', 'zespół', 'team', 'dzial', 'dział'] },
-  { key: 'employeeNumber', labelKey: 'import.field.employeeNumber', synonyms: ['nr pracownika', 'numer pracownika', 'employee number', 'emp id'] }
+  { key: 'firstName', labelKey: 'import.field.firstName', synonyms: ['imie', 'imię', 'first name', 'firstname', 'nombre', 'vorname', 'nome', 'prenom'] },
+  { key: 'lastName', labelKey: 'import.field.lastName', synonyms: ['nazwisko', 'last name', 'lastname', 'apellido', 'apellidos', 'nachname', 'cognome', 'nom'] },
+  { key: 'fullName', labelKey: 'import.field.fullName', synonyms: ['imie i nazwisko', 'imię i nazwisko', 'fullname', 'full name', 'name', 'nazwa', 'nombre completo', 'voller name', 'nome completo', 'nome e cognome', 'nom complet'] },
+  { key: 'email', labelKey: 'import.field.email', required: true, synonyms: ['email', 'e-mail', 'mail', 'correo', 'correo electronico', 'courriel'] },
+  { key: 'phone', labelKey: 'import.field.phone', synonyms: ['telefon', 'phone', 'telefono', 'telephone'] },
+  { key: 'jobTitle', labelKey: 'import.field.jobTitle', synonyms: ['stanowisko', 'job title', 'title', 'puesto', 'cargo', 'position', 'mansione', 'ruolo', 'fonction', 'poste'] },
+  { key: 'team', labelKey: 'import.field.team', synonyms: ['zespol', 'zespół', 'team', 'dzial', 'dział', 'equipo', 'departamento', 'abteilung', 'reparto', 'squadra', 'equipe', 'service'] },
+  { key: 'employeeNumber', labelKey: 'import.field.employeeNumber', synonyms: ['nr pracownika', 'numer pracownika', 'employee number', 'emp id', 'numero de empleado', 'personalnummer', 'matricola', 'matricule'] }
 ];
 
 const ASSET_FIELDS: FieldDef[] = [
-  { key: 'name', labelKey: 'import.field.name', required: true, synonyms: ['nazwa', 'name'] },
-  { key: 'assetTag', labelKey: 'import.field.assetTag', required: true, synonyms: ['tag', 'assettag', 'numer inwentarzowy', 'nr inwentarzowy'] },
-  { key: 'serialNumber', labelKey: 'import.field.serialNumber', synonyms: ['numer seryjny', 'serial', 'sn'] },
-  { key: 'category', labelKey: 'import.field.category', required: true, synonyms: ['kategoria', 'category'] },
-  { key: 'manufacturer', labelKey: 'import.field.manufacturer', synonyms: ['producent', 'manufacturer'] },
-  { key: 'model', labelKey: 'import.field.model', synonyms: ['model'] },
-  { key: 'location', labelKey: 'import.field.location', synonyms: ['lokalizacja', 'location'] }
+  { key: 'name', labelKey: 'import.field.name', required: true, synonyms: ['nazwa', 'name', 'nombre', 'bezeichnung', 'nome', 'nom'] },
+  { key: 'assetTag', labelKey: 'import.field.assetTag', required: true, synonyms: ['tag', 'assettag', 'numer inwentarzowy', 'nr inwentarzowy', 'etiqueta', 'kennung', 'inventarnummer', 'etichetta', 'etiquette'] },
+  { key: 'serialNumber', labelKey: 'import.field.serialNumber', synonyms: ['numer seryjny', 'serial', 'sn', 'numero de serie', 'seriennummer', 'numero di serie'] },
+  { key: 'category', labelKey: 'import.field.category', required: true, synonyms: ['kategoria', 'category', 'categoria', 'kategorie', 'categorie'] },
+  { key: 'manufacturer', labelKey: 'import.field.manufacturer', synonyms: ['producent', 'manufacturer', 'fabricante', 'hersteller', 'produttore', 'fabricant'] },
+  { key: 'model', labelKey: 'import.field.model', synonyms: ['model', 'modelo', 'modell', 'modello', 'modele'] },
+  { key: 'location', labelKey: 'import.field.location', synonyms: ['lokalizacja', 'location', 'ubicacion', 'standort', 'ubicazione', 'emplacement'] }
 ];
 
 interface RowResult {
@@ -45,6 +50,10 @@ interface RowResult {
   status: 'ok' | 'error' | 'duplicate';
   reason?: string;
 }
+
+// Kody zwracane przez backend, gdy zasób wyczerpał limit planu (wspólny dla aktywów, pracowników
+// i pozostałych zasobów - patrz OrganizationSubscription.GetResourceLimit).
+const LIMIT_ERROR_CODES = ['SUBSCRIPTION_ASSET_LIMIT_EXCEEDED', 'SUBSCRIPTION_RESOURCE_LIMIT_EXCEEDED'];
 
 const DIACRITICS_PATTERN = new RegExp('[\\u0300-\\u036f]', 'g');
 
@@ -113,6 +122,14 @@ function buildTemplate(entity: Entity, language: Language): string {
       people: 'nombre,apellido,email,telefono,puesto,equipo\nJuan,Garcia,juan.garcia@empresa.com,600100200,Desarrollador,TI',
       assets: 'nombre,tag,numero de serie,categoria,fabricante,modelo,ubicacion\nPortatil Dell,LAP-001,SN12345,Portatiles,Dell,Latitude 5440,Oficina Madrid'
     },
+    it: {
+      people: 'nome,cognome,email,telefono,mansione,team\nMarco,Rossi,marco.rossi@azienda.it,3401002000,Sviluppatore,IT',
+      assets: 'nome,tag,numero di serie,categoria,produttore,modello,ubicazione\nPortatile Dell,LAP-001,SN12345,Portatili,Dell,Latitude 5440,Ufficio Milano'
+    },
+    fr: {
+      people: 'prenom,nom,email,telephone,fonction,equipe\nJulien,Martin,julien.martin@entreprise.fr,601002000,Developpeur,IT',
+      assets: 'nom,tag,numero de serie,categorie,fabricant,modele,emplacement\nOrdinateur Dell,LAP-001,SN12345,Ordinateurs portables,Dell,Latitude 5440,Bureau Paris'
+    },
     de: {
       people: 'vorname,nachname,email,telefon,position,team\nMax,Mueller,max.mueller@firma.de,600100200,Entwickler,IT',
       assets: 'name,tag,seriennummer,kategorie,hersteller,modell,standort\nDell Laptop,LAP-001,SN12345,Laptops,Dell,Latitude 5440,Buero Berlin'
@@ -154,6 +171,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [summary, setSummary] = useState({ created: 0, skipped: 0, failed: [] as { row: number; reason: string }[] });
   const [parseError, setParseError] = useState<string | null>(null);
+  const [limitReached, setLimitReached] = useState<string | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
 
   function reset() {
@@ -162,6 +180,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
     setRows([]);
     setMapping({});
     setParseError(null);
+    setLimitReached(null);
     setSummary({ created: 0, skipped: 0, failed: [] });
     setFileInputKey(current => current + 1);
   }
@@ -248,7 +267,9 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
     const validRows = results.filter(item => item.status === 'ok');
     setStep('importing');
     setProgress({ done: 0, total: validRows.length });
+    setLimitReached(null);
     let created = 0;
+    let attempted = 0;
     const failed: { row: number; reason: string }[] = [];
 
     for (const row of validRows) {
@@ -286,12 +307,20 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
         }
         created++;
       } catch (error) {
-        failed.push({ row: row.index + 2, reason: error instanceof Error ? error.message : t('import.rowFailed') });
+        const reason = error instanceof Error ? error.message : t('import.rowFailed');
+        // Limit planu jest wspólny dla całej organizacji, więc kolejne wiersze też go nie przejdą -
+        // przerywamy, zamiast wysyłać tysiące żądań skazanych na to samo odrzucenie.
+        if (error instanceof ApiError && LIMIT_ERROR_CODES.includes(error.code)) {
+          setLimitReached(reason);
+          break;
+        }
+        failed.push({ row: row.index + 2, reason });
       }
+      attempted++;
       setProgress(current => ({ ...current, done: current.done + 1 }));
     }
 
-    setSummary({ created, skipped: errorCount + duplicateCount, failed });
+    setSummary({ created, skipped: errorCount + duplicateCount + (validRows.length - attempted), failed });
     setStep('result');
     onDone();
   }
@@ -371,6 +400,7 @@ export function ImportModal({ open, entity, existingKeys, categories, teams, loc
         {step === 'result' && (
           <div className="formGrid">
             <p>{t('import.summary', { created: summary.created, skipped: summary.skipped, failed: summary.failed.length })}</p>
+            {limitReached && <p className="toast toast--error">{limitReached}</p>}
             {summary.failed.length > 0 && (
               <div className="listRows">
                 {summary.failed.map(item => (

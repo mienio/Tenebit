@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 
 namespace Tenebit.Api.Auth;
 
@@ -50,7 +51,7 @@ public sealed class CurrentUser : ICurrentUser
         get
         {
             var header = _httpContextAccessor.HttpContext?.Request.Headers["X-Ui-Language"].ToString();
-            return string.IsNullOrWhiteSpace(header) ? "pl" : header.Trim().ToLowerInvariant();
+            return AppLanguages.Normalize(header);
         }
     }
 

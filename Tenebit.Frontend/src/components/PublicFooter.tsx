@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom';
 import { legalConfig } from '../config/legal';
 import { StorageNotice } from './StorageNotice';
 import { useI18n } from '../i18n/I18nProvider';
-import { legalContent } from '../legal/legalContent';
+import { legalContentFor } from '../legal/legalContent';
 
 export function PublicFooter({ compact = false }: { compact?: boolean }) {
   const { language } = useI18n();
-  const ui = legalContent[language].ui;
+  const ui = legalContentFor(language).ui;
 
   return (
     <>

@@ -63,7 +63,7 @@ public static class ProceduresEndpoints
         {
             if (!request.HasFormContentType)
             {
-                return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Wyślij plik jako multipart/form-data."), code = "VALIDATION_ERROR" });
             }
 
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxProcedureDocumentUploadBytes);

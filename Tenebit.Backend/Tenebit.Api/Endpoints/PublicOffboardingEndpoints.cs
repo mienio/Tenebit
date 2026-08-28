@@ -26,11 +26,11 @@ public static class PublicOffboardingEndpoints
         {
             var token = PublicCapabilityCookie.Read(request, protector, PublicCapabilityCookie.OffboardingPurpose, clock.UtcNow);
             if (token is null) return Results.NotFound();
-            if (!request.HasFormContentType) return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
+            if (!request.HasFormContentType) return Results.BadRequest(new { message = ResultExtensions.Localize("Wyślij plik jako multipart/form-data."), code = "VALIDATION_ERROR" });
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxSingleEvidenceUploadBytes);
             var form = await request.ReadFormAsync(ct);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0) return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
+            if (file is null || file.Length == 0) return Results.BadRequest(new { message = ResultExtensions.Localize("Wybierz zdjęcie."), code = "VALIDATION_ERROR" });
             var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, ct);
             return (await service.UploadPublicEvidenceAsync(token, itemId, file.FileName, file.ContentType, content, ct)).ToHttpResult();
         }).DisableAntiforgery().AllowAnonymous().RequireRateLimiting("public").WithTags("Public offboarding");

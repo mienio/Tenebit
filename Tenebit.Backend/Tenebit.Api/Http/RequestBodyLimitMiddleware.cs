@@ -41,7 +41,7 @@ public sealed class RequestBodyLimitMiddleware
                 context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
                 await context.Response.WriteAsJsonAsync(new
                 {
-                    message = "Żądanie jest za duże.",
+                    message = ResultExtensions.Localize("Żądanie jest za duże."),
                     code = "PAYLOAD_TOO_LARGE"
                 }, cancellationToken: context.RequestAborted);
                 return;

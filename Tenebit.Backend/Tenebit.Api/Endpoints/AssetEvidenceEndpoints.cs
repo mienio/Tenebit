@@ -50,7 +50,7 @@ public static class AssetEvidenceEndpoints
         {
             if (!request.HasFormContentType)
             {
-                return Results.BadRequest(new { message = "Wyślij plik jako multipart/form-data.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Wyślij plik jako multipart/form-data."), code = "VALIDATION_ERROR" });
             }
 
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxSingleEvidenceUploadBytes);
@@ -58,12 +58,12 @@ public static class AssetEvidenceEndpoints
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
             if (file is null || file.Length == 0)
             {
-                return Results.BadRequest(new { message = "Wybierz zdjęcie.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Wybierz zdjęcie."), code = "VALIDATION_ERROR" });
             }
 
             if (!Enum.TryParse<EvidencePhase>(form["phase"], true, out var phase) || !Enum.IsDefined(typeof(EvidencePhase), phase))
             {
-                return Results.BadRequest(new { message = "Nieprawidłowy etap materiału dowodowego.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Nieprawidłowy etap materiału dowodowego."), code = "VALIDATION_ERROR" });
             }
 
             var assignmentRaw = form["assignmentId"].ToString();
@@ -72,7 +72,7 @@ public static class AssetEvidenceEndpoints
             {
                 if (!Guid.TryParse(assignmentRaw, out var aid) || aid == Guid.Empty)
                 {
-                    return Results.BadRequest(new { message = "Nieprawidłowy identyfikator wydania.", code = "VALIDATION_ERROR" });
+                    return Results.BadRequest(new { message = ResultExtensions.Localize("Nieprawidłowy identyfikator wydania."), code = "VALIDATION_ERROR" });
                 }
                 assignmentId = aid;
             }
@@ -82,7 +82,7 @@ public static class AssetEvidenceEndpoints
             var validationError = RequestObjectValidator.Validate(uploadRequest);
             if (validationError is not null)
             {
-                return Results.BadRequest(new { message = validationError, code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize(validationError), code = "VALIDATION_ERROR" });
             }
 
             var content = await MultipartRequestHelpers.ReadFileAsync(file, RequestSizeLimits.MaxEvidenceFileBytes, cancellationToken);

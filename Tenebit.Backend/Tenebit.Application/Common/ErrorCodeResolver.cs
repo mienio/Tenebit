@@ -254,6 +254,11 @@ public static class ErrorCodeResolver
     private static readonly List<(Regex Pattern, string Code)> TemplateCodes = new()
     {
         (new Regex(@"^Limit aktywów przekroczony\."), "SUBSCRIPTION_ASSET_LIMIT_EXCEEDED"),
+        // Pozostałe zasoby dzielą limit planu z aktywami (OrganizationSubscription.GetResourceLimit) i
+        // muszą dawać klientowi ten sam, rozpoznawalny kod - inaczej import CSV nie odróżni wyczerpanego
+        // limitu od zwykłego błędu walidacji wiersza i próbowałby dalej dla każdego kolejnego wiersza.
+        (new Regex(@"^Limit [\p{L} ]+ przekroczony\. Plan .+ pozwala na \d+ [\p{L} ]+\. Przejdź na wyższy plan\.$"), "SUBSCRIPTION_RESOURCE_LIMIT_EXCEEDED"),
+        (new Regex(@"^Limit planu .+ \(\d+\) został osiągnięty "), "SUBSCRIPTION_RESOURCE_LIMIT_EXCEEDED"),
         (new Regex(@"^Nieznana rola: "), "ROLE_UNKNOWN"),
         (new Regex(@"^Nieznane uprawnienie: "), "PERMISSION_UNKNOWN"),
         (new Regex(@"^Nieznany status aktywa: "), "ASSET_STATUS_UNKNOWN"),

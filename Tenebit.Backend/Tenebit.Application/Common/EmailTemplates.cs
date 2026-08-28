@@ -3,7 +3,7 @@ using System.Net;
 namespace Tenebit.Application.Common;
 
 /// <summary>
-/// Centralized, email-client-safe transactional templates for the four supported languages.
+/// Centralized, email-client-safe transactional templates for every supported UI language.
 /// The markup is table based, uses inline styles and deliberately contains no JavaScript.
 /// </summary>
 public static class EmailTemplates
@@ -16,11 +16,7 @@ public static class EmailTemplates
     private const string Accent = "#a63a2e";
     private const string Border = "#d8cebc";
 
-    private static string Normalize(string? language)
-    {
-        var lang = (language ?? "pl").Trim().ToLowerInvariant();
-        return lang is "pl" or "en" or "es" or "de" ? lang : "pl";
-    }
+    private static string Normalize(string? language) => AppLanguages.Normalize(language);
 
     private static string Encode(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
@@ -61,6 +57,26 @@ public static class EmailTemplates
                 "Formular öffnen",
                 "Falls du diese Änderung nicht angefordert hast, teile den Code nicht und ignoriere diese Nachricht.",
                 "Sicherheitshinweis"),
+            "it" => new EmailCopy(
+                "Reimposta la password di Tenebit",
+                "Reimpostazione della password",
+                "Imposta una nuova password",
+                "Abbiamo ricevuto una richiesta di modifica della password del tuo account Tenebit.",
+                "Il tuo codice monouso",
+                "Il codice è valido per 15 minuti. Incolla tutte e sei le cifre nel modulo.",
+                "Apri il modulo",
+                "Se non hai richiesto questa modifica, non condividere il codice e ignora questo messaggio.",
+                "Avviso di sicurezza"),
+            "fr" => new EmailCopy(
+                "Réinitialisez votre mot de passe Tenebit",
+                "Réinitialisation du mot de passe",
+                "Définissez un nouveau mot de passe",
+                "Nous avons reçu une demande de modification du mot de passe de votre compte Tenebit.",
+                "Votre code à usage unique",
+                "Le code est valable 15 minutes. Collez les six chiffres dans le formulaire.",
+                "Ouvrir le formulaire",
+                "Si vous n'êtes pas à l'origine de cette demande, ne partagez pas le code et ignorez ce message.",
+                "Avis de sécurité"),
             _ => new EmailCopy(
                 "Zresetuj hasło w Tenebit",
                 "Reset hasła",
@@ -111,6 +127,26 @@ public static class EmailTemplates
                 "E-Mail bestätigen",
                 "Leite diese Nachricht nicht weiter und teile den Code mit keiner anderen Person.",
                 "Kontoschutz"),
+            "it" => new EmailCopy(
+                "Conferma la tua e-mail Tenebit",
+                "Verifica dell'e-mail",
+                "Un ultimo passaggio",
+                "Conferma che questa casella di posta è tua e scegli la password che proteggerà il tuo account.",
+                "Il tuo codice di verifica",
+                "Il codice è valido per 30 minuti. Puoi incollare tutte e sei le cifre in una volta.",
+                "Conferma l'e-mail",
+                "Non inoltrare mai questo messaggio e non condividere il codice con altre persone.",
+                "Protezione dell'account"),
+            "fr" => new EmailCopy(
+                "Confirmez votre e-mail Tenebit",
+                "Vérification de l'e-mail",
+                "Une dernière étape",
+                "Confirmez que cette boîte de réception vous appartient et choisissez le mot de passe qui protégera votre compte.",
+                "Votre code de vérification",
+                "Le code est valable 30 minutes. Vous pouvez coller les six chiffres en une seule fois.",
+                "Confirmer l'e-mail",
+                "Ne transférez jamais ce message et ne communiquez le code à personne.",
+                "Protection du compte"),
             _ => new EmailCopy(
                 "Potwierdź e-mail w Tenebit",
                 "Potwierdzenie e-maila",
@@ -161,6 +197,26 @@ public static class EmailTemplates
                 "Konto aktivieren",
                 "Nur der Inhaber dieses Postfachs sollte das Konto aktivieren. Teile den Code nicht.",
                 "Private Einladung"),
+            "it" => new EmailCopy(
+                "Il tuo invito a Tenebit",
+                "Invito all'organizzazione",
+                "Il tuo spazio di lavoro è pronto",
+                "Un amministratore ti ha aggiunto a un'organizzazione in Tenebit. Rivendica l'account e imposta la tua password personale.",
+                "Il tuo codice di invito",
+                "Il codice è valido per 24 ore. Incolla tutte e sei le cifre nel modulo di attivazione.",
+                "Attiva l'account",
+                "Solo il titolare di questa casella di posta dovrebbe attivare l'account. Non condividere il codice.",
+                "Invito personale"),
+            "fr" => new EmailCopy(
+                "Votre invitation à Tenebit",
+                "Invitation à l'organisation",
+                "Votre espace de travail est prêt",
+                "Un administrateur vous a ajouté à une organisation dans Tenebit. Revendiquez le compte et définissez votre mot de passe personnel.",
+                "Votre code d'invitation",
+                "Le code est valable 24 heures. Collez les six chiffres dans le formulaire d'activation.",
+                "Activer le compte",
+                "Seul le titulaire de cette boîte de réception doit activer le compte. Ne partagez pas le code.",
+                "Invitation personnelle"),
             _ => new EmailCopy(
                 "Twoje zaproszenie do Tenebit",
                 "Zaproszenie do organizacji",
@@ -222,6 +278,26 @@ public static class EmailTemplates
                 "Bestätigungsreferenz",
                 "Prüfen und Empfang bestätigen",
                 "Deine Bestätigung mit Datum und Uhrzeit wird in Tenebit gespeichert und bleibt im Aktivitätsverlauf verfügbar."),
+            "it" => new ActionCopy(
+                $"Attrezzatura pronta per la conferma | {protocolNumber}",
+                "Nuova attrezzatura",
+                $"Ciao {name}, la tua attrezzatura è pronta",
+                "Controlla l'elenco qui sotto, apri la pagina sicura di conferma e conferma ciò che hai ricevuto.",
+                "Attrezzatura",
+                "Regolamenti e procedure inclusi in questa consegna",
+                "Riferimento della conferma",
+                "Controlla e conferma la ricezione",
+                "La tua conferma, con data e ora, verrà registrata in Tenebit e resterà disponibile nella cronologia delle attività."),
+            "fr" => new ActionCopy(
+                $"Matériel prêt à être confirmé | {protocolNumber}",
+                "Nouveau matériel",
+                $"Bonjour {name}, votre matériel est prêt",
+                "Consultez la liste ci-dessous, ouvrez la page sécurisée de confirmation et confirmez ce que vous avez reçu.",
+                "Matériel",
+                "Règlements et procédures inclus dans cette remise",
+                "Référence de la confirmation",
+                "Vérifier et confirmer la réception",
+                "Votre confirmation, date et heure incluses, sera enregistrée dans Tenebit et restera disponible dans l'historique des activités."),
             _ => new ActionCopy(
                 $"Sprzęt gotowy do potwierdzenia | {protocolNumber}",
                 "Nowy sprzęt",
@@ -256,6 +332,8 @@ public static class EmailTemplates
         {
             "en" => new SimpleActionCopy("Return company equipment", "Equipment return", $"Hi {name}, let us close this properly", "Review the equipment and licenses assigned to you, then update every item on the secure return checklist.", "Return deadline", "Open return checklist", "The checklist is the current source of truth for the return process."),
             "es" => new SimpleActionCopy("Devolución del equipo de la empresa", "Devolución de equipo", $"Hola, {name}. Cerremos esto correctamente", "Revisa el equipo y las licencias que tienes asignados y actualiza cada elemento en la lista segura de devolución.", "Fecha límite", "Abrir lista de devolución", "La lista es la fuente actual de información para todo el proceso de devolución."),
+            "it" => new SimpleActionCopy("Restituisci l'attrezzatura aziendale", "Restituzione dell'attrezzatura", $"Ciao {name}, chiudiamo la pratica come si deve", "Controlla l'attrezzatura e le licenze a te assegnate, poi aggiorna ogni voce nell'elenco sicuro di restituzione.", "Termine di restituzione", "Apri l'elenco di restituzione", "L'elenco è il riferimento aggiornato per l'intero processo di restituzione."),
+            "fr" => new SimpleActionCopy("Restituer le matériel de l'entreprise", "Restitution du matériel", $"Bonjour {name}, clôturons cela correctement", "Vérifiez le matériel et les licences qui vous sont attribués, puis mettez à jour chaque élément dans la liste sécurisée de restitution.", "Date limite de restitution", "Ouvrir la liste de restitution", "La liste fait référence pour l'ensemble du processus de restitution."),
             "de" => new SimpleActionCopy("Firmenausrüstung zurückgeben", "Ausrüstungsrückgabe", $"Hallo {name}, lass uns den Vorgang sauber abschließen", "Prüfe die dir zugewiesene Ausrüstung und Lizenzen und aktualisiere jedes Element in der sicheren Rückgabeliste.", "Rückgabefrist", "Rückgabeliste öffnen", "Die Checkliste ist die aktuelle verbindliche Übersicht für den Rückgabeprozess."),
             _ => new SimpleActionCopy("Zwrot sprzętu firmowego", "Zwrot sprzętu", $"Cześć {name}, zamknijmy ten proces porządnie", "Sprawdź sprzęt i licencje przypisane do Ciebie, a następnie zaktualizuj każdą pozycję na bezpiecznej liście zwrotu.", "Termin zwrotu", "Otwórz listę zwrotu", "Lista w Tenebit jest aktualnym źródłem informacji dla całego procesu zwrotu.")
         };
@@ -276,6 +354,8 @@ public static class EmailTemplates
         {
             "en" => new SimpleActionCopy("Confirm your assigned equipment", "Equipment check", $"Hi {name}, please check your equipment", "Open the secure form, compare the list with what you have and report any mismatch.", "Complete by", "Open confirmation form", "Your response is recorded directly in Tenebit and can be reviewed by the responsible team."),
             "es" => new SimpleActionCopy("Confirma tu equipo asignado", "Revisión de equipo", $"Hola, {name}. Revisa tu equipo", "Abre el formulario seguro, compara la lista con lo que tienes e informa de cualquier diferencia.", "Completar antes de", "Abrir formulario", "Tu respuesta se registra directamente en Tenebit y el equipo responsable puede revisarla."),
+            "it" => new SimpleActionCopy("Conferma l'attrezzatura a te assegnata", "Verifica dell'attrezzatura", $"Ciao {name}, controlla la tua attrezzatura", "Apri il modulo sicuro, confronta l'elenco con ciò che possiedi e segnala eventuali differenze.", "Da completare entro", "Apri il modulo di conferma", "La tua risposta viene registrata direttamente in Tenebit e può essere verificata dal team responsabile."),
+            "fr" => new SimpleActionCopy("Confirmez le matériel qui vous est attribué", "Vérification du matériel", $"Bonjour {name}, vérifiez votre matériel", "Ouvrez le formulaire sécurisé, comparez la liste avec ce que vous détenez et signalez toute différence.", "À compléter avant le", "Ouvrir le formulaire de confirmation", "Votre réponse est enregistrée directement dans Tenebit et peut être consultée par l'équipe responsable."),
             "de" => new SimpleActionCopy("Zugewiesene Ausrüstung bestätigen", "Ausrüstungsprüfung", $"Hallo {name}, bitte prüfe deine Ausrüstung", "Öffne das sichere Formular, vergleiche die Liste mit deiner Ausrüstung und melde Abweichungen.", "Abschließen bis", "Bestätigungsformular öffnen", "Deine Antwort wird direkt in Tenebit gespeichert und kann vom zuständigen Team geprüft werden."),
             _ => new SimpleActionCopy("Potwierdź przypisany sprzęt", "Kontrola sprzętu", $"Cześć {name}, sprawdź proszę swój sprzęt", "Otwórz bezpieczny formularz, porównaj listę z tym, co masz, i zgłoś każdą niezgodność.", "Wykonaj do", "Otwórz formularz potwierdzenia", "Twoja odpowiedź zostanie zapisana bezpośrednio w Tenebit i będzie dostępna dla odpowiedzialnego zespołu.")
         };
@@ -298,6 +378,8 @@ public static class EmailTemplates
         {
             "en" => new AlertCopy($"Procedure not confirmed | {procedureTitle ?? "procedure"}", "Attention required", "A procedure still needs confirmation", $"{person} has not confirmed the procedure within {deadlineDays} days of delivery.", "Procedure", "Person", "Confirmation reference"),
             "es" => new AlertCopy($"Procedimiento sin confirmar | {procedureTitle ?? "procedimiento"}", "Requiere atención", "Un procedimiento sigue pendiente", $"{person} no ha confirmado el procedimiento en los {deadlineDays} días posteriores al envío.", "Procedimiento", "Persona", "Referencia de confirmación"),
+            "it" => new AlertCopy($"Procedura non confermata | {procedureTitle ?? "procedura"}", "Richiede attenzione", "Una procedura attende ancora la conferma", $"{person} non ha confermato la procedura entro {deadlineDays} giorni dalla consegna.", "Procedura", "Persona", "Riferimento della conferma"),
+            "fr" => new AlertCopy($"Procédure non confirmée | {procedureTitle ?? "procédure"}", "Action requise", "Une procédure attend toujours confirmation", $"{person} n'a pas confirmé la procédure dans les {deadlineDays} jours suivant sa remise.", "Procédure", "Personne", "Référence de la confirmation"),
             "de" => new AlertCopy($"Verfahren nicht bestätigt | {procedureTitle ?? "Verfahren"}", "Aktion erforderlich", "Ein Verfahren wartet noch auf Bestätigung", $"{person} hat das Verfahren innerhalb von {deadlineDays} Tagen nach der Zustellung nicht bestätigt.", "Verfahren", "Person", "Bestätigungsreferenz"),
             _ => new AlertCopy($"Brak potwierdzenia procedury | {procedureTitle ?? "procedura"}", "Wymaga uwagi", "Procedura nadal czeka na potwierdzenie", $"{person} nie potwierdził procedury w ciągu {deadlineDays} dni od jej przekazania.", "Procedura", "Osoba", "Numer potwierdzenia")
         };
@@ -417,6 +499,8 @@ public static class EmailTemplates
         "en" => "No items",
         "es" => "Sin elementos",
         "de" => "Keine Einträge",
+        "it" => "Nessun elemento",
+        "fr" => "Aucun élément",
         _ => "Brak pozycji"
     };
 
@@ -425,6 +509,8 @@ public static class EmailTemplates
         "en" => "Not provided",
         "es" => "Sin datos",
         "de" => "Nicht angegeben",
+        "it" => "Non indicato",
+        "fr" => "Non renseigné",
         _ => "Brak danych"
     };
 
@@ -433,6 +519,8 @@ public static class EmailTemplates
         "en" => "Use the button above or paste the secure link into your browser. Never share a one-time code.",
         "es" => "Usa el botón superior o pega el enlace seguro en tu navegador. No compartas nunca un código de un solo uso.",
         "de" => "Nutze die Schaltfläche oben oder füge den sicheren Link in deinen Browser ein. Teile niemals einen Einmalcode.",
+        "it" => "Usa il pulsante qui sopra oppure incolla il link sicuro nel tuo browser. Non condividere mai un codice monouso.",
+        "fr" => "Utilisez le bouton ci-dessus ou collez le lien sécurisé dans votre navigateur. Ne partagez jamais un code à usage unique.",
         _ => "Użyj przycisku powyżej albo wklej bezpieczny link do przeglądarki. Nigdy nie udostępniaj jednorazowego kodu."
     };
 
@@ -441,6 +529,8 @@ public static class EmailTemplates
         "en" => "If the button does not work, paste this address into your browser:",
         "es" => "Si el botón no funciona, pega esta dirección en el navegador:",
         "de" => "Falls die Schaltfläche nicht funktioniert, füge diese Adresse in den Browser ein:",
+        "it" => "Se il pulsante non funziona, incolla questo indirizzo nel browser:",
+        "fr" => "Si le bouton ne fonctionne pas, collez cette adresse dans votre navigateur :",
         _ => "Jeśli przycisk nie działa, wklej ten adres do przeglądarki:"
     };
 
@@ -449,6 +539,8 @@ public static class EmailTemplates
         "en" => "transactional message",
         "es" => "mensaje transaccional",
         "de" => "Transaktionsnachricht",
+        "it" => "messaggio transazionale",
+        "fr" => "message transactionnel",
         _ => "wiadomość transakcyjna"
     };
 
@@ -457,6 +549,8 @@ public static class EmailTemplates
         "en" => "This message was generated automatically. Please do not reply.",
         "es" => "Este mensaje se ha generado automáticamente. No respondas.",
         "de" => "Diese Nachricht wurde automatisch erstellt. Bitte nicht antworten.",
+        "it" => "Questo messaggio è stato generato automaticamente. Non rispondere.",
+        "fr" => "Ce message a été généré automatiquement. Merci de ne pas y répondre.",
         _ => "Ta wiadomość została wygenerowana automatycznie. Nie odpowiadaj na nią."
     };
 
@@ -465,6 +559,8 @@ public static class EmailTemplates
         "en" => "Open Tenebit to review the current status and take the appropriate action.",
         "es" => "Abre Tenebit para revisar el estado actual y realizar la acción adecuada.",
         "de" => "Öffne Tenebit, um den aktuellen Status zu prüfen und die passende Aktion auszuführen.",
+        "it" => "Apri Tenebit per verificare lo stato attuale ed eseguire l'azione appropriata.",
+        "fr" => "Ouvrez Tenebit pour consulter l'état actuel et effectuer l'action appropriée.",
         _ => "Otwórz Tenebit, sprawdź aktualny status i wykonaj odpowiednią akcję."
     };
 

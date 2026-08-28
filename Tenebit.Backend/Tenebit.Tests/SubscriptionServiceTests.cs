@@ -1,6 +1,7 @@
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Subscriptions;
 using Tenebit.Domain.Assets;
+using Tenebit.Domain.People;
 using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
@@ -10,13 +11,36 @@ public class SubscriptionServiceTests
 {
     private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents) CreateService()
     {
+        var (service, currentUser, assets, subscriptions, paymentGateway, processedEvents, _) = CreateServiceWithPeople();
+        return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents);
+    }
+
+    private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents, InMemoryPersonRepository People) CreateServiceWithPeople()
+    {
         var currentUser = new FakeCurrentUser();
         var assets = new InMemoryAssetRepository();
+        var people = new InMemoryPersonRepository();
         var subscriptions = new InMemorySubscriptionRepository();
         var paymentGateway = new FakePaymentGateway();
         var processedEvents = new InMemoryProcessedStripeEventRepository();
-        var service = new SubscriptionService(subscriptions, processedEvents, assets, new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), paymentGateway, new FakeAppLinkBuilder());
-        return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents);
+        var service = new SubscriptionService(
+            subscriptions,
+            processedEvents,
+            assets,
+            people,
+            new InMemoryProcedureRepository(),
+            new InMemoryLicenseRepository(),
+            new InMemoryLocationRepository(),
+            new InMemoryTeamRepository(),
+            new InMemoryJobProfileRepository(),
+            new InMemoryAssetCategoryRepository(),
+            new InMemoryActivityLogRepository(),
+            currentUser,
+            new FakeClock(),
+            new FakeUnitOfWork(),
+            paymentGateway,
+            new FakeAppLinkBuilder());
+        return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents, people);
     }
 
     [Fact]
@@ -328,4 +352,25 @@ public class SubscriptionServiceTests
         Assert.Equal(firstKey, paymentGateway.LastCheckoutIdempotencyKey);
     }
 
+
+    [Fact]
+    public async Task GetCurrentAsync_ReportsUsageForEveryLimitedResource()
+    {
+        var (service, user, assets, _, _, _, people) = CreateServiceWithPeople();
+        assets.Add(new Asset(user.OrganizationId, Guid.NewGuid(), "Laptop", "AT-001"));
+        people.Add(new Person(user.OrganizationId, "Jan", "Kowalski", "jan@acme.test"));
+        people.Add(new Person(user.OrganizationId, "Anna", "Nowak", "anna@acme.test"));
+
+        var result = await service.GetCurrentAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var usage = result.Value!.Usage;
+        Assert.Equal(
+            new[] { "assets", "people", "procedures", "licenses", "locations", "teams", "jobProfiles", "categories" },
+            usage.Select(x => x.Resource).ToArray());
+        Assert.All(usage, x => Assert.Equal(SubscriptionPlan.Free.AssetLimit, x.Limit));
+        Assert.Equal(1, usage.Single(x => x.Resource == "assets").Current);
+        Assert.Equal(2, usage.Single(x => x.Resource == "people").Current);
+        Assert.Equal(result.Value!.CurrentAssetCount, usage.Single(x => x.Resource == "assets").Current);
+    }
 }

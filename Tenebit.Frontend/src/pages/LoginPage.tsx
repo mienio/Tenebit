@@ -9,14 +9,14 @@ import { PublicFooter } from '../components/PublicFooter';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
-import { legalContent } from '../legal/legalContent';
+import { legalContentFor } from '../legal/legalContent';
 
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { t, language } = useI18n();
-  const legal = legalContent[language].ui;
+  const legal = legalContentFor(language).ui;
   const routeState = location.state as { from?: unknown; challengeToken?: unknown } | null;
   const fromState = routeState?.from;
   const returnTo = typeof fromState === 'string' && fromState.startsWith('/') ? fromState : '/dashboard';

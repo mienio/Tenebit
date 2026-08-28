@@ -3,6 +3,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.JobProfiles;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.JobProfiles;
 
@@ -12,17 +13,19 @@ public sealed class JobProfileService
     private readonly IAssetCategoryRepository _categories;
     private readonly IProcedureRepository _procedures;
     private readonly IPersonRepository _people;
+    private readonly ISubscriptionRepository _subscriptions;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public JobProfileService(IJobProfileRepository profiles, IAssetCategoryRepository categories, IProcedureRepository procedures, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public JobProfileService(IJobProfileRepository profiles, IAssetCategoryRepository categories, IProcedureRepository procedures, IPersonRepository people, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
     {
         _profiles = profiles;
         _categories = categories;
         _procedures = procedures;
         _people = people;
+        _subscriptions = subscriptions;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -48,9 +51,38 @@ public sealed class JobProfileService
             var profile = new JobProfile(organizationId, request.Name, request.Description, request.DefaultManagerId);
             profile.SetAssetCategories(request.AssetCategoryIds);
             profile.SetProcedures(request.ProcedureIds);
-            _profiles.Add(profile);
-            _activity.Add(new ActivityLog(organizationId, "job_profile.created", "job_profile", profile.Id, _currentUser.Subject, profile.Name, _clock.UtcNow));
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
+            var limit = subscription.GetResourceLimit();
+
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "job-profile-capacity",
+                [organizationId],
+                async ct =>
+            {
+                var currentCount = (await _profiles.ListAsync(organizationId, ct)).Count;
+                if (currentCount >= limit) return false;
+
+                _profiles.Add(profile);
+                _activity.Add(new ActivityLog(organizationId, "job_profile.created", "job_profile", profile.Id, _currentUser.Subject, profile.Name, _clock.UtcNow));
+                await _unitOfWork.SaveChangesAsync(ct);
+                return true;
+            }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<JobProfileResponse>.Failure(Error.Validation($"Limit zestawów stanowiskowych przekroczony. Plan {plan.Name} pozwala na {limit} zestawów stanowiskowych. Przejdź na wyższy plan."));
+            }
+
             return Result<JobProfileResponse>.Success(Map(profile));
         }
         catch (DomainException ex) { return Result<JobProfileResponse>.Failure(Error.Validation(ex.Message)); }

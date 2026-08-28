@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider';
-import { legalContent } from '../legal/legalContent';
+import { legalContentFor } from '../legal/legalContent';
 
 const STORAGE_KEY = 'tenebit_storage_notice_dismissed';
 
@@ -12,7 +12,7 @@ function wasDismissed() {
 export function StorageNotice() {
   const { language } = useI18n();
   const [visible, setVisible] = useState(() => !wasDismissed());
-  const ui = legalContent[language].ui;
+  const ui = legalContentFor(language).ui;
 
   if (!visible) return null;
 

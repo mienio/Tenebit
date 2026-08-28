@@ -10,7 +10,7 @@ import { PublicFooter } from '../components/PublicFooter';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
-import { legalContent } from '../legal/legalContent';
+import { legalContentFor } from '../legal/legalContent';
 
 const currencies = ['PLN', 'EUR', 'USD', 'GBP', 'CHF', 'CZK', 'UAH'];
 
@@ -18,7 +18,7 @@ export function RegisterPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { t, language } = useI18n();
-  const legal = legalContent[language].ui;
+  const legal = legalContentFor(language).ui;
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [password, setPassword] = useState('');

@@ -57,7 +57,7 @@ public static class OnboardingEndpoints
         {
             if (!request.HasFormContentType)
             {
-                return Results.BadRequest(new { message = "Wyślij żądanie jako multipart/form-data.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Wyślij żądanie jako multipart/form-data."), code = "VALIDATION_ERROR" });
             }
 
             MultipartRequestHelpers.LimitRequestBody(request, MultipartRequestHelpers.MaxEvidenceBundleUploadBytes);
@@ -66,13 +66,13 @@ public static class OnboardingEndpoints
             var createRequest = MultipartRequestHelpers.DeserializePart<CreateEmployeePackageRequest>(form, "request", out var requestError);
             if (createRequest is null)
             {
-                return Results.BadRequest(new { message = requestError ?? "Nieprawidłowe dane pakietu pracownika.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize(requestError ?? "Nieprawidłowe dane pakietu pracownika."), code = "VALIDATION_ERROR" });
             }
 
             var manifest = MultipartRequestHelpers.DeserializeManifest(form, out var manifestError);
             if (manifest is null)
             {
-                return Results.BadRequest(new { message = manifestError ?? "Nieprawidłowy manifest zdjęć.", code = "VALIDATION_ERROR" });
+                return Results.BadRequest(new { message = ResultExtensions.Localize(manifestError ?? "Nieprawidłowy manifest zdjęć."), code = "VALIDATION_ERROR" });
             }
 
             var files = new List<EvidenceFileInput>();

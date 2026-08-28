@@ -16,8 +16,20 @@ import { useI18n } from '../i18n/I18nProvider';
 import { DashboardWidgetContent } from '../dashboard/DashboardWidgetContent';
 import { useDashboardLayout } from '../dashboard/useDashboardLayout';
 import { GRID_COLS, WIDGET_ICONS, type WidgetType } from '../dashboard/widgetCatalog';
+import type { LimitedResource, ResourceUsage } from '../types/domain';
 
 const AutoWidthGrid = WidthProvider(GridLayout);
+
+const RESOURCE_LABEL_KEYS: Record<LimitedResource, string> = {
+  assets: 'nav.assets',
+  people: 'nav.people',
+  procedures: 'nav.procedures',
+  licenses: 'nav.licenses',
+  locations: 'settings.locations',
+  teams: 'settings.teams',
+  jobProfiles: 'settings.profiles',
+  categories: 'settings.categories'
+};
 
 const onboardingStepRoutes: Record<string, string> = {
   team: '/people',
@@ -62,8 +74,13 @@ export function DashboardPage() {
 
   const actionCount = data.openAssignments + data.pendingProcedureAcceptances + data.warrantyExpiringSoon.length;
   const subData = subscription.data;
-  const usagePercent = subData ? (subData.currentAssetCount / subData.assetLimit) * 100 : 0;
+  // Każdy zasób ma własny licznik przy tym samym progu planu, więc ostrzegamy o tym, który jest najbliżej.
+  const usage = subData?.usage ?? [];
+  const usagePercent = usage.reduce((worst, item) => Math.max(worst, item.limit ? (item.current / item.limit) * 100 : 0), 0);
   const isNearLimit = usagePercent >= 90;
+  const tightestUsage = usage.reduce<ResourceUsage | null>(
+    (worst, item) => (!worst || item.current / item.limit > worst.current / worst.limit ? item : worst),
+    null);
   const orderedForMobile = [...layout.widgets].sort((a, b) => (a.y - b.y) || (a.x - b.x));
 
   return (
@@ -116,19 +133,44 @@ export function DashboardPage() {
 
       {subscription.error && <Card><ErrorState message={subscription.error} onRetry={subscription.reload} /></Card>}
 
-      {subData && isNearLimit && (
+      {subData && isNearLimit && tightestUsage && (
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertCircle size={18} style={{ color: '#c08a1f', flexShrink: 0 }} />
               <span>{t('dashboard.nearLimit')}</span>
-              <span className="status">{t('dashboard.assetsOf', { current: subData.currentAssetCount, limit: subData.assetLimit })}</span>
+              <span className="status">{t('dashboard.usageOf', { resource: t(RESOURCE_LABEL_KEYS[tightestUsage.resource]), current: tightestUsage.current, limit: tightestUsage.limit })}</span>
             </div>
             {subData.planKey.toLowerCase() !== 'enterprise' && (
               <Link to="/pricing">
                 <Button icon={<Zap size={16} />}>{t('dashboard.upgradeToPro')}</Button>
               </Link>
             )}
+          </div>
+        </Card>
+      )}
+
+      {subData && usage.length > 0 && (
+        <Card>
+          <div>
+            <strong>{t('dashboard.planUsageTitle')}</strong>
+            <p className="muted">{t('dashboard.planUsageDesc', { plan: subData.planName, limit: subData.assetLimit })}</p>
+          </div>
+          <div className="planUsageGrid">
+            {usage.map(item => {
+              const percent = item.limit ? Math.min(100, (item.current / item.limit) * 100) : 0;
+              return (
+                <div className="planUsage" key={item.resource}>
+                  <div className="planUsage__head">
+                    <span>{t(RESOURCE_LABEL_KEYS[item.resource])}</span>
+                    <small>{item.current} / {item.limit}</small>
+                  </div>
+                  <div className="progress planUsage__bar">
+                    <span style={{ width: `${percent}%`, background: percent >= 90 ? '#c08a1f' : undefined }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}

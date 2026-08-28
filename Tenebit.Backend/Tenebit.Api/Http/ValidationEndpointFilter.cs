@@ -12,7 +12,10 @@ public sealed class ValidationEndpointFilter : IEndpointFilter
             var error = RequestObjectValidator.Validate(argument);
             if (error is not null)
             {
-                return Results.Json(new ErrorResponse(error, "VALIDATION_ERROR"), statusCode: StatusCodes.Status400BadRequest);
+                // Walidator pisze po polsku (jak cala warstwa aplikacji), a ten filtr odpowiada
+                // z pominieciem Result, wiec tlumaczenie musi byc tutaj - inaczej kazdy blad
+                // walidacji wracal po polsku niezaleznie od jezyka interfejsu.
+                return Results.Json(new ErrorResponse(ResultExtensions.Localize(error), "VALIDATION_ERROR"), statusCode: StatusCodes.Status400BadRequest);
             }
         }
 

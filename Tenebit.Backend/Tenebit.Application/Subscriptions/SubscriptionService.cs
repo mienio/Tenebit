@@ -11,6 +11,13 @@ public sealed class SubscriptionService
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IProcessedStripeEventRepository _processedEvents;
     private readonly IAssetRepository _assets;
+    private readonly IPersonRepository _people;
+    private readonly IProcedureRepository _procedures;
+    private readonly ILicenseRepository _licenses;
+    private readonly ILocationRepository _locations;
+    private readonly ITeamRepository _teams;
+    private readonly IJobProfileRepository _jobProfiles;
+    private readonly IAssetCategoryRepository _categories;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
@@ -22,6 +29,13 @@ public sealed class SubscriptionService
         ISubscriptionRepository subscriptions,
         IProcessedStripeEventRepository processedEvents,
         IAssetRepository assets,
+        IPersonRepository people,
+        IProcedureRepository procedures,
+        ILicenseRepository licenses,
+        ILocationRepository locations,
+        ITeamRepository teams,
+        IJobProfileRepository jobProfiles,
+        IAssetCategoryRepository categories,
         IActivityLogRepository activity,
         ICurrentUser currentUser,
         IClock clock,
@@ -32,6 +46,13 @@ public sealed class SubscriptionService
         _subscriptions = subscriptions;
         _processedEvents = processedEvents;
         _assets = assets;
+        _people = people;
+        _procedures = procedures;
+        _licenses = licenses;
+        _locations = locations;
+        _teams = teams;
+        _jobProfiles = jobProfiles;
+        _categories = categories;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -52,8 +73,9 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var assetCount = await _assets.CountAsync(_currentUser.OrganizationId, cancellationToken);
         var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+        var usage = await BuildUsageAsync(subscription, cancellationToken);
+        var assetCount = usage.First(x => x.Resource == "assets").Current;
 
         return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
             subscription.Id,
@@ -64,8 +86,30 @@ public sealed class SubscriptionService
             plan.Currency,
             assetCount,
             subscription.Status.ToString(),
-            subscription.CurrentPeriodEnd
+            subscription.CurrentPeriodEnd,
+            usage
         ));
+    }
+
+    /// <summary>Bieżące zużycie każdego zasobu objętego limitem planu. Wszystkie dzielą ten sam próg
+    /// (<see cref="OrganizationSubscription.GetResourceLimit"/>), ale mają osobne liczniki.</summary>
+    private async Task<IReadOnlyList<ResourceUsage>> BuildUsageAsync(OrganizationSubscription subscription, CancellationToken cancellationToken)
+    {
+        var organizationId = _currentUser.OrganizationId;
+        var limit = subscription.GetResourceLimit();
+
+        return
+        [
+            new ResourceUsage("assets", await _assets.CountAsync(organizationId, cancellationToken), limit),
+            new ResourceUsage("people", await _people.CountAsync(organizationId, cancellationToken), limit),
+            new ResourceUsage("procedures", await _procedures.CountAsync(organizationId, cancellationToken), limit),
+            new ResourceUsage("licenses", await _licenses.CountAsync(organizationId, cancellationToken), limit),
+            new ResourceUsage("locations", await _locations.CountAsync(organizationId, cancellationToken), limit),
+            new ResourceUsage("teams", (await _teams.ListAsync(organizationId, cancellationToken)).Count, limit),
+            new ResourceUsage("jobProfiles", (await _jobProfiles.ListAsync(organizationId, cancellationToken)).Count, limit),
+            // Katalog systemowy kategorii nie liczy się do limitu - patrz AssetCategoryService.CreateAsync.
+            new ResourceUsage("categories", (await _categories.ListAsync(organizationId, cancellationToken)).Count(x => !x.IsSystem), limit),
+        ];
     }
 
     /// <summary>
@@ -120,7 +164,7 @@ public sealed class SubscriptionService
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            var assetCount = await _assets.CountAsync(_currentUser.OrganizationId, cancellationToken);
+            var usage = await BuildUsageAsync(subscription, cancellationToken);
 
             return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
                 subscription.Id,
@@ -129,9 +173,10 @@ public sealed class SubscriptionService
                 newPlan.AssetLimit,
                 newPlan.MonthlyPrice,
                 newPlan.Currency,
-                assetCount,
+                usage.First(x => x.Resource == "assets").Current,
                 subscription.Status.ToString(),
-                subscription.CurrentPeriodEnd
+                subscription.CurrentPeriodEnd,
+                usage
             ));
         }
         catch (DomainException ex)
@@ -358,5 +403,8 @@ public sealed record SubscriptionResponse(
     string Currency,
     int CurrentAssetCount,
     string Status,
-    DateTimeOffset CurrentPeriodEnd
+    DateTimeOffset CurrentPeriodEnd,
+    IReadOnlyList<ResourceUsage> Usage
 );
+
+public sealed record ResourceUsage(string Resource, int Current, int Limit);

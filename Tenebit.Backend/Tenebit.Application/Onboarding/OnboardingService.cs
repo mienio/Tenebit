@@ -104,23 +104,21 @@ public sealed class OnboardingService
                 return Result<StarterPackageResponse>.Failure(Error.Conflict("Tag aktywa jest już używany."));
             }
 
+            // Zespół i kategoria są dopisywane dopiero wewnątrz sekcji limitu poniżej - inaczej pakiet
+            // startowy tworzyłby je nawet wtedy, gdy pakiet zostanie odrzucony przez limit planu.
             var teamName = request.TeamName.Trim();
-            var team = (await _teams.ListAsync(organizationId, cancellationToken))
-                .FirstOrDefault(x => string.Equals(x.Name, teamName, StringComparison.OrdinalIgnoreCase));
-            if (team is null)
-            {
-                team = new Team(organizationId, teamName, null, null);
-                _teams.Add(team);
-            }
+            var existingTeams = await _teams.ListAsync(organizationId, cancellationToken);
+            var team = existingTeams.FirstOrDefault(x => string.Equals(x.Name, teamName, StringComparison.OrdinalIgnoreCase));
+            var newTeam = team is null ? new Team(organizationId, teamName, null, null) : null;
+            team ??= newTeam!;
 
             var categoryName = request.CategoryName.Trim();
-            var category = (await _categories.ListAsync(organizationId, cancellationToken))
-                .FirstOrDefault(x => string.Equals(x.Name, categoryName, StringComparison.OrdinalIgnoreCase));
-            if (category is null)
-            {
-                category = new AssetCategory(organizationId, categoryName, AssetCategoryType.Physical, "Kategoria utworzona w pakiecie startowym.");
-                _categories.Add(category);
-            }
+            var existingCategories = await _categories.ListAsync(organizationId, cancellationToken);
+            var category = existingCategories.FirstOrDefault(x => string.Equals(x.Name, categoryName, StringComparison.OrdinalIgnoreCase));
+            var newCategory = category is null
+                ? new AssetCategory(organizationId, categoryName, AssetCategoryType.Physical, "Kategoria utworzona w pakiecie startowym.")
+                : null;
+            category ??= newCategory!;
 
             var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
             if (locationResult.IsFailure) return Result<StarterPackageResponse>.Failure(locationResult.Error!);
@@ -162,7 +160,11 @@ public sealed class OnboardingService
                 if (await _people.CountAsync(organizationId, ct) >= limit) return false;
                 if (await _assets.CountAsync(organizationId, ct) >= limit) return false;
                 if (await _procedures.CountAsync(organizationId, ct) >= limit) return false;
+                if (newTeam is not null && (await _teams.ListAsync(organizationId, ct)).Count >= limit) return false;
+                if (newCategory is not null && (await _categories.ListAsync(organizationId, ct)).Count(x => !x.IsSystem) >= limit) return false;
 
+                if (newTeam is not null) _teams.Add(newTeam);
+                if (newCategory is not null) _categories.Add(newCategory);
                 _people.Add(person);
                 _assets.Add(asset);
                 _procedures.Add(procedure);

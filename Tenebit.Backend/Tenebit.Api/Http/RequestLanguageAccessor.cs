@@ -1,3 +1,5 @@
+using Tenebit.Application.Common;
+
 namespace Tenebit.Api.Http;
 
 /// <summary>
@@ -21,7 +23,7 @@ public static class RequestLanguageAccessor
         get
         {
             var header = _httpContextAccessor?.HttpContext?.Request.Headers["X-Ui-Language"].ToString();
-            return string.IsNullOrWhiteSpace(header) ? "pl" : header.Trim().ToLowerInvariant();
+            return AppLanguages.Normalize(header);
         }
     }
 }

@@ -179,7 +179,10 @@ export function AssignmentsPage() {
             returnEvidence[asset.assetId] ?? []
           );
         } catch (error) {
-          throw new Error(`Zwrot aktywu ${asset.assetId} się nie powiódł: ${error instanceof Error ? error.message : t('assignments.returnFailed')}`);
+          throw new Error(t('assignments.returnAssetFailed', {
+            asset: asset.assetId,
+            reason: error instanceof Error ? error.message : t('assignments.returnFailed')
+          }));
         }
       }
 
