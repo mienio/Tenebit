@@ -1,4 +1,4 @@
-import { CircleDot, Download, Pencil, Plus, Printer, RefreshCw, Tag, Upload, Users } from 'lucide-react';
+import { CircleDot, Download, Layers, Pencil, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
@@ -23,6 +23,8 @@ import { useCelebration } from '../celebration/CelebrationProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { useSearchParams } from 'react-router-dom';
 import { AssetDetailPanel } from './assets/AssetDetailPanel';
+import { BatchAddModal } from './assets/BatchAddModal';
+import { LabelSheetModal, type LabelSize } from './assets/LabelSheetModal';
 import { AssetsList } from './assets/AssetsList';
 import { AssetsToolbar } from './assets/AssetsToolbar';
 import { ASSET_COLUMNS, readAssetColumns } from './assets/useAssetColumns';
@@ -108,6 +110,8 @@ export function AssetsPage() {
   const [pendingBulkOverride, setPendingBulkOverride] = useState<Partial<CreateAssetRequest & { status: AssetStatus }> | null>(null);
   const [batchQr, setBatchQr] = useState<{ asset: Asset; svg: string }[] | null>(null);
   const [batchQrLoading, setBatchQrLoading] = useState(false);
+  const [batchAddOpen, setBatchAddOpen] = useState(false);
+  const qrLabelSettings = useAsyncData(api.qrLabelSettings, []);
   const openedAssetRef = useRef<string | null>(null);
   const assetsLoader = useMemo(
     () => () => api.assetsPaged({ search: debouncedSearch, status, location, teamId: team, owner, warranty, sort: sort?.key, desc: sort?.dir === -1, page, pageSize }),
@@ -371,11 +375,11 @@ export function AssetsPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function openBatchQr() {
+  async function openLabelSheet(assets: Asset[]) {
     setBatchQrLoading(true);
     const results: { asset: Asset; svg: string }[] = [];
     const failedTags: string[] = [];
-    for (const asset of selectedAssets) {
+    for (const asset of assets) {
       try {
         const svg = await api.assetQr(asset.id);
         results.push({ asset, svg });
@@ -388,6 +392,19 @@ export function AssetsPage() {
     if (failedTags.length) {
       setMessage({ type: 'error', text: t('assets.qrBatchFailed', { count: failedTags.length, tags: failedTags.join(', ') }) });
     }
+  }
+
+  const openBatchQr = () => openLabelSheet(selectedAssets);
+
+  // Zamknięcie pętli "przyjęcie dostawy": po utworzeniu partii od razu otwieramy arkusz etykiet,
+  // bo naklejenie ich na kartony jest następną czynnością, a nie osobnym zadaniem na później.
+  async function handleBatchCreated(created: Asset[]) {
+    setBatchAddOpen(false);
+    setMessage({ type: 'success', text: t('assets.batchCreated', { count: created.length }) });
+    setPage(1);
+    celebrate(t('celebration.assetAdded'));
+    await reloadAssets();
+    await openLabelSheet(created);
   }
 
 
@@ -674,6 +691,9 @@ export function AssetsPage() {
             </Button>
             <Button variant="secondary" onClick={openImport} icon={<Upload size={16} />}>
               {t('assets.import')}
+            </Button>
+            <Button variant="secondary" onClick={() => setBatchAddOpen(true)} icon={<Layers size={16} />}>
+              {t('assets.batchAdd')}
             </Button>
             <Button onClick={openCreate} icon={<Plus size={16} />}>
               {t('assets.add')}
@@ -1019,23 +1039,17 @@ export function AssetsPage() {
         onClose={() => setPendingBulkOverride(null)}
       />
 
-      <Modal open={!!batchQr} title={t('assets.bulkPrintQrTitle')} onClose={() => setBatchQr(null)} width="wide">
-        {batchQr && (
-          <>
-            <div className="qrPrintSheet">
-              {batchQr.map(item => (
-                <div className="qrPrintCard" key={item.asset.id}>
-                  <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(item.svg)}`} alt="QR" />
-                </div>
-              ))}
-            </div>
-            <div className="formActions formActions--split">
-              <Button type="button" variant="ghost" onClick={() => setBatchQr(null)}>{t('common.close')}</Button>
-              <Button type="button" onClick={() => window.print()} icon={<Printer size={16} />}>{t('assets.bulkPrintQr')}</Button>
-            </div>
-          </>
-        )}
-      </Modal>
+      <LabelSheetModal labels={batchQr} defaultSize={qrLabelSettings.data?.format as LabelSize | undefined} onClose={() => setBatchQr(null)} />
+
+      <BatchAddModal
+        open={batchAddOpen}
+        onClose={() => setBatchAddOpen(false)}
+        categories={categories.data ?? []}
+        locations={locations.data ?? []}
+        teams={teams.data ?? []}
+        onCreated={created => void handleBatchCreated(created)}
+        onError={text => setMessage({ type: 'error', text })}
+      />
     </div>
   );
 }

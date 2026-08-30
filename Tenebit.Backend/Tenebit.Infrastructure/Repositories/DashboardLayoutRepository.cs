@@ -14,10 +14,10 @@ internal sealed class DashboardLayoutRepository : IDashboardLayoutRepository
         _context = context;
     }
 
-    public async Task<DashboardLayout?> GetAsync(Guid organizationUserId, CancellationToken cancellationToken)
+    public async Task<DashboardLayout?> GetAsync(Guid organizationId, Guid organizationUserId, CancellationToken cancellationToken)
     {
         return await _context.DashboardLayouts
-            .Where(x => x.OrganizationUserId == organizationUserId)
+            .Where(x => x.OrganizationId == organizationId && x.OrganizationUserId == organizationUserId)
             .FirstOrDefaultAsync(cancellationToken);
     }
 

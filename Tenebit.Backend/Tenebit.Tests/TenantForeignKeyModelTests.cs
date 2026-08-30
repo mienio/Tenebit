@@ -71,6 +71,40 @@ public sealed class TenantForeignKeyModelTests
         AssertTenantFk<DashboardLayout, OrganizationUser>(model, nameof(DashboardLayout.OrganizationId), nameof(DashboardLayout.OrganizationUserId));
     }
 
+    /// <summary>
+    /// Lista powyżej jest ręczna, więc nowa encja tenantowa z pojedynczym FK przeszłaby przez CI niezauważona.
+    /// Ta reguła jest generyczna: jeśli obie strony relacji należą do organizacji, klucz obcy musi zawierać
+    /// OrganizationId, inaczej baza pozwoli wskazać wiersz innej firmy.
+    /// </summary>
+    [Fact]
+    public void Every_foreign_key_between_two_tenant_entities_includes_organization_id()
+    {
+        using var db = CreateContext();
+
+        var offenders = new List<string>();
+        foreach (var entityType in db.Model.GetEntityTypes())
+        {
+            if (!IsTenantOwned(entityType)) continue;
+
+            foreach (var foreignKey in entityType.GetForeignKeys())
+            {
+                if (!IsTenantOwned(foreignKey.PrincipalEntityType)) continue;
+                if (foreignKey.Properties.Any(p => p.Name == OrganizationIdProperty)) continue;
+
+                offenders.Add(
+                    $"{entityType.ClrType.Name} -> {foreignKey.PrincipalEntityType.ClrType.Name} ({string.Join(", ", foreignKey.Properties.Select(p => p.Name))})");
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "Klucz obcy między encjami tenantowymi musi zawierać OrganizationId: " + string.Join("; ", offenders));
+    }
+
+    private const string OrganizationIdProperty = nameof(Asset.OrganizationId);
+
+    private static bool IsTenantOwned(IEntityType entityType) =>
+        !entityType.IsOwned() && entityType.FindProperty(OrganizationIdProperty)?.ClrType == typeof(Guid);
+
     private static TenebitDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<TenebitDbContext>()

@@ -3,7 +3,7 @@ namespace Tenebit.Application.Abstractions;
 public interface IAppLinkBuilder
 {
     string BuildAssignmentAcceptanceLink(string rawToken);
-    string BuildAssetScanLink(Guid organizationId, Guid assetId);
+    string BuildAssetScanLink(string scanCode);
     string BuildPasswordResetLink(string email, string code);
     string BuildEmailVerificationLink(string email, string code);
     string BuildOffboardingLink(string rawToken);

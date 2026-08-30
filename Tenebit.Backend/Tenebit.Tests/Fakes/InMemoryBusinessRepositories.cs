@@ -106,6 +106,12 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.Any(x => x.OrganizationId == organizationId && x.AssetTag == assetTag && (!excludingAssetId.HasValue || x.Id != excludingAssetId.Value)));
 
+    public Task<Asset?> FindByScanCodeAsync(string scanCode, CancellationToken cancellationToken) =>
+        Task.FromResult(Assets.FirstOrDefault(x => x.ScanCode == scanCode));
+
+    public Task<bool> ScanCodeExistsAsync(string scanCode, CancellationToken cancellationToken) =>
+        Task.FromResult(Assets.Any(x => x.ScanCode == scanCode));
+
     public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult(Assets.Count(x => x.OrganizationId == organizationId));
 
@@ -379,8 +385,8 @@ public sealed class InMemoryDashboardLayoutRepository : IDashboardLayoutReposito
 {
     public List<DashboardLayout> Layouts { get; } = [];
 
-    public Task<DashboardLayout?> GetAsync(Guid organizationUserId, CancellationToken cancellationToken) =>
-        Task.FromResult(Layouts.FirstOrDefault(x => x.OrganizationUserId == organizationUserId));
+    public Task<DashboardLayout?> GetAsync(Guid organizationId, Guid organizationUserId, CancellationToken cancellationToken) =>
+        Task.FromResult(Layouts.FirstOrDefault(x => x.OrganizationId == organizationId && x.OrganizationUserId == organizationUserId));
 
     public void Add(DashboardLayout layout) => Layouts.Add(layout);
 }

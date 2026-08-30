@@ -37,6 +37,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        GuardTenantWrites();
+
         try
         {
             return await base.SaveChangesAsync(cancellationToken);
@@ -44,6 +46,41 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
         catch (DbUpdateConcurrencyException)
         {
             throw new ConcurrencyException("Dane zostały zmodyfikowane równolegle - odśwież i spróbuj ponownie.");
+        }
+    }
+
+    /// <summary>
+    /// Odpowiednik ConfigureTenantQueryFilter po stronie zapisu. Filtr chroni tylko odczyt, więc pomyłka
+    /// w serwisie (encja ostemplowana cudzym OrganizationId albo podmiana tej kolumny na już śledzonym
+    /// wierszu) zapisywała się do bazy bez żadnego sygnału. Sprawdzana jest też wartość oryginalna, żeby
+    /// przepisanie cudzego wiersza na własną organizację nie przeszło jako "zgodne z tenantem".
+    ///
+    /// Przepływy bez tenanta - publiczne, webhook Stripe, zadania w tle, panel platform-admina - mają
+    /// Guid.Empty i są celowo pomijane; tam obowiązują jawne filtry repozytoriów, dokładnie jak w filtrze
+    /// zapytań. Mismatch przy zalogowanym tenancie to zawsze błąd, nie przypadek biznesowy, więc leci
+    /// wyjątek i żądanie kończy się 500 z correlation id zamiast cichego zapisu.
+    /// </summary>
+    private void GuardTenantWrites()
+    {
+        var tenantOrganizationId = CurrentTenantOrganizationId;
+        if (tenantOrganizationId == Guid.Empty) return;
+
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
+
+            var organizationId = entry.Metadata.FindProperty("OrganizationId");
+            if (organizationId?.ClrType != typeof(Guid)) continue;
+
+            var property = entry.Property(organizationId.Name);
+            var mismatch = !Equals(property.CurrentValue, tenantOrganizationId) ||
+                (entry.State is not EntityState.Added && !Equals(property.OriginalValue, tenantOrganizationId));
+
+            if (mismatch)
+            {
+                throw new CrossTenantWriteException(
+                    $"Zapis encji {entry.Metadata.ClrType.Name} należącej do innej organizacji niż tenant bieżącego żądania.");
+            }
         }
     }
 
@@ -507,6 +544,15 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.PrivacyContactEmail).HasMaxLength(320);
             entity.Property(x => x.QrLabelShowName).HasDefaultValue(true);
             entity.Property(x => x.QrLabelShowTag).HasDefaultValue(true);
+            entity.Property(x => x.QrLabelShowSerialNumber).HasDefaultValue(false);
+            entity.Property(x => x.QrLabelShowOrganizationName).HasDefaultValue(false);
+            entity.Property(x => x.QrLabelCustomText).HasMaxLength(60);
+            entity.Property(x => x.QrLabelLogo).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(QrLabelLogoMode.None);
+            entity.Property(x => x.QrLabelLogoContentType).HasMaxLength(60);
+            entity.Property(x => x.QrLabelCodeSize).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(QrLabelCodeSize.Medium);
+            entity.Property(x => x.QrLabelFormat).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(QrLabelFormat.Medium63);
+            entity.Ignore(x => x.QrLabelAppearance);
+            entity.Ignore(x => x.HasCustomQrLabelLogo);
         });
     }
 
@@ -714,6 +760,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Model).HasMaxLength(120);
             entity.Property(x => x.Currency).HasMaxLength(8);
             entity.Property(x => x.QrCodePayload).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.ScanCode).HasMaxLength(16).IsRequired();
+            entity.HasIndex(x => x.ScanCode).IsUnique();
             entity.Property(x => x.PurchasePrice).HasPrecision(18, 2);
             entity.HasIndex(x => new { x.OrganizationId, x.AssetTag }).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });

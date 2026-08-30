@@ -10,21 +10,24 @@ test('register, logout, and log back in', async ({ page }) => {
   await page.getByLabel('Nazwa firmy').fill(`Auth E2E ${suffix}`);
   await page.getByLabel('Twoje imię i nazwisko').fill('Auth Tester');
   await page.getByLabel('E-mail').fill(email);
-  await page.getByLabel('Hasło').fill(password);
+  // Formularz ma dwa pola hasła, więc dopasowanie musi być dokładne.
+  await page.getByLabel('Hasło', { exact: true }).fill(password);
+  await page.getByLabel('Powtórz hasło').fill(password);
+  await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'ZAŁÓŻ ORGANIZACJĘ' }).click();
+
+  // Rejestracja nie loguje - wydaje 202 i odsyła na logowanie (bez SMTP konto jest auto-zweryfikowane).
+  await expect(page).toHaveURL(/\/login/);
+
+  await page.getByLabel('E-mail').fill(email);
+  await page.getByLabel('Hasło', { exact: true }).fill(password);
+  await page.getByRole('button', { name: /zaloguj/i }).click();
 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
   await page.getByRole('button', { name: 'Wyloguj' }).click();
   await expect(page).toHaveURL(/\/login$/);
-
-  await page.getByLabel('E-mail').fill(email);
-  await page.getByLabel('Hasło').fill(password);
-  await page.getByRole('button', { name: /zaloguj/i }).click();
-
-  await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByText('Auth Tester')).toBeVisible();
 });
 
 test('rejects wrong password', async ({ page }) => {

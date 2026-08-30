@@ -38,6 +38,25 @@ public sealed class Organization
     public string? PrivacyContactEmail { get; private set; }
     public bool QrLabelShowName { get; private set; } = true;
     public bool QrLabelShowTag { get; private set; } = true;
+    public bool QrLabelShowSerialNumber { get; private set; }
+    public bool QrLabelShowOrganizationName { get; private set; }
+    public string? QrLabelCustomText { get; private set; }
+    public QrLabelLogoMode QrLabelLogo { get; private set; } = QrLabelLogoMode.None;
+    public QrLabelCodeSize QrLabelCodeSize { get; private set; } = QrLabelCodeSize.Medium;
+    public QrLabelFormat QrLabelFormat { get; private set; } = QrLabelFormat.Medium63;
+    public byte[]? QrLabelLogoImage { get; private set; }
+    public string? QrLabelLogoContentType { get; private set; }
+    public bool HasCustomQrLabelLogo => QrLabelLogoImage is { Length: > 0 };
+
+    public QrLabelAppearance QrLabelAppearance => new(
+        QrLabelShowName,
+        QrLabelShowTag,
+        QrLabelShowSerialNumber,
+        QrLabelShowOrganizationName,
+        QrLabelCustomText,
+        QrLabelLogo,
+        QrLabelCodeSize,
+        QrLabelFormat);
 
     // Platform-level moderation (terms-of-service enforcement), set only from the admin panel.
     // Suspension blocks every sign-in for the organization but never touches its data, so it is fully
@@ -65,10 +84,50 @@ public sealed class Organization
         SuspendedReason = null;
     }
 
-    public void UpdateQrLabelSettings(bool showName, bool showTag)
+    public const int QrLabelCustomTextMaxLength = 60;
+
+    public void UpdateQrLabelSettings(bool showName, bool showTag, bool showSerialNumber, bool showOrganizationName, string? customText, QrLabelLogoMode logo, QrLabelCodeSize codeSize, QrLabelFormat format)
     {
+        var trimmed = customText?.Trim();
+        if (trimmed is { Length: > QrLabelCustomTextMaxLength })
+        {
+            throw new DomainException($"Tekst na etykiecie może mieć maksymalnie {QrLabelCustomTextMaxLength} znaków.");
+        }
+
+        // Selecting the custom mark without an uploaded image would print a label with a gap where the
+        // logo should be, and the gap would only become visible after someone printed a sheet of them.
+        if (logo == QrLabelLogoMode.Custom && !HasCustomQrLabelLogo)
+        {
+            throw new DomainException("Najpierw wgraj własne logo, aby użyć go na etykiecie.");
+        }
+
         QrLabelShowName = showName;
         QrLabelShowTag = showTag;
+        QrLabelShowSerialNumber = showSerialNumber;
+        QrLabelShowOrganizationName = showOrganizationName;
+        QrLabelCustomText = string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+        QrLabelLogo = logo;
+        QrLabelCodeSize = codeSize;
+        QrLabelFormat = format;
+    }
+
+    public void SetQrLabelLogo(byte[] content, string contentType)
+    {
+        if (content.Length == 0)
+        {
+            throw new DomainException("Plik logo jest pusty.");
+        }
+
+        QrLabelLogoImage = content;
+        QrLabelLogoContentType = contentType;
+        QrLabelLogo = QrLabelLogoMode.Custom;
+    }
+
+    public void ClearQrLabelLogo()
+    {
+        QrLabelLogoImage = null;
+        QrLabelLogoContentType = null;
+        if (QrLabelLogo == QrLabelLogoMode.Custom) QrLabelLogo = QrLabelLogoMode.None;
     }
 
     public void UpdatePrivacySettings(PublicIpCaptureMode capturePublicIp, int? publicIpRetentionDays, int? defaultEvidenceRetentionMonths, string? privacyNoticeUrl, string? privacyContactEmail)

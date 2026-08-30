@@ -32,6 +32,11 @@ public interface IAssetRepository
     Task<IReadOnlyList<Asset>> ListWarrantyExpiringAsync(Guid organizationId, DateOnly from, DateOnly to, CancellationToken cancellationToken);
     Task<Asset?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken);
+
+    /// <summary>Resolves a scanned label. Deliberately not scoped to an organization - the code on the
+    /// sticker is all the scanner has, and it is unique across the whole installation.</summary>
+    Task<Asset?> FindByScanCodeAsync(string scanCode, CancellationToken cancellationToken);
+    Task<bool> ScanCodeExistsAsync(string scanCode, CancellationToken cancellationToken);
     Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<int> CountByLocationAsync(Guid organizationId, string location, CancellationToken cancellationToken);
     Task<int> CountByLocationIdAsync(Guid organizationId, Guid locationId, CancellationToken cancellationToken);

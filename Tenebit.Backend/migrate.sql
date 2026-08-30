@@ -3862,3 +3862,66 @@ BEGIN
     END IF;
 END $EF$;
 COMMIT;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829120000_QrLabelDesigner') THEN
+    ALTER TABLE tenebit.organizations
+        ADD COLUMN IF NOT EXISTS "QrLabelShowSerialNumber" boolean NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS "QrLabelShowOrganizationName" boolean NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS "QrLabelCustomText" character varying(60),
+        ADD COLUMN IF NOT EXISTS "QrLabelLogo" character varying(20) NOT NULL DEFAULT 'None',
+        ADD COLUMN IF NOT EXISTS "QrLabelLogoImage" bytea,
+        ADD COLUMN IF NOT EXISTS "QrLabelLogoContentType" character varying(60),
+        ADD COLUMN IF NOT EXISTS "QrLabelCodeSize" character varying(20) NOT NULL DEFAULT 'Medium',
+        ADD COLUMN IF NOT EXISTS "QrLabelFormat" character varying(20) NOT NULL DEFAULT 'Medium63';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829120000_QrLabelDesigner') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260829120000_QrLabelDesigner', '10.0.4');
+    END IF;
+END $EF$;
+COMMIT;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829140000_AssetScanCode') THEN
+    ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "ScanCode" character varying(16);
+
+    DECLARE
+        alphabet CONSTANT text := '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+        target uuid;
+        candidate text;
+    BEGIN
+        LOOP
+            SELECT "Id" INTO target FROM tenebit.assets WHERE "ScanCode" IS NULL LIMIT 1;
+            EXIT WHEN target IS NULL;
+
+            LOOP
+                SELECT string_agg(substr(alphabet, 1 + floor(random() * 32)::int, 1), '')
+                  INTO candidate
+                  FROM generate_series(1, 10);
+                EXIT WHEN NOT EXISTS (SELECT 1 FROM tenebit.assets WHERE "ScanCode" = candidate);
+            END LOOP;
+
+            UPDATE tenebit.assets SET "ScanCode" = candidate WHERE "Id" = target;
+        END LOOP;
+    END;
+
+    ALTER TABLE tenebit.assets ALTER COLUMN "ScanCode" SET NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS "IX_assets_ScanCode" ON tenebit.assets ("ScanCode");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829140000_AssetScanCode') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260829140000_AssetScanCode', '10.0.4');
+    END IF;
+END $EF$;
+COMMIT;

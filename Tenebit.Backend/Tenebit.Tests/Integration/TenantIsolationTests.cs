@@ -87,6 +87,33 @@ public sealed class TenantIsolationTests : IClassFixture<TenebitApiFactory>
         Assert.Equal(HttpStatusCode.OK, stillThere.StatusCode);
     }
 
+    /// <summary>
+    /// Suite pilnował dotąd wyłącznie odmów międzyfirmowych, więc regresja, która psuje zwykłe dodawanie,
+    /// edycję albo usuwanie we własnej organizacji, przechodziła przez CI zielona. Ten test przechodzi pełny
+    /// obieg właściciela na prawdziwym API i bazie - jest też jedynym miejscem, które sprawdza, że strażnik
+    /// zapisu w TenebitDbContext przepuszcza wszystkie trzy rodzaje operacji.
+    /// </summary>
+    [Fact]
+    public async Task Owner_can_create_update_and_delete_own_asset()
+    {
+        var (client, categoryId) = await SeedOrgWithCategoryAsync("Crud");
+        var tag = $"TAG-{Guid.NewGuid():N}"[..12];
+
+        var asset = await CreateAssetAsync(client, categoryId, tag);
+
+        var updateResponse = await client.PutAsJsonAsync($"/api/assets/{asset.Id}",
+            new UpdateAssetRequest("Laptop po edycji", tag, null, categoryId, asset.Status, null, null, null, null, null, null, null, null, null));
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var afterUpdate = await client.GetFromJsonAsync<AssetResponse>($"/api/assets/{asset.Id}", JsonOptions);
+        Assert.Equal("Laptop po edycji", afterUpdate!.Name);
+
+        var deleteResponse = await client.DeleteAsync($"/api/assets/{asset.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/assets/{asset.Id}")).StatusCode);
+    }
+
     [Fact]
     public async Task OrgA_asset_list_never_contains_orgB_assets()
     {

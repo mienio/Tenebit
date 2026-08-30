@@ -57,6 +57,12 @@ public sealed class AssetRepository : IAssetRepository
     public Task<bool> AssetTagExistsAsync(Guid organizationId, string assetTag, Guid? excludingAssetId, CancellationToken cancellationToken) =>
         _db.Assets.AnyAsync(x => x.OrganizationId == organizationId && x.AssetTag == assetTag.Trim() && (!excludingAssetId.HasValue || x.Id != excludingAssetId.Value), cancellationToken);
 
+    public Task<Asset?> FindByScanCodeAsync(string scanCode, CancellationToken cancellationToken) =>
+        _db.Assets.FirstOrDefaultAsync(x => x.ScanCode == scanCode, cancellationToken);
+
+    public Task<bool> ScanCodeExistsAsync(string scanCode, CancellationToken cancellationToken) =>
+        _db.Assets.AnyAsync(x => x.ScanCode == scanCode, cancellationToken);
+
     public Task<int> CountAsync(Guid organizationId, CancellationToken cancellationToken) =>
         _db.Assets.CountAsync(x => x.OrganizationId == organizationId, cancellationToken);
 

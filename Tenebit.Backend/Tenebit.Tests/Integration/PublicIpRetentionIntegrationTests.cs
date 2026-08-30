@@ -38,7 +38,11 @@ public sealed class PublicIpRetentionIntegrationTests : IClassFixture<TenebitApi
             Assert.Null(expiredRow.SourceIp);
             Assert.Null(expiredRow.SourceIpExpiresAt);
             Assert.Equal("198.51.100.0", futureRow.SourceIp);
-            Assert.Equal(future.SourceIpExpiresAt, futureRow.SourceIpExpiresAt);
+
+            // PostgreSQL trzyma timestamptz z dokładnością do mikrosekundy, DateTimeOffset w pamięci do 100 ns.
+            // Porównanie co do ticka wywracało ten test na samym zaokrągleniu zapisu, nie na logice retencji.
+            Assert.NotNull(futureRow.SourceIpExpiresAt);
+            Assert.True((futureRow.SourceIpExpiresAt!.Value - future.SourceIpExpiresAt!.Value).Duration() < TimeSpan.FromMilliseconds(1));
         }
     }
 }

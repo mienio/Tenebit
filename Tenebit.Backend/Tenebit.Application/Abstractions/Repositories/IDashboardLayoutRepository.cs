@@ -21,6 +21,6 @@ namespace Tenebit.Application.Abstractions;
 
 public interface IDashboardLayoutRepository
 {
-    Task<DashboardLayout?> GetAsync(Guid organizationUserId, CancellationToken cancellationToken);
+    Task<DashboardLayout?> GetAsync(Guid organizationId, Guid organizationUserId, CancellationToken cancellationToken);
     void Add(DashboardLayout layout);
 }

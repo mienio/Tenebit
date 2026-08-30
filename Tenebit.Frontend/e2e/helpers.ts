@@ -16,6 +16,9 @@ export async function registerOrg(request: APIRequestContext, namePrefix: string
   const email = `${namePrefix}-${suffix}@example.test`;
   const password = 'E2ePassword123!';
 
+  // Rejestracja dowodzi znajomości hasła, nie własności skrzynki, więc od czasu bramki weryfikacji
+  // e-maila zwraca 202 bez tokenu - token bierze się dopiero z logowania. Bez skonfigurowanego SMTP
+  // (tak działa E2E) backend auto-weryfikuje konto, więc logowanie przechodzi od razu.
   const response = await request.post('/api/auth/register', {
     data: {
       organizationName: `${namePrefix} ${suffix}`,
@@ -24,12 +27,21 @@ export async function registerOrg(request: APIRequestContext, namePrefix: string
       displayName: `${namePrefix} Owner`,
       currency: 'PLN',
       language: 'pl',
+      acceptTerms: true,
     },
   });
   if (!response.ok()) {
     throw new Error(`register failed: ${response.status()} ${await response.text()}`);
   }
-  const body = await response.json();
+
+  const loginResponse = await request.post('/api/auth/login', { data: { email, password } });
+  if (!loginResponse.ok()) {
+    throw new Error(`login after register failed: ${loginResponse.status()} ${await loginResponse.text()}`);
+  }
+  const body = await loginResponse.json();
+  if (!body.token) {
+    throw new Error(`login after register returned no token: ${JSON.stringify(body)}`);
+  }
   return { token: body.token as string, organizationId: body.user.organizationId as string, email, password };
 }
 

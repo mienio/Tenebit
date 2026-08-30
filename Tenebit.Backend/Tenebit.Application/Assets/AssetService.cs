@@ -5,6 +5,7 @@ using Tenebit.Application.Abstractions;
 using Tenebit.Application.Abstractions.Repositories;
 using Tenebit.Application.Common;
 using Tenebit.Application.Identity;
+using Tenebit.Application.Organizations;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
@@ -192,6 +193,7 @@ public sealed class AssetService
             if (locationResult.IsFailure) return Result<AssetResponse>.Failure(locationResult.Error!);
 
             var asset = new Asset(organizationId, request.CategoryId, request.Name, request.AssetTag);
+            await EnsureUniqueScanCodeAsync(asset, cancellationToken);
             asset.UpdateCore(request.Name, request.AssetTag, request.SerialNumber, request.CategoryId, locationResult.Value!.FullPath, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
             asset.SetLocation(locationResult.Value.Id, locationResult.Value.FullPath);
             asset.SetFieldValues(EncryptSensitiveFields(category, customFieldsResult.Value!));
@@ -225,6 +227,203 @@ public sealed class AssetService
         {
             return Result<AssetResponse>.Failure(Error.Validation(ex.Message));
         }
+    }
+
+    public const int MaxBatchQuantity = 100;
+    private const int MaxTagPadding = 8;
+
+    /// <summary>
+    /// Creates a run of identical assets in one transaction.
+    ///
+    /// The whole run is validated - every generated tag, the plan's remaining capacity - before anything
+    /// is written, and then written under the same capacity lock a single create uses. A partial batch is
+    /// worse than a rejected one here: the operator would have to work out which of the twenty tags made
+    /// it in before retrying, and the missing ones are exactly the labels already stuck to the boxes.
+    /// </summary>
+    public async Task<Result<CreateAssetBatchResponse>> CreateBatchAsync(CreateAssetBatchRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        if (access.IsFailure) return Result<CreateAssetBatchResponse>.Failure(access.Error!);
+
+        try
+        {
+            var organizationId = _currentUser.OrganizationId;
+
+            if (request.Quantity < 1 || request.Quantity > MaxBatchQuantity)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation($"Liczba sztuk musi mieścić się w zakresie 1-{MaxBatchQuantity}."));
+            }
+
+            var prefix = request.TagPrefix.Trim();
+            if (prefix.Length == 0) return Result<CreateAssetBatchResponse>.Failure(Error.Validation("Prefiks tagu jest wymagany."));
+            if (request.TagPadding is < 0 or > MaxTagPadding)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation($"Liczba cyfr numeracji musi mieścić się w zakresie 0-{MaxTagPadding}."));
+            }
+
+            if (request.TagStartNumber < 0 || request.TagStartNumber > 999_999)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation("Numer początkowy musi mieścić się w zakresie 0-999999."));
+            }
+
+            var serials = (request.SerialNumbers ?? [])
+                .Select(serial => serial.Trim())
+                .Where(serial => serial.Length > 0)
+                .ToList();
+            if (serials.Count > request.Quantity)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation("Podano więcej numerów seryjnych niż sztuk w partii."));
+            }
+
+            var tags = BuildBatchTags(prefix, request.TagStartNumber, request.TagPadding, request.Quantity);
+            var tooLong = tags.FirstOrDefault(tag => tag.Length > 80);
+            if (tooLong is not null)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation($"Tag '{tooLong}' przekracza 80 znaków. Skróć prefiks."));
+            }
+
+            var category = await _categories.GetAsync(organizationId, request.CategoryId, cancellationToken);
+            if (category is null) return Result<CreateAssetBatchResponse>.Failure(Error.Validation("Wybrana kategoria nie istnieje."));
+
+            if (request.TeamId.HasValue && await _teams.GetAsync(organizationId, request.TeamId.Value, cancellationToken) is null)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation("Wybrany zespół nie istnieje."));
+            }
+
+            var customFieldsResult = ValidateCustomFields(category, request.CustomFields);
+            if (customFieldsResult.IsFailure) return Result<CreateAssetBatchResponse>.Failure(customFieldsResult.Error!);
+            var locationResult = await _locationResolver.ResolveAsync(organizationId, request.Location, cancellationToken);
+            if (locationResult.IsFailure) return Result<CreateAssetBatchResponse>.Failure(locationResult.Error!);
+
+            var taken = new List<string>();
+            foreach (var tag in tags)
+            {
+                if (await _assets.AssetTagExistsAsync(organizationId, tag, null, cancellationToken)) taken.Add(tag);
+                if (taken.Count == 5) break;
+            }
+
+            if (taken.Count > 0)
+            {
+                return Result<CreateAssetBatchResponse>.Failure(Error.Conflict($"Te tagi są już używane: {string.Join(", ", taken)}. Zmień numer początkowy lub prefiks."));
+            }
+
+            var encryptedFields = EncryptSensitiveFields(category, customFieldsResult.Value!);
+            var created = new List<Asset>(tags.Count);
+            for (var i = 0; i < tags.Count; i++)
+            {
+                var asset = new Asset(organizationId, request.CategoryId, request.Name, tags[i]);
+                await EnsureUniqueScanCodeAsync(asset, cancellationToken, created);
+                asset.UpdateCore(request.Name, tags[i], i < serials.Count ? serials[i] : null, request.CategoryId, locationResult.Value!.FullPath, request.Manufacturer, request.Model, request.PurchasePrice, request.Currency, request.PurchaseDate, request.WarrantyUntil, request.TeamId);
+                asset.SetLocation(locationResult.Value.Id, locationResult.Value.FullPath);
+                asset.SetFieldValues(encryptedFields);
+                created.Add(asset);
+            }
+
+            var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+            if (subscription is null)
+            {
+                subscription = new OrganizationSubscription(organizationId, SubscriptionPlan.Free.Key);
+                _subscriptions.Add(subscription);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
+            var limit = subscription.GetAssetLimit();
+            var remaining = 0;
+            var withinLimit = await _unitOfWork.ExecuteWithResourceLocksAsync(
+                organizationId,
+                "asset-capacity",
+                [organizationId],
+                async ct =>
+                {
+                    var currentCount = await _assets.CountAsync(organizationId, ct);
+                    remaining = Math.Max(0, limit - currentCount);
+                    if (currentCount + created.Count > limit) return false;
+
+                    foreach (var asset in created)
+                    {
+                        _assets.Add(asset);
+                        _activity.Add(new ActivityLog(organizationId, "asset.created", "asset", asset.Id, _currentUser.Subject, asset.Name, _clock.UtcNow));
+                    }
+
+                    await _unitOfWork.SaveChangesAsync(ct);
+                    return true;
+                }, cancellationToken);
+
+            if (!withinLimit)
+            {
+                var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+                return Result<CreateAssetBatchResponse>.Failure(Error.Validation($"Limit aktywów przekroczony. Plan {plan.Name} pozwala na {limit} aktywów, zostało wolnych: {remaining}. Przejdź na wyższy plan lub zmniejsz partię."));
+            }
+
+            var categories = await _categories.ListAsync(organizationId, cancellationToken);
+            var teams = await _teams.ListAsync(organizationId, cancellationToken);
+            var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
+            var responses = created.Select(asset => Map(asset, categories, [], teams, _currentUser.Language, null, today)).ToList();
+            return Result<CreateAssetBatchResponse>.Success(new CreateAssetBatchResponse(responses.Count, responses));
+        }
+        catch (DomainException ex)
+        {
+            return Result<CreateAssetBatchResponse>.Failure(Error.Validation(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Redraws the asset's code until it is free. Fifty bits make a clash astronomically unlikely, but
+    /// "unlikely" is not "impossible" and the column is unique, so the alternative to checking is an
+    /// occasional insert that fails for a reason nobody would recognise. Within a batch the codes are
+    /// also checked against each other, since none of them is in the database yet.
+    /// </summary>
+    private async Task EnsureUniqueScanCodeAsync(Asset asset, CancellationToken cancellationToken, IReadOnlyCollection<Asset>? pending = null)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var clashesInBatch = pending is not null && pending.Any(other => other.ScanCode == asset.ScanCode);
+            if (!clashesInBatch && !await _assets.ScanCodeExistsAsync(asset.ScanCode, cancellationToken)) return;
+            asset.RegenerateScanCode();
+        }
+
+        throw new DomainException("Nie udało się wygenerować unikalnego kodu etykiety. Spróbuj ponownie.");
+    }
+
+    /// <summary>
+    /// Resolves a scanned label for a signed-in user, so the app can open the asset it belongs to.
+    /// Scoped to the caller's organization: a code from another tenant's sticker must look exactly like
+    /// a code that does not exist.
+    /// </summary>
+    public async Task<Result<Guid>> ResolveScanCodeAsync(string scanCode, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        if (access.IsFailure) return Result<Guid>.Failure(access.Error!);
+
+        var asset = AssetScanCode.IsWellFormed(scanCode) ? await _assets.FindByScanCodeAsync(scanCode, cancellationToken) : null;
+        return asset is null || asset.OrganizationId != _currentUser.OrganizationId
+            ? Result<Guid>.Failure(Error.NotFound("Aktywo nie istnieje."))
+            : Result<Guid>.Success(asset.Id);
+    }
+
+    public async Task<Result<PublicAssetScanResponse>> GetPublicScanByCodeAsync(string scanCode, CancellationToken cancellationToken)
+    {
+        var asset = AssetScanCode.IsWellFormed(scanCode) ? await _assets.FindByScanCodeAsync(scanCode, cancellationToken) : null;
+        if (asset is null) return Result<PublicAssetScanResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+        return await GetPublicScanAsync(asset.OrganizationId, asset.Id, cancellationToken);
+    }
+
+    public async Task<Result> ReportPublicIssueByCodeAsync(string scanCode, ReportAssetIssueRequest request, CancellationToken cancellationToken)
+    {
+        var asset = AssetScanCode.IsWellFormed(scanCode) ? await _assets.FindByScanCodeAsync(scanCode, cancellationToken) : null;
+        if (asset is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
+        return await ReportPublicIssueAsync(asset.OrganizationId, asset.Id, request, cancellationToken);
+    }
+
+    private static List<string> BuildBatchTags(string prefix, int startNumber, int padding, int quantity)
+    {
+        var tags = new List<string>(quantity);
+        for (var i = 0; i < quantity; i++)
+        {
+            var number = (startNumber + i).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            tags.Add(prefix + (padding > 0 ? number.PadLeft(padding, '0') : number));
+        }
+        return tags;
     }
 
     public async Task<Result<AssetResponse>> UpdateAsync(Guid id, UpdateAssetRequest request, CancellationToken cancellationToken)
@@ -298,19 +497,25 @@ public sealed class AssetService
         var asset = await _assets.GetAsync(organizationId, id, cancellationToken);
         if (asset is null) return Result<string>.Failure(Error.NotFound("Aktywo nie istnieje."));
         var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-        var scanLink = _linkBuilder.BuildAssetScanLink(organizationId, asset.Id);
-        var labelLines = new List<string>();
-        if (organization is null || organization.QrLabelShowName) labelLines.Add(asset.Name);
-        if (organization is null || organization.QrLabelShowTag) labelLines.Add(asset.AssetTag);
-        return Result<string>.Success(_qrCodeGenerator.CreateLabelledAssetQrSvg(scanLink, labelLines));
+        var scanLink = _linkBuilder.BuildAssetScanLink(asset.ScanCode);
+        var content = organization is null
+            ? new QrLabelContent([], [asset.AssetTag, asset.Name], null)
+            : QrLabelComposer.Compose(organization, asset.Name, asset.AssetTag, asset.SerialNumber);
+        return Result<string>.Success(_qrCodeGenerator.CreateLabelledAssetQrSvg(scanLink, content));
     }
 
     public async Task<Result<PublicAssetScanResponse>> GetPublicScanAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken)
     {
+        // Jedna odpowiedź na oba braki. Rozróżnienie "aktywo nie istnieje" od "organizacja nie istnieje"
+        // było oracle'em: pozwalało anonimowemu klientowi potwierdzić, że dany identyfikator organizacji
+        // jest prawdziwy, zanim trafił na poprawną parę z etykiety QR.
         var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result<PublicAssetScanResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
-        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-        if (organization is null) return Result<PublicAssetScanResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
+        var organization = asset is null ? null : await _organizations.GetAsync(organizationId, cancellationToken);
+        if (asset is null || organization is null)
+        {
+            return Result<PublicAssetScanResponse>.Failure(Error.NotFound("Aktywo nie istnieje."));
+        }
+
         return Result<PublicAssetScanResponse>.Success(new PublicAssetScanResponse(organization.Name));
     }
 
@@ -330,10 +535,11 @@ public sealed class AssetService
     {
         if (string.IsNullOrWhiteSpace(request.Message)) return Result.Failure(Error.Validation("Treść zgłoszenia jest wymagana."));
 
+        // Ten sam brak rozróżnienia co w GetPublicScanAsync - odpowiedź nie może zdradzać, który
+        // z dwóch identyfikatorów był poprawny.
         var asset = await _assets.GetAsync(organizationId, assetId, cancellationToken);
-        if (asset is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
-        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
-        if (organization is null) return Result.Failure(Error.NotFound("Organizacja nie istnieje."));
+        var organization = asset is null ? null : await _organizations.GetAsync(organizationId, cancellationToken);
+        if (asset is null || organization is null) return Result.Failure(Error.NotFound("Aktywo nie istnieje."));
 
         return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "asset-public-issue", [assetId], async ct =>
         {

@@ -75,6 +75,40 @@ public static class SettingsEndpoints
                 (await service.SaveQrLabelSettingsAsync(request, cancellationToken)).ToHttpResult())
             .WithTags("Settings");
 
+        api.MapPost("/settings/qr-label/preview", async (SaveQrLabelSettingsRequest request, SettingsService service, CancellationToken cancellationToken) =>
+                (await service.PreviewQrLabelAsync(request, cancellationToken)).ToHttpResult())
+            .WithTags("Settings");
+
+        api.MapPost("/settings/qr-label/logo", async (HttpRequest httpRequest, SettingsService service, CancellationToken cancellationToken) =>
+        {
+            if (!httpRequest.HasFormContentType)
+            {
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Wyślij plik jako multipart/form-data."), code = "VALIDATION_ERROR" });
+            }
+
+            MultipartRequestHelpers.LimitRequestBody(httpRequest, SettingsService.MaxQrLabelLogoBytes + 4096);
+            var form = await httpRequest.ReadFormAsync(cancellationToken);
+            var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+            {
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Wybierz plik logo."), code = "VALIDATION_ERROR" });
+            }
+
+            if (file.Length > SettingsService.MaxQrLabelLogoBytes)
+            {
+                return Results.BadRequest(new { message = ResultExtensions.Localize("Logo może mieć maksymalnie 512 KB."), code = "VALIDATION_ERROR" });
+            }
+
+            using var stream = new MemoryStream();
+            await file.CopyToAsync(stream, cancellationToken);
+            return (await service.UploadQrLabelLogoAsync(file.ContentType, stream.ToArray(), cancellationToken)).ToHttpResult();
+        })
+            .WithTags("Settings");
+
+        api.MapDelete("/settings/qr-label/logo", async (SettingsService service, CancellationToken cancellationToken) =>
+                (await service.RemoveQrLabelLogoAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Settings");
+
         api.MapGet("/settings/alerts", async (AlertSettingsService service, CancellationToken cancellationToken) =>
                 (await service.ListAlertRulesAsync(cancellationToken)).ToHttpResult())
             .WithTags("Settings");

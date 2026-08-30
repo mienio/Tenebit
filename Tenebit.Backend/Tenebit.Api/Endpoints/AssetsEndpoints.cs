@@ -126,12 +126,20 @@ public static class AssetsEndpoints
                 (await service.CreateAsync(request, cancellationToken)).ToCreatedResult(response => $"/api/assets/{response.Id}"))
             .WithTags("Assets");
 
+        api.MapPost("/assets/batch", async (CreateAssetBatchRequest request, AssetService service, CancellationToken cancellationToken) =>
+                (await service.CreateBatchAsync(request, cancellationToken)).ToHttpResult())
+            .WithTags("Assets");
+
         api.MapPut("/assets/{id:guid}", async (Guid id, UpdateAssetRequest request, AssetService service, CancellationToken cancellationToken) =>
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
             .WithTags("Assets");
 
         api.MapDelete("/assets/{id:guid}", async (Guid id, AssetService service, CancellationToken cancellationToken) =>
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
+            .WithTags("Assets");
+
+        api.MapGet("/assets/scan/{scanCode}", async (string scanCode, AssetService service, CancellationToken cancellationToken) =>
+                (await service.ResolveScanCodeAsync(scanCode, cancellationToken)).ToHttpResult())
             .WithTags("Assets");
 
         api.MapGet("/assets/{id:guid}/qr", async (Guid id, AssetService service, CancellationToken cancellationToken) =>

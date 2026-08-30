@@ -73,6 +73,7 @@ export function App() {
         <Route path="/cookies" element={<LegalPage kind="cookies" />} />
         <Route path="/accept" element={<PublicAssignmentPage />} />
         <Route path="/exit" element={<PublicOffboardingPage />} />
+        <Route path="/s/:code" element={<PublicAssetScanPage />} />
         <Route path="/scan/:organizationId/:assetId" element={<PublicAssetScanPage />} />
         <Route path="/audit" element={<PublicAssetAuditPage />} />
         <Route path="/admin/login" element={<AdminLoginPage />} />

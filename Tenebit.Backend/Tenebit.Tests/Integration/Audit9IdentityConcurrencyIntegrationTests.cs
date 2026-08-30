@@ -65,11 +65,18 @@ public sealed class Audit9IdentityConcurrencyIntegrationTests : IClassFixture<Te
     public async Task DistributedAuthLimiter_DoesNotTreatFiftyUsersBehindOneNatAsOneAccount()
     {
         const string natIp = "203.0.113.25";
+
+        // Kubełek limitera to SHA256(action + konto + IP) w oknie 5 minut, zapisany w bazie. Przy stałych
+        // nazwach drugi przebieg testu w ciągu tych 5 minut trafiał w kubełek zapełniony przez poprzedni
+        // i przyjmował 0 zamiast 10. Unikalny action izoluje przebiegi, a wspólne natIp w obrębie jednego
+        // przebiegu nadal odwzorowuje 50 użytkowników za jednym NAT-em.
+        var run = Guid.NewGuid().ToString("N");
+
         for (var i = 0; i < 50; i++)
         {
             using var scope = _factory.Services.CreateScope();
             var limiter = scope.ServiceProvider.GetRequiredService<IAuthenticationAbuseLimiter>();
-            Assert.True(await limiter.TryAcquireAsync("login-test", $"user{i}@example.test", natIp, 10, TimeSpan.FromMinutes(5), CancellationToken.None));
+            Assert.True(await limiter.TryAcquireAsync($"login-test-{run}", $"user{i}@example.test", natIp, 10, TimeSpan.FromMinutes(5), CancellationToken.None));
         }
 
         var accepted = 0;
@@ -77,7 +84,7 @@ public sealed class Audit9IdentityConcurrencyIntegrationTests : IClassFixture<Te
         {
             using var scope = _factory.Services.CreateScope();
             var limiter = scope.ServiceProvider.GetRequiredService<IAuthenticationAbuseLimiter>();
-            if (await limiter.TryAcquireAsync("brute-test", "victim@example.test", natIp, 10, TimeSpan.FromMinutes(5), CancellationToken.None)) accepted++;
+            if (await limiter.TryAcquireAsync($"brute-test-{run}", "victim@example.test", natIp, 10, TimeSpan.FromMinutes(5), CancellationToken.None)) accepted++;
         }
         Assert.Equal(10, accepted);
     }

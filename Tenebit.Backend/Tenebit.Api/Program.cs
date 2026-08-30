@@ -309,6 +309,25 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Każda odpowiedź /api niesie dane jednej organizacji - protokoły, zdjęcia dowodowe, listy pracowników.
+// Bez jawnego no-store pośrednik albo współdzielona przeglądarka mogą przetrzymać taką odpowiedź i oddać
+// ją komuś innemu. Nagłówek ustawiamy w OnStarting, żeby nie nadpisać go po wysłaniu nagłówków i żeby
+// obejmował także pliki zwracane przez Results.File (dowody, PDF-y protokołów).
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate, private";
+            context.Response.Headers.Pragma = "no-cache";
+            return Task.CompletedTask;
+        });
+    }
+
+    await next(context);
+});
+
 app.UseCors("Frontend");
 app.UseRateLimiter();
 app.UseAuthentication();

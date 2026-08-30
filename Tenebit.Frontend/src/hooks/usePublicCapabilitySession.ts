@@ -44,7 +44,13 @@ export function usePublicCapabilitySession(purpose: PublicCapabilityPurpose) {
 
   useEffect(() => {
     let cancelled = false;
-    const rawToken = readAndClearRawFragment();
+
+    // Fragment czytany BEZ kasowania. Poprzednia wersja kasowała go już przy wejściu do efektu, przez co
+    // pod React.StrictMode (efekt uruchamiany dwukrotnie) drugi przebieg nie widział tokenu, uznawał że
+    // cookie sesji już istnieje i od razu ustawiał 'ready'. Strona pobierała wtedy dane, zanim wymiana
+    // tokenu na cookie się zakończyła - backend odpowiadał 404 i użytkownik dostawał ekran
+    // "Nie udało się wczytać danych" na poprawnym linku.
+    const rawToken = readRawFragment();
     if (!rawToken) {
       // A refresh may legitimately have no fragment because the HttpOnly session cookie already exists.
       setState('ready');
@@ -55,6 +61,10 @@ export function usePublicCapabilitySession(purpose: PublicCapabilityPurpose) {
       method: 'POST',
       body: JSON.stringify({ purpose, token: decodeFragment(rawToken) })
     }).then(() => {
+      // Sekret znika z paska adresu dopiero wtedy, gdy cookie naprawdę istnieje. Przy błędzie token
+      // zostaje w URL-u, więc odświeżenie strony i przycisk "Spróbuj ponownie" mają jeszcze czego użyć -
+      // wcześniej pojedynczy błąd sieci kasował token bezpowrotnie i link stawał się martwy.
+      clearUrlFragment();
       if (!cancelled) setState('ready');
     }).catch(() => {
       if (!cancelled) setState('error');

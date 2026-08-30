@@ -35,9 +35,15 @@ test('offboarding public exit link resolves to the real token, not the case id',
   // never the case's internal database id.
   expect(link).not.toContain(offboardingCase.id);
   const url = new URL(link);
-  expect(url.pathname).toMatch(/^\/exit\/.+/);
 
-  await page.goto(url.pathname);
+  // Token siedzi we fragmencie, nie w ścieżce (AppLinkBuilder: `/exit#<token>`). Fragment nigdy nie
+  // trafia do serwera, więc sekret nie ląduje w logach proxy ani w RequestPath - stąd ta zmiana
+  // formatu względem starego `/exit/<token>`.
+  expect(url.pathname).toBe('/exit');
+  expect(url.hash.replace(/^#/, '').length).toBeGreaterThan(0);
+  expect(url.hash).not.toContain(offboardingCase.id);
+
+  await page.goto(`${url.pathname}${url.hash}`);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(/return|zwrot/i);
 });
 

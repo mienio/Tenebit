@@ -15,11 +15,12 @@ import { Pagination, paginate } from '../components/Pagination';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { EmailVerificationNotice } from '../components/EmailVerificationBanner';
 import { ProfileCard } from '../components/ProfileCard';
+import { QrLabelDesigner } from '../components/QrLabelDesigner';
 import { TwoFactorCard } from '../components/TwoFactorCard';
 import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, QrLabelSettings, Team } from '../types/domain';
+import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, Team } from '../types/domain';
 import { categoryTypeValues } from '../utils/labels';
 import { toNullable } from '../utils/format';
 import { CategoryIcon } from '../utils/categoryIcons';
@@ -90,8 +91,6 @@ export function SettingsPage() {
   const [statusDragOver, setStatusDragOver] = useState<number | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
   const statusDragIndex = useRef<number | null>(null);
-  const [qrLabelDraft, setQrLabelDraft] = useState<QrLabelSettings>({ showName: true, showTag: true });
-  const [qrLabelSaving, setQrLabelSaving] = useState(false);
 
   useEffect(() => {
     const inviteEmail = searchParams.get('inviteEmail');
@@ -106,7 +105,6 @@ export function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { if (statuses.data) setStatusRows(statuses.data); }, [statuses.data]);
-  useEffect(() => { if (qrLabelSettings.data) setQrLabelDraft(qrLabelSettings.data); }, [qrLabelSettings.data]);
   useEffect(() => {
     if (!categories.data) return;
     setCategoryDrafts(current => {
@@ -337,18 +335,6 @@ export function SettingsPage() {
     }
   }
 
-  async function saveQrLabelSettings() {
-    setQrLabelSaving(true);
-    try {
-      const saved = await api.saveQrLabelSettings(qrLabelDraft);
-      setQrLabelDraft(saved);
-      success(t('settings.qrLabelSaved'));
-    } catch (error) {
-      failure(error, t('settings.qrLabelSaveFailed'));
-    } finally {
-      setQrLabelSaving(false);
-    }
-  }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -569,20 +555,15 @@ export function SettingsPage() {
 
           <Card>
             <div className="sectionTitle"><div><h2>{t('settings.qrLabel')}</h2><p>{t('settings.qrLabelHint')}</p></div></div>
-            {qrLabelSettings.isLoading ? <p className="muted">{t('common.loading')}</p> : qrLabelSettings.error ? <ErrorState message={qrLabelSettings.error} onRetry={qrLabelSettings.reload} /> : (
-              <>
-                <div className="formGrid">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input type="checkbox" checked={qrLabelDraft.showName} onChange={event => setQrLabelDraft(current => ({ ...current, showName: event.target.checked }))} />
-                    {t('settings.qrLabelShowName')}
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input type="checkbox" checked={qrLabelDraft.showTag} onChange={event => setQrLabelDraft(current => ({ ...current, showTag: event.target.checked }))} />
-                    {t('settings.qrLabelShowTag')}
-                  </label>
-                </div>
-                <div className="formActions"><Button disabled={qrLabelSaving} onClick={saveQrLabelSettings} icon={<Save size={16} />}>{qrLabelSaving ? t('common.saving') : t('settings.save')}</Button></div>
-              </>
+            {/* Tylko pierwsze ładowanie podmienia edytor na tekst. Odświeżenie po wgraniu logo
+                odmontowywało go razem z niezapisanymi zmianami w formularzu. */}
+            {qrLabelSettings.isLoading && !qrLabelSettings.data ? <p className="muted">{t('common.loading')}</p> : qrLabelSettings.error || !qrLabelSettings.data ? <ErrorState message={qrLabelSettings.error ?? t('settings.qrLabelSaveFailed')} onRetry={qrLabelSettings.reload} /> : (
+              <QrLabelDesigner
+                settings={qrLabelSettings.data}
+                onSaved={() => void qrLabelSettings.reload()}
+                onSuccess={success}
+                onFailure={failure}
+              />
             )}
           </Card>
 

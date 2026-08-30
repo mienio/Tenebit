@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -33,12 +34,18 @@ public static class DependencyInjection
 
         var commandTimeoutSeconds = configuration.GetValue("Database:CommandTimeoutSeconds", 30);
         services.AddDbContext<TenebitDbContext>(options =>
-            options.UseNpgsql(connectionBuilder.ConnectionString, npgsql =>
-            {
-                npgsql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
-                npgsql.CommandTimeout(commandTimeoutSeconds);
-                npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
-            }));
+            options
+                .UseNpgsql(connectionBuilder.ConnectionString, npgsql =>
+                {
+                    npgsql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
+                    npgsql.CommandTimeout(commandTimeoutSeconds);
+                    npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                })
+                // Schemat jest własnością ręcznie pisanych migracji SQL (migrate.sql + pliki w Data/Migrations),
+                // a nie generatora EF - `migrations add` w tym projekcie nie działa, więc snapshot z definicji
+                // odstaje od modelu. Bez tego EF podnosi PendingModelChangesWarning do wyjątku i cały start
+                // aplikacji w Development/Test pada na MigrateAsync, zanim obsłuży jakikolwiek request.
+                .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<TenebitDbContext>());
         services.AddScoped<IAssetRepository, AssetRepository>();
         services.AddScoped<ILocationRepository, LocationRepository>();

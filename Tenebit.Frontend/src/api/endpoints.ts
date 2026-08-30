@@ -14,6 +14,8 @@ import type {
   AssetStatus,
   AssetStatusSetting,
   QrLabelSettings,
+  QrLabelPreview,
+  SaveQrLabelSettings,
   Assignment,
   AssetAuditCampaignDetailsResponse,
   AssetAuditCampaignPreviewResponse,
@@ -28,6 +30,8 @@ import type {
   CreateOffboardingCaseRequest,
   CreateAssignmentRequest,
   CreateAssetRequest,
+  CreateAssetBatchRequest,
+  CreateAssetBatchResponse,
   CreateEmployeePackageRequest,
   DashboardComparison,
   DashboardSummary,
@@ -141,7 +145,14 @@ export const api = {
   assetStatuses: () => apiRequest<AssetStatusSetting[]>('/api/asset-statuses'),
   saveAssetStatuses: (body: AssetStatusSetting[]) => apiRequest<AssetStatusSetting[]>('/api/asset-statuses', { method: 'PUT', body: JSON.stringify(body) }),
   qrLabelSettings: () => apiRequest<QrLabelSettings>('/api/settings/qr-label'),
-  saveQrLabelSettings: (body: QrLabelSettings) => apiRequest<QrLabelSettings>('/api/settings/qr-label', { method: 'PUT', body: JSON.stringify(body) }),
+  saveQrLabelSettings: (body: SaveQrLabelSettings) => apiRequest<QrLabelSettings>('/api/settings/qr-label', { method: 'PUT', body: JSON.stringify(body) }),
+  previewQrLabel: (body: SaveQrLabelSettings) => apiRequest<QrLabelPreview>('/api/settings/qr-label/preview', { method: 'POST', body: JSON.stringify(body) }),
+  uploadQrLabelLogo: (file: File) => {
+    const body = new FormData();
+    body.set('file', file);
+    return apiRequest<QrLabelSettings>('/api/settings/qr-label/logo', { method: 'POST', body });
+  },
+  removeQrLabelLogo: () => apiRequest<QrLabelSettings>('/api/settings/qr-label/logo', { method: 'DELETE' }),
 
   jobProfiles: () => apiRequest<JobProfile[]>('/api/job-profiles'),
   createJobProfile: (body: { name: string; description?: string | null; defaultManagerId?: string | null; assetCategoryIds: string[]; procedureIds: string[] }) => apiRequest<JobProfile>('/api/job-profiles', { method: 'POST', body: JSON.stringify(body) }),
@@ -202,6 +213,7 @@ export const api = {
   },
   assetGroupCounts: () => apiRequest<AssetGroupCounts>('/api/assets/group-counts'),
   createAsset: (body: CreateAssetRequest) => apiRequest<Asset>('/api/assets', { method: 'POST', body: JSON.stringify(body) }),
+  createAssetBatch: (body: CreateAssetBatchRequest) => apiRequest<CreateAssetBatchResponse>('/api/assets/batch', { method: 'POST', body: JSON.stringify(body) }),
   updateAsset: (id: string, body: CreateAssetRequest & { status: AssetStatus }) => apiRequest<Asset>(`/api/assets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteAsset: (id: string) => apiRequest<void>(`/api/assets/${id}`, { method: 'DELETE' }),
   getAsset: (id: string) => apiRequest<Asset>(`/api/assets/${id}`),
@@ -214,6 +226,9 @@ export const api = {
   cancelServiceTicket: (id: string, body: CancelServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
   evidenceBlob: (id: string) => apiBlob(`/api/evidence/${id}`),
   publicAssetScan: (organizationId: string, assetId: string) => apiRequest<{ organizationName: string }>(`/api/public/assets/${organizationId}/${assetId}`),
+  publicAssetScanByCode: (scanCode: string) => apiRequest<{ organizationName: string }>(`/api/public/scan/${encodeURIComponent(scanCode)}`),
+  reportAssetIssueByCode: (scanCode: string, message: string) => apiRequest<void>(`/api/public/scan/${encodeURIComponent(scanCode)}/report`, { method: 'POST', body: JSON.stringify({ message }) }),
+  resolveScanCode: (scanCode: string) => apiRequest<string>(`/api/assets/scan/${encodeURIComponent(scanCode)}`),
   reportAssetIssue: (organizationId: string, assetId: string, message: string) => apiRequest<void>(`/api/public/assets/${organizationId}/${assetId}/report`, { method: 'POST', body: JSON.stringify({ message }) }),
 
   teams: () => apiRequest<Team[]>('/api/teams'),

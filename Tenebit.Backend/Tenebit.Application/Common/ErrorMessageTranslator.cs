@@ -44,6 +44,8 @@ public static class ErrorMessageTranslator
         ["Dodaj co najmniej jedno aktywo do wydania."] = new("Add at least one asset to the assignment.", "Añade al menos un activo a la entrega.", "Fügen Sie der Übergabe mindestens ein Asset hinzu.", "Aggiungi almeno un asset all'assegnazione.", "Ajoutez au moins un actif à la remise."),
         ["Dostawca logowania nie udostępnił adresu e-mail. Wyraź zgodę na udostępnienie e-maila i spróbuj ponownie."] = new("The login provider did not share an email address. Grant permission to share your email and try again.", "El proveedor de inicio de sesión no compartió una dirección de correo. Concede permiso para compartir tu correo e inténtalo de nuevo.", "Der Anmeldeanbieter hat keine E-Mail-Adresse übermittelt. Erteilen Sie die Freigabe Ihrer E-Mail und versuchen Sie es erneut.", "Il provider di accesso non ha condiviso un indirizzo e-mail. Concedi il permesso di condividere la tua e-mail e riprova.", "Le fournisseur de connexion n'a pas partagé d'adresse e-mail. Autorisez le partage de votre e-mail et réessayez."),
         ["Dozwolone są tylko zdjęcia w formacie JPEG, PNG lub WebP."] = new("Only JPEG, PNG or WebP photos are allowed.", "Solo se permiten fotos en formato JPEG, PNG o WebP.", "Es sind nur Fotos im Format JPEG, PNG oder WebP zulässig.", "Sono ammesse solo foto in formato JPEG, PNG o WebP.", "Seules les photos aux formats JPEG, PNG ou WebP sont autorisées."),
+        ["Dozwolone są tylko obrazy w formacie JPEG, PNG lub WebP."] = new("Only JPEG, PNG or WebP images are allowed.", "Solo se permiten imágenes en formato JPEG, PNG o WebP.", "Es sind nur Bilder im Format JPEG, PNG oder WebP zulässig.", "Sono ammesse solo immagini in formato JPEG, PNG o WebP.", "Seules les images aux formats JPEG, PNG ou WebP sont autorisées."),
+        ["Logo może mieć maksymalnie 512 KB."] = new("The logo may be at most 512 KB.", "El logotipo puede pesar como máximo 512 KB.", "Das Logo darf höchstens 512 KB groß sein.", "Il logo può pesare al massimo 512 KB.", "Le logo ne doit pas dépasser 512 Ko."),
         ["Dwuskładnikowe uwierzytelnianie nie jest włączone."] = new("Two-factor authentication is not enabled.", "La autenticación de dos factores no está activada.", "Die Zwei-Faktor-Authentifizierung ist nicht aktiviert.", "L'autenticazione a due fattori non è attiva.", "L'authentification à deux facteurs n'est pas activée."),
         ["E-mail z tego dostawcy nie jest zweryfikowany. Zaloguj się hasłem i połącz konto w ustawieniach."] = new("The email from this provider is not verified. Log in with your password and link the account in settings.", "El correo de este proveedor no está verificado. Inicia sesión con tu contraseña y vincula la cuenta en ajustes.", "Die E-Mail-Adresse dieses Anbieters ist nicht verifiziert. Melden Sie sich mit Ihrem Passwort an und verknüpfen Sie das Konto in den Einstellungen.", "L'e-mail fornita da questo provider non è verificata. Accedi con la password e collega l'account nelle impostazioni.", "L'e-mail de ce fournisseur n'est pas vérifiée. Connectez-vous avec votre mot de passe et associez le compte dans les paramètres."),
         ["Etykieta pola własnego jest wymagana."] = new("The custom field label is required.", "La etiqueta del campo personalizado es obligatoria.", "Die Bezeichnung des benutzerdefinierten Felds ist erforderlich.", "L'etichetta del campo personalizzato è obbligatoria.", "Le libellé du champ personnalisé est obligatoire."),
@@ -66,6 +68,8 @@ public static class ErrorMessageTranslator
         ["Najpierw wygeneruj sekret 2FA."] = new("First generate a 2FA secret.", "Primero genera un secreto de 2FA.", "Generieren Sie zuerst ein 2FA-Secret.", "Genera prima un segreto 2FA.", "Générez d'abord un secret 2FA."),
         ["Nazwa aktywa jest wymagana."] = new("The asset name is required.", "El nombre del activo es obligatorio.", "Der Asset-Name ist erforderlich.", "Il nome dell'asset è obbligatorio.", "Le nom de l'actif est obligatoire."),
         ["Nazwa firmy jest wymagana."] = new("The company name is required.", "El nombre de la empresa es obligatorio.", "Der Firmenname ist erforderlich.", "Il nome dell'azienda è obbligatorio.", "Le nom de l'entreprise est obligatoire."),
+        ["Najpierw wgraj własne logo, aby użyć go na etykiecie."] = new("Upload your own logo first to use it on the label.", "Sube primero tu propio logotipo para usarlo en la etiqueta.", "Laden Sie zuerst Ihr eigenes Logo hoch, um es auf dem Etikett zu verwenden.", "Carica prima il tuo logo per usarlo sull'etichetta.", "Téléversez d'abord votre propre logo pour l'utiliser sur l'étiquette."),
+        ["Nie udało się wygenerować unikalnego kodu etykiety. Spróbuj ponownie."] = new("Could not generate a unique label code. Please try again.", "No se pudo generar un código de etiqueta único. Inténtalo de nuevo.", "Es konnte kein eindeutiger Etikettencode erzeugt werden. Bitte versuchen Sie es erneut.", "Non è stato possibile generare un codice etichetta univoco. Riprova.", "Impossible de générer un code d'étiquette unique. Veuillez réessayer."),
         ["Nazwa kategorii jest wymagana."] = new("The category name is required.", "El nombre de la categoría es obligatorio.", "Der Kategoriename ist erforderlich.", "Il nome della categoria è obbligatorio.", "Le nom de la catégorie est obligatoire."),
         ["Nazwa licencji jest wymagana."] = new("The license name is required.", "El nombre de la licencia es obligatorio.", "Der Lizenzname ist erforderlich.", "Il nome della licenza è obbligatorio.", "Le nom de la licence est obligatoire."),
         ["Nazwa pliku jest wymagana."] = new("The file name is required.", "El nombre del archivo es obligatorio.", "Der Dateiname ist erforderlich.", "Il nome del file è obbligatorio.", "Le nom du fichier est obligatoire."),
@@ -106,6 +110,9 @@ public static class ErrorMessageTranslator
         ["Osiągnięto limit 5 zdjęć dla tego aktywa i etapu."] = new("The limit of 5 photos for this asset and phase has been reached.", "Se ha alcanzado el límite de 5 fotos para este activo y esta fase.", "Das Limit von 5 Fotos für dieses Asset und diese Phase wurde erreicht.", "È stato raggiunto il limite di 5 foto per questo asset e questa fase.", "La limite de 5 photos pour cet actif et cette phase est atteinte."),
         ["Osoba z tym adresem e-mail już istnieje."] = new("A person with this email address already exists.", "Ya existe una persona con esta dirección de correo.", "Es existiert bereits eine Person mit dieser E-Mail-Adresse.", "Esiste già una persona con questo indirizzo e-mail.", "Une personne avec cette adresse e-mail existe déjà."),
         ["Plik nie jest prawidłowym obrazem JPEG/PNG/WebP."] = new("The file is not a valid JPEG/PNG/WebP image.", "El archivo no es una imagen JPEG/PNG/WebP válida.", "Die Datei ist kein gültiges JPEG-/PNG-/WebP-Bild.", "Il file non è un'immagine JPEG/PNG/WebP valida.", "Le fichier n'est pas une image JPEG/PNG/WebP valide."),
+        ["Plik logo jest pusty."] = new("The logo file is empty.", "El archivo del logotipo está vacío.", "Die Logo-Datei ist leer.", "Il file del logo è vuoto.", "Le fichier du logo est vide."),
+        ["Podano więcej numerów seryjnych niż sztuk w partii."] = new("There are more serial numbers than units in the batch.", "Hay más números de serie que unidades en el lote.", "Es gibt mehr Seriennummern als Einheiten in der Charge.", "Ci sono più numeri di serie che unità nel lotto.", "Il y a plus de numéros de série que d'unités dans le lot."),
+        ["Prefiks tagu jest wymagany."] = new("The tag prefix is required.", "El prefijo de etiqueta es obligatorio.", "Das Tag-Präfix ist erforderlich.", "Il prefisso del tag è obbligatorio.", "Le préfixe du tag est obligatoire."),
         ["Plik procedury jest pusty."] = new("The procedure file is empty.", "El archivo del procedimiento está vacío.", "Die Prozedurdatei ist leer.", "Il file della procedura è vuoto.", "Le fichier de la procédure est vide."),
         ["Plik procedury może mieć maksymalnie 25 MB."] = new("The procedure file can be at most 25 MB.", "El archivo del procedimiento puede tener como máximo 25 MB.", "Die Prozedurdatei darf höchstens 25 MB groß sein.", "Il file della procedura può avere una dimensione massima di 25 MB.", "Le fichier de la procédure peut peser au maximum 25 Mo."),
         ["Plik procedury nie istnieje."] = new("The procedure file does not exist.", "El archivo del procedimiento no existe.", "Die Prozedurdatei existiert nicht.", "Il file della procedura non esiste.", "Le fichier de la procédure n'existe pas."),
@@ -347,6 +354,7 @@ public static class ErrorMessageTranslator
         ["Wyślij plik jako multipart/form-data."] = new("Send the file as multipart/form-data.", "Envía el archivo como multipart/form-data.", "Senden Sie die Datei als multipart/form-data.", "Invia il file come multipart/form-data.", "Envoyez le fichier en multipart/form-data."),
         ["Wyślij żądanie jako multipart/form-data."] = new("Send the request as multipart/form-data.", "Envía la solicitud como multipart/form-data.", "Senden Sie die Anfrage als multipart/form-data.", "Invia la richiesta come multipart/form-data.", "Envoyez la requête en multipart/form-data."),
         ["Wybierz zdjęcie."] = new("Select a photo.", "Selecciona una foto.", "Wählen Sie ein Foto aus.", "Seleziona una foto.", "Sélectionnez une photo."),
+        ["Wybierz plik logo."] = new("Choose a logo file.", "Elige un archivo de logotipo.", "Wählen Sie eine Logo-Datei aus.", "Scegli un file di logo.", "Choisissez un fichier de logo."),
         ["Nieprawidłowy etap materiału dowodowego."] = new("Invalid evidence phase.", "Fase del material probatorio no válida.", "Ungültige Beweismaterial-Phase.", "Fase del materiale probatorio non valida.", "Phase de preuve invalide."),
         ["Nieprawidłowy identyfikator wydania."] = new("Invalid assignment identifier.", "Identificador de entrega no válido.", "Ungültige Übergabe-ID.", "Identificativo dell'assegnazione non valido.", "Identifiant de remise invalide."),
         ["Nieprawidłowe dane wydania."] = new("Invalid assignment data.", "Datos de la entrega no válidos.", "Ungültige Übergabedaten.", "Dati dell'assegnazione non validi.", "Données de remise invalides."),
@@ -416,8 +424,79 @@ public static class ErrorMessageTranslator
     // translated template. Build returns null when no translation is needed for the requested
     // language (i.e. it matches the message's own source language), signalling the caller to fall
     // back to the original message unchanged.
+    /// <summary>Podmioty komunikatów o dozwolonym zakresie liczbowym - jeden szablon, kilka pól formularza partii.</summary>
+    private static readonly Dictionary<string, Localized> RangeSubjects = new()
+    {
+        ["Liczba sztuk"] = new("The quantity", "La cantidad", "Die Stückzahl", "La quantità", "La quantité"),
+        ["Liczba cyfr numeracji"] = new("The number of digits", "El número de dígitos", "Die Stellenzahl", "Il numero di cifre", "Le nombre de chiffres"),
+        ["Numer początkowy"] = new("The start number", "El número inicial", "Die Startnummer", "Il numero iniziale", "Le numéro de départ"),
+    };
+
     private static readonly List<TemplateRule> Templates = new()
     {
+        // Zakresy dla pól partii. Sformułowania celowo omijają uzgodnienie rodzaju ("rientrare",
+        // "se situer"), żeby jeden szablon obsłużył wszystkie podmioty bez odmiany.
+        new TemplateRule(
+            new Regex(@"^(?<what>[\p{L} ]+) musi mieścić się w zakresie (?<range>\d+-\d+)\.$"),
+            (m, lang) =>
+            {
+                if (!RangeSubjects.TryGetValue(m.Groups["what"].Value, out var subject)) return null;
+                var range = m.Groups["range"].Value;
+                var noun = subject.For(lang);
+                return lang switch
+                {
+                    "en" => $"{noun} must be within the range {range}.",
+                    "es" => $"{noun} debe estar en el rango {range}.",
+                    "de" => $"{noun} muss im Bereich {range} liegen.",
+                    "it" => $"{noun} deve rientrare nell'intervallo {range}.",
+                    "fr" => $"{noun} doit se situer dans la plage {range}.",
+                    _ => null,
+                };
+            }),
+        new TemplateRule(
+            new Regex(@"^Tag '(?<tag>[^']+)' przekracza 80 znaków\. Skróć prefiks\.$"),
+            (m, lang) => lang switch
+            {
+                "en" => $"Tag '{m.Groups["tag"].Value}' exceeds 80 characters. Shorten the prefix.",
+                "es" => $"La etiqueta '{m.Groups["tag"].Value}' supera los 80 caracteres. Acorta el prefijo.",
+                "de" => $"Der Tag '{m.Groups["tag"].Value}' überschreitet 80 Zeichen. Kürzen Sie das Präfix.",
+                "it" => $"Il tag '{m.Groups["tag"].Value}' supera gli 80 caratteri. Accorcia il prefisso.",
+                "fr" => $"Le tag « {m.Groups["tag"].Value} » dépasse 80 caractères. Raccourcissez le préfixe.",
+                _ => null,
+            }),
+        new TemplateRule(
+            new Regex(@"^Te tagi są już używane: (?<tags>.+)\. Zmień numer początkowy lub prefiks\.$"),
+            (m, lang) => lang switch
+            {
+                "en" => $"These tags are already in use: {m.Groups["tags"].Value}. Change the start number or the prefix.",
+                "es" => $"Estas etiquetas ya están en uso: {m.Groups["tags"].Value}. Cambia el número inicial o el prefijo.",
+                "de" => $"Diese Tags werden bereits verwendet: {m.Groups["tags"].Value}. Ändern Sie die Startnummer oder das Präfix.",
+                "it" => $"Questi tag sono già in uso: {m.Groups["tags"].Value}. Cambia il numero iniziale o il prefisso.",
+                "fr" => $"Ces tags sont déjà utilisés : {m.Groups["tags"].Value}. Changez le numéro de départ ou le préfixe.",
+                _ => null,
+            }),
+        new TemplateRule(
+            new Regex(@"^Limit aktywów przekroczony\. Plan (?<plan>.+) pozwala na (?<limit>\d+) aktywów, zostało wolnych: (?<free>\d+)\. Przejdź na wyższy plan lub zmniejsz partię\.$"),
+            (m, lang) => lang switch
+            {
+                "en" => $"Asset limit exceeded. The {m.Groups["plan"].Value} plan allows {m.Groups["limit"].Value} assets and {m.Groups["free"].Value} are still free. Upgrade your plan or reduce the batch.",
+                "es" => $"Límite de activos superado. El plan {m.Groups["plan"].Value} permite {m.Groups["limit"].Value} activos y quedan {m.Groups["free"].Value} libres. Actualiza tu plan o reduce el lote.",
+                "de" => $"Asset-Limit überschritten. Der Plan {m.Groups["plan"].Value} erlaubt {m.Groups["limit"].Value} Assets, davon sind noch {m.Groups["free"].Value} frei. Aktualisieren Sie Ihren Plan oder verkleinern Sie die Charge.",
+                "it" => $"Limite di asset superato. Il piano {m.Groups["plan"].Value} consente {m.Groups["limit"].Value} asset e ne restano {m.Groups["free"].Value} liberi. Passa a un piano superiore o riduci il lotto.",
+                "fr" => $"Limite d'actifs dépassée. Le forfait {m.Groups["plan"].Value} autorise {m.Groups["limit"].Value} actifs et il en reste {m.Groups["free"].Value} de libres. Passez à un forfait supérieur ou réduisez le lot.",
+                _ => null,
+            }),
+        new TemplateRule(
+            new Regex(@"^Tekst na etykiecie może mieć maksymalnie (?<max>\d+) znaków\.$"),
+            (m, lang) => lang switch
+            {
+                "en" => $"The label text may be at most {m.Groups["max"].Value} characters long.",
+                "es" => $"El texto de la etiqueta puede tener como máximo {m.Groups["max"].Value} caracteres.",
+                "de" => $"Der Etikettentext darf höchstens {m.Groups["max"].Value} Zeichen lang sein.",
+                "it" => $"Il testo dell'etichetta può contenere al massimo {m.Groups["max"].Value} caratteri.",
+                "fr" => $"Le texte de l'étiquette ne peut pas dépasser {m.Groups["max"].Value} caractères.",
+                _ => null,
+            }),
         // Jeden szablon dla całej rodziny komunikatów o limicie planu - wszystkie zasoby dzielą ten sam
         // limit (OrganizationSubscription.GetResourceLimit), więc różni je tylko nazwa zasobu.
         new TemplateRule(

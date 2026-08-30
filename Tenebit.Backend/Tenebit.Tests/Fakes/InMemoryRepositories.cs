@@ -451,7 +451,7 @@ public sealed class FakeEmailSender : IEmailSender
 public sealed class FakeAppLinkBuilder : IAppLinkBuilder
 {
     public string BuildAssignmentAcceptanceLink(string rawToken) => $"https://test/accept#{Uri.EscapeDataString(rawToken)}";
-    public string BuildAssetScanLink(Guid organizationId, Guid assetId) => $"https://test/scan/{organizationId}/{assetId}";
+    public string BuildAssetScanLink(string scanCode) => $"HTTPS://TEST/S/{scanCode}";
     public string BuildPasswordResetLink(string email, string code) =>
         $"https://test/reset-password#email={Uri.EscapeDataString(email)}&code={Uri.EscapeDataString(code)}";
     public string BuildEmailVerificationLink(string email, string code) =>
@@ -475,7 +475,8 @@ public sealed class FakeFieldEncryptor : IFieldEncryptor
 public sealed class FakeQrCodeGenerator : IQrCodeGenerator
 {
     public string CreateAssetQrSvg(string payload) => "<svg/>";
-    public string CreateLabelledAssetQrSvg(string payload, IReadOnlyList<string> labelLines) => "<svg/>";
+    public string CreateLabelledAssetQrSvg(string payload, QrLabelContent content) => "<svg/>";
+    public QrLabelRender RenderAssetQrLabel(string payload, QrLabelContent content) => new("<svg/>", 180, 300, 120, 45);
     public string CreateTotpQrSvg(string otpAuthUri) => "<svg/>";
 }
 

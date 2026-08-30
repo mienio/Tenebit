@@ -14,6 +14,7 @@ public sealed class Asset
         CreatedAt = DateTimeOffset.UtcNow;
         UpdatedAt = CreatedAt;
         Status = AssetStatus.InStock;
+        ScanCode = AssetScanCode.Create();
         UpdateCore(name, assetTag, null, null, null, null, null, null, null, null, null, null);
     }
 
@@ -35,10 +36,21 @@ public sealed class Asset
     public DateOnly? PurchaseDate { get; private set; }
     public DateOnly? WarrantyUntil { get; private set; }
     public string QrCodePayload { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// What the printed QR code points at. Random and stable for the life of the asset: it is stamped on
+    /// a physical label, so it must never be recomputed from fields people edit - renaming an asset or
+    /// fixing its tag cannot be allowed to invalidate a sticker already on the box.
+    /// </summary>
+    public string ScanCode { get; private set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
     public List<AssetFieldValue> FieldValues { get; private set; } = [];
 
+
+    /// <summary>Assigns a freshly drawn code after a collision with an existing one. Only the creating
+    /// service calls this, and only before the asset is persisted.</summary>
+    public void RegenerateScanCode() => ScanCode = AssetScanCode.Create();
 
     public void SetLocation(Guid? locationId, string? locationPath)
     {

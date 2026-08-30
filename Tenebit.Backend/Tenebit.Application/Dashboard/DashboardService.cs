@@ -30,7 +30,7 @@ public sealed class DashboardService
     public async Task<DashboardLayoutResponse> GetLayoutAsync(CancellationToken cancellationToken)
     {
         var userId = Guid.Parse(_currentUser.Subject);
-        var layout = await _layouts.GetAsync(userId, cancellationToken);
+        var layout = await _layouts.GetAsync(_currentUser.OrganizationId, userId, cancellationToken);
         return new DashboardLayoutResponse(layout?.LayoutJson);
     }
 
@@ -38,7 +38,7 @@ public sealed class DashboardService
     {
         var userId = Guid.Parse(_currentUser.Subject);
         var organizationId = _currentUser.OrganizationId;
-        var layout = await _layouts.GetAsync(userId, cancellationToken);
+        var layout = await _layouts.GetAsync(organizationId, userId, cancellationToken);
         if (layout is null)
         {
             layout = new DashboardLayout(organizationId, userId, request.LayoutJson);

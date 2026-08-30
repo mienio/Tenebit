@@ -171,6 +171,19 @@ export interface CreateAssetRequest {
   customFields?: Record<string, string> | null;
 }
 
+export interface CreateAssetBatchRequest extends Omit<CreateAssetRequest, 'assetTag' | 'serialNumber'> {
+  quantity: number;
+  tagPrefix: string;
+  tagStartNumber: number;
+  tagPadding: number;
+  serialNumbers?: string[] | null;
+}
+
+export interface CreateAssetBatchResponse {
+  created: number;
+  assets: Asset[];
+}
+
 export interface ServiceTicket {
   id: string;
   assetId: string;
@@ -845,10 +858,36 @@ export interface AssetStatusSetting {
   isEnabled: boolean;
 }
 
+export type QrLabelLogoMode = 'None' | 'Custom' | 'Tenebit';
+export type QrLabelCodeSize = 'Small' | 'Medium' | 'Large';
+export type QrLabelFormat = 'Square38' | 'Medium63' | 'Large99';
+
 export interface QrLabelSettings {
   showName: boolean;
   showTag: boolean;
+  showSerialNumber: boolean;
+  showOrganizationName: boolean;
+  customText?: string | null;
+  logo: QrLabelLogoMode;
+  codeSize: QrLabelCodeSize;
+  format: QrLabelFormat;
+  hasCustomLogo: boolean;
+  organizationName: string;
 }
+
+export interface QrLabelPreview {
+  svg: string;
+  widthPx: number;
+  heightPx: number;
+  codeSizePx: number;
+  moduleCount: number;
+  labelWidthMm: number;
+  labelHeightMm: number;
+  codeMm: number;
+  millimetresPerModule: number;
+}
+
+export type SaveQrLabelSettings = Pick<QrLabelSettings, 'showName' | 'showTag' | 'showSerialNumber' | 'showOrganizationName' | 'customText' | 'logo' | 'codeSize' | 'format'>;
 
 export interface JobProfile {
   id: string;

@@ -86,6 +86,35 @@ public sealed record CreateAssetRequest(
     Guid? TeamId,
     IReadOnlyDictionary<string, string>? CustomFields);
 
+/// <summary>
+/// One delivery of identical equipment: the same description for every unit, with the asset tags
+/// generated from a prefix and a running number so nobody types twenty near-identical forms.
+///
+/// Serial numbers are the only per-unit field here, because they are the one thing a delivery note
+/// actually lists per item. The Nth serial goes to the Nth generated tag; a shorter list simply leaves
+/// the remaining units without one.
+/// </summary>
+[ValidatedRequest]
+public sealed record CreateAssetBatchRequest(
+    string Name,
+    Guid CategoryId,
+    int Quantity,
+    string TagPrefix,
+    int TagStartNumber,
+    int TagPadding,
+    IReadOnlyList<string>? SerialNumbers,
+    string? Location,
+    string? Manufacturer,
+    string? Model,
+    decimal? PurchasePrice,
+    string? Currency,
+    DateOnly? PurchaseDate,
+    DateOnly? WarrantyUntil,
+    Guid? TeamId,
+    IReadOnlyDictionary<string, string>? CustomFields);
+
+public sealed record CreateAssetBatchResponse(int Created, IReadOnlyList<AssetResponse> Assets);
+
 public sealed record AssetGroupCountsResponse(
     IReadOnlyDictionary<Guid, int> ByCategory,
     IReadOnlyDictionary<AssetStatus, int> ByStatus,
