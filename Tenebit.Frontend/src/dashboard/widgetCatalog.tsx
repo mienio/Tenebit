@@ -58,32 +58,27 @@ export const WIDGET_ICONS: Record<WidgetType, ReactNode> = {
   'list-activity': <History size={18} />
 };
 
-const DEFAULT_ENABLED: WidgetType[] = [
+// Cztery liczniki w jednym pełnym rzędzie. Sześć kafelków ściśniętych po 3 z 20 kolumn ucinało
+// etykiety i wartości; pozostałe metryki nadal można dołożyć z listy widgetów.
+const DEFAULT_METRICS: WidgetType[] = [
   'metric-assets',
   'metric-inStock',
-  'metric-licenses',
   'metric-assigned',
-  'metric-people',
-  'metric-openAssignments',
-  'chart-byStatus',
-  'chart-byCategory',
-  'list-maintenance',
-  'list-activity'
+  'metric-openAssignments'
 ];
+
+const METRICS_PER_ROW = 4;
 
 export function buildDefaultLayout(): Layout[] {
   const layout: Layout[] = [];
-  const metrics = DEFAULT_ENABLED.filter(type => type.startsWith('metric-'));
-  // Fit metrics into as few full rows as possible instead of a fixed 5-per-row
-  // grid, which stranded a lone card in its own row once a 6th metric existed.
-  const perRow = Math.max(1, Math.min(metrics.length, Math.floor(GRID_COLS / Math.max(3, Math.floor(GRID_COLS / metrics.length)))));
-  const colWidth = Math.floor(GRID_COLS / perRow);
+  const metrics = DEFAULT_METRICS;
+  const colWidth = Math.floor(GRID_COLS / METRICS_PER_ROW);
   metrics.forEach((type, index) => {
-    const row = Math.floor(index / perRow);
-    const col = index % perRow;
+    const row = Math.floor(index / METRICS_PER_ROW);
+    const col = index % METRICS_PER_ROW;
     layout.push({ i: type, x: col * colWidth, y: row * 3, w: colWidth, h: WIDGET_CATALOG_MAP[type].defaultSize.h, minW: WIDGET_CATALOG_MAP[type].minW, minH: WIDGET_CATALOG_MAP[type].minH });
   });
-  const chartsY = Math.ceil(metrics.length / perRow) * 3;
+  const chartsY = Math.ceil(metrics.length / METRICS_PER_ROW) * 3;
   layout.push({ i: 'chart-byStatus', x: 0, y: chartsY, ...WIDGET_CATALOG_MAP['chart-byStatus'].defaultSize });
   layout.push({ i: 'chart-byCategory', x: 10, y: chartsY, ...WIDGET_CATALOG_MAP['chart-byCategory'].defaultSize });
   layout.push({ i: 'list-activity', x: 0, y: chartsY + 5, ...WIDGET_CATALOG_MAP['list-activity'].defaultSize });

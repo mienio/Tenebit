@@ -418,11 +418,11 @@ export function PeoplePage() {
                     <th style={{ width: '32px' }}><input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} onClick={event => event.stopPropagation()} aria-label={t('people.bulkSelectAll')} /></th>
                     <th style={{ width: '40px' }}></th>
                     <th>{t('people.colFullName')}</th>
-                    <th>{t('settings.emailLabel')}</th>
-                    <th>{t('people.colPhone')}</th>
-                    <th>{t('people.colType')}</th>
-                    <th>{t('people.colJobTitle')}</th>
-                    <th>{t('people.colTeam')}</th>
+                    <th className="colDropSm">{t('settings.emailLabel')}</th>
+                    <th className="colDropLg">{t('people.colPhone')}</th>
+                    <th className="colDropMd">{t('people.colType')}</th>
+                    <th className="colDropLg">{t('people.colJobTitle')}</th>
+                    <th className="colDropMd">{t('people.colTeam')}</th>
                     <th>{t('people.colStatus')}</th>
                   </tr>
                 </thead>
@@ -447,13 +447,13 @@ export function PeoplePage() {
                         <strong>{person.fullName}</strong>
                         {person.employeeNumber && <small>#{person.employeeNumber}</small>}
                       </td>
-                      <td data-label={t('settings.emailLabel')}>
+                      <td className="colDropSm" data-label={t('settings.emailLabel')}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
                           <Mail size={12} style={{ color: 'var(--muted)' }} />
                           {person.email}
                         </div>
                       </td>
-                      <td data-label={t('people.colPhone')}>
+                      <td className="colDropLg" data-label={t('people.colPhone')}>
                         {person.phone ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
                             <Phone size={12} style={{ color: 'var(--muted)' }} />
@@ -463,10 +463,10 @@ export function PeoplePage() {
                           <span style={{ color: 'var(--muted)' }}>-</span>
                         )}
                       </td>
-                      <td data-label={t('people.colType')}>
+                      <td className="colDropMd" data-label={t('people.colType')}>
                         <span className="status">{person.relationType}</span>
                       </td>
-                      <td data-label={t('people.colJobTitle')}>
+                      <td className="colDropLg" data-label={t('people.colJobTitle')}>
                         {person.jobTitle ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
                             <Briefcase size={12} style={{ color: 'var(--muted)' }} />
@@ -476,7 +476,7 @@ export function PeoplePage() {
                           <span style={{ color: 'var(--muted)' }}>-</span>
                         )}
                       </td>
-                      <td data-label={t('people.colTeam')}>{person.teamName ?? <span style={{ color: 'var(--muted)' }}>-</span>}</td>
+                      <td className="colDropMd" data-label={t('people.colTeam')}>{person.teamName ?? <span style={{ color: 'var(--muted)' }}>-</span>}</td>
                       <td data-label={t('people.colStatus')}>
                         <span className={`status ${getEmploymentStatusPresentation(person.employmentStatus).badgeClass}`}>
                           {t(getEmploymentStatusPresentation(person.employmentStatus).labelKey)}

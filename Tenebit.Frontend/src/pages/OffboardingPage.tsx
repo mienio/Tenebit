@@ -209,11 +209,11 @@ export function OffboardingPage() {
               <thead>
                 <tr>
                   <th>{t('offboarding.colPerson')}</th>
-                  <th>{t('offboarding.colEmploymentEnds')}</th>
-                  <th>{t('offboarding.colReturnDue')}</th>
-                  <th>{t('offboarding.colProgress')}</th>
+                  <th className="colDropSm">{t('offboarding.colEmploymentEnds')}</th>
+                  <th className="colDropMd">{t('offboarding.colReturnDue')}</th>
+                  <th className="colDropLg">{t('offboarding.colProgress')}</th>
                   <th>{t('offboarding.colStatus')}</th>
-                  <th>{t('offboarding.colOwner')}</th>
+                  <th className="colDropLg">{t('offboarding.colOwner')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -224,11 +224,11 @@ export function OffboardingPage() {
                   return (
                     <tr key={item.id}>
                       <td data-label={t('offboarding.colPerson')}><strong>{item.personName ?? '-'}</strong></td>
-                      <td data-label={t('offboarding.colEmploymentEnds')}>{formatDate(item.employmentEndsAt)}</td>
-                      <td data-label={t('offboarding.colReturnDue')}>{formatDate(item.returnDueDate)}</td>
-                      <td data-label={t('offboarding.colProgress')}>{progress}%</td>
+                      <td className="colDropSm" data-label={t('offboarding.colEmploymentEnds')}>{formatDate(item.employmentEndsAt)}</td>
+                      <td className="colDropMd" data-label={t('offboarding.colReturnDue')}>{formatDate(item.returnDueDate)}</td>
+                      <td className="colDropLg" data-label={t('offboarding.colProgress')}>{progress}%</td>
                       <td data-label={t('offboarding.colStatus')}><StatusBadge status={item.status} /></td>
-                      <td data-label={t('offboarding.colOwner')}>{owner}</td>
+                      <td className="colDropLg" data-label={t('offboarding.colOwner')}>{owner}</td>
                       <td>
                         <div className="tableActions">
                           <button type="button" className="iconButton" aria-label={t('offboarding.detailsAria')} onClick={() => navigate(`/offboarding/${item.id}`)}><Eye size={16} /></button>

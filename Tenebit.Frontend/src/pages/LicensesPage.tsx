@@ -158,10 +158,10 @@ export function LicensesPage() {
                 <tr>
                   <th></th>
                   <th>{t('licenses.colName')}</th>
-                  <th>{t('licenses.colVendor')}</th>
+                  <th className="colDropMd">{t('licenses.colVendor')}</th>
                   <th>{t('licenses.colSeats')}</th>
-                  <th>{t('licenses.colKey')}</th>
-                  <th>{t('licenses.colExpires')}</th>
+                  <th className="colDropLg">{t('licenses.colKey')}</th>
+                  <th className="colDropSm">{t('licenses.colExpires')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -169,16 +169,16 @@ export function LicensesPage() {
                   <tr key={license.id} onClick={() => setSelected(license)}>
                     <td className="cell-icon"><div className="table-icon"><KeyRound size={16} /></div></td>
                     <td data-label={t('licenses.colName')}><strong>{license.name}</strong></td>
-                    <td data-label={t('licenses.colVendor')}>{license.vendor ?? '-'}</td>
+                    <td className="colDropMd" data-label={t('licenses.colVendor')}>{license.vendor ?? '-'}</td>
                     <td data-label={t('licenses.colSeats')}>{license.seatsAssigned}/{license.seatsTotal}</td>
-                    <td data-label={t('licenses.colKey')}>
+                    <td className="colDropLg" data-label={t('licenses.colKey')}>
                       {!license.hasLicenseKey ? '-' : !license.canViewLicenseKey ? (
                         <span title={t('licenses.keyHiddenHint')}><Lock size={14} /> {t('licenses.keyHidden')}</span>
                       ) : revealedKeys.has(license.id) ? (
                         <code>{license.licenseKey}</code>
                       ) : '••••••••'}
                     </td>
-                    <td data-label={t('licenses.colExpires')}>{license.expiresAt ?? '-'}</td>
+                    <td className="colDropSm" data-label={t('licenses.colExpires')}>{license.expiresAt ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

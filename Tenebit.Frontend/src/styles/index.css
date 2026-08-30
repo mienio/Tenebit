@@ -34,7 +34,10 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .twoFactorSetup__secret, .qrPreview code, code, kbd, pre { font-family: var(--font-mono); }
 
 .appShell { min-height: 100vh; }
-.content { min-width: 0; padding: 38px; margin-left: 276px; }
+/* Strona nigdy nie przewija się w poziomie. Co nie mieści się w szerokości, ma się skalować albo
+   chować - `clip` (nie `hidden`) nie tworzy kontenera przewijania, więc sticky nadal działa, a
+   własne poziome przewijaki wewnątrz (np. .tableWrap raportów) zachowują się normalnie. */
+.content { min-width: 0; padding: 38px; margin-left: 276px; overflow-x: clip; }
 .mobileTopbar, .sidebarScrim { display: none; }
 
 .sidebar { position: fixed; top: 0; left: 0; z-index: 30; width: 276px; height: 100vh; overflow-y: auto; padding: 22px; background: var(--surface); color: var(--text); display: flex; flex-direction: column; gap: 24px; border: 1px solid var(--border-strong); box-shadow: var(--shadow); scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
@@ -73,7 +76,9 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .sidebarPlanBadge { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 3px 10px; margin-top: -4px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--accent); font-size: 12px; font-weight: 700; text-decoration: none; }
 .sidebarPlanBadge:hover { background: var(--brand-soft); border-color: var(--accent); }
 
-.pageStack { display: grid; gap: 22px; }
+/* minmax(0, 1fr), nie 1fr: domyślnie kolumna gridu jest szeroka jak min-content najszerszego dziecka,
+   więc jeden nieskracalny rząd przycisków rozpychał całą stronę poza ekran telefonu. */
+.pageStack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
 .pageStack--narrow { max-width: 1080px; }
 .pageHeader { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; }
 .pageHeader h1 { margin: 0; max-width: 960px; font-size: clamp(30px, 3.2vw, 46px); line-height: 1.02; font-weight: 730; letter-spacing: -0.045em; }
@@ -92,19 +97,30 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .heroCard__actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .heroCard .inlineAction { color: var(--brand); border-color: rgba(255,255,255,.25); }
 
-.planUsageGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 20px; margin-top: 16px; }
-.planUsage__head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-.planUsage__head small { color: var(--muted); font-family: var(--font-mono); }
-.planUsage__bar { height: 8px; margin-bottom: 0; }
+/* Jedyna informacja o limitach w aplikacji: licznik aktywów. Pozostałe limity planu są opisane
+   wyłącznie w regulaminie, więc pasek celowo nie wymienia innych zasobów. */
+.assetQuota { display: flex; align-items: center; gap: 10px; max-width: 460px; font-size: 12px; color: var(--muted); }
+.assetQuota__label { white-space: nowrap; }
+.assetQuota__bar { display: block; flex: 1 1 auto; height: 4px; margin-bottom: 0; }
+.assetQuota__count { font-family: var(--font-mono); white-space: nowrap; }
+.assetQuota .inlineAction { font-size: 12px; white-space: nowrap; }
 
 .metricGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 14px; }
+/* Liczniki dashboardu poza siatką widgetów (telefon, tablet): zawsze dwie kolumny na wąskim ekranie,
+   dlatego nie schodzą do jednej kolumny razem z .metricGrid poniżej 900px. */
+.dashboardMetrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+/* W siatce widgetów kafelek ma stałą wysokość, więc podpis musi być jednolinijkowy i przycięty. Tutaj
+   kafelek rośnie, więc podpis zawija się zamiast urywać w połowie słowa. */
+.dashboardMetrics .metricCard small,
+.dashboardMetrics .metricCard__top span:first-child { white-space: normal; overflow: visible; line-height: 1.3; }
 .metricCard { min-height: 126px; display: grid; gap: 12px; align-content: space-between; color: inherit; text-decoration: none; }
 .metricCard--link { transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
 .metricCard--link:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: 4px 4px 0 rgba(34, 29, 24, .12); }
 .metricCard__top { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 620; }
 .metricCard__icon { width: 36px; height: 36px; display: grid; place-items: center; color: var(--brand); }
 .metricCard__body { display: grid; gap: 5px; align-content: end; }
-.metricCard strong { display: block; font-size: 30px; line-height: 1; font-weight: 720; letter-spacing: -0.045em; }
+/* Wartość skaluje się z szerokością okna: na telefonie 30px wypychało dłuższe liczby i kwoty poza kafelek. */
+.metricCard strong { display: block; font-size: clamp(22px, 4vw, 30px); line-height: 1; font-weight: 720; letter-spacing: -0.045em; overflow-wrap: anywhere; }
 .metricCard small, .muted { color: var(--muted); }
 .metricCard small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .metricCard__top span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -162,6 +178,18 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .fieldWithAdd .iconButton { width: 42px; height: 42px; flex: 0 0 auto; }
 .formSectionTitle { grid-column: 1 / -1; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--brand); font-size: 12px; font-weight: 780; letter-spacing: .12em; text-transform: uppercase; }
 .formSectionTitle:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.formFullWidth { grid-column: 1 / -1; display: grid; gap: 6px; }
+
+.qrDesigner { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 24px; align-items: start; }
+.qrDesigner__controls { display: grid; gap: 12px; }
+.qrDesigner__controls .checkField { grid-column: auto; }
+.qrDesigner__logoModes { display: flex; flex-wrap: wrap; gap: 18px; }
+.qrDesigner__preview { display: grid; justify-items: center; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; text-align: center; }
+.qrDesigner__previewLabel { color: var(--muted); font-size: 12px; font-weight: 780; letter-spacing: .12em; text-transform: uppercase; }
+.qrDesigner__preview img { max-width: 180px; height: auto; }
+.qrDesigner__warning { margin: 0; padding: 6px 10px; border-radius: var(--radius); background: #fffbeb; color: #b45309; font-size: 12px; font-weight: 600; }
+.qrDesigner__previewEmpty { display: grid; place-items: center; width: 180px; height: 180px; color: var(--muted); background: var(--surface-muted, #f5f5f4); border-radius: var(--radius); }
+@media (max-width: 900px) { .qrDesigner { grid-template-columns: 1fr; } }
 .inlineForm { display: grid; grid-template-columns: 1fr 160px auto; gap: 12px; align-items: end; }
 .divider { height: 1px; background: var(--border); margin: 20px 0; }
 .checkField { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 14px; }
@@ -800,7 +828,7 @@ button.authIcon:hover { filter: brightness(0.94); }
   .pagination .rowActions { width: 100%; }
   .pagination .button { flex: 1; }
   .toastStack { right: 12px; bottom: 12px; }
-  .tableWrap:not(.tableWrap--cards) table { min-width: 680px; }
+  .tableWrap:not(.tableWrap--cards):not(.tableWrap--oneLine) table { min-width: 680px; }
 
   .tableWrap--cards { overflow-x: visible; }
   .tableWrap--cards table { min-width: 0; width: 100%; }
@@ -849,14 +877,42 @@ button.authIcon:hover { filter: brightness(0.94); }
 .react-grid-item.react-grid-placeholder { background: var(--focus); opacity: .15; border-radius: var(--radius); }
 .react-grid-item > .react-resizable-handle { z-index: 2; }
 
-.qrPrintSheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
-.qrPrintCard { display: grid; justify-items: center; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); text-align: center; }
-.qrPrintCard svg { width: 100px; height: auto; }
+/* Etykiety wymiarujemy w milimetrach, bo arkusz ma trafić 1:1 na papier samoprzylepny.
+   --labelW/--labelH ustawia komponent zależnie od wybranego formatu. */
+.qrPrintSheet { display: grid; grid-template-columns: repeat(auto-fill, var(--labelW, 63.5mm)); gap: var(--labelGap, 2mm); justify-content: start; }
+.qrPrintCard { display: grid; place-items: center; width: var(--labelW, 63.5mm); height: var(--labelH, 38.1mm); padding: 1.5mm; box-sizing: border-box; overflow: hidden; }
+.qrPrintCard--bordered { border: 1px dashed var(--border); }
+/* min-height/min-width 0: element gridu domyślnie nie schodzi poniżej swojej treści, więc `max-height`
+   było ignorowane i etykieta wyższa od naklejki traciła dolne linie (tag, nazwa, numer seryjny). */
+.qrPrintCard img { max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+
+@page { size: A4; margin: 8mm; }
 
 @media print {
   body * { visibility: hidden; }
   .qrPrintSheet, .qrPrintSheet * { visibility: visible; }
-  .qrPrintSheet { position: absolute; inset: 0; padding: 24px; }
+  /* Modal jest oprawą wyłącznie ekranową. Na wydruku nie może ani pozycjonować arkusza (przez
+     `position: relative` panel był jego kontenerem i arkusz lądował w środku kartki), ani go przycinać
+     (`max-height` + `overflow: auto` ucinały etykiety, które nie mieściły się w okienku modala). */
+  /* min-height: 100vh (body i appShell) liczone dla kartki dawało pustą drugą stronę na końcu
+     wydruku; `overflow: hidden` na body ustawia blokada przewijania modala - stąd !important. */
+  html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+  .appShell { min-height: 0; }
+  .content { overflow: visible; padding: 0; margin: 0; }
+  /* Szerokość na całą kartkę: modal na ekranie ma `width: min(900px, ...)` i wyśrodkowanie, przez co
+     arkusz dostawał ~240px i drukował jedną kolumnę etykiet zamiast trzech. */
+  .modalOverlay { position: static; display: block; padding: 0; background: none; width: 100%; }
+  .modalPanel, .modalPanel--wide { position: static; width: 100%; max-width: none; max-height: none; overflow: visible; border: 0; box-shadow: none; }
+  .modalBody { padding: 0; }
+  .modalHeader, .modalBody > *:not(.qrPrintSheet) { display: none; }
+  /* Ukryta przez `visibility` aplikacja nadal zajmuje wysokość i dokłada pustą kartkę na końcu.
+     Zwijamy więc każdą gałąź, która nie prowadzi do arkusza. */
+  .appShell > *:not(:has(.qrPrintSheet)),
+  .content > *:not(:has(.qrPrintSheet)),
+  .pageStack > *:not(:has(.qrPrintSheet)) { display: none; }
+  .qrPrintSheet { position: static; width: 100%; padding: 0; gap: var(--labelGap, 2mm); }
+  .qrPrintCard { break-inside: avoid; }
+  .qrPrintCard--bordered { border-color: #d4d4d4; }
 }
 
 .roleSplit { display: grid; grid-template-columns: 240px 1fr; border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden; min-height: 420px; }
@@ -918,7 +974,9 @@ button.authIcon:hover { filter: brightness(0.94); }
    scan it, then click a tile for the detail panel. Growing to a second line is prevented rather than
    discouraged - the height is fixed and every field clips - because a list where records vary in
    height cannot be scanned. Fields that do not fit are removed with the column picker, never wrapped. */
-.assetTiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* minmax(0, 1fr) z tego samego powodu co w .pageStack: bez tego kolumna gridu rośnie do min-content
+   najszerszego kafelka i lista wychodzi poza ekran zamiast się skurczyć. */
+.assetTiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 
 .assetTile {
   display: flex;
@@ -1016,10 +1074,32 @@ button.authIcon:hover { filter: brightness(0.94); }
 .sortChip:hover { border-color: var(--border-strong); color: var(--text); }
 .sortChip--active { background: var(--brand-soft); border-color: var(--brand); color: var(--text); font-weight: 600; }
 
+/* Kafelek zawsze mieści się w ekranie - lista nigdy nie jedzie w poziomie i nigdy nie rozbija aktywa
+   na dwie linie. Zamiast ściskać wszystkie kolumny do nieczytelnych pasków, kolejne kolumny znikają
+   w kolejności od najmniej istotnej. Nazwa i status zostają do samego końca. */
+@media (max-width: 1400px) { .assetTile__field--warranty { display: none; } }
+@media (max-width: 1280px) { .assetTile__field--value { display: none; } }
+@media (max-width: 1150px) { .assetTile__field--location { display: none; } }
+@media (max-width: 1000px) { .assetTile__field--category { display: none; } }
+
 @media (max-width: 720px) {
   /* Still one line: the tile keeps its height and simply carries fewer fields. */
   .assetTile { gap: 8px; padding: 0 9px; }
   .assetTile__field { font-size: 12px; }
+}
+
+@media (max-width: 900px) { .assetTile__field--tag { display: none; } }
+@media (max-width: 560px) {
+  /* Na telefonie nazwa jest jedyną rzeczą, po której poznaje się rekord - to ona dostaje resztę
+     miejsca, a status kurczy się do swojej treści. */
+  .assetTile__field--person { display: none; }
+  .assetTile__name { flex: 3 1 150px; }
+  .assetTile__status { flex: 0 0 auto; }
+  /* Ikona kategorii powtarza to, co mówi nazwa - na telefonie oddaje jej swoje miejsce. */
+  .assetTile__icon { display: none; }
+  .assetTile { gap: 7px; padding: 0 7px; }
+  /* Przycięty w połowie badge wygląda jak błąd - węższa plakietka mieści całe słowo. */
+  .assetTile__status .status { font-size: 10px; padding: 0 6px; gap: 4px; letter-spacing: 0; }
 }
 
 /* ---- Asset search bar ----------------------------------------------------
@@ -1122,9 +1202,9 @@ button.authIcon:hover { filter: brightness(0.94); }
    Applied to every record list. A row must stay a row at any width or zoom: the card fallback that
    used to kick in below 900px turned each record into a tall stacked panel, which makes a list
    impossible to scan. Text that does not fit is clipped (the full value stays in the title
-   attribute); columns that do not fit are reached by scrolling the table sideways. */
-.tableWrap--oneLine { overflow-x: auto; }
-.tableWrap--oneLine table { min-width: 680px; }
+   attribute); columns that do not fit are dropped, never scrolled to. */
+.tableWrap--oneLine { overflow-x: clip; }
+.tableWrap--oneLine table { width: 100%; min-width: 0; }
 .tableWrap--oneLine td,
 .tableWrap--oneLine th {
   white-space: nowrap;
@@ -1140,4 +1220,25 @@ button.authIcon:hover { filter: brightness(0.94); }
   display: inline;
   margin: 0 0 0 8px;
   color: var(--muted);
+}
+
+/* Im węższy ekran, tym mniej kolumn - zamiast ściskać wszystkie do nieczytelnych pasków albo
+   wypuszczać tabelę poza ekran. Kolumnę oznacza się (th i td) według tego, jak wcześnie może zniknąć;
+   nieoznaczone kolumny - identyfikacja rekordu, status i akcje - zostają zawsze. */
+/* Progi liczone dla obszaru treści, nie dla viewportu: sidebar (276px) i padding (76px) zabierają
+   ~350px, więc iPad w poziomie (1194px) ma na tabelę tylko ~840px. */
+@media (max-width: 1450px) { .colDropLg { display: none; } }
+@media (max-width: 1250px) { .colDropMd { display: none; } }
+@media (max-width: 900px) {
+  .colDropSm { display: none; }
+  .tableWrap--oneLine td, .tableWrap--oneLine th { max-width: none; }
+  /* Bez sidebara zostaje ~310px. Układ stały pozwala komórce zejść poniżej swojej treści (i przyciąć
+     ją wielokropkiem) - inaczej tabela rozpycha się do min-content i wychodzi poza ekran. */
+  .tableWrap--oneLine table { table-layout: fixed; }
+  /* 12px z każdej strony nie mieści się w wąskiej kolumnie zaznaczenia (32px na sam checkbox). */
+  .tableWrap--oneLine td, .tableWrap--oneLine th { padding-left: 6px; padding-right: 6px; }
+  .sectionTitle { flex-wrap: wrap; }
+  /* Kolumna z ikoną/awatarem to na telefonie czysta strata szerokości. */
+  .tableWrap--oneLine td.cell-icon,
+  .tableWrap--oneLine th:empty:nth-child(-n+2) { display: none; }
 }

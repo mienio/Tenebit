@@ -84,19 +84,19 @@ export function AuditLogPage() {
         <Card>
           <div className="tableWrap tableWrap--oneLine">
             <table>
-              <thead><tr><th>{t('audit.colDate')}</th><th>{t('audit.colActor')}</th><th>{t('audit.colAction')}</th><th>{t('audit.colEntity')}</th><th>{t('audit.colDetails')}</th></tr></thead>
+              <thead><tr><th>{t('audit.colDate')}</th><th>{t('audit.colActor')}</th><th>{t('audit.colAction')}</th><th className="colDropSm">{t('audit.colEntity')}</th><th className="colDropLg">{t('audit.colDetails')}</th></tr></thead>
               <tbody>
                 {items.map(entry => (
                   <tr key={entry.id}>
                     <td data-label={t('audit.colDate')}><small>{formatDateTime(entry.createdAt)}</small></td>
                     <td data-label={t('audit.colActor')}>{entry.actorDisplay}</td>
                     <td data-label={t('audit.colAction')}>{activityActionLabel(t, entry.action)}</td>
-                    <td data-label={t('audit.colEntity')}>
+                    <td className="colDropSm" data-label={t('audit.colEntity')}>
                       {auditEntityRoutes[entry.entityType]
                         ? <Link className="status" to={auditEntityRoutes[entry.entityType]}>{auditEntityLabel(t, entry.entityType)}</Link>
                         : <span className="status">{auditEntityLabel(t, entry.entityType)}</span>}
                     </td>
-                    <td data-label={t('audit.colDetails')}>{entry.details ?? '-'}</td>
+                    <td className="colDropLg" data-label={t('audit.colDetails')}>{entry.details ?? '-'}</td>
                   </tr>
                 ))}
               </tbody>

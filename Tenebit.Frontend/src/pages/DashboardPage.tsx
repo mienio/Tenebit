@@ -1,4 +1,4 @@
-import { AlertCircle, Check, ChevronDown, ChevronUp, GripVertical, Plus, RotateCcw, SlidersHorizontal, X, Zap } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, GripVertical, Plus, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import GridLayout, { WidthProvider } from 'react-grid-layout';
@@ -16,20 +16,8 @@ import { useI18n } from '../i18n/I18nProvider';
 import { DashboardWidgetContent } from '../dashboard/DashboardWidgetContent';
 import { useDashboardLayout } from '../dashboard/useDashboardLayout';
 import { GRID_COLS, WIDGET_ICONS, type WidgetType } from '../dashboard/widgetCatalog';
-import type { LimitedResource, ResourceUsage } from '../types/domain';
 
 const AutoWidthGrid = WidthProvider(GridLayout);
-
-const RESOURCE_LABEL_KEYS: Record<LimitedResource, string> = {
-  assets: 'nav.assets',
-  people: 'nav.people',
-  procedures: 'nav.procedures',
-  licenses: 'nav.licenses',
-  locations: 'settings.locations',
-  teams: 'settings.teams',
-  jobProfiles: 'settings.profiles',
-  categories: 'settings.categories'
-};
 
 const onboardingStepRoutes: Record<string, string> = {
   team: '/people',
@@ -42,10 +30,13 @@ const onboardingStepRoutes: Record<string, string> = {
 
 const onboardingDismissKey = 'tenebit_onboarding_dismissed';
 
+// Siatka widgetów ma sens dopiero na prawdziwym desktopie. Na telefonie i tablecie (także iPadzie
+// w poziomie) kafelki w 20-kolumnowym gridzie robiły się węższe niż ich własny tekst, więc poniżej
+// tego progu układamy je w jedną czytelną kolumnę.
 function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 900);
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1200);
   useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= 900);
+    const onResize = () => setIsDesktop(window.innerWidth >= 1200);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -74,14 +65,16 @@ export function DashboardPage() {
 
   const actionCount = data.openAssignments + data.pendingProcedureAcceptances + data.warrantyExpiringSoon.length;
   const subData = subscription.data;
-  // Każdy zasób ma własny licznik przy tym samym progu planu, więc ostrzegamy o tym, który jest najbliżej.
-  const usage = subData?.usage ?? [];
-  const usagePercent = usage.reduce((worst, item) => Math.max(worst, item.limit ? (item.current / item.limit) * 100 : 0), 0);
-  const isNearLimit = usagePercent >= 90;
-  const tightestUsage = usage.reduce<ResourceUsage | null>(
-    (worst, item) => (!worst || item.current / item.limit > worst.current / worst.limit ? item : worst),
-    null);
+  // Pokazujemy wyłącznie licznik aktywów. Limity pozostałych zasobów wynikają z tego samego progu
+  // planu i są opisane w regulaminie - nie wystawiamy ich w interfejsie.
+  const assetUsage = subData?.usage.find(item => item.resource === 'assets') ?? null;
+  const assetPercent = assetUsage && assetUsage.limit > 0 ? Math.min(100, (assetUsage.current / assetUsage.limit) * 100) : 0;
+  const assetsNearLimit = assetPercent >= 90;
   const orderedForMobile = [...layout.widgets].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  // Na wąskim ekranie liczniki idą w zwartą siatkę, a wykresy i listy pełną szerokością - inaczej
+  // sam rząd metryk zajmował kilka ekranów przewijania.
+  const mobileMetrics = orderedForMobile.filter(item => item.i.startsWith('metric-'));
+  const mobilePanels = orderedForMobile.filter(item => !item.i.startsWith('metric-'));
 
   return (
     <div className="pageStack">
@@ -133,46 +126,17 @@ export function DashboardPage() {
 
       {subscription.error && <Card><ErrorState message={subscription.error} onRetry={subscription.reload} /></Card>}
 
-      {subData && isNearLimit && tightestUsage && (
-        <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertCircle size={18} style={{ color: '#c08a1f', flexShrink: 0 }} />
-              <span>{t('dashboard.nearLimit')}</span>
-              <span className="status">{t('dashboard.usageOf', { resource: t(RESOURCE_LABEL_KEYS[tightestUsage.resource]), current: tightestUsage.current, limit: tightestUsage.limit })}</span>
-            </div>
-            {subData.planKey.toLowerCase() !== 'enterprise' && (
-              <Link to="/pricing">
-                <Button icon={<Zap size={16} />}>{t('dashboard.upgradeToPro')}</Button>
-              </Link>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {subData && usage.length > 0 && (
-        <Card>
-          <div>
-            <strong>{t('dashboard.planUsageTitle')}</strong>
-            <p className="muted">{t('dashboard.planUsageDesc', { plan: subData.planName, limit: subData.assetLimit })}</p>
-          </div>
-          <div className="planUsageGrid">
-            {usage.map(item => {
-              const percent = item.limit ? Math.min(100, (item.current / item.limit) * 100) : 0;
-              return (
-                <div className="planUsage" key={item.resource}>
-                  <div className="planUsage__head">
-                    <span>{t(RESOURCE_LABEL_KEYS[item.resource])}</span>
-                    <small>{item.current} / {item.limit}</small>
-                  </div>
-                  <div className="progress planUsage__bar">
-                    <span style={{ width: `${percent}%`, background: percent >= 90 ? '#c08a1f' : undefined }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+      {subData && assetUsage && (
+        <div className="assetQuota">
+          <span className="assetQuota__label">{t('nav.assets')}</span>
+          <span className="assetQuota__count">{assetUsage.current} / {assetUsage.limit}</span>
+          <span className="progress assetQuota__bar">
+            <span style={{ width: `${assetPercent}%`, background: assetsNearLimit ? '#c08a1f' : undefined }} />
+          </span>
+          {assetsNearLimit && subData.planKey.toLowerCase() !== 'enterprise' && (
+            <Link className="inlineAction" to="/pricing">{t('dashboard.upgradeToPro')}</Link>
+          )}
+        </div>
       )}
 
       {onboarding.error && <Card><ErrorState message={onboarding.error} onRetry={onboarding.reload} /></Card>}
@@ -180,9 +144,9 @@ export function DashboardPage() {
       {onboarding.data && onboarding.data.completionPercent < 100 && !onboardingDismissed && (
         <Card>
           <div style={{ padding: '10px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <strong style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>{t('dashboard.gettingStarted')}</strong>
-              <div style={{ flex: 1, background: 'var(--border)', borderRadius: 'var(--radius)', height: '6px', overflow: 'hidden' }}>
+              <div style={{ flex: '1 1 120px', minWidth: '120px', background: 'var(--border)', borderRadius: 'var(--radius)', height: '6px', overflow: 'hidden' }}>
                 <div style={{
                   width: `${onboarding.data.completionPercent}%`,
                   height: '100%',
@@ -245,7 +209,16 @@ export function DashboardPage() {
         </AutoWidthGrid>
       ) : (
         <div className="pageStack">
-          {orderedForMobile.map(item => (
+          {mobileMetrics.length > 0 && (
+            <div className="dashboardMetrics">
+              {mobileMetrics.map(item => (
+                <Card key={item.i} className="metricCard">
+                  <DashboardWidgetContent type={item.i as WidgetType} data={data} editing={false} t={t} />
+                </Card>
+              ))}
+            </div>
+          )}
+          {mobilePanels.map(item => (
             <Card key={item.i}>
               <DashboardWidgetContent type={item.i as WidgetType} data={data} editing={false} t={t} />
             </Card>
