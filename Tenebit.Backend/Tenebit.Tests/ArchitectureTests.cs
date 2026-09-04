@@ -90,7 +90,8 @@ public class ArchitectureTests
         "IAssignmentRepository.FindByPublicTokenHashAsync",
         "IOffboardingCaseRepository.FindByPublicTokenHashAsync",
         "ISubscriptionRepository.GetByStripeCustomerAsync",
-        "ISubscriptionRepository.ListWithStripeSubscriptionAsync"
+        "ISubscriptionRepository.ListWithStripeSubscriptionAsync",
+        "ISubscriptionRepository.ListPendingStripeLinkAsync"
     ];
 
     /// <summary>

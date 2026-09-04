@@ -11,6 +11,8 @@ public interface IPaymentGateway
     Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken);
     PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader);
     Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken);
+    Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken);
+    Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken);
 }
 
 public sealed class PaymentWebhookValidationException : Exception
@@ -20,7 +22,17 @@ public sealed class PaymentWebhookValidationException : Exception
 
 public sealed class PaymentGatewayException : Exception
 {
+    /// <summary>The upstream HTTP status Stripe returned, when the exception came from a non-2xx Stripe
+    /// response - lets callers distinguish an expected business outcome (402: card declined) from an
+    /// unexpected transport/config failure without parsing the message string.</summary>
+    public int? StatusCode { get; }
+
     public PaymentGatewayException(string message, Exception? innerException = null) : base(message, innerException) { }
+
+    public PaymentGatewayException(string message, int statusCode) : base(message)
+    {
+        StatusCode = statusCode;
+    }
 }
 
 public sealed record PaymentWebhookEvent(

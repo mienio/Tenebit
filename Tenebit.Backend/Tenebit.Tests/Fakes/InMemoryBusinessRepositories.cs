@@ -368,6 +368,11 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
     public Task<IReadOnlyList<OrganizationSubscription>> ListWithStripeSubscriptionAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions.Where(x => !string.IsNullOrWhiteSpace(x.StripeSubscriptionId)).ToList());
 
+    public Task<IReadOnlyList<OrganizationSubscription>> ListPendingStripeLinkAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions
+            .Where(x => !string.IsNullOrWhiteSpace(x.StripeCustomerId) && string.IsNullOrWhiteSpace(x.StripeSubscriptionId))
+            .ToList());
+
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
 }
 
@@ -600,6 +605,28 @@ public sealed class FakePaymentGateway : IPaymentGateway
             NextWebhookEvent.CurrentPeriodStart,
             NextWebhookEvent.CurrentPeriodEnd,
             NextWebhookEvent.OrganizationId)));
+
+    public PaymentSubscriptionState? NextSubscriptionByCustomer { get; set; }
+
+    public Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken) =>
+        Task.FromResult(NextSubscriptionByCustomer);
+
+    public PaymentSubscriptionState? NextChangedSubscription { get; set; }
+    public Exception? ThrowOnPlanChange { get; set; }
+    public string? LastPlanChangeIdempotencyKey { get; private set; }
+    public string? LastPlanChangeSubscriptionId { get; private set; }
+    public string? LastPlanChangeNewPlanKey { get; private set; }
+    public int PlanChangeCalls { get; private set; }
+
+    public Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        LastPlanChangeSubscriptionId = subscriptionId;
+        LastPlanChangeNewPlanKey = newPlanKey;
+        LastPlanChangeIdempotencyKey = idempotencyKey;
+        PlanChangeCalls++;
+        if (ThrowOnPlanChange is not null) throw ThrowOnPlanChange;
+        return Task.FromResult(NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set"));
+    }
 }
 
 public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository

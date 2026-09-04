@@ -2,9 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
+using Tenebit.Application.Common;
+using Tenebit.Application.Identity;
 using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Audit;
+using Tenebit.Domain.Identity;
 using Tenebit.Domain.Organizations;
 using Tenebit.Domain.People;
 using Tenebit.Domain.Procedures;
@@ -64,6 +67,20 @@ public sealed class DefaultDataSeeder
             _db.Assets.Add(asset);
             _db.Procedures.Add(procedure);
             _db.ActivityLogs.Add(new ActivityLog(organizationId, "seed.demo.created", "organization", organizationId, "system", "Dane demonstracyjne utworzone przy pierwszym uruchomieniu.", DateTimeOffset.UtcNow));
+        }
+
+        // Jedyne konto logowania w swiezej bazie demo - wlasciciel zasianej organizacji. Tworzone
+        // bezposrednio (nie przez AuthService.Register), wiec od razu oznaczone jako zweryfikowane -
+        // nikt nie odbierze maila weryfikacyjnego dla konta, ktore nikt "nie zarejestrowal".
+        if (!await _db.OrganizationUsers.AnyAsync(x => x.OrganizationId == organizationId, cancellationToken))
+        {
+            var demoEmail = _configuration["Seed:DemoAccountEmail"] ?? "demo@teneb.it";
+            var demoPassword = _configuration["Seed:DemoAccountPassword"] ?? "TenebitDemo#2026";
+            var demoUser = new OrganizationUser(organizationId, demoEmail, "Demo", true);
+            demoUser.Update(demoEmail, "Demo", true, [TenebitRoles.Owner]);
+            demoUser.SetPasswordHash(PasswordHasher.Hash(demoPassword));
+            demoUser.MarkEmailVerified();
+            _db.OrganizationUsers.Add(demoUser);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

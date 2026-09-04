@@ -24,5 +24,10 @@ public interface ISubscriptionRepository
     Task<OrganizationSubscription?> GetByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken);
     Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken);
     Task<IReadOnlyList<OrganizationSubscription>> ListWithStripeSubscriptionAsync(CancellationToken cancellationToken);
+
+    /// <summary>Organizations that have started Stripe billing (have a customer) but never got a
+    /// StripeSubscriptionId linked - the case a lost/failed created-subscription webhook leaves behind,
+    /// which <see cref="ListWithStripeSubscriptionAsync"/> can never discover since it requires one.</summary>
+    Task<IReadOnlyList<OrganizationSubscription>> ListPendingStripeLinkAsync(CancellationToken cancellationToken);
     void Add(OrganizationSubscription subscription);
 }

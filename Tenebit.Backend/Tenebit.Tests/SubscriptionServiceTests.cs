@@ -405,6 +405,93 @@ public class SubscriptionServiceTests
         Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
     }
 
+    [Fact]
+    public async Task ChangePlanAsync_SwitchesLiveSubscriptionToNewPlan()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "cus_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SubscriptionPlan.Growth.Key, result.Value!.PlanKey);
+        Assert.Equal(SubscriptionPlan.Growth.Key, local.PlanKey);
+        Assert.Equal(1, paymentGateway.PlanChangeCalls);
+        Assert.Equal("sub_1", paymentGateway.LastPlanChangeSubscriptionId);
+        Assert.Equal(SubscriptionPlan.Growth.Key, paymentGateway.LastPlanChangeNewPlanKey);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_LeavesPlanUnchanged_WhenStripeDeclinesTheProrationPayment()
+    {
+        // Regression for the free-upgrade audit finding: a declined card must not leave the org on the
+        // higher plan. StripePaymentGateway.ChangeSubscriptionPlanAsync throws a 402 PaymentGatewayException
+        // in that case (see StripePaymentGatewayTests); the service must translate that into a normal
+        // failure result and must not touch local plan state.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.ThrowOnPlanChange = new PaymentGatewayException("Stripe API error 402", 402);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
+        Assert.Equal(1, paymentGateway.PlanChangeCalls);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_IsNoOp_WhenAlreadyOnRequestedPlan()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_RejectsWhenNoLiveStripeSubscription()
+    {
+        var (service, _, _, _, paymentGateway, _, _) = CreateService();
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_RejectsSwitchingToFree()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Free.Key, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+    }
+
     /// <summary>Limity pozostałych zasobów są egzekwowane, ale nie mogą wyciec przez API - w
     /// odpowiedzi jest wyłącznie licznik aktywów.</summary>
     [Fact]

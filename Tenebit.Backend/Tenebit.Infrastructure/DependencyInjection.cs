@@ -40,6 +40,12 @@ public static class DependencyInjection
                     npgsql.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
                     npgsql.CommandTimeout(commandTimeoutSeconds);
                     npgsql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+                    // Bez jawnego schematu Postgres tworzy __EFMigrationsHistory w zaleznosci od
+                    // biezacego search_path ("$user" = rola "tenebit"), wiec przy pierwszym starcie
+                    // (schemat "tenebit" jeszcze nie istnieje) ladowala w "public", a przy kazdym
+                    // kolejnym starcie (schemat juz istnieje) - w "tenebit", gdzie jest pusta. Migrator
+                    // "gubil" w ten sposob cala historie i probowal odtworzyc istniejace tabele.
+                    npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "public");
                 })
                 // Schemat jest własnością ręcznie pisanych migracji SQL (migrate.sql + pliki w Data/Migrations),
                 // a nie generatora EF - `migrations add` w tym projekcie nie działa, więc snapshot z definicji

@@ -54,6 +54,10 @@ public static class SubscriptionEndpoints
                 (await service.CreateCheckoutSessionAsync(request.PlanKey, request.SuccessUrl, request.CancelUrl, cancellationToken, request.PromoCode)).ToHttpResult())
             .WithTags("Subscription");
 
+        api.MapPost("/subscription/change-plan", async (UpgradeRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.ChangePlanAsync(request.PlanKey, cancellationToken)).ToHttpResult())
+            .WithTags("Subscription");
+
         api.MapPost("/subscription/promo-code/validate", async (PromoCodeValidateRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.ValidatePromoCodeAsync(request.PlanKey, request.Code, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");

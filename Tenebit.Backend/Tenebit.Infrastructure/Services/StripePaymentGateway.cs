@@ -158,8 +158,8 @@ public sealed class StripePaymentGateway : IPaymentGateway
                 matchedPlanKey ?? SubscriptionPlan.Free.Key,
                 status,
                 created,
-                RequiredUnix(obj, "current_period_start"),
-                RequiredUnix(obj, "current_period_end"),
+                RequiredPeriodUnix(obj, "current_period_start"),
+                RequiredPeriodUnix(obj, "current_period_end"),
                 ReadOrganizationId(obj));
         }
         catch (PaymentWebhookValidationException)
@@ -177,6 +177,70 @@ public sealed class StripePaymentGateway : IPaymentGateway
         if (string.IsNullOrWhiteSpace(subscriptionId)) return null;
 
         var obj = await GetAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}?expand[]=items.data.price", cancellationToken);
+        return MapSubscriptionState(obj);
+    }
+
+    /// <summary>
+    /// Discovers a customer's subscription without already knowing its Stripe subscription id - used to
+    /// close the gap where a checkout completed but the created-subscription webhook never landed (lost
+    /// delivery, or arrived before this endpoint's signing secret was corrected), so the org never got a
+    /// StripeSubscriptionId to reconcile by id in the first place.
+    /// </summary>
+    public async Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(customerId)) return null;
+
+        var json = await GetAsync(
+            $"subscriptions?customer={Uri.EscapeDataString(customerId)}&status=all&limit=1&expand[]=data.items.data.price",
+            cancellationToken);
+        if (!json.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array || data.GetArrayLength() == 0)
+            return null;
+
+        return MapSubscriptionState(data[0]);
+    }
+
+    /// <summary>
+    /// Switches an existing live subscription directly to a different configured plan - both upgrade and
+    /// downgrade - via Stripe's own subscription-item price swap with automatic proration, instead of
+    /// routing every plan change through Checkout/Billing Portal. Checkout only ever creates the first
+    /// subscription (<see cref="CreateCheckoutSessionAsync"/> refuses a second one on purpose); this is
+    /// the path for changing an already-live one.
+    /// </summary>
+    public async Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        if (!PlanPrices.TryGetValue(newPlanKey, out var newPriceId))
+            throw new PaymentGatewayException($"Stripe:Prices:{newPlanKey} is not configured.");
+
+        var current = await GetAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}?expand[]=items.data.price", cancellationToken);
+        if (!current.TryGetProperty("items", out var items) ||
+            !items.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Array ||
+            data.GetArrayLength() == 0)
+            throw new PaymentGatewayException("Stripe subscription has no item to switch.");
+        var itemId = RequiredString(data[0], "id");
+
+        // create_prorations (the Stripe default) only invoices immediately when the billing interval
+        // changes or the customer moves from free to paid - a same-interval plan swap just books the
+        // proration against the *next* renewal invoice and, with the also-default payment_behavior of
+        // allow_incomplete, applies the new (possibly much higher) plan right away regardless of whether
+        // that eventual charge ever succeeds. That combination let an org switch to any configured plan
+        // for free. always_invoice forces an invoice for the proration now, and error_if_incomplete makes
+        // Stripe reject the whole update - the plan stays unchanged - unless that invoice is actually paid.
+        var form = new Dictionary<string, string>
+        {
+            ["items[0][id]"] = itemId,
+            ["items[0][price]"] = newPriceId,
+            ["proration_behavior"] = "always_invoice",
+            ["payment_behavior"] = "error_if_incomplete",
+            ["expand[0]"] = "items.data.price"
+        };
+
+        var updated = await PostAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}", form, idempotencyKey, cancellationToken);
+        return MapSubscriptionState(updated);
+    }
+
+    private PaymentSubscriptionState MapSubscriptionState(JsonElement obj)
+    {
         var customer = RequiredString(obj, "customer");
         var status = MapStatus(string.Empty, obj.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() : null);
         var matchedPlanKey = MatchConfiguredPlan(obj);
@@ -187,8 +251,8 @@ public sealed class StripePaymentGateway : IPaymentGateway
             RequiredString(obj, "id"),
             matchedPlanKey ?? SubscriptionPlan.Free.Key,
             status,
-            RequiredUnix(obj, "current_period_start"),
-            RequiredUnix(obj, "current_period_end"),
+            RequiredPeriodUnix(obj, "current_period_start"),
+            RequiredPeriodUnix(obj, "current_period_end"),
             ReadOrganizationId(obj));
     }
 
@@ -320,7 +384,7 @@ public sealed class StripePaymentGateway : IPaymentGateway
                     path.Split('?')[0],
                     requestIds?.FirstOrDefault() ?? "unknown",
                     Encoding.UTF8.GetByteCount(body));
-                throw new PaymentGatewayException($"Stripe API error {(int)response.StatusCode}");
+                throw new PaymentGatewayException($"Stripe API error {(int)response.StatusCode}", (int)response.StatusCode);
             }
 
             try
@@ -364,6 +428,25 @@ public sealed class StripePaymentGateway : IPaymentGateway
         element.TryGetProperty(property, out var value) && value.TryGetInt64(out var unix)
             ? DateTimeOffset.FromUnixTimeSeconds(unix)
             : throw new JsonException($"Missing {property}");
+
+    /// <summary>Stripe API versions from 2025-03-31 onward dropped current_period_start/current_period_end
+    /// from the Subscription object itself - the same fields now live only on its first SubscriptionItem.
+    /// Checking the root first keeps this working against older pinned API versions/test fixtures too.</summary>
+    private static DateTimeOffset RequiredPeriodUnix(JsonElement obj, string property)
+    {
+        if (obj.TryGetProperty(property, out var rootValue) && rootValue.TryGetInt64(out var rootUnix))
+            return DateTimeOffset.FromUnixTimeSeconds(rootUnix);
+
+        if (obj.TryGetProperty("items", out var items) &&
+            items.TryGetProperty("data", out var data) &&
+            data.ValueKind == JsonValueKind.Array &&
+            data.GetArrayLength() > 0 &&
+            data[0].TryGetProperty(property, out var itemValue) &&
+            itemValue.TryGetInt64(out var itemUnix))
+            return DateTimeOffset.FromUnixTimeSeconds(itemUnix);
+
+        throw new JsonException($"Missing {property}");
+    }
 
     private static Guid? ReadOrganizationId(JsonElement element)
     {

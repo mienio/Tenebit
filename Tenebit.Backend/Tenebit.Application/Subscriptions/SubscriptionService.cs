@@ -245,16 +245,101 @@ public sealed class SubscriptionService
             return id;
         }, cancellationToken);
 
+        // GetOrCreateCheckoutAttempt reuses attemptId (and so this Idempotency-Key) for up to 30 minutes,
+        // to dedupe genuine double-clicks into one Stripe call. But Stripe ties an Idempotency-Key to the
+        // exact request body it first saw - if the plan or promo code differs between retries within that
+        // window (e.g. no code, then the same checkout retried with a promo code), reusing the key sends a
+        // *different* body under the same key and Stripe rejects it outright. Salting the key with the plan
+        // and discount shape keeps real duplicate retries deduped while giving a differently-shaped retry
+        // its own key.
+        var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}";
         var checkoutUrl = await _paymentGateway.CreateCheckoutSessionAsync(
             subscription.StripeCustomerId!,
             organizationId,
             targetPlan.Key,
             _appLinkBuilder.BuildAppUrl(successPath),
             _appLinkBuilder.BuildAppUrl(cancelPath),
-            $"tenebit-checkout-{attemptId:N}",
+            $"tenebit-checkout-{attemptId:N}-{targetPlan.Key}-{discountKey}",
             cancellationToken,
             discount);
         return Result<string>.Success(checkoutUrl);
+    }
+
+    /// <summary>
+    /// Switches an already-live paid subscription directly to a different paid plan - upgrade or downgrade
+    /// - via Stripe's own proration, without a new Checkout Session (CreateCheckoutSessionAsync refuses to
+    /// create a second one on purpose). Moving to Free still goes through the Billing Portal, since that's
+    /// a cancellation, not a price swap.
+    /// </summary>
+    public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<SubscriptionResponse>.Failure(access.Error!);
+
+        var newPlan = SubscriptionPlan.FromKey(planKey);
+        if (newPlan is null || newPlan.Key == SubscriptionPlan.Free.Key)
+            return Result<SubscriptionResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
+
+        if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(newPlan.Key))
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane dla tego planu."));
+
+        var organizationId = _currentUser.OrganizationId;
+        var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+        if (subscription is null || !subscription.HasLiveStripeSubscription)
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Stripe do zmiany - najpierw ją załóż przez płatność."));
+
+        if (subscription.PlanKey != newPlan.Key)
+        {
+            PaymentSubscriptionState canonical;
+            try
+            {
+                canonical = await _paymentGateway.ChangeSubscriptionPlanAsync(
+                    subscription.StripeSubscriptionId!,
+                    newPlan.Key,
+                    $"tenebit-planchange-{subscription.StripeSubscriptionId}-{newPlan.Key}",
+                    cancellationToken);
+            }
+            catch (PaymentGatewayException ex) when (ex.StatusCode == 402)
+            {
+                // error_if_incomplete (see StripePaymentGateway.ChangeSubscriptionPlanAsync) makes Stripe
+                // reject the whole update when the proration invoice can't be paid - the plan on both
+                // Stripe's side and ours is untouched, so this is a normal declined-card outcome, not a
+                // system failure.
+                return Result<SubscriptionResponse>.Failure(Error.Validation(
+                    "Płatność za zmianę planu nie powiodła się. Sprawdź metodę płatności w portalu rozliczeniowym Stripe i spróbuj ponownie."));
+            }
+
+            if (!string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
+                || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
+                throw new PaymentGatewayException("Stripe subscription association mismatch.");
+
+            subscription.ReconcileFromStripe(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+
+            _activity.Add(new ActivityLog(
+                organizationId,
+                "subscription.plan_changed",
+                "subscription",
+                subscription.Id,
+                _currentUser.Subject,
+                $"Changed to {newPlan.Name}",
+                _clock.UtcNow));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        var usage = await BuildUsageAsync(subscription, cancellationToken);
+        return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
+            subscription.Id,
+            subscription.PlanKey,
+            newPlan.Name,
+            newPlan.AssetLimit,
+            newPlan.MonthlyPrice,
+            newPlan.Currency,
+            usage.First(x => x.Resource == "assets").Current,
+            subscription.Status.ToString(),
+            subscription.CurrentPeriodEnd,
+            usage
+        ));
     }
 
     /// <summary>Opens the Stripe Billing Portal so the owner can manage payment method, invoices, or cancel.</summary>

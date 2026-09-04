@@ -36,6 +36,15 @@ internal sealed class SubscriptionRepository : ISubscriptionRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<OrganizationSubscription>> ListPendingStripeLinkAsync(CancellationToken cancellationToken)
+    {
+        return await _context.Subscriptions
+            .Where(x => x.StripeCustomerId != null && x.StripeCustomerId != ""
+                && (x.StripeSubscriptionId == null || x.StripeSubscriptionId == ""))
+            .OrderBy(x => x.OrganizationId)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(OrganizationSubscription subscription)
     {
         _context.Subscriptions.Add(subscription);

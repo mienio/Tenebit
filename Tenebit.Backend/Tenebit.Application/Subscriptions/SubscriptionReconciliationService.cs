@@ -101,6 +101,71 @@ public sealed class SubscriptionReconciliationService
                 _clock.UtcNow));
         }
 
+        await ReconcilePendingLinksAsync(cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Discovers subscriptions Stripe knows about for organizations that started billing (have a
+    /// customer) but never got their StripeSubscriptionId linked - the gap a lost or rejected
+    /// created-subscription webhook leaves behind. A customer with no Stripe subscription at all (never
+    /// checked out, or cancelled without ever completing one) is the ordinary case, not a failure.</summary>
+    private async Task ReconcilePendingLinksAsync(CancellationToken cancellationToken)
+    {
+        var pending = await _subscriptions.ListPendingStripeLinkAsync(cancellationToken);
+        foreach (var subscription in pending)
+        {
+            PaymentSubscriptionState? canonical;
+            try
+            {
+                canonical = await _paymentGateway.FindSubscriptionByCustomerAsync(subscription.StripeCustomerId!, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                SecurityTelemetry.ReconciliationFailure();
+                _activity.Add(new ActivityLog(
+                    subscription.OrganizationId,
+                    "subscription.stripe_reconciliation_failed",
+                    "subscription",
+                    subscription.Id,
+                    "stripe-reconciliation",
+                    "customer_lookup_failed",
+                    _clock.UtcNow));
+                continue;
+            }
+
+            if (canonical is null) continue;
+
+            var mismatch = !string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
+                || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != subscription.OrganizationId);
+            if (mismatch)
+            {
+                _activity.Add(new ActivityLog(
+                    subscription.OrganizationId,
+                    "subscription.stripe_reconciliation_mismatch",
+                    "subscription",
+                    subscription.Id,
+                    "stripe-reconciliation",
+                    "canonical_association_mismatch",
+                    _clock.UtcNow));
+                continue;
+            }
+
+            subscription.ReconcileFromStripe(
+                canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd,
+                canonical.SubscriptionId, canonical.CustomerId);
+
+            _activity.Add(new ActivityLog(
+                subscription.OrganizationId,
+                "subscription.stripe_reconciled",
+                "subscription",
+                subscription.Id,
+                "stripe-reconciliation",
+                $"{subscription.PlanKey}/{subscription.Status}",
+                _clock.UtcNow));
+        }
     }
 }

@@ -62,4 +62,50 @@ public sealed class SubscriptionReconciliationServiceTests
         Assert.Equal("cus_1", local.StripeCustomerId);
         Assert.Contains(activity.Logs, x => x.Action == "subscription.stripe_reconciliation_mismatch");
     }
+
+    [Fact]
+    public async Task Reconciliation_LinksSubscription_WhenCheckoutCompletedButWebhookNeverArrived()
+    {
+        var subscriptions = new InMemorySubscriptionRepository();
+        var activity = new InMemoryActivityLogRepository();
+        var gateway = new FakePaymentGateway();
+        var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
+        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Free.Key);
+        local.AttachStripeCustomer("cus_1");
+        subscriptions.Add(local);
+        gateway.NextSubscriptionByCustomer = new PaymentSubscriptionState(
+            "cus_1",
+            "sub_1",
+            SubscriptionPlan.Starter.Key,
+            SubscriptionStatus.Active,
+            clock.UtcNow,
+            clock.UtcNow.AddMonths(1),
+            local.OrganizationId);
+
+        var service = new SubscriptionReconciliationService(subscriptions, gateway, activity, new FakeUnitOfWork(), clock);
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
+        Assert.Equal("sub_1", local.StripeSubscriptionId);
+        Assert.Contains(activity.Logs, x => x.Action == "subscription.stripe_reconciled");
+    }
+
+    [Fact]
+    public async Task Reconciliation_LeavesFreeCustomerAlone_WhenStripeHasNoSubscriptionForThem()
+    {
+        var subscriptions = new InMemorySubscriptionRepository();
+        var activity = new InMemoryActivityLogRepository();
+        var gateway = new FakePaymentGateway();
+        var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
+        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Free.Key);
+        local.AttachStripeCustomer("cus_1");
+        subscriptions.Add(local);
+
+        var service = new SubscriptionReconciliationService(subscriptions, gateway, activity, new FakeUnitOfWork(), clock);
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(SubscriptionPlan.Free.Key, local.PlanKey);
+        Assert.Null(local.StripeSubscriptionId);
+        Assert.DoesNotContain(activity.Logs, x => x.Action.StartsWith("subscription.stripe_reconcil"));
+    }
 }
