@@ -30,7 +30,7 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bg); color: var(--text); }
 button, input, select, textarea { font: inherit; }
 a { color: inherit; text-decoration: none; }
-h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .drawerHeader h2, .slide-panel-header h2, .confirmDialog h2, .landing__hero h1, .landing__sectionIntro h2, .landing__pricing h2, .landing__scenarioProof h3, .landing__personaCard h3, .landing__security h2, .landing__securityItem h3, .authCard h1, .legalDocument h1, .legalSections h2, .landing__featureCard h3, .pricing-hero h1, .stateBox h2, .stateBox h3, .reportCard h2, .pricing-card h3 { font-family: var(--font-serif); font-weight: 600; }
+h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .drawerHeader h2, .slide-panel-header h2, .confirmDialog h2, .landing__hero h1, .landing__sectionIntro h2, .landing__pricing h2, .landing__scenarioProof h3, .landing__personaCard h3, .landing__steps h2, .authCard h1, .legalDocument h1, .legalSections h2, .landing__featureCard h3, .pricing-hero h1, .stateBox h2, .stateBox h3, .reportCard h2, .pricing-card h3 { font-family: var(--font-serif); font-weight: 600; }
 .twoFactorSetup__secret, .qrPreview code, code, kbd, pre { font-family: var(--font-mono); }
 
 .appShell { min-height: 100vh; }
@@ -440,7 +440,7 @@ button.authIcon:hover { filter: brightness(0.94); }
    ma rozmiar minimalny równy min-content najszerszego dziecka, więc jedna nieściśliwa sekcja rozpycha
    cały layout ponad `max-width` i robi poziomy scroll na całej stronie głównej. `minmax(0, ...)`
    pozwala dzieciom się zwęzić i zamyka tę klasę błędu raz na zawsze. */
-.landing { max-width: 1180px; margin: 0 auto; padding: 24px 28px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 96px; }
+.landing { max-width: 1180px; margin: 0 auto; padding: 24px 28px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 64px; }
 /* Landmark <main> dla czytnikow ekranu. `display: contents` sprawia, ze element nie tworzy wlasnego
    pudelka, wiec sekcje pozostaja bezposrednimi elementami siatki `.landing` i uklad sie nie zmienia. */
 .landing__main { display: contents; }
@@ -456,7 +456,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__navActions { display: flex; align-items: center; gap: 10px; }
 .landing__registerShort { display: none; }
 
-.landing__hero { text-align: left; max-width: 760px; margin: 42px 0 0; display: grid; gap: 20px; justify-items: start; }
+.landing__hero { text-align: left; max-width: 900px; margin: 42px 0 0; display: grid; gap: 20px; justify-items: start; }
 .landing__hero h1 { font-size: clamp(36px, 5vw, 58px); line-height: 1.02; letter-spacing: -0.045em; margin: 0; }
 .landing__lead { font-size: clamp(17px, 2vw, 19px); line-height: 1.65; color: var(--muted); margin: 0; }
 .landing__heroActions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
@@ -470,19 +470,9 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__trustRow span { display: inline-flex; align-items: center; gap: 6px; }
 .landing__trustRow svg { color: var(--accent); flex-shrink: 0; }
 
-.landing__scenario, .landing__personas, .landing__features, .landing__security, .landing__pricing { min-width: 0; scroll-margin-top: 88px; }
+.landing__scenario, .landing__personas, .landing__features, .landing__pricing { min-width: 0; scroll-margin-top: 88px; }
 .landing__scenario { display: grid; gap: 24px; }
 .landing__scenario .landing__sectionIntro { margin-bottom: 0; }
-.landing__scenarioSteps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.landing__scenarioStep { position: relative; min-width: 0; min-height: 96px; display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 12px; padding: 18px 34px 16px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-soft); color: var(--text); text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease; }
-.landing__scenarioStep:hover { border-color: var(--accent); transform: translateY(-2px); }
-.landing__scenarioStep:focus-visible, .landing__previewTab:focus-visible { outline: 3px solid rgba(166, 58, 46, .22); outline-offset: 2px; }
-.landing__scenarioStep--active { border-color: var(--accent); background: var(--surface); box-shadow: 4px 4px 0 var(--accent-soft); }
-.landing__scenarioStepNumber { position: absolute; top: 9px; right: 10px; color: var(--border-strong); font-family: var(--font-mono); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
-.landing__scenarioStepIcon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--surface); color: var(--accent); }
-.landing__scenarioStep strong, .landing__scenarioStep small { display: block; }
-.landing__scenarioStep strong { padding-right: 4px; font-size: 14px; line-height: 1.3; }
-.landing__scenarioStep small { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .landing__preview { position: relative; min-width: 0; }
 .landing__previewFrame { position: relative; width: 100%; max-width: 1100px; margin: 0 auto; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); box-shadow: 6px 6px 0 rgba(34, 29, 24, .14); animation: landingFadeUp .7s cubic-bezier(.22, 1, .36, 1) .3s both; overflow: hidden; }
 .landing__previewChrome { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
@@ -492,6 +482,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__previewTabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
 .landing__previewTab { min-height: 38px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 650; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
 .landing__previewTab:hover { color: var(--text); }
+.landing__previewTab:focus-visible { outline: 3px solid rgba(166, 58, 46, .22); outline-offset: 2px; }
 .landing__previewTab--active { background: var(--surface); border-color: var(--border-strong); color: var(--accent); }
 .landing__previewSubTabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px 0; }
 .landing__previewSubTabs .landing__previewTab { border-color: var(--border); font-size: 12px; padding: 5px 10px; }
@@ -508,11 +499,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__previewFrame .locationRow__main { padding: 5px 4px; gap: 8px; }
 .landing__previewFrame .locationRow__main small { margin-top: 1px; }
 .landing__previewFrame .dense-table tbody tr:hover { background: none; cursor: default; }
-.landing__previewFrame .dense-table tr.landing__previewFocus td { background: var(--accent-soft); }
-.landing__previewFrame .dense-table tr.landing__previewFocus td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .landing__previewFrame .locationGroup__children .dense-table { margin-top: 2px; }
-.landing__scenarioHint { width: min(960px, 100%); display: flex; align-items: flex-start; gap: 9px; margin: -6px auto 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
-.landing__scenarioHint svg { flex: 0 0 auto; margin-top: 3px; color: var(--accent); }
 .landing__scenarioProof { display: grid; gap: 24px; padding: clamp(22px, 4vw, 42px); }
 .landing__scenarioProofHeader { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; }
 .landing__scenarioProofHeader h3 { margin: 3px 0 0; font-size: clamp(22px, 3vw, 30px); letter-spacing: -.03em; }
@@ -528,7 +515,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__scenarioAuditLine code { margin-left: auto; color: var(--text); font-size: 11px; }
 
 .landing__sectionIntro { max-width: 760px; margin-bottom: 30px; }
-.landing__sectionIntro h2, .landing__pricing h2 { font-size: clamp(28px, 3vw, 36px); letter-spacing: -0.035em; text-align: left; margin: 0; }
+.landing__sectionIntro h2, .landing__steps h2, .landing__pricing h2 { font-size: clamp(28px, 3vw, 36px); letter-spacing: -0.035em; text-align: left; margin: 0; }
 .landing__sectionIntro > p:last-child { margin: 12px 0 0; color: var(--muted); line-height: 1.65; font-size: 16px; }
 .landing__personaGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .landing__personaCard { min-width: 0; min-height: 310px; display: flex; flex-direction: column; align-items: flex-start; padding: 30px; border: 1px solid var(--border-strong); border-top: 4px solid var(--accent); background: var(--surface); box-shadow: var(--shadow); }
@@ -546,23 +533,15 @@ button.authIcon:hover { filter: brightness(0.94); }
 .landing__featureCard > p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; }
 .landing__featureCard blockquote { position: relative; margin: 0; padding: 14px 16px 14px 18px; border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--surface-soft); font-family: var(--font-serif); font-size: 15px; line-height: 1.55; }
 
-.landing__security { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(0, 2fr); gap: clamp(30px, 5vw, 64px); padding: clamp(28px, 5vw, 52px); background: var(--brand); color: #fff; box-shadow: 8px 8px 0 rgba(166, 58, 46, .24); }
-.landing__securityIntro { align-self: center; }
-.landing__securityIntro .eyebrow { color: #e9a79e !important; }
-.landing__securityIntro h2 { margin: 8px 0 16px; font-size: clamp(28px, 3vw, 38px); line-height: 1.08; letter-spacing: -.035em; }
-.landing__securityIntro > p:not(.eyebrow) { margin: 0; color: rgba(255,255,255,.72); line-height: 1.65; }
-.landing__securityLink { display: inline-flex; align-items: center; gap: 8px; margin-top: 22px; border-bottom: 1px solid rgba(255,255,255,.45); padding-bottom: 3px; font-weight: 700; }
-.landing__securityLink:hover { border-bottom-color: #fff; }
-.landing__securityGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid rgba(255,255,255,.2); }
-.landing__securityItem { min-width: 0; padding: 24px; border-right: 1px solid rgba(255,255,255,.16); border-bottom: 1px solid rgba(255,255,255,.16); }
-.landing__securityItem:nth-child(2n) { border-right: 0; }
-.landing__securityItem:nth-last-child(-n + 2) { border-bottom: 0; }
-.landing__securityItem > svg { color: #e9a79e; }
-.landing__securityItem h3 { margin: 16px 0 8px; font-size: 19px; }
-.landing__securityItem p { margin: 0; color: rgba(255,255,255,.7); font-size: 14px; line-height: 1.6; }
+
+.landing__stepGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.landing__stepCard { display: grid; gap: 10px; align-content: start; padding: 24px; border-top: 1px solid var(--border-strong); }
+.landing__stepNumber { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 999px; background: transparent; border: 2px dashed var(--accent); color: var(--accent); font-family: var(--font-mono); font-weight: 600; font-size: 20px; transform: rotate(-4deg); }
+.landing__stepCard h3 { margin: 0; font-size: 19px; }
+.landing__stepCard p { margin: 0; color: var(--muted); line-height: 1.6; font-size: 14px; }
 
 .landing__pricing { text-align: left; }
-.landing__pricing h2 { margin-bottom: 32px; }
+.landing__steps h2, .landing__pricing h2 { margin-bottom: 32px; }
 .landing__pricing .pricing-cards { margin-bottom: 32px; }
 
 .publicFooter { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding: 32px 0 40px; border-top: 1px solid var(--border-strong); color: var(--muted); font-size: 13px; }
@@ -625,10 +604,9 @@ button.authIcon:hover { filter: brightness(0.94); }
   .landing__nav { margin: 0 -16px; padding: 8px 16px; gap: 12px; }
   .landing__navLinks { display: none; }
   .landing__hero { margin-top: 26px; }
-  .landing__scenarioSteps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .landing__featureGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .landing__security { grid-template-columns: 1fr; }
-  .landing__securityIntro { max-width: 640px; }
+  .landing__stepGrid { grid-template-columns: 1fr; }
+  .landing__stepCard { padding: 20px 0; }
   .publicFooter { flex-direction: column; }
   .publicFooter__links { justify-content: flex-start; }
   .legalShell { width: min(100% - 32px, 760px); gap: 32px; padding-top: 16px; }
@@ -652,8 +630,6 @@ button.authIcon:hover { filter: brightness(0.94); }
   .landing__heroActions { width: 100%; display: grid; }
   .landing__heroActions .button { width: 100%; }
   .landing__trustRow { display: grid; }
-  .landing__scenarioSteps { grid-template-columns: 1fr; }
-  .landing__scenarioStep { min-height: 82px; }
   .landing__previewFrame { box-shadow: 3px 3px 0 rgba(34, 29, 24, .14); }
   .landing__previewTabs, .landing__previewSubTabs { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: thin; }
   .landing__previewTabs { padding: 8px; }
@@ -666,9 +642,6 @@ button.authIcon:hover { filter: brightness(0.94); }
   .landing__previewFrame .tableWrap--cards tr { padding: 8px 10px; }
   .landing__previewFrame .tableWrap--cards td { min-width: 0; gap: 10px; }
   .landing__previewFrame .tableWrap--cards td > * { min-width: 0; overflow-wrap: anywhere; }
-  .landing__previewFrame .dense-table tr.landing__previewFocus { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
-  .landing__previewFrame .dense-table tr.landing__previewFocus td, .landing__previewFrame .dense-table tr.landing__previewFocus td:first-child { background: transparent; box-shadow: none; }
-  .landing__scenarioHint { font-size: 13px; }
   .landing__scenarioProof { gap: 18px; padding: 18px 14px; }
   .landing__scenarioProofHeader { grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
   .landing__scenarioProofHeader > .status { grid-column: 2; justify-self: start; }
@@ -683,10 +656,6 @@ button.authIcon:hover { filter: brightness(0.94); }
   .landing__personaOutcome { margin-top: 22px; padding-top: 0; }
   .landing__featureGrid { grid-template-columns: 1fr; }
   .landing__featureCard { padding: 22px; }
-  .landing__security { gap: 26px; padding: 24px 20px; box-shadow: 4px 4px 0 rgba(166, 58, 46, .24); }
-  .landing__securityGrid { grid-template-columns: 1fr; }
-  .landing__securityItem, .landing__securityItem:nth-child(2n), .landing__securityItem:nth-last-child(-n + 2) { border-right: 0; border-bottom: 1px solid rgba(255,255,255,.16); }
-  .landing__securityItem:last-child { border-bottom: 0; }
   .storageNotice { left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: auto; align-items: stretch; flex-direction: column; gap: 12px; }
   .storageNotice button { width: 100%; }
   .legalHeader__actions .button { width: 42px; padding: 0; }
@@ -699,7 +668,6 @@ button.authIcon:hover { filter: brightness(0.94); }
 
 @media (prefers-reduced-motion: reduce) {
   .landing__hero > *, .landing__previewFrame { animation: none; }
-  .landing__scenarioStep { transition: none; }
 }
 
 .qrPreview { display: grid; justify-items: center; gap: 16px; padding: 8px 0; }
@@ -847,10 +815,11 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-hero h1 { margin: 0 0 12px; font-size: clamp(32px, 4.5vw, 46px); font-weight: 730; letter-spacing: -0.045em; }
 .pricing-hero p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.6; max-width: 640px; }
 
-/* `minmax(min(240px, 100%), 1fr)`, nie `minmax(240px, 1fr)`: twarda podłoga 240px dawała siatce
-   min-content 1296px przy pięciu planach (5x240 + 4x24 przerwy). Siatka nie mogła się zwęzić, rozpychała
-   `.landing` i robiła poziomy scroll na 1280px. `min(...)` zdejmuje podłogę, gdy nie ma na nią miejsca. */
-.pricing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
+/* Exactly 5 plans always render here, so the column count is fixed rather than auto-fit: auto-fit
+   picked its track count from available width, and above ~1300px that put only 4 cards per row,
+   wrapping the 5th onto its own row without stretching it. `minmax(0, 1fr)` (no hard floor) lets the
+   columns shrink instead of forcing overflow, same as the auto-fit version did. */
+.pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
 .pricing-card { min-width: 0; padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
 .pricing-card--featured { border-color: var(--brand); box-shadow: 8px 8px 0 rgba(34,29,24,.18); background: var(--brand-soft); transform: scale(1.045); z-index: 1; }
 .pricing-card__badge { position: absolute; top: -12px; left: 24px; padding: 6px 12px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
@@ -866,6 +835,21 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-features svg { color: var(--success); flex: 0 0 20px; margin-top: 2px; }
 .pricing-cta { width: 100%; min-height: 48px; }
 .pricing-confirm-detail { margin-top: -4px; padding: 10px 12px; border-radius: var(--radius); background: var(--brand-soft); font-size: 14px; }
+
+/* Managing billing (incl. cancellation) is a rare, deliberate action, not something to weigh the same
+   as an upgrade CTA - a full-size branded button here read as an invitation to cancel. Kept as a small,
+   gray, off-to-the-side link instead. */
+.pricing-manageBilling { display: flex; justify-content: flex-end; margin: -12px 0 8px; }
+.pricing-manageBilling .button { min-height: auto; padding: 4px 2px; border: none; background: none; color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: normal; font-family: var(--font-sans); text-decoration: underline; text-underline-offset: 2px; }
+.pricing-manageBilling .button:hover { color: var(--text); background: none; }
+
+/* Promo codes are an edge case, not a checkout step everyone should see next to the price - collapsed
+   behind a small link by default so it never competes with the actual payment summary. */
+.pricing-promoToggle { background: none; border: none; padding: 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.pricing-promoToggle:hover { color: var(--text); }
+.pricing-promoField { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+.pricing-promoField .input { min-height: 34px; padding: 0 10px; font-size: 13px; max-width: 160px; }
+.pricing-promoField .button { min-height: 34px; padding: 0 10px; font-size: 12px; }
 
 /* Pięć planów mieści się obok siebie dopiero od ~1300px. Poniżej schodzimy na trzy kolumny zamiast
    ściskać karty do nieczytelnej szerokości. */

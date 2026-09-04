@@ -41,7 +41,10 @@ export function PublicAssetScanPage() {
   const { t } = useI18n();
   const auth = useAuth();
   const params = useParams<{ organizationId?: string; assetId?: string; code?: string }>();
-  const target = useMemo(() => readScanTarget(params), [params.organizationId, params.assetId, params.code]);
+  const target = useMemo(
+    () => readScanTarget({ organizationId: params.organizationId, assetId: params.assetId, code: params.code }),
+    [params.organizationId, params.assetId, params.code],
+  );
   const [state, setState] = useState<ScanState>({ kind: 'loading' });
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);

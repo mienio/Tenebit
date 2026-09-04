@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Field, TextInput } from '../components/FormFields';
+import { TextInput } from '../components/FormFields';
 import { PricingCards, type PlanDef } from '../components/PricingCards';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
@@ -15,11 +15,16 @@ export function PricingPage() {
   const [upgrading, setUpgrading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanDef | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [promoOpen, setPromoOpen] = useState(false);
   const [promoInput, setPromoInput] = useState('');
   const [promoStatus, setPromoStatus] = useState<'idle' | 'checking' | 'applied' | 'error'>('idle');
   const [promoError, setPromoError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<PromoCodeValidation | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
+  // A live paid Stripe subscription already exists - switching plans must reuse it (Stripe proration)
+  // instead of Checkout, which only ever creates a first subscription and refuses to create a second.
+  const hasLivePaidSubscription = !!subscription.data && subscription.data.planKey !== 'free' && subscription.data.status !== 'Cancelled';
 
   useEffect(() => {
     if (!message) return;
@@ -28,6 +33,7 @@ export function PricingPage() {
   }, [message]);
 
   function openCheckout(plan: PlanDef) {
+    setPromoOpen(false);
     setPromoInput('');
     setPromoStatus('idle');
     setPromoError(null);
@@ -65,14 +71,33 @@ export function PricingPage() {
     if (!selectedPlan) return;
     const plan = selectedPlan;
     const promoCode = appliedPromo?.code;
+    const isPlanChange = hasLivePaidSubscription;
     setSelectedPlan(null);
     setUpgrading(true);
     try {
-      const checkoutUrl = await api.createCheckoutSession(plan.key, '/dashboard?checkout=success', '/pricing?checkout=cancelled', promoCode);
-      window.location.assign(checkoutUrl);
+      if (isPlanChange) {
+        await api.changeSubscriptionPlan(plan.key);
+        await subscription.reload();
+        setMessage({ type: 'success', text: t('pricing.changePlanSuccess', { plan: plan.name }) });
+        setUpgrading(false);
+      } else {
+        const checkoutUrl = await api.createCheckoutSession(plan.key, '/dashboard?checkout=success', '/pricing?checkout=cancelled', promoCode);
+        window.location.assign(checkoutUrl);
+      }
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
       setUpgrading(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    setPortalLoading(true);
+    try {
+      const portalUrl = await api.createBillingPortalSession('/pricing');
+      window.location.assign(portalUrl);
+    } catch (error) {
+      setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
+      setPortalLoading(false);
     }
   }
 
@@ -110,7 +135,7 @@ export function PricingPage() {
                 icon={<Zap size={18} />}
                 className="pricing-cta"
               >
-                {upgrading ? t('pricing.processing') : t('pricing.upgrade', { plan: plan.name })}
+                {upgrading ? t('pricing.processing') : t(hasLivePaidSubscription ? 'pricing.changePlan' : 'pricing.upgrade', { plan: plan.name })}
               </Button>
             );
           }
@@ -118,19 +143,27 @@ export function PricingPage() {
         }}
       />
 
+      {hasLivePaidSubscription && (
+        <div className="pricing-manageBilling">
+          <Button variant="ghost" onClick={openBillingPortal} disabled={portalLoading}>
+            {t('pricing.manageBilling')}
+          </Button>
+        </div>
+      )}
+
       <ConfirmDialog
         open={selectedPlan !== null}
         variant="positive"
-        title={t('pricing.confirmUpgradeTitle')}
-        description={selectedPlan ? t('pricing.confirmUpgrade', { plan: selectedPlan.name, price: totalPrice.toFixed(2) }) : ''}
-        confirmLabel={selectedPlan ? t('pricing.upgrade', { plan: selectedPlan.name }) : ''}
+        title={t(hasLivePaidSubscription ? 'pricing.confirmChangePlanTitle' : 'pricing.confirmUpgradeTitle')}
+        description={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.confirmChangePlan' : 'pricing.confirmUpgrade', { plan: selectedPlan.name, price: totalPrice.toFixed(2) }) : ''}
+        confirmLabel={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.changePlan' : 'pricing.upgrade', { plan: selectedPlan.name }) : ''}
         onConfirm={confirmUpgrade}
         onClose={closeCheckout}
       >
         {selectedPlan && (
           <>
             <p className="pricing-confirm-detail">
-              {t('pricing.confirmUpgradeDetail', { limit: selectedPlan.limitLabel })}
+              {t(hasLivePaidSubscription ? 'pricing.confirmChangePlanDetail' : 'pricing.confirmUpgradeDetail', { limit: selectedPlan.limitLabel })}
             </p>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 14 }}>
@@ -148,33 +181,39 @@ export function PricingPage() {
               <span>{totalPrice.toFixed(2)} €{t('landing.perMonth')}</span>
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <Field label={t('pricing.checkout.promoLabel')}>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <TextInput
-                    value={promoInput}
-                    onChange={e => setPromoInput(e.target.value.toUpperCase())}
-                    placeholder={t('pricing.checkout.promoPlaceholder')}
-                    disabled={promoStatus === 'applied'}
-                  />
-                  {promoStatus === 'applied' ? (
-                    <Button type="button" variant="secondary" onClick={removePromoCode}>{t('pricing.checkout.promoRemove')}</Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      icon={<Tag size={16} />}
-                      onClick={applyPromoCode}
-                      disabled={!promoInput.trim() || promoStatus === 'checking'}
-                    >
-                      {promoStatus === 'checking' ? t('pricing.checkout.promoChecking') : t('pricing.checkout.promoApply')}
-                    </Button>
-                  )}
-                </div>
-              </Field>
-              {promoStatus === 'error' && promoError && <p className="formMessage formMessage--error" style={{ marginTop: 8 }}>{promoError}</p>}
-              {promoStatus === 'applied' && <p className="formMessage formMessage--success" style={{ marginTop: 8 }}>{t('pricing.checkout.promoApplied', { code: appliedPromo!.code })}</p>}
-            </div>
+            {!hasLivePaidSubscription && (
+              <div style={{ marginTop: 16 }}>
+                {!promoOpen && promoStatus !== 'applied' ? (
+                  <button type="button" className="pricing-promoToggle" onClick={() => setPromoOpen(true)}>
+                    {t('pricing.checkout.promoLabel')}
+                  </button>
+                ) : (
+                  <div className="pricing-promoField">
+                    <TextInput
+                      value={promoInput}
+                      onChange={e => setPromoInput(e.target.value.toUpperCase())}
+                      disabled={promoStatus === 'applied'}
+                      autoFocus
+                    />
+                    {promoStatus === 'applied' ? (
+                      <Button type="button" variant="ghost" onClick={removePromoCode}>{t('pricing.checkout.promoRemove')}</Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={<Tag size={14} />}
+                        onClick={applyPromoCode}
+                        disabled={!promoInput.trim() || promoStatus === 'checking'}
+                      >
+                        {promoStatus === 'checking' ? t('pricing.checkout.promoChecking') : t('pricing.checkout.promoApply')}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {promoStatus === 'error' && promoError && <p className="formMessage formMessage--error" style={{ marginTop: 8 }}>{promoError}</p>}
+                {promoStatus === 'applied' && <p className="formMessage formMessage--success" style={{ marginTop: 8 }}>{t('pricing.checkout.promoApplied', { code: appliedPromo!.code })}</p>}
+              </div>
+            )}
           </>
         )}
       </ConfirmDialog>

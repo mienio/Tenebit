@@ -7,20 +7,16 @@ import {
   CheckCircle2,
   Clock3,
   ClipboardCheck,
-  FileCheck2,
   Headphones,
   History,
   KeyRound,
   Laptop,
   List,
-  LockKeyhole,
   MapPin,
   Monitor,
   PackageCheck,
   QrCode,
-  ShieldCheck,
   Smartphone,
-  UserPlus,
   UserRoundCheck,
   Users,
   Wrench
@@ -206,27 +202,11 @@ const previewTabs = [
 
 type PreviewTab = typeof previewTabs[number]['key'];
 
-type ScenarioStep = 'person' | 'asset' | 'procedure' | 'proof';
-
-const scenarioSteps: { key: ScenarioStep; preview: PreviewTab; icon: typeof UserPlus }[] = [
-  { key: 'person', preview: 'people', icon: UserPlus },
-  { key: 'asset', preview: 'assets', icon: PackageCheck },
-  { key: 'procedure', preview: 'procedures', icon: ClipboardCheck },
-  { key: 'proof', preview: 'proof', icon: CheckCircle2 }
-];
-
 const personas = [
   { key: 'it', icon: Laptop },
   { key: 'hr', icon: UserRoundCheck },
   { key: 'operations', icon: Building2 },
   { key: 'management', icon: BarChart3 }
-] as const;
-
-const securityItems = [
-  { key: 'roles', icon: ShieldCheck },
-  { key: 'twoFactor', icon: LockKeyhole },
-  { key: 'history', icon: History },
-  { key: 'proofs', icon: FileCheck2 }
 ] as const;
 
 function handleTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number, count: number, select: (nextIndex: number) => void) {
@@ -252,11 +232,12 @@ const features = [
   { icon: BarChart3, key: 'reports' }
 ] as const;
 
+const steps = ['step1', 'step2', 'step3'];
+
 export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
-  const [previewTab, setPreviewTab] = useState<PreviewTab>('people');
-  const [scenarioStep, setScenarioStep] = useState<ScenarioStep | null>('person');
+  const [previewTab, setPreviewTab] = useState<PreviewTab>('assets');
   const [assetView, setAssetView] = useState<'list' | 'byLocation'>('list');
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>('room101');
   const office = previewOfficeByLanguage[language];
@@ -286,7 +267,7 @@ export function LandingPage() {
     const personIndex = row.personIndex;
     const person = personIndex != null ? previewPeopleRows[personIndex] : null;
     return (
-      <tr key={row.tag} className={scenarioStep === 'asset' && row.personIndex === 1 ? 'landing__previewFocus' : undefined}>
+      <tr key={row.tag}>
         <td className="cell-icon"><div className="table-icon"><row.icon size={16} /></div></td>
         <td data-label={t('assets.nameLabel')}><strong>{row.name}</strong></td>
         <td data-label={t('assets.colTag')}>{row.tag}</td>
@@ -342,16 +323,8 @@ export function LandingPage() {
     timeStyle: 'short',
     timeZone: 'UTC'
   }).format(new Date(Date.UTC(2026, 6, 15, 10, 23)));
-  const activeScenario = scenarioSteps.find(step => step.key === scenarioStep);
-
-  const selectScenarioStep = (step: typeof scenarioSteps[number]) => {
-    setScenarioStep(step.key);
-    setPreviewTab(step.preview);
-    if (step.preview === 'assets') setAssetView('list');
-  };
 
   const selectPreviewTab = (tab: PreviewTab) => {
-    setScenarioStep(null);
     setPreviewTab(tab);
   };
 
@@ -373,7 +346,6 @@ export function LandingPage() {
           <a href="#demo">{t('landing.navDemo')}</a>
           <a href="#dla-kogo">{t('landing.navRoles')}</a>
           <a href="#funkcje">{t('landing.navFeatures')}</a>
-          <a href="#bezpieczenstwo">{t('landing.navSecurity')}</a>
           <a href="#cennik">{t('landing.navPricing')}</a>
         </nav>
         <div className="landing__navActions">
@@ -412,30 +384,6 @@ export function LandingPage() {
         <div className="landing__sectionIntro">
           <p className="eyebrow">{t('landing.scenario.eyebrow')}</p>
           <h2 id="landing-scenario-title">{t('landing.scenario.title')}</h2>
-          <p>{t('landing.scenario.lead')}</p>
-        </div>
-
-        <div className="landing__scenarioSteps" role="group" aria-label={t('landing.scenario.title')}>
-          {scenarioSteps.map((step, index) => (
-            <button
-              key={step.key}
-              id={`landing-scenario-${step.key}`}
-              type="button"
-              aria-pressed={scenarioStep === step.key}
-              aria-controls="landing-preview-panel"
-              tabIndex={scenarioStep === step.key || (scenarioStep === null && index === 0) ? 0 : -1}
-              className={`landing__scenarioStep${scenarioStep === step.key ? ' landing__scenarioStep--active' : ''}`}
-              onClick={() => selectScenarioStep(step)}
-              onKeyDown={event => handleTabKey(event, index, scenarioSteps.length, nextIndex => selectScenarioStep(scenarioSteps[nextIndex]))}
-            >
-              <span className="landing__scenarioStepNumber">0{index + 1}</span>
-              <span className="landing__scenarioStepIcon"><step.icon size={18} /></span>
-              <span>
-                <strong>{t(`landing.scenario.step.${step.key}.title`)}</strong>
-                <small>{t(`landing.scenario.step.${step.key}.text`)}</small>
-              </span>
-            </button>
-          ))}
         </div>
 
         <div className="landing__preview">
@@ -473,14 +421,14 @@ export function LandingPage() {
               <button
                 type="button"
                 className={`landing__previewTab${assetView === 'list' ? ' landing__previewTab--active' : ''}`}
-                onClick={() => { setScenarioStep(null); setAssetView('list'); }}
+                onClick={() => setAssetView('list')}
               >
                 <List size={14} /> {t('landing.preview.viewList')}
               </button>
               <button
                 type="button"
                 className={`landing__previewTab${assetView === 'byLocation' ? ' landing__previewTab--active' : ''}`}
-                onClick={() => { setScenarioStep(null); setAssetView('byLocation'); }}
+                onClick={() => setAssetView('byLocation')}
               >
                 <MapPin size={14} /> {t('landing.preview.viewByLocation')}
               </button>
@@ -531,8 +479,8 @@ export function LandingPage() {
                   <tr><th></th><th>{t('people.colFullName')}</th><th>{t('people.colJobTitle')}</th><th>{t('people.colTeam')}</th><th>{t('landing.preview.colLocation')}</th></tr>
                 </thead>
                 <tbody>
-                  {previewPeopleRows.map((row, index) => (
-                    <tr key={row.name} className={scenarioStep === 'person' && index === 1 ? 'landing__previewFocus' : undefined}>
+                  {previewPeopleRows.map(row => (
+                    <tr key={row.name}>
                       <td className="cell-icon"><Avatar name={row.name} size={28} /></td>
                       <td data-label={t('people.colFullName')}><strong>{row.name}</strong></td>
                       <td data-label={t('people.colJobTitle')}>{row.jobTitle}</td>
@@ -583,7 +531,7 @@ export function LandingPage() {
                   {previewProcedureRows.map(row => {
                     const person = row.personIndex != null ? previewPeopleRows[row.personIndex] : null;
                     return (
-                      <tr key={row.title} className={scenarioStep === 'procedure' && row.personIndex === 1 ? 'landing__previewFocus' : undefined}>
+                      <tr key={row.title}>
                         <td className="cell-icon"><div className="table-icon"><ClipboardCheck size={16} /></div></td>
                         <td data-label={t('procedures.titleLabel')}><strong>{row.title}</strong></td>
                         <td data-label={t('procedures.versionLabel')}>{row.version}</td>
@@ -622,10 +570,6 @@ export function LandingPage() {
           </div>
         </div>
         </div>
-        <p className="landing__scenarioHint">
-          <ArrowRight size={16} />
-          {activeScenario ? t(`landing.scenario.step.${activeScenario.key}.text`) : t('landing.scenario.explore')}
-        </p>
       </section>
 
       <section className="landing__personas" id="dla-kogo" aria-labelledby="landing-personas-title">
@@ -667,20 +611,15 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="landing__security" id="bezpieczenstwo" aria-labelledby="landing-security-title">
-        <div className="landing__securityIntro">
-          <p className="eyebrow">{t('landing.security.eyebrow')}</p>
-          <h2 id="landing-security-title">{t('landing.security.title')}</h2>
-          <p>{t('landing.security.lead')}</p>
-          <Link to="/privacy" className="landing__securityLink">{t('landing.security.privacy')} <ArrowRight size={16} /></Link>
-        </div>
-        <div className="landing__securityGrid">
-          {securityItems.map(item => (
-            <article className="landing__securityItem" key={item.key}>
-              <item.icon size={22} />
-              <h3>{t(`landing.security.${item.key}.title`)}</h3>
-              <p>{t(`landing.security.${item.key}.text`)}</p>
-            </article>
+      <section className="landing__steps">
+        <h2>{t('landing.stepsHeadline')}</h2>
+        <div className="landing__stepGrid">
+          {steps.map((key, index) => (
+            <div className="landing__stepCard" key={key}>
+              <span className="landing__stepNumber">{index + 1}</span>
+              <h3>{t(`landing.${key}.title`)}</h3>
+              <p>{t(`landing.${key}.text`)}</p>
+            </div>
           ))}
         </div>
       </section>
