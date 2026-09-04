@@ -108,4 +108,31 @@ public sealed class SubscriptionReconciliationServiceTests
         Assert.Null(local.StripeSubscriptionId);
         Assert.DoesNotContain(activity.Logs, x => x.Action.StartsWith("subscription.stripe_reconcil"));
     }
+
+    [Fact]
+    public async Task Reconciliation_ClearsPendingDowngrade_OnceStripesScheduledPhaseHasApplied()
+    {
+        // The subscription schedule (see StripePaymentGateway.ScheduleDowngradeAsync) applies the price
+        // switch on Stripe's side with no action from us - reconciliation just needs to notice the
+        // canonical plan has caught up to what was pending and drop the local "still waiting" markers.
+        var subscriptions = new InMemorySubscriptionRepository();
+        var activity = new InMemoryActivityLogRepository();
+        var gateway = new FakePaymentGateway();
+        var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
+        var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Growth.Key);
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, clock.UtcNow.AddMonths(-1), clock.UtcNow, "sub_1", "cus_1", clock.UtcNow.AddMonths(-1));
+        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, clock.UtcNow, "sched_1");
+        subscriptions.Add(local);
+        gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
+            "cus_1", "sub_1", SubscriptionPlan.Starter.Key, SubscriptionStatus.Active,
+            clock.UtcNow, clock.UtcNow.AddMonths(1), local.OrganizationId);
+
+        var service = new SubscriptionReconciliationService(subscriptions, gateway, activity, new FakeUnitOfWork(), clock);
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
+        Assert.Null(local.PendingPlanKey);
+        Assert.Null(local.PendingPlanEffectiveAt);
+        Assert.Null(local.StripeScheduleId);
+    }
 }

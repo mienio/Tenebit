@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+﻿CREATE TABLE IF NOT EXISTS public."__EFMigrationsHistory" (
     "MigrationId" character varying(150) NOT NULL,
     "ProductVersion" character varying(32) NOT NULL,
     CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY ("MigrationId")
@@ -8,7 +8,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
         IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'tenebit') THEN
             CREATE SCHEMA tenebit;
         END IF;
@@ -17,7 +17,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.activity_logs (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -34,7 +34,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.asset_categories (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -52,7 +52,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.asset_status_settings (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -67,7 +67,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.assets (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -95,7 +95,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.assignments (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -115,7 +115,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.device_trust_tokens (
         "Id" uuid NOT NULL,
         "OrganizationUserId" uuid NOT NULL,
@@ -129,7 +129,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.email_verification_tokens (
         "Id" uuid NOT NULL,
         "OrganizationUserId" uuid NOT NULL,
@@ -144,7 +144,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.external_logins (
         "Id" uuid NOT NULL,
         "OrganizationUserId" uuid NOT NULL,
@@ -158,7 +158,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.job_profiles (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -173,7 +173,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.organization_users (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -192,7 +192,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.organizations (
         "Id" uuid NOT NULL,
         "Name" character varying(160) NOT NULL,
@@ -209,7 +209,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.password_reset_tokens (
         "Id" uuid NOT NULL,
         "OrganizationUserId" uuid NOT NULL,
@@ -224,7 +224,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.people (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -248,7 +248,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.procedures (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -268,7 +268,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.refresh_tokens (
         "Id" uuid NOT NULL,
         "OrganizationUserId" uuid NOT NULL,
@@ -283,7 +283,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.sent_alerts (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -297,7 +297,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.subscriptions (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -315,7 +315,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.teams (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -330,7 +330,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.asset_field_definitions (
         "CategoryId" uuid NOT NULL,
         "Id" uuid NOT NULL,
@@ -348,7 +348,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.asset_field_values (
         "AssetId" uuid NOT NULL,
         "FieldKey" character varying(80) NOT NULL,
@@ -361,7 +361,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.assignment_assets (
         "AssignmentId" uuid NOT NULL,
         "AssetId" uuid NOT NULL,
@@ -375,7 +375,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.procedure_acceptances (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -393,7 +393,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.job_profile_asset_categories (
         "JobProfileId" uuid NOT NULL,
         "AssetCategoryId" uuid NOT NULL,
@@ -405,7 +405,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.job_profile_procedures (
         "JobProfileId" uuid NOT NULL,
         "ProcedureId" uuid NOT NULL,
@@ -417,7 +417,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.organization_user_roles (
         "UserId" uuid NOT NULL,
         "Role" character varying(80) NOT NULL,
@@ -429,7 +429,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.procedure_documents (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -448,182 +448,182 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_activity_logs_OrganizationId_CreatedAt" ON tenebit.activity_logs ("OrganizationId", "CreatedAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_asset_categories_OrganizationId_Name" ON tenebit.asset_categories ("OrganizationId", "Name");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_asset_status_settings_OrganizationId_StatusKey" ON tenebit.asset_status_settings ("OrganizationId", "StatusKey");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_assets_OrganizationId_AssetTag" ON tenebit.assets ("OrganizationId", "AssetTag");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_assets_OrganizationId_Status" ON tenebit.assets ("OrganizationId", "Status");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_assignments_OrganizationId_ProtocolNumber" ON tenebit.assignments ("OrganizationId", "ProtocolNumber");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_device_trust_tokens_OrganizationUserId_TokenHash" ON tenebit.device_trust_tokens ("OrganizationUserId", "TokenHash");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_email_verification_tokens_OrganizationUserId" ON tenebit.email_verification_tokens ("OrganizationUserId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_email_verification_tokens_TokenHash" ON tenebit.email_verification_tokens ("TokenHash");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_external_logins_Provider_ProviderUserId" ON tenebit.external_logins ("Provider", "ProviderUserId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_job_profiles_OrganizationId_Name" ON tenebit.job_profiles ("OrganizationId", "Name");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_organization_users_Email" ON tenebit.organization_users ("Email");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_organization_users_OrganizationId_Email" ON tenebit.organization_users ("OrganizationId", "Email");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_password_reset_tokens_OrganizationUserId" ON tenebit.password_reset_tokens ("OrganizationUserId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_password_reset_tokens_TokenHash" ON tenebit.password_reset_tokens ("TokenHash");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_people_OrganizationId_Email" ON tenebit.people ("OrganizationId", "Email");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_procedure_acceptances_AssignmentId" ON tenebit.procedure_acceptances ("AssignmentId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_procedure_documents_OrganizationId_ProcedureId_UploadedAt" ON tenebit.procedure_documents ("OrganizationId", "ProcedureId", "UploadedAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_procedure_documents_ProcedureId" ON tenebit.procedure_documents ("ProcedureId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_procedures_OrganizationId_Title_Version" ON tenebit.procedures ("OrganizationId", "Title", "Version");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE INDEX "IX_refresh_tokens_OrganizationUserId" ON tenebit.refresh_tokens ("OrganizationUserId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_refresh_tokens_TokenHash" ON tenebit.refresh_tokens ("TokenHash");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_sent_alerts_OrganizationId_AlertKey_EntityId" ON tenebit.sent_alerts ("OrganizationId", "AlertKey", "EntityId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_subscriptions_OrganizationId" ON tenebit.subscriptions ("OrganizationId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE UNIQUE INDEX "IX_teams_OrganizationId_Name" ON tenebit.teams ("OrganizationId", "Name");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
     CREATE TABLE tenebit.asset_locations (
         "Id" uuid PRIMARY KEY,
         "OrganizationId" uuid NOT NULL,
@@ -641,8 +641,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260812200749_InitialCreate') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260812200749_InitialCreate', '10.0.4');
     END IF;
 END $EF$;
@@ -652,21 +652,21 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     ALTER TABLE tenebit.asset_status_settings ADD "BackgroundColor" character varying(9) NOT NULL DEFAULT '';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     ALTER TABLE tenebit.asset_status_settings ADD "Color" character varying(9) NOT NULL DEFAULT '';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.dashboard_layouts (
         "OrganizationUserId" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -679,7 +679,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.dashboard_snapshots (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -696,7 +696,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.licenses (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -714,7 +714,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.person_relation_types (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -728,7 +728,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.role_permissions (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -742,7 +742,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.two_factor_recovery_codes (
         "Id" uuid NOT NULL,
         "OrganizationUserId" uuid NOT NULL,
@@ -756,7 +756,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE TABLE tenebit.license_seats (
         "LicenseId" uuid NOT NULL,
         "PersonId" uuid NOT NULL,
@@ -769,36 +769,36 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE UNIQUE INDEX "IX_dashboard_snapshots_OrganizationId_SnapshotDate" ON tenebit.dashboard_snapshots ("OrganizationId", "SnapshotDate");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE UNIQUE INDEX "IX_person_relation_types_OrganizationId_Name" ON tenebit.person_relation_types ("OrganizationId", "Name");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE UNIQUE INDEX "IX_role_permissions_OrganizationId_RoleKey_PermissionKey" ON tenebit.role_permissions ("OrganizationId", "RoleKey", "PermissionKey");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
     CREATE INDEX "IX_two_factor_recovery_codes_OrganizationUserId" ON tenebit.two_factor_recovery_codes ("OrganizationUserId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813062004_SyncModelAfterMerge') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813062004_SyncModelAfterMerge', '10.0.4');
     END IF;
 END $EF$;
@@ -808,36 +808,36 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
     ALTER TABLE tenebit.procedure_acceptances ADD "ConfirmationHash" text;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
     ALTER TABLE tenebit.procedure_acceptances ADD "ConfirmedIp" text;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
     ALTER TABLE tenebit.assignments ADD "AcceptanceHash" text;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
     ALTER TABLE tenebit.assignments ADD "AcceptedIp" text;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063321_AddAssignmentIntegrityFields') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813063321_AddAssignmentIntegrityFields', '10.0.4');
     END IF;
 END $EF$;
@@ -847,29 +847,29 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
     ALTER TABLE tenebit.subscriptions ADD "StripeCustomerId" character varying(80);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
     ALTER TABLE tenebit.subscriptions ADD "StripeSubscriptionId" character varying(80);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
     CREATE INDEX "IX_subscriptions_StripeCustomerId" ON tenebit.subscriptions ("StripeCustomerId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813063636_AddStripeSubscriptionFields') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813063636_AddStripeSubscriptionFields', '10.0.4');
     END IF;
 END $EF$;
@@ -879,71 +879,71 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     ALTER TABLE tenebit.people ADD "DeactivatedAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     ALTER TABLE tenebit.people ADD "EmploymentEndsAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     ALTER TABLE tenebit.people ADD "EmploymentStatus" character varying(40);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     ALTER TABLE tenebit.people ADD "PreferredLanguage" character varying(8);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     UPDATE tenebit.people SET "EmploymentStatus" = CASE WHEN "IsActive" THEN 'Active' ELSE 'Inactive' END;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     ALTER TABLE tenebit.people ALTER COLUMN "EmploymentStatus" SET NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     CREATE INDEX "IX_people_OrganizationId_EmploymentEndsAt" ON tenebit.people ("OrganizationId", "EmploymentEndsAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     CREATE INDEX "IX_people_OrganizationId_EmploymentStatus" ON tenebit.people ("OrganizationId", "EmploymentStatus");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
     ALTER TABLE tenebit.people ADD CONSTRAINT "CK_people_employment_status_active" CHECK (("EmploymentStatus" IN ('Active', 'Offboarding') AND "IsActive") OR ("EmploymentStatus" = 'Inactive' AND NOT "IsActive"));
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813153647_AddPersonEmploymentLifecycle') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813153647_AddPersonEmploymentLifecycle', '10.0.4');
     END IF;
 END $EF$;
@@ -953,43 +953,43 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
     ALTER TABLE tenebit.assignment_assets ADD "ReturnLocation" character varying(200);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
     ALTER TABLE tenebit.assignment_assets ADD "ReturnNotes" character varying(800);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
     ALTER TABLE tenebit.assignment_assets ADD "ReturnResolution" character varying(40);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
     ALTER TABLE tenebit.assignment_assets ADD "ReturnedAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
     ALTER TABLE tenebit.assignment_assets ADD "ReturnedBy" character varying(240);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813204056_AddAssignmentAssetPartialReturn') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813204056_AddAssignmentAssetPartialReturn', '10.0.4');
     END IF;
 END $EF$;
@@ -999,42 +999,42 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     ALTER TABLE tenebit.asset_categories ADD "PhotoOnIssue" character varying(40) NOT NULL DEFAULT 'Disabled';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     ALTER TABLE tenebit.asset_categories ADD "PhotoOnReturn" character varying(40) NOT NULL DEFAULT 'Disabled';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     ALTER TABLE tenebit.asset_categories ADD "PostReturnDisposition" character varying(40) NOT NULL DEFAULT 'Reuse';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     ALTER TABLE tenebit.asset_categories ADD "ReturnChecklistTemplate" character varying(2000);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     ALTER TABLE tenebit.asset_categories ADD "ReturnHandlingMode" character varying(40) NOT NULL DEFAULT 'DirectToStock';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     CREATE TABLE tenebit.asset_inspections (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1058,15 +1058,15 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
     CREATE INDEX "IX_asset_inspections_OrganizationId_AssetId_Outcome" ON tenebit.asset_inspections ("OrganizationId", "AssetId", "Outcome");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813210619_AddReturnPolicyAndAssetInspections') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813210619_AddReturnPolicyAndAssetInspections', '10.0.4');
     END IF;
 END $EF$;
@@ -1076,7 +1076,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
     CREATE TABLE tenebit.asset_evidence (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1104,29 +1104,29 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
     CREATE INDEX "IX_asset_evidence_AssetId" ON tenebit.asset_evidence ("AssetId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
     CREATE INDEX "IX_asset_evidence_AssignmentId" ON tenebit.asset_evidence ("AssignmentId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
     CREATE INDEX "IX_asset_evidence_OrganizationId_AssetId_Phase" ON tenebit.asset_evidence ("OrganizationId", "AssetId", "Phase");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260813214418_AddAssetEvidence') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260813214418_AddAssetEvidence', '10.0.4');
     END IF;
 END $EF$;
@@ -1136,92 +1136,92 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     DROP INDEX tenebit."IX_sent_alerts_OrganizationId_AlertKey_EntityId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ALTER COLUMN "SentAt" DROP NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "AttemptCount" integer NOT NULL DEFAULT 0;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "CreatedAt" timestamp with time zone NOT NULL DEFAULT TIMESTAMPTZ '-infinity';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "DigestId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "LastError" character varying(500);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "NextAttemptAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "RecipientEmail" character varying(320) NOT NULL DEFAULT '';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.sent_alerts ADD "Status" character varying(20) NOT NULL DEFAULT '';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.organizations ADD "QuietHoursEnd" time without time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     ALTER TABLE tenebit.organizations ADD "QuietHoursStart" time without time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
     CREATE UNIQUE INDEX "IX_sent_alerts_OrganizationId_AlertKey_EntityId_RecipientEmail" ON tenebit.sent_alerts ("OrganizationId", "AlertKey", "EntityId", "RecipientEmail");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814061115_AddSentAlertDeliveryTrackingAndQuietHours') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814061115_AddSentAlertDeliveryTrackingAndQuietHours', '10.0.4');
     END IF;
 END $EF$;
@@ -1231,57 +1231,57 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.organizations ADD "CapturePublicIp" character varying(20) NOT NULL DEFAULT 'Off';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.organizations ADD "DefaultEvidenceRetentionMonths" integer;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.organizations ADD "PrivacyContactEmail" character varying(320);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.organizations ADD "PrivacyNoticeUrl" character varying(600);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.organizations ADD "PublicIpRetentionDays" integer;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.asset_evidence ADD "LegalHold" boolean NOT NULL DEFAULT FALSE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
     ALTER TABLE tenebit.asset_evidence ADD "RedactedAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814102642_AddEvidencePrivacyAndRetention') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814102642_AddEvidencePrivacyAndRetention', '10.0.4');
     END IF;
 END $EF$;
@@ -1291,7 +1291,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
     CREATE TABLE tenebit.offboarding_cases (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1325,7 +1325,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
     CREATE TABLE tenebit.offboarding_items (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1358,29 +1358,29 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
     CREATE UNIQUE INDEX "IX_offboarding_cases_OrganizationId_PersonId_Open" ON tenebit.offboarding_cases ("OrganizationId", "PersonId") WHERE "Status" NOT IN ('Completed', 'Cancelled');
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
     CREATE INDEX "IX_offboarding_items_OffboardingCaseId" ON tenebit.offboarding_items ("OffboardingCaseId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
     CREATE INDEX "IX_offboarding_items_OrganizationId_OffboardingCaseId" ON tenebit.offboarding_items ("OrganizationId", "OffboardingCaseId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814104147_AddOffboardingCaseAndItems') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814104147_AddOffboardingCaseAndItems', '10.0.4');
     END IF;
 END $EF$;
@@ -1390,15 +1390,15 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814111728_AddOffboardingItemIdToAssetInspection') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814111728_AddOffboardingItemIdToAssetInspection') THEN
     ALTER TABLE tenebit.asset_inspections ADD "OffboardingItemId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814111728_AddOffboardingItemIdToAssetInspection') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814111728_AddOffboardingItemIdToAssetInspection') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814111728_AddOffboardingItemIdToAssetInspection', '10.0.4');
     END IF;
 END $EF$;
@@ -1408,7 +1408,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE TABLE tenebit.asset_audit_campaigns (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1429,7 +1429,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE TABLE tenebit.asset_audit_participants (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1450,7 +1450,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE TABLE tenebit.asset_audit_items (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1475,57 +1475,57 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE INDEX "IX_asset_audit_campaigns_OrganizationId_Status" ON tenebit.asset_audit_campaigns ("OrganizationId", "Status");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE INDEX "IX_asset_audit_items_CampaignId" ON tenebit.asset_audit_items ("CampaignId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE INDEX "IX_asset_audit_items_OrganizationId_CampaignId" ON tenebit.asset_audit_items ("OrganizationId", "CampaignId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE INDEX "IX_asset_audit_items_OrganizationId_ParticipantId" ON tenebit.asset_audit_items ("OrganizationId", "ParticipantId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE INDEX "IX_asset_audit_items_ParticipantId" ON tenebit.asset_audit_items ("ParticipantId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE INDEX "IX_asset_audit_participants_CampaignId" ON tenebit.asset_audit_participants ("CampaignId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
     CREATE UNIQUE INDEX "IX_asset_audit_participants_OrganizationId_CampaignId_PersonId" ON tenebit.asset_audit_participants ("OrganizationId", "CampaignId", "PersonId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814121001_AddAssetAuditCampaigns') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814121001_AddAssetAuditCampaigns', '10.0.4');
     END IF;
 END $EF$;
@@ -1535,63 +1535,63 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.assets ADD "IsReservable" boolean NOT NULL DEFAULT FALSE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.assets ADD "MaxReservationDays" integer;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.assets ADD "ReservationInstructions" character varying(2000);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.asset_categories ADD "CatalogDescription" character varying(600);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.asset_categories ADD "CatalogImageUrl" character varying(600);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.asset_categories ADD "CatalogName" character varying(120);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.asset_categories ADD "ReservationMode" character varying(40) NOT NULL DEFAULT 'RequestByCategory';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     ALTER TABLE tenebit.asset_categories ADD "VisibleInEmployeeCatalog" boolean NOT NULL DEFAULT FALSE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     CREATE TABLE tenebit.equipment_kit_definitions (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1607,7 +1607,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     CREATE TABLE tenebit.equipment_kit_definition_items (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1622,29 +1622,29 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     CREATE INDEX "IX_equipment_kit_definition_items_KitDefinitionId" ON tenebit.equipment_kit_definition_items ("KitDefinitionId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     CREATE INDEX "IX_equipment_kit_definition_items_OrganizationId_KitDefinition~" ON tenebit.equipment_kit_definition_items ("OrganizationId", "KitDefinitionId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
     CREATE UNIQUE INDEX "IX_equipment_kit_definitions_OrganizationId_Name" ON tenebit.equipment_kit_definitions ("OrganizationId", "Name");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814130828_AddReservationCatalogFoundation') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814130828_AddReservationCatalogFoundation', '10.0.4');
     END IF;
 END $EF$;
@@ -1654,7 +1654,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE TABLE tenebit.equipment_reservations (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1685,7 +1685,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE TABLE tenebit.equipment_reservation_items (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1705,43 +1705,43 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE INDEX "IX_equipment_reservation_items_OrganizationId_AssetId" ON tenebit.equipment_reservation_items ("OrganizationId", "AssetId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE INDEX "IX_equipment_reservation_items_OrganizationId_ReservationId" ON tenebit.equipment_reservation_items ("OrganizationId", "ReservationId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE INDEX "IX_equipment_reservation_items_ReservationId" ON tenebit.equipment_reservation_items ("ReservationId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE INDEX "IX_equipment_reservations_OrganizationId_RequesterPersonId" ON tenebit.equipment_reservations ("OrganizationId", "RequesterPersonId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
     CREATE INDEX "IX_equipment_reservations_OrganizationId_Status_StartAt_EndAt" ON tenebit.equipment_reservations ("OrganizationId", "Status", "StartAt", "EndAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814132320_AddEquipmentReservations') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814132320_AddEquipmentReservations', '10.0.4');
     END IF;
 END $EF$;
@@ -1751,15 +1751,15 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814153000_AddAssignmentIntegrityVersion') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814153000_AddAssignmentIntegrityVersion') THEN
     ALTER TABLE tenebit.assignments ADD "IntegrityVersion" integer NOT NULL DEFAULT 1;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814153000_AddAssignmentIntegrityVersion') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814153000_AddAssignmentIntegrityVersion') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814153000_AddAssignmentIntegrityVersion', '10.0.4');
     END IF;
 END $EF$;
@@ -1769,7 +1769,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
     CREATE TABLE tenebit.alert_digest_settings (
         "OrganizationId" uuid NOT NULL,
         "Frequency" character varying(20) NOT NULL,
@@ -1788,7 +1788,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
     CREATE TABLE tenebit.alert_rules (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1809,22 +1809,22 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
     CREATE INDEX "IX_alert_rules_OrganizationId" ON tenebit.alert_rules ("OrganizationId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
     CREATE UNIQUE INDEX "IX_alert_rules_OrganizationId_Type" ON tenebit.alert_rules ("OrganizationId", "Type");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814161313_AddAlertRulesAndDigestSettings') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814161313_AddAlertRulesAndDigestSettings', '10.0.4');
     END IF;
 END $EF$;
@@ -1834,7 +1834,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814180000_SeedDefaultAlertRules') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814180000_SeedDefaultAlertRules') THEN
     INSERT INTO tenebit.alert_rules ("Id", "OrganizationId", "Type", "IsEnabled", "ThresholdDays", "DeliveryMode", "RecipientMode", "CustomEmails", "CooldownDays", "CreatedAt", "UpdatedAt", "UpdatedBy")
     SELECT gen_random_uuid(), o."Id", d."Type", d."IsEnabled", d."ThresholdDays", 'Immediate', 'OwnersAndAdmins', NULL, 1, now(), now(), 'system'
     FROM tenebit.organizations o
@@ -1859,8 +1859,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260814180000_SeedDefaultAlertRules') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260814180000_SeedDefaultAlertRules') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260814180000_SeedDefaultAlertRules', '10.0.4');
     END IF;
 END $EF$;
@@ -1870,7 +1870,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260815125601_AddServiceTickets') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260815125601_AddServiceTickets') THEN
     CREATE TABLE tenebit.service_tickets (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -1895,15 +1895,15 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260815125601_AddServiceTickets') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260815125601_AddServiceTickets') THEN
     CREATE INDEX "IX_service_tickets_OrganizationId_AssetId_Status" ON tenebit.service_tickets ("OrganizationId", "AssetId", "Status");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260815125601_AddServiceTickets') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260815125601_AddServiceTickets') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260815125601_AddServiceTickets', '10.0.4');
     END IF;
 END $EF$;
@@ -1913,22 +1913,22 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816141723_AddQrLabelSettings') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816141723_AddQrLabelSettings') THEN
     ALTER TABLE tenebit.organizations ADD "QrLabelShowName" boolean NOT NULL DEFAULT TRUE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816141723_AddQrLabelSettings') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816141723_AddQrLabelSettings') THEN
     ALTER TABLE tenebit.organizations ADD "QrLabelShowTag" boolean NOT NULL DEFAULT TRUE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816141723_AddQrLabelSettings') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816141723_AddQrLabelSettings') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260816141723_AddQrLabelSettings', '10.0.4');
     END IF;
 END $EF$;
@@ -1938,29 +1938,29 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
     ALTER TABLE tenebit.assignments ADD "PublicTokenExpiresAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
     ALTER TABLE tenebit.assignments ADD "PublicTokenHash" character varying(128);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
     ALTER TABLE tenebit.assignments ADD "PublicTokenRevokedAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260816204908_AddAssignmentPublicToken') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260816204908_AddAssignmentPublicToken', '10.0.4');
     END IF;
 END $EF$;
@@ -1970,204 +1970,204 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_items DROP CONSTRAINT "FK_asset_audit_items_asset_audit_campaigns_CampaignId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_items DROP CONSTRAINT "FK_asset_audit_items_asset_audit_participants_ParticipantId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_participants DROP CONSTRAINT "FK_asset_audit_participants_asset_audit_campaigns_CampaignId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_evidence DROP CONSTRAINT "FK_asset_evidence_assets_AssetId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_evidence DROP CONSTRAINT "FK_asset_evidence_assignments_AssignmentId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.equipment_reservation_items DROP CONSTRAINT "FK_equipment_reservation_items_equipment_reservations_Reservat~";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.offboarding_items DROP CONSTRAINT "FK_offboarding_items_offboarding_cases_OffboardingCaseId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_offboarding_items_OffboardingCaseId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_equipment_reservation_items_ReservationId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_asset_evidence_AssetId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_asset_evidence_AssignmentId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_asset_audit_participants_CampaignId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_asset_audit_items_CampaignId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     DROP INDEX tenebit."IX_asset_audit_items_ParticipantId";
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.offboarding_cases ADD CONSTRAINT "AK_offboarding_cases_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.equipment_reservations ADD CONSTRAINT "AK_equipment_reservations_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.assignments ADD CONSTRAINT "AK_assignments_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.assets ADD CONSTRAINT "AK_assets_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_participants ADD CONSTRAINT "AK_asset_audit_participants_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_campaigns ADD CONSTRAINT "AK_asset_audit_campaigns_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     CREATE INDEX "IX_asset_evidence_OrganizationId_AssignmentId" ON tenebit.asset_evidence ("OrganizationId", "AssignmentId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_items ADD CONSTRAINT "FK_asset_audit_items_asset_audit_campaigns_OrganizationId_Camp~" FOREIGN KEY ("OrganizationId", "CampaignId") REFERENCES tenebit.asset_audit_campaigns ("OrganizationId", "Id") ON DELETE CASCADE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_items ADD CONSTRAINT "FK_asset_audit_items_asset_audit_participants_OrganizationId_P~" FOREIGN KEY ("OrganizationId", "ParticipantId") REFERENCES tenebit.asset_audit_participants ("OrganizationId", "Id") ON DELETE CASCADE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_audit_participants ADD CONSTRAINT "FK_asset_audit_participants_asset_audit_campaigns_Organization~" FOREIGN KEY ("OrganizationId", "CampaignId") REFERENCES tenebit.asset_audit_campaigns ("OrganizationId", "Id") ON DELETE CASCADE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_evidence ADD CONSTRAINT "FK_asset_evidence_assets_OrganizationId_AssetId" FOREIGN KEY ("OrganizationId", "AssetId") REFERENCES tenebit.assets ("OrganizationId", "Id") ON DELETE CASCADE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_evidence ADD CONSTRAINT "FK_asset_evidence_assignments_OrganizationId_AssignmentId" FOREIGN KEY ("OrganizationId", "AssignmentId") REFERENCES tenebit.assignments ("OrganizationId", "Id") ON DELETE SET NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.equipment_reservation_items ADD CONSTRAINT "FK_equipment_reservation_items_equipment_reservations_Organiza~" FOREIGN KEY ("OrganizationId", "ReservationId") REFERENCES tenebit.equipment_reservations ("OrganizationId", "Id") ON DELETE CASCADE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.offboarding_items ADD CONSTRAINT "FK_offboarding_items_offboarding_cases_OrganizationId_Offboard~" FOREIGN KEY ("OrganizationId", "OffboardingCaseId") REFERENCES tenebit.offboarding_cases ("OrganizationId", "Id") ON DELETE CASCADE;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817062322_AddTenantCompositeForeignKeys') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817062322_AddTenantCompositeForeignKeys', '10.0.4');
     END IF;
 END $EF$;
@@ -2177,22 +2177,22 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817084613_AddPublicTokenHashIndexes') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817084613_AddPublicTokenHashIndexes') THEN
     CREATE UNIQUE INDEX "IX_offboarding_cases_PublicTokenHash" ON tenebit.offboarding_cases ("PublicTokenHash") WHERE "PublicTokenHash" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817084613_AddPublicTokenHashIndexes') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817084613_AddPublicTokenHashIndexes') THEN
     CREATE UNIQUE INDEX "IX_assignments_PublicTokenHash" ON tenebit.assignments ("PublicTokenHash") WHERE "PublicTokenHash" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817084613_AddPublicTokenHashIndexes') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817084613_AddPublicTokenHashIndexes') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817084613_AddPublicTokenHashIndexes', '10.0.4');
     END IF;
 END $EF$;
@@ -2202,15 +2202,15 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817090221_AddDeviceTrustTokenRevocation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817090221_AddDeviceTrustTokenRevocation') THEN
     ALTER TABLE tenebit.device_trust_tokens ADD "RevokedAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817090221_AddDeviceTrustTokenRevocation') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817090221_AddDeviceTrustTokenRevocation') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817090221_AddDeviceTrustTokenRevocation', '10.0.4');
     END IF;
 END $EF$;
@@ -2220,14 +2220,14 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
     ALTER TABLE tenebit.subscriptions ADD "LastWebhookEventAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
     CREATE TABLE tenebit.processed_stripe_events (
         "Id" uuid NOT NULL,
         "EventId" character varying(120) NOT NULL,
@@ -2239,15 +2239,15 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
     CREATE UNIQUE INDEX "IX_processed_stripe_events_EventId" ON tenebit.processed_stripe_events ("EventId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091513_AddStripeWebhookIdempotency') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817091513_AddStripeWebhookIdempotency', '10.0.4');
     END IF;
 END $EF$;
@@ -2257,141 +2257,141 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.teams ADD CONSTRAINT "AK_teams_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.people ADD CONSTRAINT "AK_people_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.asset_inspections ADD CONSTRAINT "AK_asset_inspections_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_teams_OrganizationId_ManagerId" ON tenebit.teams ("OrganizationId", "ManagerId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_service_tickets_OrganizationId_AssetInspectionId" ON tenebit.service_tickets ("OrganizationId", "AssetInspectionId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_people_OrganizationId_ManagerId" ON tenebit.people ("OrganizationId", "ManagerId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_people_OrganizationId_TeamId" ON tenebit.people ("OrganizationId", "TeamId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_offboarding_cases_OrganizationId_ProcessOwnerId" ON tenebit.offboarding_cases ("OrganizationId", "ProcessOwnerId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_job_profiles_OrganizationId_DefaultManagerId" ON tenebit.job_profiles ("OrganizationId", "DefaultManagerId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_assets_OrganizationId_AssignedPersonId" ON tenebit.assets ("OrganizationId", "AssignedPersonId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     CREATE INDEX "IX_assets_OrganizationId_TeamId" ON tenebit.assets ("OrganizationId", "TeamId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.assets ADD CONSTRAINT "FK_assets_people_OrganizationId_AssignedPersonId" FOREIGN KEY ("OrganizationId", "AssignedPersonId") REFERENCES tenebit.people ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.assets ADD CONSTRAINT "FK_assets_teams_OrganizationId_TeamId" FOREIGN KEY ("OrganizationId", "TeamId") REFERENCES tenebit.teams ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.job_profiles ADD CONSTRAINT "FK_job_profiles_people_OrganizationId_DefaultManagerId" FOREIGN KEY ("OrganizationId", "DefaultManagerId") REFERENCES tenebit.people ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.offboarding_cases ADD CONSTRAINT "FK_offboarding_cases_people_OrganizationId_ProcessOwnerId" FOREIGN KEY ("OrganizationId", "ProcessOwnerId") REFERENCES tenebit.people ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.people ADD CONSTRAINT "FK_people_people_OrganizationId_ManagerId" FOREIGN KEY ("OrganizationId", "ManagerId") REFERENCES tenebit.people ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.people ADD CONSTRAINT "FK_people_teams_OrganizationId_TeamId" FOREIGN KEY ("OrganizationId", "TeamId") REFERENCES tenebit.teams ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.service_tickets ADD CONSTRAINT "FK_service_tickets_asset_inspections_OrganizationId_AssetInspe~" FOREIGN KEY ("OrganizationId", "AssetInspectionId") REFERENCES tenebit.asset_inspections ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
     ALTER TABLE tenebit.teams ADD CONSTRAINT "FK_teams_people_OrganizationId_ManagerId" FOREIGN KEY ("OrganizationId", "ManagerId") REFERENCES tenebit.people ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817091726_AddTenantCompositeForeignKeysP0') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817091726_AddTenantCompositeForeignKeysP0', '10.0.4');
     END IF;
 END $EF$;
@@ -2401,22 +2401,22 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817101658_AddFieldEncryptionColumnSizing') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817101658_AddFieldEncryptionColumnSizing') THEN
     ALTER TABLE tenebit.organization_users ALTER COLUMN "TotpSecret" TYPE character varying(200);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817101658_AddFieldEncryptionColumnSizing') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817101658_AddFieldEncryptionColumnSizing') THEN
     ALTER TABLE tenebit.licenses ALTER COLUMN "LicenseKey" TYPE character varying(600);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817101658_AddFieldEncryptionColumnSizing') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817101658_AddFieldEncryptionColumnSizing') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817101658_AddFieldEncryptionColumnSizing', '10.0.4');
     END IF;
 END $EF$;
@@ -2426,8 +2426,8 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817123926_AddLocationEntityMapping') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817123926_AddLocationEntityMapping') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817123926_AddLocationEntityMapping', '10.0.4');
     END IF;
 END $EF$;
@@ -2437,15 +2437,15 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817172359_AddAssetAuditParticipantTokenHashIndex') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817172359_AddAssetAuditParticipantTokenHashIndex') THEN
     CREATE UNIQUE INDEX "IX_asset_audit_participants_TokenHash" ON tenebit.asset_audit_participants ("TokenHash") WHERE "TokenHash" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817172359_AddAssetAuditParticipantTokenHashIndex') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817172359_AddAssetAuditParticipantTokenHashIndex') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817172359_AddAssetAuditParticipantTokenHashIndex', '10.0.4');
     END IF;
 END $EF$;
@@ -2455,14 +2455,14 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
     ALTER TABLE tenebit.organization_users ADD "SecurityStamp" uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
     UPDATE tenebit.organization_users
     SET "SecurityStamp" = "Id"
     WHERE "SecurityStamp" = '00000000-0000-0000-0000-000000000000';
@@ -2471,7 +2471,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
     ALTER TABLE tenebit.organization_users ALTER COLUMN "SecurityStamp" TYPE uuid;
     ALTER TABLE tenebit.organization_users ALTER COLUMN "SecurityStamp" DROP DEFAULT;
     END IF;
@@ -2479,8 +2479,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817184500_AddOrganizationUserSecurityStamp') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817184500_AddOrganizationUserSecurityStamp', '10.0.4');
     END IF;
 END $EF$;
@@ -2490,14 +2490,14 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
     ALTER TABLE tenebit.organization_users ADD "PersonId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
     UPDATE tenebit.organization_users AS u
     SET "PersonId" = p."Id"
     FROM tenebit.people AS p
@@ -2509,22 +2509,22 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
     CREATE UNIQUE INDEX "IX_organization_users_OrganizationId_PersonId" ON tenebit.organization_users ("OrganizationId", "PersonId") WHERE "PersonId" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
     ALTER TABLE tenebit.organization_users ADD CONSTRAINT "FK_organization_users_people_OrganizationId_PersonId" FOREIGN KEY ("OrganizationId", "PersonId") REFERENCES tenebit.people ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817201500_AddOrganizationUserPersonLink') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817201500_AddOrganizationUserPersonLink', '10.0.4');
     END IF;
 END $EF$;
@@ -2534,7 +2534,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.assignment_assets ADD COLUMN "OrganizationId" uuid;
     UPDATE tenebit.assignment_assets c
     SET "OrganizationId" = p."OrganizationId"
@@ -2567,7 +2567,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
     DO $tenant_preflight$
     BEGIN
         IF EXISTS (
@@ -2733,7 +2733,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
     ALTER TABLE tenebit.asset_categories ADD CONSTRAINT "AK_asset_categories_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     ALTER TABLE tenebit.procedures ADD CONSTRAINT "AK_procedures_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
     ALTER TABLE tenebit.job_profiles ADD CONSTRAINT "AK_job_profiles_OrganizationId_Id" UNIQUE ("OrganizationId", "Id");
@@ -2836,7 +2836,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
     CREATE INDEX "IX_tenant_assets_category" ON tenebit.assets ("OrganizationId", "CategoryId");
     CREATE INDEX "IX_tenant_inspections_assignment" ON tenebit.asset_inspections ("OrganizationId", "AssignmentId");
     CREATE INDEX "IX_tenant_inspections_offboarding_item" ON tenebit.asset_inspections ("OrganizationId", "OffboardingItemId");
@@ -2871,8 +2871,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260817214500_CompleteTenantCompositeForeignKeys') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260817214500_CompleteTenantCompositeForeignKeys', '10.0.4');
     END IF;
 END $EF$;
@@ -2882,35 +2882,35 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.refresh_tokens ADD "FamilyId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.refresh_tokens ADD "ParentTokenId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.refresh_tokens ADD "ReplacedByTokenId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     UPDATE tenebit.refresh_tokens SET "FamilyId" = "Id" WHERE "FamilyId" IS NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.refresh_tokens ALTER COLUMN "FamilyId" TYPE uuid;
     ALTER TABLE tenebit.refresh_tokens ALTER COLUMN "FamilyId" SET NOT NULL;
     END IF;
@@ -2918,56 +2918,56 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_refresh_tokens_FamilyId" ON tenebit.refresh_tokens ("FamilyId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_refresh_tokens_ParentTokenId" ON tenebit.refresh_tokens ("ParentTokenId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_refresh_tokens_ReplacedByTokenId" ON tenebit.refresh_tokens ("ReplacedByTokenId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.refresh_tokens ADD CONSTRAINT "FK_refresh_tokens_refresh_tokens_ParentTokenId" FOREIGN KEY ("ParentTokenId") REFERENCES tenebit.refresh_tokens ("Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.refresh_tokens ADD CONSTRAINT "FK_refresh_tokens_refresh_tokens_ReplacedByTokenId" FOREIGN KEY ("ReplacedByTokenId") REFERENCES tenebit.refresh_tokens ("Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.licenses ALTER COLUMN "LicenseKey" TYPE text;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.asset_field_values ALTER COLUMN "Value" TYPE text;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE TABLE tenebit.background_job_runs (
         "JobName" character varying(120) NOT NULL,
         "LastRunAt" timestamp with time zone NOT NULL,
@@ -2978,7 +2978,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE TABLE tenebit.oauth_transactions (
         "Id" uuid NOT NULL,
         "StateHash" character varying(128) NOT NULL,
@@ -2997,21 +2997,21 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE UNIQUE INDEX "IX_oauth_transactions_StateHash" ON tenebit.oauth_transactions ("StateHash");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_oauth_transactions_ExpiresAt" ON tenebit.oauth_transactions ("ExpiresAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE TABLE tenebit.two_factor_challenges (
         "Id" uuid NOT NULL,
         "TicketHash" character varying(128) NOT NULL,
@@ -3027,42 +3027,42 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE UNIQUE INDEX "IX_two_factor_challenges_TicketHash" ON tenebit.two_factor_challenges ("TicketHash");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_two_factor_challenges_ExpiresAt" ON tenebit.two_factor_challenges ("ExpiresAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_two_factor_challenges_OrganizationUserId" ON tenebit.two_factor_challenges ("OrganizationUserId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.asset_locations ADD "NormalizedName" character varying(120);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     UPDATE tenebit.asset_locations SET "NormalizedName" = upper(trim("Name"));
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     DO $$
     BEGIN
         IF EXISTS (
@@ -3079,7 +3079,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.asset_locations ALTER COLUMN "NormalizedName" TYPE character varying(120);
     ALTER TABLE tenebit.asset_locations ALTER COLUMN "NormalizedName" SET NOT NULL;
     END IF;
@@ -3087,49 +3087,49 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE UNIQUE INDEX "UX_asset_locations_sibling_name" ON tenebit.asset_locations ("OrganizationId", "ParentId", "NormalizedName") WHERE "ParentId" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE UNIQUE INDEX "UX_asset_locations_root_name" ON tenebit.asset_locations ("OrganizationId", "NormalizedName") WHERE "ParentId" IS NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.assets ADD "LocationId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.people ADD "LocationId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     UPDATE tenebit.assets SET "Location" = NULL WHERE "Location" IS NOT NULL AND btrim("Location") = ''; 
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     UPDATE tenebit.people SET "Location" = NULL WHERE "Location" IS NOT NULL AND btrim("Location") = ''; 
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     WITH RECURSIVE location_paths AS (
         SELECT l."Id", l."OrganizationId", l."ParentId", l."Name"::text AS full_path
         FROM tenebit.asset_locations l
@@ -3166,7 +3166,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     DO $$
     BEGIN
         IF EXISTS (SELECT 1 FROM tenebit.assets WHERE "Location" IS NOT NULL AND "LocationId" IS NULL) THEN
@@ -3181,36 +3181,36 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_assets_OrganizationId_LocationId" ON tenebit.assets ("OrganizationId", "LocationId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     CREATE INDEX "IX_people_OrganizationId_LocationId" ON tenebit.people ("OrganizationId", "LocationId");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.assets ADD CONSTRAINT "FK_assets_asset_locations_OrganizationId_LocationId" FOREIGN KEY ("OrganizationId", "LocationId") REFERENCES tenebit.asset_locations ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
     ALTER TABLE tenebit.people ADD CONSTRAINT "FK_people_asset_locations_OrganizationId_LocationId" FOREIGN KEY ("OrganizationId", "LocationId") REFERENCES tenebit.asset_locations ("OrganizationId", "Id") ON DELETE RESTRICT;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818004500_SecurityStateAndNormalizedLocations') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818004500_SecurityStateAndNormalizedLocations', '10.0.4');
     END IF;
 END $EF$;
@@ -3220,15 +3220,15 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818023000_CompleteRefreshTokenFamilyMetadata') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818023000_CompleteRefreshTokenFamilyMetadata') THEN
     ALTER TABLE tenebit.refresh_tokens ADD "RevocationReason" character varying(80);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818023000_CompleteRefreshTokenFamilyMetadata') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818023000_CompleteRefreshTokenFamilyMetadata') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818023000_CompleteRefreshTokenFamilyMetadata', '10.0.4');
     END IF;
 END $EF$;
@@ -3238,49 +3238,49 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     ALTER TABLE tenebit.activity_logs ADD "SourceIp" character varying(64);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     ALTER TABLE tenebit.activity_logs ADD "SourceIpExpiresAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     CREATE INDEX "IX_activity_logs_SourceIpExpiresAt" ON tenebit.activity_logs ("SourceIpExpiresAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     ALTER TABLE tenebit.procedure_acceptances ADD "IntegrityVersion" integer NOT NULL DEFAULT 1;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     ALTER TABLE tenebit.subscriptions ADD "CheckoutAttemptId" uuid;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     ALTER TABLE tenebit.subscriptions ADD "CheckoutAttemptExpiresAt" timestamp with time zone;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     CREATE TABLE tenebit.auth_rate_limit_buckets (
         "KeyHash" character varying(64) NOT NULL,
         "BucketStart" timestamp with time zone NOT NULL,
@@ -3293,14 +3293,14 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     CREATE INDEX "IX_auth_rate_limit_buckets_ExpiresAt" ON tenebit.auth_rate_limit_buckets ("ExpiresAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     UPDATE tenebit.activity_logs
     SET "ActorSubject" = 'public-scan'
     WHERE "ActorSubject" LIKE 'public-scan:%';
@@ -3309,7 +3309,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
     UPDATE tenebit.assignments
     SET "PublicTokenRevokedAt" = NOW()
     WHERE "PublicTokenHash" IS NOT NULL AND "PublicTokenRevokedAt" IS NULL;
@@ -3334,8 +3334,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818093000_Audit9CriticalClosure') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818093000_Audit9CriticalClosure', '10.0.4');
     END IF;
 END $EF$;
@@ -3345,7 +3345,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818143000_Audit11RegressionCredentialRevocation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818143000_Audit11RegressionCredentialRevocation') THEN
     UPDATE tenebit.assignments
     SET "PublicTokenRevokedAt" = NOW()
     WHERE "PublicTokenHash" IS NOT NULL AND "PublicTokenRevokedAt" IS NULL;
@@ -3374,8 +3374,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818143000_Audit11RegressionCredentialRevocation') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818143000_Audit11RegressionCredentialRevocation') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818143000_Audit11RegressionCredentialRevocation', '10.0.4');
     END IF;
 END $EF$;
@@ -3385,7 +3385,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
     CREATE TABLE tenebit.email_outbox_messages (
         "Id" uuid NOT NULL,
         "OrganizationId" uuid NOT NULL,
@@ -3409,29 +3409,29 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
     ALTER TABLE tenebit.email_outbox_messages ADD CONSTRAINT "CK_email_outbox_messages_AttemptCount" CHECK ("AttemptCount" >= 0);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
     CREATE UNIQUE INDEX "IX_email_outbox_messages_OrganizationId_IdempotencyKey" ON tenebit.email_outbox_messages ("OrganizationId", "IdempotencyKey");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
     CREATE INDEX "IX_email_outbox_messages_dispatch" ON tenebit.email_outbox_messages ("SentAt", "NextAttemptAt", "LeaseUntil", "CreatedAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818162000_TransactionalEmailOutbox') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818162000_TransactionalEmailOutbox', '10.0.4');
     END IF;
 END $EF$;
@@ -3441,7 +3441,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818181000_Audit9CapabilityIncidentFinalClosure') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818181000_Audit9CapabilityIncidentFinalClosure') THEN
     UPDATE tenebit.assignments
     SET "PublicTokenRevokedAt" = NOW()
     WHERE "PublicTokenHash" IS NOT NULL AND "PublicTokenRevokedAt" IS NULL;
@@ -3493,8 +3493,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818181000_Audit9CapabilityIncidentFinalClosure') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818181000_Audit9CapabilityIncidentFinalClosure') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818181000_Audit9CapabilityIncidentFinalClosure', '10.0.4');
     END IF;
 END $EF$;
@@ -3504,14 +3504,14 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     ALTER TABLE tenebit.organization_users ADD "LastUsedTotpCounter" bigint;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE EXTENSION IF NOT EXISTS pg_trgm;
     END IF;
 END $EF$;
@@ -3520,135 +3520,135 @@ COMMIT;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_assets_Name_trgm" ON tenebit.assets USING gin (lower("Name") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_assets_AssetTag_trgm" ON tenebit.assets USING gin (lower("AssetTag") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_assets_SerialNumber_trgm" ON tenebit.assets USING gin (lower("SerialNumber") gin_trgm_ops) WHERE "SerialNumber" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_procedures_Title_trgm" ON tenebit.procedures USING gin (lower("Title") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_procedures_Owner_trgm" ON tenebit.procedures USING gin (lower("Owner") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_procedures_Version_trgm" ON tenebit.procedures USING gin (lower("Version") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_people_FirstName_trgm" ON tenebit.people USING gin (lower("FirstName") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_people_LastName_trgm" ON tenebit.people USING gin (lower("LastName") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_people_Email_trgm" ON tenebit.people USING gin (lower("Email") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_people_FullName_trgm" ON tenebit.people USING gin (lower("FirstName" || ' ' || "LastName") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_assignments_ProtocolNumber_trgm" ON tenebit.assignments USING gin (lower("ProtocolNumber") gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_activity_logs_Action_trgm" ON tenebit.activity_logs USING gin ("Action" gin_trgm_ops);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_activity_logs_Details_trgm" ON tenebit.activity_logs USING gin ("Details" gin_trgm_ops) WHERE "Details" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_activity_logs_recent_entity_actor_action" ON tenebit.activity_logs ("OrganizationId", "EntityType", "EntityId", "ActorSubject", "Action", "CreatedAt" DESC);
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_asset_evidence_retention_due" ON tenebit.asset_evidence ("OrganizationId", "UploadedAt") WHERE "LegalHold" = FALSE AND "RedactedAt" IS NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_assets_warranty_due" ON tenebit.assets ("OrganizationId", "WarrantyUntil") WHERE "WarrantyUntil" IS NOT NULL;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818193000_AuditPerformanceSecurityHardening') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818193000_AuditPerformanceSecurityHardening', '10.0.4');
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818204500_AddActivityLogRetentionIndex') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818204500_AddActivityLogRetentionIndex') THEN
     CREATE INDEX CONCURRENTLY IF NOT EXISTS "IX_activity_logs_CreatedAt" ON tenebit.activity_logs ("CreatedAt");
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260818204500_AddActivityLogRetentionIndex') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260818204500_AddActivityLogRetentionIndex') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260818204500_AddActivityLogRetentionIndex', '10.0.4');
     END IF;
 END $EF$;
@@ -3656,7 +3656,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
     CREATE TABLE IF NOT EXISTS tenebit.login_events (
         "Id" uuid NOT NULL CONSTRAINT "PK_login_events" PRIMARY KEY,
         "OrganizationId" uuid NULL,
@@ -3674,7 +3674,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
     CREATE INDEX IF NOT EXISTS "IX_login_events_CreatedAt"
         ON tenebit.login_events ("CreatedAt");
     CREATE INDEX IF NOT EXISTS "IX_login_events_OrganizationId_CreatedAt"
@@ -3688,7 +3688,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
     CREATE TABLE IF NOT EXISTS tenebit.admin_audit_logs (
         "Id" uuid NOT NULL CONSTRAINT "PK_admin_audit_logs" PRIMARY KEY,
         "Action" character varying(80) NOT NULL,
@@ -3704,7 +3704,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
     CREATE INDEX IF NOT EXISTS "IX_admin_audit_logs_CreatedAt"
         ON tenebit.admin_audit_logs ("CreatedAt");
     END IF;
@@ -3712,7 +3712,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
     ALTER TABLE tenebit.organizations
         ADD COLUMN IF NOT EXISTS "IsSuspended" boolean NOT NULL DEFAULT FALSE,
         ADD COLUMN IF NOT EXISTS "SuspendedAt" timestamp with time zone NULL,
@@ -3722,8 +3722,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824090000_AdminPanelLoginHistoryAndModeration') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260824090000_AdminPanelLoginHistoryAndModeration', '10.0.4');
     END IF;
 END $EF$;
@@ -3733,7 +3733,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824160000_AssetCategoryDepreciation') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824160000_AssetCategoryDepreciation') THEN
     ALTER TABLE tenebit.asset_categories
         ADD COLUMN IF NOT EXISTS "DepreciationMonths" integer NULL;
     END IF;
@@ -3741,8 +3741,8 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260824160000_AssetCategoryDepreciation') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260824160000_AssetCategoryDepreciation') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260824160000_AssetCategoryDepreciation', '10.0.4');
     END IF;
 END $EF$;
@@ -3752,7 +3752,7 @@ START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260825090000_MaintenanceSchedules') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260825090000_MaintenanceSchedules') THEN
     CREATE TABLE IF NOT EXISTS tenebit.maintenance_schedules (
         "Id" uuid NOT NULL CONSTRAINT "PK_maintenance_schedules" PRIMARY KEY,
         "OrganizationId" uuid NOT NULL,
@@ -3774,7 +3774,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260825090000_MaintenanceSchedules') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260825090000_MaintenanceSchedules') THEN
     CREATE INDEX IF NOT EXISTS "IX_maintenance_schedules_OrganizationId_NextDueOn"
         ON tenebit.maintenance_schedules ("OrganizationId", "NextDueOn");
     CREATE INDEX IF NOT EXISTS "IX_maintenance_schedules_OrganizationId_AssetId"
@@ -3784,15 +3784,18 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260825090000_MaintenanceSchedules') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260825090000_MaintenanceSchedules') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260825090000_MaintenanceSchedules', '10.0.4');
     END IF;
 END $EF$;
+COMMIT;
+
+START TRANSACTION;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826120000_PublicReportThrottle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826120000_PublicReportThrottle') THEN
     CREATE TABLE IF NOT EXISTS tenebit.public_report_throttle (
         "Id" uuid NOT NULL CONSTRAINT "PK_public_report_throttle" PRIMARY KEY,
         "OrganizationId" uuid NOT NULL,
@@ -3808,7 +3811,7 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826120000_PublicReportThrottle') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826120000_PublicReportThrottle') THEN
     CREATE INDEX IF NOT EXISTS "IX_public_report_throttle_OrganizationId_AssetId_CreatedAt"
         ON tenebit.public_report_throttle ("OrganizationId", "AssetId", "CreatedAt");
     CREATE INDEX IF NOT EXISTS "IX_public_report_throttle_OrganizationId_ReporterHash_CreatedAt"
@@ -3818,16 +3821,18 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826120000_PublicReportThrottle') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826120000_PublicReportThrottle') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260826120000_PublicReportThrottle', '10.0.4');
     END IF;
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826170000_AssignmentSignature') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826170000_AssignmentSignature') THEN
     ALTER TABLE tenebit.assignments
         ADD COLUMN IF NOT EXISTS "SignatureImage" bytea,
         ADD COLUMN IF NOT EXISTS "SignatureSha256" character varying(64),
@@ -3837,16 +3842,18 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826170000_AssignmentSignature') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826170000_AssignmentSignature') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260826170000_AssignmentSignature', '10.0.4');
     END IF;
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826210000_DropAssignmentSignature') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826210000_DropAssignmentSignature') THEN
     ALTER TABLE tenebit.assignments
         DROP COLUMN IF EXISTS "SignatureImage",
         DROP COLUMN IF EXISTS "SignatureSha256",
@@ -3856,16 +3863,18 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260826210000_DropAssignmentSignature') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260826210000_DropAssignmentSignature') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260826210000_DropAssignmentSignature', '10.0.4');
     END IF;
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829120000_QrLabelDesigner') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260829120000_QrLabelDesigner') THEN
     ALTER TABLE tenebit.organizations
         ADD COLUMN IF NOT EXISTS "QrLabelShowSerialNumber" boolean NOT NULL DEFAULT FALSE,
         ADD COLUMN IF NOT EXISTS "QrLabelShowOrganizationName" boolean NOT NULL DEFAULT FALSE,
@@ -3880,18 +3889,21 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829120000_QrLabelDesigner') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260829120000_QrLabelDesigner') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260829120000_QrLabelDesigner', '10.0.4');
     END IF;
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829140000_AssetScanCode') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260829140000_AssetScanCode') THEN
     ALTER TABLE tenebit.assets ADD COLUMN IF NOT EXISTS "ScanCode" character varying(16);
 
+    DO $$
     DECLARE
         alphabet CONSTANT text := '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
         target uuid;
@@ -3910,7 +3922,7 @@ BEGIN
 
             UPDATE tenebit.assets SET "ScanCode" = candidate WHERE "Id" = target;
         END LOOP;
-    END;
+    END $$;
 
     ALTER TABLE tenebit.assets ALTER COLUMN "ScanCode" SET NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS "IX_assets_ScanCode" ON tenebit.assets ("ScanCode");
@@ -3919,16 +3931,18 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260829140000_AssetScanCode') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260829140000_AssetScanCode') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260829140000_AssetScanCode', '10.0.4');
     END IF;
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260830090000_PromoCodes') THEN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260830090000_PromoCodes') THEN
     CREATE TABLE tenebit.promo_codes (
         "Id" uuid NOT NULL,
         "Code" character varying(40) NOT NULL,
@@ -3950,9 +3964,31 @@ END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260830090000_PromoCodes') THEN
-    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260830090000_PromoCodes') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
     VALUES ('20260830090000_PromoCodes', '10.0.4');
     END IF;
 END $EF$;
 COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260904220000_ScheduledPlanDowngrade') THEN
+    ALTER TABLE tenebit.subscriptions
+        ADD COLUMN "PendingPlanKey" character varying(40),
+        ADD COLUMN "PendingPlanEffectiveAt" timestamp with time zone,
+        ADD COLUMN "StripeScheduleId" character varying(80);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM public."__EFMigrationsHistory" WHERE "MigrationId" = '20260904220000_ScheduledPlanDowngrade') THEN
+    INSERT INTO public."__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260904220000_ScheduledPlanDowngrade', '10.0.4');
+    END IF;
+END $EF$;
+COMMIT;
+

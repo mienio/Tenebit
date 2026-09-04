@@ -2294,6 +2294,13 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PendingPlanKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("PendingPlanEffectiveAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PlanKey")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -2305,6 +2312,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(40)");
 
                     b.Property<string>("StripeCustomerId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("StripeScheduleId")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 

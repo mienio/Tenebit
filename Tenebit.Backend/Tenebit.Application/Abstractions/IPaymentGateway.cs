@@ -13,6 +13,16 @@ public interface IPaymentGateway
     Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken);
     Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken);
     Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken);
+
+    /// <summary>Schedules a plan switch to take effect at the end of the subscription's current billing
+    /// period, via a Stripe subscription schedule - the subscription stays on its current price/plan
+    /// until then. Pass <paramref name="existingScheduleId"/> to retarget an already-scheduled change
+    /// instead of creating a second schedule (Stripe allows only one per subscription).</summary>
+    Task<PaymentScheduleState> ScheduleDowngradeAsync(string subscriptionId, string? existingScheduleId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken);
+
+    /// <summary>Cancels a pending scheduled plan change, leaving the subscription on its current plan
+    /// indefinitely (release, not cancel - the underlying subscription itself is untouched).</summary>
+    Task ReleaseScheduleAsync(string scheduleId, CancellationToken cancellationToken);
 }
 
 public sealed class PaymentWebhookValidationException : Exception
@@ -45,3 +55,5 @@ public sealed record PaymentSubscriptionState(
     DateTimeOffset CurrentPeriodStart, DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId);
 
 public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value);
+
+public sealed record PaymentScheduleState(string ScheduleId, string PendingPlanKey, DateTimeOffset EffectiveAt);

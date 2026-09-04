@@ -55,22 +55,7 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
-        var usage = await BuildUsageAsync(subscription, cancellationToken);
-        var assetCount = usage.First(x => x.Resource == "assets").Current;
-
-        return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
-            subscription.Id,
-            subscription.PlanKey,
-            plan.Name,
-            plan.AssetLimit,
-            plan.MonthlyPrice,
-            plan.Currency,
-            assetCount,
-            subscription.Status.ToString(),
-            subscription.CurrentPeriodEnd,
-            usage
-        ));
+        return Result<SubscriptionResponse>.Success(await BuildSubscriptionResponseAsync(subscription, cancellationToken));
     }
 
     /// <summary>Na zewnątrz raportujemy wyłącznie licznik aktywów. Limity osób, procedur, licencji,
@@ -136,20 +121,7 @@ public sealed class SubscriptionService
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            var usage = await BuildUsageAsync(subscription, cancellationToken);
-
-            return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
-                subscription.Id,
-                subscription.PlanKey,
-                newPlan.Name,
-                newPlan.AssetLimit,
-                newPlan.MonthlyPrice,
-                newPlan.Currency,
-                usage.First(x => x.Resource == "assets").Current,
-                subscription.Status.ToString(),
-                subscription.CurrentPeriodEnd,
-                usage
-            ));
+            return Result<SubscriptionResponse>.Success(await BuildSubscriptionResponseAsync(subscription, cancellationToken));
         }
         catch (DomainException ex)
         {
@@ -266,10 +238,15 @@ public sealed class SubscriptionService
     }
 
     /// <summary>
-    /// Switches an already-live paid subscription directly to a different paid plan - upgrade or downgrade
-    /// - via Stripe's own proration, without a new Checkout Session (CreateCheckoutSessionAsync refuses to
-    /// create a second one on purpose). Moving to Free still goes through the Billing Portal, since that's
-    /// a cancellation, not a price swap.
+    /// Switches an already-live paid subscription directly to a different paid plan, without a new
+    /// Checkout Session (CreateCheckoutSessionAsync refuses to create a second one on purpose). Moving to
+    /// Free still goes through the Billing Portal, since that's a cancellation, not a price swap.
+    ///
+    /// An upgrade applies immediately, gated on Stripe actually collecting the prorated payment now (see
+    /// StripePaymentGateway.ChangeSubscriptionPlanAsync). A downgrade must not take effect - or credit
+    /// anything - until the current period the org already paid for actually ends, so it's scheduled on
+    /// Stripe's side instead (StripePaymentGateway.ScheduleDowngradeAsync): the plan, price and entitlements
+    /// stay put until then.
     /// </summary>
     public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, CancellationToken cancellationToken)
     {
@@ -288,7 +265,44 @@ public sealed class SubscriptionService
         if (subscription is null || !subscription.HasLiveStripeSubscription)
             return Result<SubscriptionResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Stripe do zmiany - najpierw ją załóż przez płatność."));
 
-        if (subscription.PlanKey != newPlan.Key)
+        var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+
+        if (subscription.PlanKey == newPlan.Key)
+        {
+            // No-op: already on the requested plan.
+        }
+        else if (newPlan.MonthlyPrice < currentPlan.MonthlyPrice)
+        {
+            PaymentScheduleState schedule;
+            try
+            {
+                schedule = await _paymentGateway.ScheduleDowngradeAsync(
+                    subscription.StripeSubscriptionId!,
+                    subscription.StripeScheduleId,
+                    newPlan.Key,
+                    $"tenebit-scheduledowngrade-{subscription.StripeSubscriptionId}-{newPlan.Key}",
+                    cancellationToken);
+            }
+            catch (PaymentGatewayException ex) when (ex.StatusCode is >= 400 and < 500)
+            {
+                return Result<SubscriptionResponse>.Failure(Error.Validation(
+                    "Nie udało się zaplanować zmiany planu. Spróbuj ponownie później."));
+            }
+
+            subscription.ScheduleDowngrade(schedule.PendingPlanKey, schedule.EffectiveAt, schedule.ScheduleId);
+
+            _activity.Add(new ActivityLog(
+                organizationId,
+                "subscription.plan_change_scheduled",
+                "subscription",
+                subscription.Id,
+                _currentUser.Subject,
+                $"Scheduled downgrade to {newPlan.Name} effective {schedule.EffectiveAt:O}",
+                _clock.UtcNow));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        else
         {
             PaymentSubscriptionState canonical;
             try
@@ -327,19 +341,66 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
+        return Result<SubscriptionResponse>.Success(await BuildSubscriptionResponseAsync(subscription, cancellationToken));
+    }
+
+    /// <summary>Cancels a downgrade scheduled by <see cref="ChangePlanAsync"/> before it takes effect - the
+    /// org simply stays on its current plan. No-op safe to call again if nothing is actually pending.</summary>
+    public async Task<Result<SubscriptionResponse>> CancelScheduledPlanChangeAsync(CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<SubscriptionResponse>.Failure(access.Error!);
+
+        var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
+        if (subscription?.StripeScheduleId is not { } scheduleId)
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Brak zaplanowanej zmiany planu do anulowania."));
+
+        try
+        {
+            await _paymentGateway.ReleaseScheduleAsync(scheduleId, cancellationToken);
+        }
+        catch (PaymentGatewayException)
+        {
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Nie udało się anulować zaplanowanej zmiany planu. Spróbuj ponownie później."));
+        }
+
+        subscription.ClearPendingPlanChange();
+
+        _activity.Add(new ActivityLog(
+            subscription.OrganizationId,
+            "subscription.plan_change_cancelled",
+            "subscription",
+            subscription.Id,
+            _currentUser.Subject,
+            "Cancelled scheduled plan change",
+            _clock.UtcNow));
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result<SubscriptionResponse>.Success(await BuildSubscriptionResponseAsync(subscription, cancellationToken));
+    }
+
+    private async Task<SubscriptionResponse> BuildSubscriptionResponseAsync(OrganizationSubscription subscription, CancellationToken cancellationToken)
+    {
+        var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+        var pendingPlan = subscription.PendingPlanKey is null ? null : SubscriptionPlan.FromKey(subscription.PendingPlanKey);
         var usage = await BuildUsageAsync(subscription, cancellationToken);
-        return Result<SubscriptionResponse>.Success(new SubscriptionResponse(
+
+        return new SubscriptionResponse(
             subscription.Id,
             subscription.PlanKey,
-            newPlan.Name,
-            newPlan.AssetLimit,
-            newPlan.MonthlyPrice,
-            newPlan.Currency,
+            plan.Name,
+            plan.AssetLimit,
+            plan.MonthlyPrice,
+            plan.Currency,
             usage.First(x => x.Resource == "assets").Current,
             subscription.Status.ToString(),
             subscription.CurrentPeriodEnd,
-            usage
-        ));
+            usage,
+            pendingPlan?.Key,
+            pendingPlan?.Name,
+            subscription.PendingPlanEffectiveAt
+        );
     }
 
     /// <summary>Opens the Stripe Billing Portal so the owner can manage payment method, invoices, or cancel.</summary>
@@ -493,7 +554,10 @@ public sealed record SubscriptionResponse(
     int CurrentAssetCount,
     string Status,
     DateTimeOffset CurrentPeriodEnd,
-    IReadOnlyList<ResourceUsage> Usage
+    IReadOnlyList<ResourceUsage> Usage,
+    string? PendingPlanKey = null,
+    string? PendingPlanName = null,
+    DateTimeOffset? PendingPlanEffectiveAt = null
 );
 
 public sealed record ResourceUsage(string Resource, int Current, int Limit);

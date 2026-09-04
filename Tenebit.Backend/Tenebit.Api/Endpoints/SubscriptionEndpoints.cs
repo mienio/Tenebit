@@ -58,6 +58,10 @@ public static class SubscriptionEndpoints
                 (await service.ChangePlanAsync(request.PlanKey, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");
 
+        api.MapPost("/subscription/cancel-scheduled-change", async (SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.CancelScheduledPlanChangeAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Subscription");
+
         api.MapPost("/subscription/promo-code/validate", async (PromoCodeValidateRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.ValidatePromoCodeAsync(request.PlanKey, request.Code, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");

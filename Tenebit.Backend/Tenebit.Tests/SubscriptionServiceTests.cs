@@ -492,6 +492,96 @@ public class SubscriptionServiceTests
         Assert.Equal(0, paymentGateway.PlanChangeCalls);
     }
 
+    [Fact]
+    public async Task ChangePlanAsync_SchedulesDowngrade_InsteadOfSwitchingImmediately()
+    {
+        // A downgrade must not take the org off its current (higher) plan - and its entitlements - until
+        // the period already paid for actually ends. ChangePlanAsync must route a cheaper target plan
+        // through ScheduleDowngradeAsync, never ChangeSubscriptionPlanAsync's immediate price swap.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddMonths(1);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextSchedule = new PaymentScheduleState("sched_1", SubscriptionPlan.Starter.Key, periodEnd);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+        Assert.Equal(1, paymentGateway.ScheduleDowngradeCalls);
+        Assert.Equal("sub_1", paymentGateway.LastScheduleDowngradeSubscriptionId);
+        Assert.Null(paymentGateway.LastScheduleDowngradeExistingScheduleId);
+        // Still on Growth right now - the whole point of scheduling instead of switching immediately.
+        Assert.Equal(SubscriptionPlan.Growth.Key, local.PlanKey);
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PendingPlanKey);
+        Assert.Equal(periodEnd, local.PendingPlanEffectiveAt);
+        Assert.Equal("sched_1", local.StripeScheduleId);
+        Assert.Equal(SubscriptionPlan.Growth.Key, result.Value!.PlanKey);
+        Assert.Equal(SubscriptionPlan.Starter.Key, result.Value.PendingPlanKey);
+        Assert.Equal(periodEnd, result.Value.PendingPlanEffectiveAt);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_RetargetsAnAlreadyScheduledDowngrade_InsteadOfCreatingASecondSchedule()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddMonths(1);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "cus_1", now);
+        local.ScheduleDowngrade(SubscriptionPlan.Growth.Key, periodEnd, "sched_existing");
+        subscriptions.Add(local);
+        paymentGateway.NextSchedule = new PaymentScheduleState("sched_existing", SubscriptionPlan.Starter.Key, periodEnd);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("sched_existing", paymentGateway.LastScheduleDowngradeExistingScheduleId);
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PendingPlanKey);
+    }
+
+    [Fact]
+    public async Task CancelScheduledPlanChangeAsync_ClearsPendingStateAndReleasesTheStripeSchedule()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, now.AddMonths(1), "sched_1");
+        subscriptions.Add(local);
+
+        var result = await service.CancelScheduledPlanChangeAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, paymentGateway.ReleaseScheduleCalls);
+        Assert.Equal("sched_1", paymentGateway.LastReleasedScheduleId);
+        Assert.Null(local.PendingPlanKey);
+        Assert.Null(local.PendingPlanEffectiveAt);
+        Assert.Null(local.StripeScheduleId);
+        Assert.Null(result.Value!.PendingPlanKey);
+    }
+
+    [Fact]
+    public async Task CancelScheduledPlanChangeAsync_Fails_WhenNothingIsPending()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+
+        var result = await service.CancelScheduledPlanChangeAsync(CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0, paymentGateway.ReleaseScheduleCalls);
+    }
+
     /// <summary>Limity pozostałych zasobów są egzekwowane, ale nie mogą wyciec przez API - w
     /// odpowiedzi jest wyłącznie licznik aktywów.</summary>
     [Fact]

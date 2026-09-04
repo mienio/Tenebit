@@ -30,6 +30,13 @@ public sealed class OrganizationSubscription
     public string? StripeCustomerId { get; private set; }
     public string? StripeSubscriptionId { get; private set; }
 
+    /// <summary>A downgrade in progress: <see cref="PlanKey"/> (and its entitlements) stays on the current,
+    /// higher plan until <see cref="PendingPlanEffectiveAt"/> - Stripe applies the actual price switch via
+    /// a subscription schedule (<see cref="StripeScheduleId"/>) at that date, no local cron needed.</summary>
+    public string? PendingPlanKey { get; private set; }
+    public DateTimeOffset? PendingPlanEffectiveAt { get; private set; }
+    public string? StripeScheduleId { get; private set; }
+
     /// <summary>Timestamp (Stripe event `created`) of the last webhook event actually applied to this
     /// record - Stripe does not guarantee delivery order, so a retried/out-of-order older event must
     /// never overwrite state a newer event already applied (audyt P0.6).</summary>
@@ -95,6 +102,25 @@ public sealed class OrganizationSubscription
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>Records a downgrade scheduled on Stripe's side to take effect at <paramref name="effectiveAt"/>
+    /// (the current period end) - entitlements are untouched until then; see <see cref="SyncFromStripe"/>
+    /// for how the pending state clears once Stripe actually applies it.</summary>
+    public void ScheduleDowngrade(string planKey, DateTimeOffset effectiveAt, string scheduleId)
+    {
+        PendingPlanKey = planKey;
+        PendingPlanEffectiveAt = effectiveAt;
+        StripeScheduleId = scheduleId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ClearPendingPlanChange()
+    {
+        PendingPlanKey = null;
+        PendingPlanEffectiveAt = null;
+        StripeScheduleId = null;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>
     /// Applies the state of a Stripe subscription (from checkout completion or a webhook) to this record.
     /// A Cancelled status always reverts the organization to the Free plan, regardless of what plan the
@@ -102,6 +128,16 @@ public sealed class OrganizationSubscription
     /// </summary>
     public void SyncFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? stripeSubscriptionId, string stripeCustomerId, DateTimeOffset webhookEventCreatedAt)
     {
+        // A pending downgrade resolves itself once Stripe's schedule actually applies the new price (the
+        // canonical planKey catches up to what we scheduled) or the subscription is gone - no local cron
+        // needed, this just needs to notice either has happened.
+        if (PendingPlanKey is not null && (status == SubscriptionStatus.Cancelled || planKey == PendingPlanKey))
+        {
+            PendingPlanKey = null;
+            PendingPlanEffectiveAt = null;
+            StripeScheduleId = null;
+        }
+
         StripeCustomerId = stripeCustomerId;
         StripeSubscriptionId = stripeSubscriptionId;
         Status = status;

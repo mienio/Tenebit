@@ -627,6 +627,35 @@ public sealed class FakePaymentGateway : IPaymentGateway
         if (ThrowOnPlanChange is not null) throw ThrowOnPlanChange;
         return Task.FromResult(NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set"));
     }
+
+    public PaymentScheduleState? NextSchedule { get; set; }
+    public Exception? ThrowOnScheduleDowngrade { get; set; }
+    public string? LastScheduleDowngradeSubscriptionId { get; private set; }
+    public string? LastScheduleDowngradeExistingScheduleId { get; private set; }
+    public string? LastScheduleDowngradeNewPlanKey { get; private set; }
+    public int ScheduleDowngradeCalls { get; private set; }
+
+    public Task<PaymentScheduleState> ScheduleDowngradeAsync(string subscriptionId, string? existingScheduleId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        LastScheduleDowngradeSubscriptionId = subscriptionId;
+        LastScheduleDowngradeExistingScheduleId = existingScheduleId;
+        LastScheduleDowngradeNewPlanKey = newPlanKey;
+        ScheduleDowngradeCalls++;
+        if (ThrowOnScheduleDowngrade is not null) throw ThrowOnScheduleDowngrade;
+        return Task.FromResult(NextSchedule ?? throw new InvalidOperationException("NextSchedule not set"));
+    }
+
+    public Exception? ThrowOnReleaseSchedule { get; set; }
+    public string? LastReleasedScheduleId { get; private set; }
+    public int ReleaseScheduleCalls { get; private set; }
+
+    public Task ReleaseScheduleAsync(string scheduleId, CancellationToken cancellationToken)
+    {
+        LastReleasedScheduleId = scheduleId;
+        ReleaseScheduleCalls++;
+        if (ThrowOnReleaseSchedule is not null) throw ThrowOnReleaseSchedule;
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository

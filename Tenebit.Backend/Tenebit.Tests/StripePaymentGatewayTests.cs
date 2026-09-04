@@ -97,6 +97,78 @@ public class StripePaymentGatewayTests
         Assert.Equal(402, ex.StatusCode);
     }
 
+    private const string NewScheduleJson = """
+        {
+          "id": "sub_sched_1", "object": "subscription_schedule",
+          "phases": [ { "start_date": 1700000000, "end_date": 1702592000, "items": [ { "price": "price_old", "quantity": 1 } ] } ]
+        }
+        """;
+
+    [Fact]
+    public async Task ScheduleDowngradeAsync_CreatesScheduleAndAddsSecondPhaseStartingAtCurrentPeriodEnd()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Post, "subscription_schedules", HttpStatusCode.OK, NewScheduleJson)
+            .Enqueue(HttpMethod.Post, "subscription_schedules/sub_sched_1", HttpStatusCode.OK, NewScheduleJson);
+        var gateway = CreateGateway(handler, ("starter", "price_starter"));
+
+        var result = await gateway.ScheduleDowngradeAsync("sub_1", null, "starter", "idem-1", CancellationToken.None);
+
+        Assert.Equal("sub_sched_1", result.ScheduleId);
+        Assert.Equal("starter", result.PendingPlanKey);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1702592000), result.EffectiveAt);
+
+        var create = handler.Requests[0];
+        Assert.Contains("from_subscription=sub_1", create.Body);
+
+        var update = handler.Requests[1];
+        Assert.Contains("phases%5B0%5D%5Bitems%5D%5B0%5D%5Bprice%5D=price_old", update.Body);
+        Assert.Contains("phases%5B0%5D%5Bstart_date%5D=1700000000", update.Body);
+        Assert.Contains("phases%5B0%5D%5Bend_date%5D=1702592000", update.Body);
+        Assert.Contains("phases%5B1%5D%5Bitems%5D%5B0%5D%5Bprice%5D=price_starter", update.Body);
+        Assert.Contains("phases%5B1%5D%5Bduration%5D%5Binterval%5D=month", update.Body);
+        Assert.Contains("end_behavior=release", update.Body);
+    }
+
+    [Fact]
+    public async Task ScheduleDowngradeAsync_RetargetsAnAlreadyPendingSchedule_WithoutCreatingASecondOne()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "subscription_schedules/sub_sched_1", HttpStatusCode.OK, NewScheduleJson)
+            .Enqueue(HttpMethod.Post, "subscription_schedules/sub_sched_1", HttpStatusCode.OK, NewScheduleJson);
+        var gateway = CreateGateway(handler, ("business", "price_business"));
+
+        var result = await gateway.ScheduleDowngradeAsync("sub_1", "sub_sched_1", "business", "idem-1", CancellationToken.None);
+
+        Assert.Equal("sub_sched_1", result.ScheduleId);
+        Assert.DoesNotContain(handler.Requests, r => r.Path.Contains("subscription_schedules") && r.Method == HttpMethod.Post && r.Body != null && r.Body.Contains("from_subscription"));
+    }
+
+    [Fact]
+    public async Task ScheduleDowngradeAsync_StartsFreshSchedule_WhenThePreviouslyStoredOneIsGone()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "subscription_schedules/sub_sched_stale", HttpStatusCode.NotFound, """{"error":{"message":"No such schedule"}}""")
+            .Enqueue(HttpMethod.Post, "subscription_schedules", HttpStatusCode.OK, NewScheduleJson)
+            .Enqueue(HttpMethod.Post, "subscription_schedules/sub_sched_1", HttpStatusCode.OK, NewScheduleJson);
+        var gateway = CreateGateway(handler, ("starter", "price_starter"));
+
+        var result = await gateway.ScheduleDowngradeAsync("sub_1", "sub_sched_stale", "starter", "idem-1", CancellationToken.None);
+
+        Assert.Equal("sub_sched_1", result.ScheduleId);
+    }
+
+    [Fact]
+    public async Task ReleaseScheduleAsync_PostsToTheReleaseEndpoint()
+    {
+        var handler = new StubHandler().Enqueue(HttpMethod.Post, "subscription_schedules/sub_sched_1/release", HttpStatusCode.OK, NewScheduleJson);
+        var gateway = CreateGateway(handler);
+
+        await gateway.ReleaseScheduleAsync("sub_sched_1", CancellationToken.None);
+
+        Assert.Single(handler.Requests);
+    }
+
     [Fact]
     public void ParseWebhookEvent_SubscriptionOnDifferentPrice_IsQuarantinedWithoutProEntitlement()
     {
