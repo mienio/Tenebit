@@ -1,22 +1,31 @@
 import {
   ArrowRight,
   BarChart3,
+  Building2,
   Boxes,
   Check,
+  CheckCircle2,
+  Clock3,
   ClipboardCheck,
+  FileCheck2,
   Headphones,
+  History,
   KeyRound,
   Laptop,
   List,
+  LockKeyhole,
   MapPin,
   Monitor,
   PackageCheck,
   QrCode,
+  ShieldCheck,
   Smartphone,
+  UserPlus,
+  UserRoundCheck,
   Users,
   Wrench
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { BrandMark } from '../components/BrandMark';
@@ -29,16 +38,6 @@ import { useI18n } from '../i18n/I18nProvider';
 import type { Language } from '../i18n/translations';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import type { LocationNode } from '../types/domain';
-
-// previewPeopleByLanguage keeps the same gender per index across all 4 locales (index 0/3 female,
-// 1/2/4 male), so one photo per index works for every language.
-const previewAvatarUrls = [
-  'https://randomuser.me/api/portraits/women/65.jpg',
-  'https://randomuser.me/api/portraits/men/32.jpg',
-  'https://randomuser.me/api/portraits/men/86.jpg',
-  'https://randomuser.me/api/portraits/women/44.jpg',
-  'https://randomuser.me/api/portraits/men/76.jpg'
-];
 
 const previewAssetRows = [
   { icon: Laptop, name: 'MacBook Pro 14"', tag: 'AST-0142', status: 'Assigned', personIndex: 0, locationId: 'room101', value: 9800 },
@@ -201,10 +200,48 @@ const previewTabs = [
   { key: 'people', icon: Users },
   { key: 'locations', icon: MapPin },
   { key: 'procedures', icon: ClipboardCheck },
-  { key: 'maintenance', icon: Wrench }
+  { key: 'maintenance', icon: Wrench },
+  { key: 'proof', icon: CheckCircle2 }
 ] as const;
 
 type PreviewTab = typeof previewTabs[number]['key'];
+
+type ScenarioStep = 'person' | 'asset' | 'procedure' | 'proof';
+
+const scenarioSteps: { key: ScenarioStep; preview: PreviewTab; icon: typeof UserPlus }[] = [
+  { key: 'person', preview: 'people', icon: UserPlus },
+  { key: 'asset', preview: 'assets', icon: PackageCheck },
+  { key: 'procedure', preview: 'procedures', icon: ClipboardCheck },
+  { key: 'proof', preview: 'proof', icon: CheckCircle2 }
+];
+
+const personas = [
+  { key: 'it', icon: Laptop },
+  { key: 'hr', icon: UserRoundCheck },
+  { key: 'operations', icon: Building2 },
+  { key: 'management', icon: BarChart3 }
+] as const;
+
+const securityItems = [
+  { key: 'roles', icon: ShieldCheck },
+  { key: 'twoFactor', icon: LockKeyhole },
+  { key: 'history', icon: History },
+  { key: 'proofs', icon: FileCheck2 }
+] as const;
+
+function handleTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number, count: number, select: (nextIndex: number) => void) {
+  let nextIndex: number | null = null;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % count;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + count) % count;
+  if (event.key === 'Home') nextIndex = 0;
+  if (event.key === 'End') nextIndex = count - 1;
+  if (nextIndex === null) return;
+
+  event.preventDefault();
+  const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(':scope > button');
+  select(nextIndex);
+  tabs?.[nextIndex]?.focus();
+}
 
 const features = [
   { icon: Boxes, key: 'assets' },
@@ -215,12 +252,11 @@ const features = [
   { icon: BarChart3, key: 'reports' }
 ] as const;
 
-const steps = ['step1', 'step2', 'step3'];
-
 export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
-  const [previewTab, setPreviewTab] = useState<PreviewTab>('assets');
+  const [previewTab, setPreviewTab] = useState<PreviewTab>('people');
+  const [scenarioStep, setScenarioStep] = useState<ScenarioStep | null>('person');
   const [assetView, setAssetView] = useState<'list' | 'byLocation'>('list');
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>('room101');
   const office = previewOfficeByLanguage[language];
@@ -250,13 +286,13 @@ export function LandingPage() {
     const personIndex = row.personIndex;
     const person = personIndex != null ? previewPeopleRows[personIndex] : null;
     return (
-      <tr key={row.tag}>
-        <td><div className="table-icon"><row.icon size={16} /></div></td>
-        <td><strong>{row.name}</strong></td>
-        <td>{row.tag}</td>
-        <td><StatusBadge status={row.status} /></td>
-        <td>{person && personIndex != null ? <span className="personChip"><Avatar name={person.name} photoUrl={previewAvatarUrls[personIndex]} size={22} /><span className="personChip__sep">•</span>{person.name}</span> : t('common.unassigned')}</td>
-        <td style={{ textAlign: 'right' }}>{formatPreviewValue(row.value)}</td>
+      <tr key={row.tag} className={scenarioStep === 'asset' && row.personIndex === 1 ? 'landing__previewFocus' : undefined}>
+        <td className="cell-icon"><div className="table-icon"><row.icon size={16} /></div></td>
+        <td data-label={t('assets.nameLabel')}><strong>{row.name}</strong></td>
+        <td data-label={t('assets.colTag')}>{row.tag}</td>
+        <td data-label={t('assets.statusLabel')}><StatusBadge status={row.status} /></td>
+        <td data-label={t('assets.colPerson')}>{person && personIndex != null ? <span className="personChip"><Avatar name={person.name} size={22} /><span className="personChip__sep">•</span>{person.name}</span> : t('common.unassigned')}</td>
+        <td data-label={t('assets.colValue')} style={{ textAlign: 'right' }}>{formatPreviewValue(row.value)}</td>
       </tr>
     );
   };
@@ -301,6 +337,23 @@ export function LandingPage() {
     const { locale, currency } = currencyByLanguage[language];
     return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
   };
+  const proofDate = new Intl.DateTimeFormat(currencyByLanguage[language].locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC'
+  }).format(new Date(Date.UTC(2026, 6, 15, 10, 23)));
+  const activeScenario = scenarioSteps.find(step => step.key === scenarioStep);
+
+  const selectScenarioStep = (step: typeof scenarioSteps[number]) => {
+    setScenarioStep(step.key);
+    setPreviewTab(step.preview);
+    if (step.preview === 'assets') setAssetView('list');
+  };
+
+  const selectPreviewTab = (tab: PreviewTab) => {
+    setScenarioStep(null);
+    setPreviewTab(tab);
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -317,13 +370,19 @@ export function LandingPage() {
           <strong>Tenebit</strong>
         </Link>
         <nav className="landing__navLinks">
+          <a href="#demo">{t('landing.navDemo')}</a>
+          <a href="#dla-kogo">{t('landing.navRoles')}</a>
           <a href="#funkcje">{t('landing.navFeatures')}</a>
+          <a href="#bezpieczenstwo">{t('landing.navSecurity')}</a>
           <a href="#cennik">{t('landing.navPricing')}</a>
         </nav>
         <div className="landing__navActions">
           <LanguageSwitcher />
           <Link to="/login" className="button button--ghost landing__loginButton">{t('landing.navLoginBtn')}</Link>
-          <Link to="/register" className="button button--primary">{t('landing.navRegisterBtn')}</Link>
+          <Link to="/register" className="button button--primary" aria-label={t('landing.navRegisterBtn')}>
+            <span className="landing__registerFull">{t('landing.navRegisterBtn')}</span>
+            <span className="landing__registerShort" aria-hidden="true">{t('landing.ctaStart')}</span>
+          </Link>
         </div>
       </header>
       {/* `display: contents` - landmark dla czytnikow ekranu bez zmiany siatki `.landing`. */}
@@ -349,16 +408,61 @@ export function LandingPage() {
         </section>
       </div>
 
-      <section className="landing__preview" aria-label={t('landing.previewAria')}>
-        <div className="landing__previewFrame">
-          <div className="landing__previewChrome"><span /><span /><span /></div>
-          <div className="landing__previewTabs">
-            {previewTabs.map(tab => (
+      <section className="landing__scenario" id="demo" aria-labelledby="landing-scenario-title">
+        <div className="landing__sectionIntro">
+          <p className="eyebrow">{t('landing.scenario.eyebrow')}</p>
+          <h2 id="landing-scenario-title">{t('landing.scenario.title')}</h2>
+          <p>{t('landing.scenario.lead')}</p>
+        </div>
+
+        <div className="landing__scenarioSteps" role="group" aria-label={t('landing.scenario.title')}>
+          {scenarioSteps.map((step, index) => (
+            <button
+              key={step.key}
+              id={`landing-scenario-${step.key}`}
+              type="button"
+              aria-pressed={scenarioStep === step.key}
+              aria-controls="landing-preview-panel"
+              tabIndex={scenarioStep === step.key || (scenarioStep === null && index === 0) ? 0 : -1}
+              className={`landing__scenarioStep${scenarioStep === step.key ? ' landing__scenarioStep--active' : ''}`}
+              onClick={() => selectScenarioStep(step)}
+              onKeyDown={event => handleTabKey(event, index, scenarioSteps.length, nextIndex => selectScenarioStep(scenarioSteps[nextIndex]))}
+            >
+              <span className="landing__scenarioStepNumber">0{index + 1}</span>
+              <span className="landing__scenarioStepIcon"><step.icon size={18} /></span>
+              <span>
+                <strong>{t(`landing.scenario.step.${step.key}.title`)}</strong>
+                <small>{t(`landing.scenario.step.${step.key}.text`)}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="landing__preview">
+          <div
+            className="landing__previewFrame"
+            id="landing-preview-panel"
+            role="region"
+            aria-live="polite"
+            aria-label={t('landing.previewAria')}
+          >
+          <div className="landing__previewChrome">
+            <div className="landing__previewDots" aria-hidden="true"><span /><span /><span /></div>
+            <span className="landing__previewBadge">{t('landing.previewBadge')}</span>
+          </div>
+          <div className="landing__previewTabs" role="tablist" aria-label={t('landing.previewAria')}>
+            {previewTabs.map((tab, index) => (
               <button
                 key={tab.key}
+                id={`landing-preview-tab-${tab.key}`}
                 type="button"
+                role="tab"
+                aria-selected={previewTab === tab.key}
+                aria-controls="landing-preview-content"
+                tabIndex={previewTab === tab.key ? 0 : -1}
                 className={`landing__previewTab${previewTab === tab.key ? ' landing__previewTab--active' : ''}`}
-                onClick={() => setPreviewTab(tab.key)}
+                onClick={() => selectPreviewTab(tab.key)}
+                onKeyDown={event => handleTabKey(event, index, previewTabs.length, nextIndex => selectPreviewTab(previewTabs[nextIndex].key))}
               >
                 <tab.icon size={14} /> {t(`landing.previewTab.${tab.key}`)}
               </button>
@@ -369,20 +473,26 @@ export function LandingPage() {
               <button
                 type="button"
                 className={`landing__previewTab${assetView === 'list' ? ' landing__previewTab--active' : ''}`}
-                onClick={() => setAssetView('list')}
+                onClick={() => { setScenarioStep(null); setAssetView('list'); }}
               >
                 <List size={14} /> {t('landing.preview.viewList')}
               </button>
               <button
                 type="button"
                 className={`landing__previewTab${assetView === 'byLocation' ? ' landing__previewTab--active' : ''}`}
-                onClick={() => setAssetView('byLocation')}
+                onClick={() => { setScenarioStep(null); setAssetView('byLocation'); }}
               >
                 <MapPin size={14} /> {t('landing.preview.viewByLocation')}
               </button>
             </div>
           )}
-          <div className="tableWrap">
+          <div
+            className="tableWrap tableWrap--cards"
+            id="landing-preview-content"
+            role="tabpanel"
+            tabIndex={0}
+            aria-labelledby={`landing-preview-tab-${previewTab}`}
+          >
             {previewTab === 'assets' && assetView === 'list' && (
               <table className="dense-table">
                 <thead>
@@ -404,12 +514,12 @@ export function LandingPage() {
                 <tbody>
                   {previewLicenseRows.map(row => (
                     <tr key={row.name}>
-                      <td><div className="table-icon"><KeyRound size={16} /></div></td>
-                      <td><strong>{row.name}</strong></td>
-                      <td>{row.vendor}</td>
-                      <td>{row.seatsUsed}/{row.seatsTotal}</td>
-                      <td>{row.key ? <code>{row.key}</code> : '-'}</td>
-                      <td><StatusBadge status={row.status} /></td>
+                      <td className="cell-icon"><div className="table-icon"><KeyRound size={16} /></div></td>
+                      <td data-label={t('licenses.colName')}><strong>{row.name}</strong></td>
+                      <td data-label={t('licenses.colVendor')}>{row.vendor}</td>
+                      <td data-label={t('licenses.colSeats')}>{row.seatsUsed}/{row.seatsTotal}</td>
+                      <td data-label={t('licenses.colKey')}>{row.key ? <code>{row.key}</code> : '-'}</td>
+                      <td data-label={t('assets.statusLabel')}><StatusBadge status={row.status} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -422,12 +532,12 @@ export function LandingPage() {
                 </thead>
                 <tbody>
                   {previewPeopleRows.map((row, index) => (
-                    <tr key={row.name}>
-                      <td className="cell-icon"><Avatar name={row.name} photoUrl={previewAvatarUrls[index]} size={28} /></td>
-                      <td><strong>{row.name}</strong></td>
-                      <td>{row.jobTitle}</td>
-                      <td>{row.team}</td>
-                      <td>{row.location}</td>
+                    <tr key={row.name} className={scenarioStep === 'person' && index === 1 ? 'landing__previewFocus' : undefined}>
+                      <td className="cell-icon"><Avatar name={row.name} size={28} /></td>
+                      <td data-label={t('people.colFullName')}><strong>{row.name}</strong></td>
+                      <td data-label={t('people.colJobTitle')}>{row.jobTitle}</td>
+                      <td data-label={t('people.colTeam')}>{row.team}</td>
+                      <td data-label={t('landing.preview.colLocation')}>{row.location}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -473,19 +583,69 @@ export function LandingPage() {
                   {previewProcedureRows.map(row => {
                     const person = row.personIndex != null ? previewPeopleRows[row.personIndex] : null;
                     return (
-                      <tr key={row.title}>
-                        <td><div className="table-icon"><ClipboardCheck size={16} /></div></td>
-                        <td><strong>{row.title}</strong></td>
-                        <td>{row.version}</td>
-                        <td><StatusBadge status={row.status} /></td>
-                        <td>{person && row.personIndex != null ? <span className="personChip"><Avatar name={person.name} photoUrl={previewAvatarUrls[row.personIndex]} size={22} /><span className="personChip__sep">•</span>{person.name}</span> : (row.scope ?? t('procedures.noScope'))}</td>
+                      <tr key={row.title} className={scenarioStep === 'procedure' && row.personIndex === 1 ? 'landing__previewFocus' : undefined}>
+                        <td className="cell-icon"><div className="table-icon"><ClipboardCheck size={16} /></div></td>
+                        <td data-label={t('procedures.titleLabel')}><strong>{row.title}</strong></td>
+                        <td data-label={t('procedures.versionLabel')}>{row.version}</td>
+                        <td data-label={t('assets.statusLabel')}><StatusBadge status={row.status} /></td>
+                        <td data-label={t('procedures.scopeLabel')}>{person && row.personIndex != null ? <span className="personChip"><Avatar name={person.name} size={22} /><span className="personChip__sep">•</span>{person.name}</span> : (row.scope ?? t('procedures.noScope'))}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             )}
+
+            {previewTab === 'proof' && (
+              <div className="landing__scenarioProof">
+                <div className="landing__scenarioProofHeader">
+                  <span className="landing__scenarioProofIcon"><CheckCircle2 size={24} /></span>
+                  <div>
+                    <span className="eyebrow">{t('status.Accepted')}</span>
+                    <h3>{t('landing.scenario.proof.title')}</h3>
+                  </div>
+                  <StatusBadge status="Accepted" />
+                </div>
+                <div className="landing__scenarioProofGrid">
+                  <div><Users size={17} /><span>{t('landing.scenario.proof.person')}</span><strong>{previewPeopleRows[1].name}</strong></div>
+                  <div><Laptop size={17} /><span>{t('landing.scenario.proof.asset')}</span><strong>{previewAssetRows[1].name}</strong></div>
+                  <div><ClipboardCheck size={17} /><span>{t('landing.scenario.proof.procedure')}</span><strong>{previewProcedureRows[0].title}</strong></div>
+                  <div><Clock3 size={17} /><span>{t('landing.scenario.proof.time')}</span><strong>{proofDate}</strong></div>
+                </div>
+                <div className="landing__scenarioAuditLine">
+                  <History size={17} />
+                  <span>{t('landing.scenario.proof.audit')}</span>
+                  <code>EVT-2026-0715-042</code>
+                </div>
+              </div>
+            )}
           </div>
+        </div>
+        </div>
+        <p className="landing__scenarioHint">
+          <ArrowRight size={16} />
+          {activeScenario ? t(`landing.scenario.step.${activeScenario.key}.text`) : t('landing.scenario.explore')}
+        </p>
+      </section>
+
+      <section className="landing__personas" id="dla-kogo" aria-labelledby="landing-personas-title">
+        <div className="landing__sectionIntro">
+          <p className="eyebrow">{t('landing.personas.eyebrow')}</p>
+          <h2 id="landing-personas-title">{t('landing.personas.title')}</h2>
+          <p>{t('landing.personas.lead')}</p>
+        </div>
+        <div className="landing__personaGrid">
+          {personas.map(persona => (
+            <article className="landing__personaCard" key={persona.key}>
+              <div className="landing__personaRole"><persona.icon size={18} /> {t(`landing.personas.${persona.key}.role`)}</div>
+              <h3>{t(`landing.personas.${persona.key}.title`)}</h3>
+              <p>{t(`landing.personas.${persona.key}.text`)}</p>
+              <div className="landing__personaOutcome">
+                <Check size={17} />
+                <span><small>{t('landing.personas.result')}</small><strong>{t(`landing.personas.${persona.key}.result`)}</strong></span>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -507,15 +667,20 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="landing__steps">
-        <h2>{t('landing.stepsHeadline')}</h2>
-        <div className="landing__stepGrid">
-          {steps.map((key, index) => (
-            <div className="landing__stepCard" key={key}>
-              <span className="landing__stepNumber">{index + 1}</span>
-              <h3>{t(`landing.${key}.title`)}</h3>
-              <p>{t(`landing.${key}.text`)}</p>
-            </div>
+      <section className="landing__security" id="bezpieczenstwo" aria-labelledby="landing-security-title">
+        <div className="landing__securityIntro">
+          <p className="eyebrow">{t('landing.security.eyebrow')}</p>
+          <h2 id="landing-security-title">{t('landing.security.title')}</h2>
+          <p>{t('landing.security.lead')}</p>
+          <Link to="/privacy" className="landing__securityLink">{t('landing.security.privacy')} <ArrowRight size={16} /></Link>
+        </div>
+        <div className="landing__securityGrid">
+          {securityItems.map(item => (
+            <article className="landing__securityItem" key={item.key}>
+              <item.icon size={22} />
+              <h3>{t(`landing.security.${item.key}.title`)}</h3>
+              <p>{t(`landing.security.${item.key}.text`)}</p>
+            </article>
           ))}
         </div>
       </section>
