@@ -1,4 +1,4 @@
-import { CircleDot, Download, Layers, Pencil, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
+import { Building2, CircleDot, Download, FileSpreadsheet, Layers, List, Pencil, Plus, RefreshCw, Tag, Upload, Users } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
@@ -111,6 +111,7 @@ export function AssetsPage() {
   const [batchQr, setBatchQr] = useState<{ asset: Asset; svg: string }[] | null>(null);
   const [batchQrLoading, setBatchQrLoading] = useState(false);
   const [batchAddOpen, setBatchAddOpen] = useState(false);
+  const [exportImportMenuOpen, setExportImportMenuOpen] = useState(false);
   const qrLabelSettings = useAsyncData(api.qrLabelSettings, []);
   const openedAssetRef = useRef<string | null>(null);
   const assetsLoader = useMemo(
@@ -680,24 +681,30 @@ export function AssetsPage() {
         title={t('page.assets.title')}
         actions={
           <>
-            <Button variant="secondary" onClick={reloadAssets} icon={<RefreshCw size={16} />}>
-              {t('common.refresh')}
-            </Button>
-            <Button variant="secondary" disabled={exporting} onClick={() => void downloadCsv()} icon={<Download size={16} />}>
-              {exporting ? t('common.loading') : t('assets.exportCsv')}
-            </Button>
-            <Button variant="secondary" disabled={exporting} onClick={() => void downloadJson()} icon={<Download size={16} />}>
-              {exporting ? t('common.loading') : t('assets.exportJson')}
-            </Button>
-            <Button variant="secondary" onClick={openImport} icon={<Upload size={16} />}>
-              {t('assets.import')}
-            </Button>
-            <Button variant="secondary" onClick={() => setBatchAddOpen(true)} icon={<Layers size={16} />}>
-              {t('assets.batchAdd')}
-            </Button>
-            <Button onClick={openCreate} icon={<Plus size={16} />}>
-              {t('assets.add')}
-            </Button>
+            <Button variant="secondary" iconOnly title={t('common.refresh')} aria-label={t('common.refresh')} onClick={reloadAssets} icon={<RefreshCw size={16} />} />
+            <div className="menuPopover">
+              <Button
+                variant="secondary"
+                iconOnly
+                disabled={exporting}
+                title={t('assets.exportImportMenu')}
+                aria-label={t('assets.exportImportMenu')}
+                onClick={() => setExportImportMenuOpen(open => !open)}
+                icon={<FileSpreadsheet size={16} />}
+              />
+              {exportImportMenuOpen ? (
+                <>
+                  <button type="button" className="menuPopover__scrim" aria-label={t('common.close')} onClick={() => setExportImportMenuOpen(false)} />
+                  <div className="menuPopover__panel">
+                    <button type="button" className="menuPopover__item" disabled={exporting} onClick={() => { setExportImportMenuOpen(false); void downloadCsv(); }}><Download size={15} />{t('assets.exportCsv')}</button>
+                    <button type="button" className="menuPopover__item" disabled={exporting} onClick={() => { setExportImportMenuOpen(false); void downloadJson(); }}><Download size={15} />{t('assets.exportJson')}</button>
+                    <button type="button" className="menuPopover__item" onClick={() => { setExportImportMenuOpen(false); openImport(); }}><Upload size={15} />{t('assets.import')}</button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <Button variant="secondary" iconOnly title={t('assets.batchAdd')} aria-label={t('assets.batchAdd')} onClick={() => setBatchAddOpen(true)} icon={<Layers size={16} />} />
+            <Button iconOnly title={t('assets.add')} aria-label={t('assets.add')} onClick={openCreate} icon={<Plus size={16} />} />
           </>
         }
       />
@@ -731,70 +738,54 @@ export function AssetsPage() {
         statuses={statuses}
         locations={locations.data ?? []}
         teams={teams.data ?? []}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
       />
 
-      <div style={{ display: viewMode === 'location' ? undefined : 'none' }}>
-        <Card>
-          <div className="sectionTitle">
-            <div><h2>{t('assets.locationTreeTitle')}</h2></div>
-          </div>
+      <Card>
+        <div className="tabs assetViewTabs" role="tablist" aria-label={t('assets.listTitle')}>
+          <ViewTab active={viewMode === 'list'} onClick={() => setViewMode('list')} icon={<List size={16} />} label={t('assets.viewList')} />
+          <ViewTab active={viewMode === 'location'} onClick={() => setViewMode('location')} icon={<Building2 size={16} />} label={t('assets.browseByLocation')} />
+          <ViewTab active={viewMode === 'person'} onClick={() => setViewMode('person')} icon={<Users size={16} />} label={t('assets.viewPerson')} />
+          <ViewTab active={viewMode === 'status'} onClick={() => setViewMode('status')} icon={<CircleDot size={16} />} label={t('assets.viewStatus')} />
+          <ViewTab active={viewMode === 'category'} onClick={() => setViewMode('category')} icon={<Tag size={16} />} label={t('assets.viewCategory')} />
+        </div>
+
+        {viewMode === 'location' && (
           <LocationAssetBrowser locations={locations.data ?? []} categories={categories.data ?? []} onSelectAsset={handleSelectAssetFromTree} />
-        </Card>
-      </div>
-
-      <div style={{ display: viewMode === 'person' ? undefined : 'none' }}>
-        <Card>
-          <div className="sectionTitle">
-            <div><h2>{t('assets.viewPerson')}</h2></div>
-          </div>
+        )}
+        {viewMode === 'person' && (
           <GroupedAssetBrowser groups={personGroups} icon={<Users size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchPersonAssets} onSelectAsset={handleSelectAssetFromTree} />
-        </Card>
-      </div>
-
-      <div style={{ display: viewMode === 'status' ? undefined : 'none' }}>
-        <Card>
-          <div className="sectionTitle">
-            <div><h2>{t('assets.viewStatus')}</h2></div>
-          </div>
+        )}
+        {viewMode === 'status' && (
           <GroupedAssetBrowser groups={statusGroups} icon={<CircleDot size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchStatusAssets} onSelectAsset={handleSelectAssetFromTree} />
-        </Card>
-      </div>
-
-      <div style={{ display: viewMode === 'category' ? undefined : 'none' }}>
-        <Card>
-          <div className="sectionTitle">
-            <div><h2>{t('assets.viewCategory')}</h2></div>
-          </div>
+        )}
+        {viewMode === 'category' && (
           <GroupedAssetBrowser groups={categoryGroups} icon={<Tag size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchCategoryAssets} onSelectAsset={handleSelectAssetFromTree} />
-        </Card>
-      </div>
-
-      <div style={{ display: viewMode === 'list' ? undefined : 'none' }}>
-        <AssetsList
-          rows={rows}
-          categories={categories.data ?? []}
-          statusSettingByKey={statusSettingByKey}
-          isLoading={assets.isLoading}
-          totalAssets={totalAssets}
-          page={page}
-          pageSize={pageSize}
-          filtersActive={hasFilters}
-          onClearFilters={clearFilters}
-          onCreate={openCreate}
-          onSelect={setSelected}
-          onViewPerson={setViewPersonId}
-          onViewLocation={setViewLocation}
-          selectedIds={selectedIds}
-          allOnPageSelected={allOnPageSelected}
-          onToggleSelected={toggleSelected}
-          onToggleSelectAll={toggleSelectAllOnPage}
-          sort={sort}
-          onToggleSort={toggleSort}
-          onPageChange={setPage}
-        />
-      </div>
+        )}
+        {viewMode === 'list' && (
+          <AssetsList
+            rows={rows}
+            categories={categories.data ?? []}
+            statusSettingByKey={statusSettingByKey}
+            isLoading={assets.isLoading}
+            totalAssets={totalAssets}
+            page={page}
+            pageSize={pageSize}
+            filtersActive={hasFilters}
+            onClearFilters={clearFilters}
+            onCreate={openCreate}
+            onSelect={setSelected}
+            onViewPerson={setViewPersonId}
+            onViewLocation={setViewLocation}
+            selectedIds={selectedIds}
+            allOnPageSelected={allOnPageSelected}
+            onToggleSelected={toggleSelected}
+            onToggleSelectAll={toggleSelectAllOnPage}
+            sort={sort}
+            onToggleSort={toggleSort}
+            onPageChange={setPage}
+          />
+        )}
+      </Card>
 
       <AssetDetailPanel
         selected={selected}
@@ -1051,5 +1042,13 @@ export function AssetsPage() {
         onError={text => setMessage({ type: 'error', text })}
       />
     </div>
+  );
+}
+
+function ViewTab({ active, onClick, icon, label }: { active: boolean; onClick(): void; icon: React.ReactNode; label: string }) {
+  return (
+    <button type="button" role="tab" aria-selected={active} className={active ? 'tab tab--active' : 'tab'} onClick={onClick}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>{icon}{label}</span>
+    </button>
   );
 }

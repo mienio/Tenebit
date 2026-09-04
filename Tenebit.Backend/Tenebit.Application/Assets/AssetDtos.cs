@@ -91,8 +91,8 @@ public sealed record CreateAssetRequest(
 /// generated from a prefix and a running number so nobody types twenty near-identical forms.
 ///
 /// Serial numbers are the only per-unit field here, because they are the one thing a delivery note
-/// actually lists per item. The Nth serial goes to the Nth generated tag; a shorter list simply leaves
-/// the remaining units without one.
+/// actually lists per item. The Nth entry goes to the Nth generated tag; a blank or missing entry
+/// simply leaves that unit without one, so gaps in the middle of the list do not shift later units.
 /// </summary>
 [ValidatedRequest]
 public sealed record CreateAssetBatchRequest(

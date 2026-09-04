@@ -19,4 +19,9 @@ public static class AdminActions
     public const string UserBlocked = "user.blocked";
     public const string UserUnblocked = "user.unblocked";
     public const string UserForcedSignOut = "user.forced_sign_out";
+
+    public const string PromoCodeCreated = "promo_code.created";
+    public const string PromoCodeActivated = "promo_code.activated";
+    public const string PromoCodeDeactivated = "promo_code.deactivated";
+    public const string PromoCodeDeleted = "promo_code.deleted";
 }

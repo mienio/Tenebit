@@ -8,13 +8,14 @@ namespace Tenebit.Tests;
 
 public class SubscriptionServiceTests
 {
-    private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents) CreateService()
+    private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents, InMemoryPromoCodeRepository PromoCodes) CreateService()
     {
         var currentUser = new FakeCurrentUser();
         var assets = new InMemoryAssetRepository();
         var subscriptions = new InMemorySubscriptionRepository();
         var paymentGateway = new FakePaymentGateway();
         var processedEvents = new InMemoryProcessedStripeEventRepository();
+        var promoCodes = new InMemoryPromoCodeRepository();
         var service = new SubscriptionService(
             subscriptions,
             processedEvents,
@@ -24,14 +25,15 @@ public class SubscriptionServiceTests
             new FakeClock(),
             new FakeUnitOfWork(),
             paymentGateway,
-            new FakeAppLinkBuilder());
-        return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents);
+            new FakeAppLinkBuilder(),
+            promoCodes);
+        return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents, promoCodes);
     }
 
     [Fact]
     public async Task GetCurrentAsync_CreatesDefaultFreeSubscriptionWhenNoneExists()
     {
-        var (service, _, _, subscriptions, _, _) = CreateService();
+        var (service, _, _, subscriptions, _, _, _) = CreateService();
 
         var result = await service.GetCurrentAsync(CancellationToken.None);
 
@@ -43,7 +45,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task UpgradeAsync_RejectsNonOwnerRole()
     {
-        var (service, user, _, _, _, _) = CreateService();
+        var (service, user, _, _, _, _, _) = CreateService();
         user.Roles = ["employee"];
 
         var result = await service.UpgradeAsync("free", CancellationToken.None);
@@ -54,7 +56,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task UpgradeAsync_RejectsUnknownPlanKey()
     {
-        var (service, _, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _, _) = CreateService();
 
         var result = await service.UpgradeAsync("enterprise-does-not-exist", CancellationToken.None);
 
@@ -64,7 +66,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task UpgradeAsync_RejectsDirectProUpgrade_RequiresStripeCheckout()
     {
-        var (service, _, _, _, _, _) = CreateService();
+        var (service, _, _, _, _, _, _) = CreateService();
 
         var result = await service.UpgradeAsync("pro", CancellationToken.None);
 
@@ -74,7 +76,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task UpgradeAsync_RejectsFreeDowngradeWhileStripeSubscriptionActive()
     {
-        var (service, user, _, subscriptions, _, _) = CreateService();
+        var (service, user, _, subscriptions, _, _, _) = CreateService();
         var subscription = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
         subscription.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "cus_123", DateTimeOffset.UtcNow);
         subscriptions.Add(subscription);
@@ -87,7 +89,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task CreateCheckoutSessionAsync_RejectsWhenStripeNotConfigured()
     {
-        var (service, _, _, _, paymentGateway, _) = CreateService();
+        var (service, _, _, _, paymentGateway, _, _) = CreateService();
         paymentGateway.IsConfigured = false;
 
         var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
@@ -98,7 +100,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task CreateCheckoutSessionAsync_CreatesCustomerAndReturnsCheckoutUrl()
     {
-        var (service, _, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, _, _, subscriptions, paymentGateway, _, _) = CreateService();
         paymentGateway.NextCustomerId = "cus_new";
         paymentGateway.NextCheckoutUrl = "https://checkout.stripe.com/session-abc";
 
@@ -112,7 +114,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_SyncsPlanFromSubscriptionCreatedEvent()
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
         existing.AttachStripeCustomer("cus_123");
         subscriptions.Add(existing);
@@ -133,7 +135,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_RevertsToFreeOnSubscriptionDeletedEvent()
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
         existing.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "cus_123", DateTimeOffset.UtcNow.AddMinutes(-10));
         subscriptions.Add(existing);
@@ -152,7 +154,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_RejectsInvalidSignature()
     {
-        var (service, _, _, _, paymentGateway, _) = CreateService();
+        var (service, _, _, _, paymentGateway, _, _) = CreateService();
         paymentGateway.ThrowOnParseWebhookEvent = true;
 
         var result = await service.HandleWebhookAsync("{}", "bad-signature", CancellationToken.None);
@@ -163,7 +165,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_ReplayedEventIdIsNoOp()
     {
-        var (service, user, _, subscriptions, paymentGateway, processedEvents) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, processedEvents, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
         existing.AttachStripeCustomer("cus_123");
         subscriptions.Add(existing);
@@ -189,7 +191,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_IgnoresOutOfOrderEventOlderThanLastApplied()
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
         existing.AttachStripeCustomer("cus_123");
         subscriptions.Add(existing);
@@ -218,7 +220,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_UnknownStatus_DoesNotGrantProPlan()
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
         existing.AttachStripeCustomer("cus_123");
         subscriptions.Add(existing);
@@ -238,7 +240,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task HandleWebhookAsync_MetadataOrganizationMismatch_IsRejected()
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
         existing.AttachStripeCustomer("cus_owned_by_this_org");
         subscriptions.Add(existing);
@@ -260,7 +262,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task CanAddAssetAsync_ReturnsFalseAtFreePlanLimit()
     {
-        var (service, user, assets, _, _, _) = CreateService();
+        var (service, user, assets, _, _, _, _) = CreateService();
         for (var i = 0; i < SubscriptionPlan.Free.AssetLimit; i++)
         {
             assets.Add(new Asset(user.OrganizationId, Guid.NewGuid(), $"Asset {i}", $"AT-{i:000}"));
@@ -275,7 +277,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task CanAddAssetAsync_ReturnsTrueUnderFreePlanLimit()
     {
-        var (service, user, assets, _, _, _) = CreateService();
+        var (service, user, assets, _, _, _, _) = CreateService();
         for (var i = 0; i < 3; i++)
         {
             assets.Add(new Asset(user.OrganizationId, Guid.NewGuid(), $"Asset {i}", $"AT-{i:000}"));
@@ -291,7 +293,7 @@ public class SubscriptionServiceTests
     [InlineData(SubscriptionStatus.Unknown)]
     public async Task CreateCheckoutSessionAsync_BlocksSecondSubscription_WhenProviderSubscriptionStillExists(SubscriptionStatus status)
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
         existing.SyncFromStripe(SubscriptionPlan.Business.Key, status, now, now.AddMonths(1), "sub_live", "cus_live", now);
@@ -308,7 +310,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task CreateCheckoutSessionAsync_AllowsNewCheckoutAfterCanonicalCancellation()
     {
-        var (service, user, _, subscriptions, paymentGateway, _) = CreateService();
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
         existing.SyncFromStripe(SubscriptionPlan.Free.Key, SubscriptionStatus.Cancelled, now, now, "sub_old", "cus_existing", now);
@@ -325,7 +327,7 @@ public class SubscriptionServiceTests
     [Fact]
     public async Task RepeatedCheckoutAttempt_UsesStableStripeIdempotencyKey()
     {
-        var (service, _, _, _, paymentGateway, _) = CreateService();
+        var (service, _, _, _, paymentGateway, _, _) = CreateService();
 
         var first = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None);
         var firstKey = paymentGateway.LastCheckoutIdempotencyKey;
@@ -338,12 +340,77 @@ public class SubscriptionServiceTests
     }
 
 
+    [Fact]
+    public async Task ValidatePromoCodeAsync_ReturnsDiscountedPrice_ForValidCode()
+    {
+        var (service, _, _, _, _, _, promoCodes) = CreateService();
+        promoCodes.Add(new PromoCode("SUMMER10", SubscriptionPlan.Business.Key, PromoDiscountType.Percentage, 10m, null, null, DateTimeOffset.UtcNow));
+
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "summer10", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("SUMMER10", result.Value!.Code);
+        Assert.Equal(SubscriptionPlan.Business.MonthlyPrice * 0.9m, result.Value.DiscountedPrice);
+    }
+
+    [Fact]
+    public async Task ValidatePromoCodeAsync_RejectsCodeScopedToAnotherPlan()
+    {
+        var (service, _, _, _, _, _, promoCodes) = CreateService();
+        promoCodes.Add(new PromoCode("GROWTHONLY", SubscriptionPlan.Growth.Key, PromoDiscountType.Percentage, 10m, null, null, DateTimeOffset.UtcNow));
+
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "GROWTHONLY", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task ValidatePromoCodeAsync_RejectsExpiredCode()
+    {
+        var (service, _, _, _, _, _, promoCodes) = CreateService();
+        promoCodes.Add(new PromoCode("OLDCODE", SubscriptionPlan.Business.Key, PromoDiscountType.FixedAmount, 5m, null, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(-10)));
+
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "OLDCODE", CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSessionAsync_RedeemsPromoCodeAndForwardsDiscountToGateway()
+    {
+        var (service, _, _, _, paymentGateway, _, promoCodes) = CreateService();
+        var promo = new PromoCode("LAUNCH20", SubscriptionPlan.Business.Key, PromoDiscountType.Percentage, 20m, 5, null, DateTimeOffset.UtcNow);
+        promoCodes.Add(promo);
+
+        var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None, "launch20");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, promo.TimesRedeemed);
+        Assert.NotNull(paymentGateway.LastDiscount);
+        Assert.Equal(PromoDiscountType.Percentage, paymentGateway.LastDiscount!.Type);
+        Assert.Equal(20m, paymentGateway.LastDiscount.Value);
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSessionAsync_RejectsExhaustedPromoCode_WithoutCreatingCheckout()
+    {
+        var (service, _, _, _, paymentGateway, _, promoCodes) = CreateService();
+        var promo = new PromoCode("ONEUSE", SubscriptionPlan.Business.Key, PromoDiscountType.FixedAmount, 5m, 1, null, DateTimeOffset.UtcNow);
+        promo.Redeem();
+        promoCodes.Add(promo);
+
+        var result = await service.CreateCheckoutSessionAsync(SubscriptionPlan.Business.Key, "/success", "/cancel", CancellationToken.None, "ONEUSE");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
+    }
+
     /// <summary>Limity pozostałych zasobów są egzekwowane, ale nie mogą wyciec przez API - w
     /// odpowiedzi jest wyłącznie licznik aktywów.</summary>
     [Fact]
     public async Task GetCurrentAsync_ReportsAssetUsageOnly()
     {
-        var (service, user, assets, _, _, _) = CreateService();
+        var (service, user, assets, _, _, _, _) = CreateService();
         assets.Add(new Asset(user.OrganizationId, Guid.NewGuid(), "Laptop", "AT-001"));
 
         var result = await service.GetCurrentAsync(CancellationToken.None);

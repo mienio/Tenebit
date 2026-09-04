@@ -5,6 +5,7 @@ using Tenebit.Application.Abstractions;
 using Tenebit.Application.Admin;
 using Tenebit.Application.Common;
 using Tenebit.Application.Identity;
+using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Api.Endpoints;
 
@@ -24,6 +25,19 @@ public sealed record AdminSuspendRequest(
 public sealed record AdminUserActionRequest(
     [property: StringLength(500)] string? Reason,
     [property: Required, StringLength(11, MinimumLength = 6)] string TotpCode);
+
+[ValidatedRequest]
+public sealed record AdminCreatePromoCodeRequest(
+    [property: Required, StringLength(40)] string PlanKey,
+    [property: Required] PromoDiscountType DiscountType,
+    [property: Range(0.01, 100000)] decimal DiscountValue,
+    [property: Range(1, 200)] int Quantity,
+    string? Code,
+    [property: Range(1, int.MaxValue)] int? MaxRedemptions,
+    DateTimeOffset? ExpiresAt);
+
+[ValidatedRequest]
+public sealed record AdminSetPromoCodeActiveRequest(bool Active);
 
 // Fully isolated from /api: separate route group, separate JWT scope (token_scope=platform_admin),
 // no organization_id, no OrganizationUser row. TenebitEndpoints explicitly rejects this scope on every
@@ -52,6 +66,7 @@ public static class AdminEndpoints
         MapAuth(admin);
         MapReads(admin);
         MapModeration(admin);
+        MapPromoCodes(admin);
         return admin;
     }
 
@@ -193,6 +208,28 @@ public static class AdminEndpoints
                 if (result.IsSuccess) await alerts.ModerationActionAsync("wymuszone wylogowanie", id.ToString(), http.Connection.RemoteIpAddress, cancellationToken);
                 return result.ToNoContentResult();
             });
+    }
+
+    // No step-up code: promo codes are marketing configuration, not a path to anyone's account or data.
+    private static void MapPromoCodes(RouteGroupBuilder admin)
+    {
+        admin.MapGet("/promo-codes", async (PromoCodeAdminService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListAsync(cancellationToken)));
+
+        admin.MapPost("/promo-codes", async (
+                AdminCreatePromoCodeRequest request, HttpContext http, PromoCodeAdminService service, CancellationToken cancellationToken) =>
+            (await service.CreateAsync(
+                request.PlanKey, request.DiscountType, request.DiscountValue, request.Quantity,
+                request.Code, request.MaxRedemptions, request.ExpiresAt,
+                http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToHttpResult());
+
+        admin.MapPost("/promo-codes/{id:guid}/active", async (
+                Guid id, AdminSetPromoCodeActiveRequest request, HttpContext http, PromoCodeAdminService service, CancellationToken cancellationToken) =>
+            (await service.SetActiveAsync(id, request.Active, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult());
+
+        admin.MapDelete("/promo-codes/{id:guid}", async (
+                Guid id, HttpContext http, PromoCodeAdminService service, CancellationToken cancellationToken) =>
+            (await service.DeleteAsync(id, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult());
     }
 
     /// <summary>

@@ -63,27 +63,58 @@ public sealed class StripePaymentGateway : IPaymentGateway
         return RequiredString(json, "id");
     }
 
-    public async Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
+    public async Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         if (!PlanPrices.TryGetValue(planKey, out var priceId))
             throw new PaymentGatewayException($"Stripe:Prices:{planKey} is not configured.");
 
-        var json = await PostAsync(
-            "checkout/sessions",
-            new Dictionary<string, string>
-            {
-                ["mode"] = "subscription",
-                ["customer"] = customerId,
-                ["client_reference_id"] = organizationId.ToString(),
-                ["success_url"] = successUrl,
-                ["cancel_url"] = cancelUrl,
-                ["line_items[0][price]"] = priceId,
-                ["line_items[0][quantity]"] = "1",
-                ["subscription_data[metadata][organizationId]"] = organizationId.ToString()
-            },
-            idempotencyKey,
-            cancellationToken);
+        var form = new Dictionary<string, string>
+        {
+            ["mode"] = "subscription",
+            ["customer"] = customerId,
+            ["client_reference_id"] = organizationId.ToString(),
+            ["success_url"] = successUrl,
+            ["cancel_url"] = cancelUrl,
+            ["line_items[0][price]"] = priceId,
+            ["line_items[0][quantity]"] = "1",
+            ["subscription_data[metadata][organizationId]"] = organizationId.ToString()
+        };
+
+        if (discount is not null)
+        {
+            var couponId = await EnsureCouponAsync(discount, cancellationToken);
+            form["discounts[0][coupon]"] = couponId;
+        }
+
+        var json = await PostAsync("checkout/sessions", form, idempotencyKey, cancellationToken);
         return RequiredString(json, "url");
+    }
+
+    /// <summary>
+    /// Our promo codes are our own marketing entities, not Stripe objects - Stripe Checkout Sessions can
+    /// only reference an existing Coupon. This creates one on first use (idempotency key derived from the
+    /// discount shape, so repeated checkouts with the same code reuse the same coupon instead of piling
+    /// up duplicates) applied to the first invoice only ("once"), matching how a promo code is understood
+    /// everywhere else in the product: a discount on the signup, not a permanent price change.
+    /// </summary>
+    private async Task<string> EnsureCouponAsync(PromoCodeDiscount discount, CancellationToken cancellationToken)
+    {
+        var form = new Dictionary<string, string> { ["duration"] = "once" };
+        string idempotencyKey;
+        if (discount.Type == PromoDiscountType.Percentage)
+        {
+            form["percent_off"] = discount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            idempotencyKey = $"tenebit-coupon-pct-{discount.Value:0.##}";
+        }
+        else
+        {
+            form["amount_off"] = ((long)Math.Round(discount.Value * 100)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            form["currency"] = "eur";
+            idempotencyKey = $"tenebit-coupon-amt-{discount.Value:0.##}";
+        }
+
+        var json = await PostAsync("coupons", form, idempotencyKey, cancellationToken);
+        return RequiredString(json, "id");
     }
 
     public async Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken)

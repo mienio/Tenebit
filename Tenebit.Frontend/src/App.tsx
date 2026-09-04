@@ -39,6 +39,7 @@ const AdminOrganizationDetailPage = lazy(() => import('./admin/AdminOrganization
 const AdminUsersPage = lazy(() => import('./admin/AdminUsersPage').then(m => ({ default: m.AdminUsersPage })));
 const AdminLoginsPage = lazy(() => import('./admin/AdminLoginsPage').then(m => ({ default: m.AdminLoginsPage })));
 const AdminAuditPage = lazy(() => import('./admin/AdminAuditPage').then(m => ({ default: m.AdminAuditPage })));
+const AdminPromoCodesPage = lazy(() => import('./admin/AdminPromoCodesPage').then(m => ({ default: m.AdminPromoCodesPage })));
 
 function HomeRoute() {
   const auth = useAuth();
@@ -83,6 +84,7 @@ export function App() {
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/logins" element={<AdminLoginsPage />} />
         <Route path="/admin/audit" element={<AdminAuditPage />} />
+        <Route path="/admin/promo-codes" element={<AdminPromoCodesPage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<RequireRoles path="/dashboard"><DashboardPage /></RequireRoles>} />
           <Route path="my" element={<MyWorkspacePage />} />

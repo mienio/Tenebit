@@ -1,12 +1,10 @@
-import { Building2, ChevronDown, CircleDot, FileSpreadsheet, List, Printer, Search, SlidersHorizontal, Tag, Users, X } from 'lucide-react';
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { ChevronDown, FileSpreadsheet, Printer, Search, SlidersHorizontal, X } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { SelectInput, TextInput } from '../../components/FormFields';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { AssetStatus, LocationNode, Team } from '../../types/domain';
-
-type ViewMode = 'list' | 'location' | 'person' | 'status' | 'category';
 
 type StatusOption = { value: AssetStatus | ''; label: string };
 
@@ -33,8 +31,6 @@ interface AssetsToolbarProps {
   statuses: StatusOption[];
   locations: LocationNode[];
   teams: Team[];
-  viewMode: ViewMode;
-  setViewMode: Dispatch<SetStateAction<ViewMode>>;
 }
 
 export function AssetsToolbar(props: AssetsToolbarProps) {
@@ -139,24 +135,6 @@ export function AssetsToolbar(props: AssetsToolbarProps) {
           </div>
         ) : null}
       </Card>
-
-      <Card className="toolbarCard">
-        <div className="tabs" role="tablist" aria-label={t('assets.listTitle')}>
-          <ViewTab active={props.viewMode === 'list'} onClick={() => props.setViewMode('list')} icon={<List size={16} />} label={t('assets.viewList')} />
-          <ViewTab active={props.viewMode === 'location'} onClick={() => props.setViewMode('location')} icon={<Building2 size={16} />} label={t('assets.browseByLocation')} />
-          <ViewTab active={props.viewMode === 'person'} onClick={() => props.setViewMode('person')} icon={<Users size={16} />} label={t('assets.viewPerson')} />
-          <ViewTab active={props.viewMode === 'status'} onClick={() => props.setViewMode('status')} icon={<CircleDot size={16} />} label={t('assets.viewStatus')} />
-          <ViewTab active={props.viewMode === 'category'} onClick={() => props.setViewMode('category')} icon={<Tag size={16} />} label={t('assets.viewCategory')} />
-        </div>
-      </Card>
     </>
-  );
-}
-
-function ViewTab({ active, onClick, icon, label }: { active: boolean; onClick(): void; icon: React.ReactNode; label: string }) {
-  return (
-    <button type="button" role="tab" aria-selected={active} className={active ? 'tab tab--active' : 'tab'} onClick={onClick}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>{icon}{label}</span>
-    </button>
   );
 }

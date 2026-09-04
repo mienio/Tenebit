@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react';
 import { FormEvent, useMemo, useState } from 'react';
 import { api } from '../../api/endpoints';
 import { Button } from '../../components/Button';
-import { Field, SelectInput, TextArea, TextInput } from '../../components/FormFields';
+import { Field, SelectInput, TextInput } from '../../components/FormFields';
 import { Modal } from '../../components/Modal';
 import { useI18n } from '../../i18n/I18nProvider';
 import type { Asset, AssetCategory, LocationNode, Team } from '../../types/domain';
@@ -49,11 +49,14 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
     [categories, categoryId]
   );
 
-  const preview = useMemo(() => {
-    if (!tagPrefix.trim() || quantity < 1) return null;
-    const tags = buildBatchTags(tagPrefix.trim(), startNumber, padding, Math.min(quantity, maxQuantity));
-    return tags.length <= 3 ? tags.join(', ') : `${tags[0]}, ${tags[1]} … ${tags[tags.length - 1]}`;
-  }, [tagPrefix, startNumber, padding, quantity]);
+  const clampedQuantity = Math.min(Math.max(quantity, 0), maxQuantity);
+
+  const tags = useMemo(() => {
+    if (!tagPrefix.trim() || clampedQuantity < 1) return [];
+    return buildBatchTags(tagPrefix.trim(), startNumber, padding, clampedQuantity);
+  }, [tagPrefix, startNumber, padding, clampedQuantity]);
+
+  const preview = tags.length === 0 ? null : tags.length <= 3 ? tags.join(', ') : `${tags[0]}, ${tags[1]} … ${tags[tags.length - 1]}`;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -63,11 +66,7 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
     if (quantity < 1 || quantity > maxQuantity) return onError(t('assets.batchQuantityRange', { max: maxQuantity }));
     if (!tagPrefix.trim()) return onError(t('assets.batchPrefixRequired'));
 
-    const serialNumbers = String(form.get('serialNumbers') ?? '')
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-    if (serialNumbers.length > quantity) return onError(t('assets.batchSerialsTooMany'));
+    const serialNumbers = Array.from({ length: clampedQuantity }, (_, i) => String(form.get(`serial__${i}`) ?? '').trim());
 
     const customFields: Record<string, string> = {};
     for (const field of categoryFields) {
@@ -92,7 +91,7 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
         tagPrefix: tagPrefix.trim(),
         tagStartNumber: startNumber,
         tagPadding: padding,
-        serialNumbers: serialNumbers.length > 0 ? serialNumbers : null,
+        serialNumbers: serialNumbers.some(serial => serial.length > 0) ? serialNumbers : null,
         location: toNullable(String(form.get('location') ?? '')),
         manufacturer: toNullable(String(form.get('manufacturer') ?? '')),
         model: toNullable(String(form.get('model') ?? '')),
@@ -188,13 +187,19 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
           </>
         )}
 
-        <div className="formSectionTitle">{t('assets.batchSerialsSection')}</div>
-        <div className="formFullWidth">
-          <Field label={t('assets.batchSerials')}>
-            <TextArea name="serialNumbers" rows={4} placeholder={t('assets.batchSerialsPlaceholder')} />
-          </Field>
-          <p className="muted">{t('assets.batchSerialsHint')}</p>
-        </div>
+        {clampedQuantity > 0 && (
+          <>
+            <div className="formSectionTitle">{t('assets.batchSerialsSection')}</div>
+            <div className="formFullWidth">
+              <p className="muted">{t('assets.batchSerialsHint')}</p>
+            </div>
+            {Array.from({ length: clampedQuantity }, (_, i) => (
+              <Field key={i} label={tags[i] ?? `#${i + 1}`}>
+                <TextInput name={`serial__${i}`} />
+              </Field>
+            ))}
+          </>
+        )}
 
         <div className="formActions formActions--split">
           <Button type="button" variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>

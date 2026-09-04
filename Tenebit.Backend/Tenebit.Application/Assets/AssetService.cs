@@ -267,8 +267,7 @@ public sealed class AssetService
             }
 
             var serials = (request.SerialNumbers ?? [])
-                .Select(serial => serial.Trim())
-                .Where(serial => serial.Length > 0)
+                .Select(serial => { var trimmed = serial.Trim(); return trimmed.Length > 0 ? trimmed : null; })
                 .ToList();
             if (serials.Count > request.Quantity)
             {

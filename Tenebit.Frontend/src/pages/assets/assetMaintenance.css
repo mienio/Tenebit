@@ -70,19 +70,21 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
+  padding: 6px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--text);
   cursor: pointer;
   font: inherit;
-  font-size: 11.5px;
+  font-weight: 650;
+  font-size: 12px;
 }
-.amBtn:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+.amBtn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
 .amBtn:disabled { opacity: .5; cursor: default; }
-.amBtn--icon { padding: 4px 6px; }
-.amBtn--danger { border-color: var(--danger); color: var(--danger); }
+.amBtn--icon { padding: 6px; }
+.amBtn--danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+.amBtn--danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
 
 /* ---- Edge indicator on the asset tile ------------------------------------
    A strip on the tile's right edge, not a column: it costs no horizontal space, needs no header, and

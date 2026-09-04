@@ -145,6 +145,14 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .button--danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .button--danger:hover { background: transparent; color: var(--danger); }
 .button__icon { display: inline-flex; }
+.button--icon { padding: 0; width: 42px; gap: 0; }
+
+.menuPopover { position: relative; }
+.menuPopover__scrim { position: fixed; inset: 0; background: transparent; border: 0; cursor: default; z-index: 30; }
+.menuPopover__panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 31; min-width: 190px; padding: 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow); display: grid; gap: 2px; }
+.menuPopover__item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; background: transparent; border-radius: 3px; font-size: 13px; text-align: left; cursor: pointer; color: var(--text); }
+.menuPopover__item:hover { background: var(--surface-soft); }
+.menuPopover__item:disabled { opacity: .56; cursor: not-allowed; }
 
 .formGrid, .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 /* Kolumny filtrów muszą być ściśliwe (`minmax(0, Nfr)`), nie sztywne. Wcześniej `--six` miało
@@ -611,6 +619,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .tab { min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--muted); cursor: pointer; font-weight: 560; }
 .tab:hover { background: var(--surface-strong); }
 .tab--active { color: #fff; background: var(--brand); border-color: var(--brand); }
+.assetViewTabs { margin-bottom: 16px; }
 
 .modalOverlay, .drawerOverlay { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 24px; background: rgba(15,23,42,.40); }
 .modalBackdrop, .drawerBackdrop { position: absolute; inset: 0; border: 0; background: transparent; cursor: pointer; }

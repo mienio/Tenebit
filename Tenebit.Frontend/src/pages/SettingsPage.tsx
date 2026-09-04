@@ -28,12 +28,12 @@ import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 
-type Tab = 'account' | 'company' | 'locations' | 'customFields' | 'profiles' | 'users' | 'permissions' | 'alerts';
+type Tab = 'account' | 'company' | 'locations' | 'customFields' | 'qrLabel' | 'profiles' | 'users' | 'permissions' | 'alerts';
 type SettingsMessage = { type: 'success' | 'error'; text: string } | null;
 type DeleteTarget = { kind: 'category'; item: AssetCategory } | { kind: 'profile'; item: JobProfile } | { kind: 'relationType'; item: PersonRelationTypeOption } | { kind: 'team'; item: Team } | null;
 const pageSize = 20;
-const validTabs: Tab[] = ['account', 'company', 'locations', 'customFields', 'profiles', 'users', 'permissions', 'alerts'];
-const organizationOnlyTabs: Tab[] = ['company', 'locations', 'customFields', 'profiles', 'users', 'permissions', 'alerts'];
+const validTabs: Tab[] = ['account', 'company', 'locations', 'customFields', 'qrLabel', 'profiles', 'users', 'permissions', 'alerts'];
+const organizationOnlyTabs: Tab[] = ['company', 'locations', 'customFields', 'qrLabel', 'profiles', 'users', 'permissions', 'alerts'];
 
 export function SettingsPage() {
   const { t } = useI18n();
@@ -49,13 +49,14 @@ export function SettingsPage() {
   // Each tab loads only its own data (the organization gates the whole page, so it stays eager).
   const categoriesNeeded = tab === 'customFields' || tab === 'profiles';
   const statusesNeeded = tab === 'customFields';
+  const qrLabelNeeded = tab === 'qrLabel';
   const profilesNeeded = tab === 'profiles';
   const usersNeeded = tab === 'users';
   const permissionsNeeded = tab === 'permissions';
   const organization = useAsyncData(api.organization, []);
   const categories = useAsyncData(() => (categoriesNeeded ? api.categories() : Promise.resolve(null)), [categoriesNeeded]);
   const statuses = useAsyncData(() => (statusesNeeded ? api.assetStatuses() : Promise.resolve(null)), [statusesNeeded]);
-  const qrLabelSettings = useAsyncData(() => (statusesNeeded ? api.qrLabelSettings() : Promise.resolve(null)), [statusesNeeded]);
+  const qrLabelSettings = useAsyncData(() => (qrLabelNeeded ? api.qrLabelSettings() : Promise.resolve(null)), [qrLabelNeeded]);
   const relationTypeSettings = useAsyncData(() => (statusesNeeded ? api.personRelationTypes() : Promise.resolve(null)), [statusesNeeded]);
   const teamSettings = useAsyncData(() => (statusesNeeded ? api.teams() : Promise.resolve(null)), [statusesNeeded]);
   const procedures = useAsyncData(() => (profilesNeeded ? api.procedures() : Promise.resolve(null)), [profilesNeeded]);
@@ -148,6 +149,7 @@ export function SettingsPage() {
       ['company', t('settings.company')],
       ['locations', t('settings.locations')],
       ['customFields', t('settings.customFields')],
+      ['qrLabel', t('settings.qrLabel')],
       ['profiles', t('settings.profiles')],
       ['users', t('settings.users')],
       ['permissions', t('settings.rolePermissions')],
@@ -554,20 +556,6 @@ export function SettingsPage() {
           </Card>
 
           <Card>
-            <div className="sectionTitle"><div><h2>{t('settings.qrLabel')}</h2><p>{t('settings.qrLabelHint')}</p></div></div>
-            {/* Tylko pierwsze ładowanie podmienia edytor na tekst. Odświeżenie po wgraniu logo
-                odmontowywało go razem z niezapisanymi zmianami w formularzu. */}
-            {qrLabelSettings.isLoading && !qrLabelSettings.data ? <p className="muted">{t('common.loading')}</p> : qrLabelSettings.error || !qrLabelSettings.data ? <ErrorState message={qrLabelSettings.error ?? t('settings.qrLabelSaveFailed')} onRetry={qrLabelSettings.reload} /> : (
-              <QrLabelDesigner
-                settings={qrLabelSettings.data}
-                onSaved={() => void qrLabelSettings.reload()}
-                onSuccess={success}
-                onFailure={failure}
-              />
-            )}
-          </Card>
-
-          <Card>
             <div className="sectionTitle"><div><h2>{t('settings.relationTypes')}</h2><p>{t('settings.relationTypesHint')}</p></div></div>
             {relationTypeSettings.isLoading ? <p className="muted">{t('settings.loadingRelationTypes')}</p> : relationTypeSettings.error ? <ErrorState message={relationTypeSettings.error} onRetry={relationTypeSettings.reload} /> : !relationTypeSettings.data?.length ? <EmptyState title={t('settings.emptyRelationTypesTitle')} description={t('settings.emptyRelationTypesDesc')} /> : (
               <div className="statusList">
@@ -609,6 +597,24 @@ export function SettingsPage() {
               </div>
             )}
             <div className="formActions"><Button type="button" variant="secondary" disabled={creatingTeam} onClick={addTeamSetting} icon={<Plus size={16} />}>{creatingTeam ? t('common.saving') : t('settings.addTeam')}</Button></div>
+          </Card>
+        </div>
+      ) : null}
+
+      {tab === 'qrLabel' && canManageOrganization ? (
+        <div role="tabpanel" id="settings-tabpanel-qrLabel" aria-labelledby="settings-tab-qrLabel">
+          <Card>
+            <div className="sectionTitle"><div><h2>{t('settings.qrLabel')}</h2><p>{t('settings.qrLabelHint')}</p></div></div>
+            {/* Tylko pierwsze ładowanie podmienia edytor na tekst. Odświeżenie po wgraniu logo
+                odmontowywało go razem z niezapisanymi zmianami w formularzu. */}
+            {qrLabelSettings.isLoading && !qrLabelSettings.data ? <p className="muted">{t('common.loading')}</p> : qrLabelSettings.error || !qrLabelSettings.data ? <ErrorState message={qrLabelSettings.error ?? t('settings.qrLabelSaveFailed')} onRetry={qrLabelSettings.reload} /> : (
+              <QrLabelDesigner
+                settings={qrLabelSettings.data}
+                onSaved={() => void qrLabelSettings.reload()}
+                onSuccess={success}
+                onFailure={failure}
+              />
+            )}
           </Card>
         </div>
       ) : null}

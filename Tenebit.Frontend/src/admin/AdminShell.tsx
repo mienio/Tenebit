@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, LayoutDashboard, LogOut, ShieldCheck, Users } from 'lucide-react';
+import { Building2, ClipboardList, LayoutDashboard, LogOut, ShieldCheck, Tag, Users } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { adminLogout, getAdminToken } from './adminApi';
@@ -10,6 +10,7 @@ const nav = [
   { to: '/admin/users', label: 'Użytkownicy', icon: Users, end: false },
   { to: '/admin/logins', label: 'Logowania', icon: ShieldCheck, end: false },
   { to: '/admin/audit', label: 'Dziennik admina', icon: ClipboardList, end: false },
+  { to: '/admin/promo-codes', label: 'Kody promocyjne', icon: Tag, end: false },
 ];
 
 /**

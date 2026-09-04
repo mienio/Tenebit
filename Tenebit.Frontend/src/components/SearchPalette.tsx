@@ -1,4 +1,4 @@
-import { Boxes, KeyRound, MapPin, PackageCheck, Plus, Search, UserPlus, Users } from 'lucide-react';
+import { Boxes, KeyRound, MapPin, PackageCheck, Plus, QrCode, Search, UserPlus, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, type SearchHit } from '../api/endpoints';
@@ -28,6 +28,8 @@ interface Command {
   icon: typeof Plus;
   /** Ścieżka nawigacji, której uprawnienia decydują o widoczności komendy. */
   guardPath: string;
+  /** Dodatkowe role, gdy sama strona docelowa jest dostępna szerzej niż ta komenda. */
+  roles?: string[];
 }
 
 // Skróty do najczęstszych czynności. Każda prowadzi do istniejącego ekranu z parametrem ?new=1, który
@@ -36,6 +38,7 @@ const COMMANDS: Command[] = [
   { id: 'new-asset', labelKey: 'search.command.newAsset', to: '/assets?new=1', icon: Plus, guardPath: '/assets' },
   { id: 'new-assignment', labelKey: 'search.command.newAssignment', to: '/assignments?new=1', icon: PackageCheck, guardPath: '/assignments' },
   { id: 'new-person', labelKey: 'search.command.newPerson', to: '/people?new=1', icon: UserPlus, guardPath: '/people' },
+  { id: 'qr-label', labelKey: 'search.command.qrLabel', to: '/settings?tab=qrLabel', icon: QrCode, guardPath: '/settings', roles: ['owner', 'admin'] },
 ];
 
 /**
@@ -126,7 +129,8 @@ export function SearchPalette() {
       ...COMMANDS
         .filter(command => {
           const guard = nav.find(item => item.to === command.guardPath);
-          return !guard || canSee(guard.roles, auth.roles);
+          if (guard && !canSee(guard.roles, auth.roles)) return false;
+          return !command.roles || canSee(command.roles, auth.roles);
         })
         .map(command => ({ id: command.id, label: t(command.labelKey), to: command.to, icon: command.icon })),
       ...nav

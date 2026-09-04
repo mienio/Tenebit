@@ -100,7 +100,11 @@ export function MaintenanceDueRow({ item, onComplete }: { item: MaintenanceSched
       </span>
 
       {onComplete ? (
-        <button type="button" className="dueRow__action" onClick={() => onComplete(item)}>
+        <button
+          type="button"
+          className="dueRow__action"
+          onClick={() => { if (window.confirm(t('maintenance.markDoneConfirm', { name: item.name }))) onComplete(item); }}
+        >
           {t('maintenance.markDone')}
         </button>
       ) : null}

@@ -149,6 +149,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<OrganizationSubscription> Subscriptions => Set<OrganizationSubscription>();
+    public DbSet<PromoCode> PromoCodes => Set<PromoCode>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<SentAlert> SentAlerts => Set<SentAlert>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
@@ -1203,6 +1204,18 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasKey(x => x.Id);
             entity.Property(x => x.EventId).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => x.EventId).IsUnique();
+        });
+
+        modelBuilder.Entity<PromoCode>(entity =>
+        {
+            entity.ToTable("promo_codes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.PlanKey).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.DiscountType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DiscountValue).HasColumnType("numeric(10,2)");
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.PlanKey);
         });
     }
 }

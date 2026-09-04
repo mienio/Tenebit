@@ -6,7 +6,7 @@ public interface IPaymentGateway
 {
     bool IsConfigured { get; }
     Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken);
-    Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken);
+    Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
     bool IsPlanConfigured(string planKey);
     Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken);
     PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader);
@@ -31,3 +31,5 @@ public sealed record PaymentWebhookEvent(
 public sealed record PaymentSubscriptionState(
     string CustomerId, string SubscriptionId, string PlanKey, SubscriptionStatus Status,
     DateTimeOffset CurrentPeriodStart, DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId);
+
+public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value);

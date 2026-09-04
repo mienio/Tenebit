@@ -51,7 +51,11 @@ public static class SubscriptionEndpoints
             .WithTags("Subscription");
 
         api.MapPost("/subscription/checkout", async (CheckoutSessionRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.CreateCheckoutSessionAsync(request.PlanKey, request.SuccessUrl, request.CancelUrl, cancellationToken)).ToHttpResult())
+                (await service.CreateCheckoutSessionAsync(request.PlanKey, request.SuccessUrl, request.CancelUrl, cancellationToken, request.PromoCode)).ToHttpResult())
+            .WithTags("Subscription");
+
+        api.MapPost("/subscription/promo-code/validate", async (PromoCodeValidateRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.ValidatePromoCodeAsync(request.PlanKey, request.Code, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");
 
         api.MapPost("/subscription/billing-portal", async (BillingPortalRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
@@ -75,7 +79,9 @@ public static class SubscriptionEndpoints
     [ValidatedRequest]
     private sealed record UpgradeRequest(string PlanKey);
     [ValidatedRequest]
-    private sealed record CheckoutSessionRequest(string PlanKey, string SuccessUrl, string CancelUrl);
+    private sealed record CheckoutSessionRequest(string PlanKey, string SuccessUrl, string CancelUrl, string? PromoCode);
     [ValidatedRequest]
     private sealed record BillingPortalRequest(string ReturnUrl);
+    [ValidatedRequest]
+    private sealed record PromoCodeValidateRequest(string PlanKey, string Code);
 }

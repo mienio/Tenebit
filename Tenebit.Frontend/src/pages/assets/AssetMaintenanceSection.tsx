@@ -165,7 +165,12 @@ export function AssetMaintenanceSection({ assetId, onChanged }: { assetId: strin
                     </>
                   ) : (
                     <>
-                      <button type="button" className="amBtn" disabled={busyId === item.id} onClick={() => complete(item)}>
+                      <button
+                        type="button"
+                        className="amBtn"
+                        disabled={busyId === item.id}
+                        onClick={() => { if (window.confirm(t('maintenance.markDoneConfirm', { name: item.name }))) complete(item); }}
+                      >
                         <Check size={13} /> {t('maintenance.markDone')}
                       </button>
                       <button type="button" className="amBtn amBtn--icon" aria-label={t('maintenance.delete')} onClick={() => setConfirmDelete(item.id)}>

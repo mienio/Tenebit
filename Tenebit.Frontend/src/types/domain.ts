@@ -953,6 +953,15 @@ export interface Subscription {
   usage: ResourceUsage[];
 }
 
+export interface PromoCodeValidation {
+  code: string;
+  discountType: 'Percentage' | 'FixedAmount';
+  discountValue: number;
+  originalPrice: number;
+  discountedPrice: number;
+  currency: string;
+}
+
 export type EquipmentReservationStatus = 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected' | 'Cancelled' | 'ReadyForPickup' | 'CheckedOut' | 'Completed' | 'Expired';
 
 export interface ReservationResponse {

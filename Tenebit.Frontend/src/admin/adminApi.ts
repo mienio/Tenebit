@@ -189,6 +189,19 @@ export interface AdminAuditEntry {
   createdAt: string;
 }
 
+export interface AdminPromoCode {
+  id: string;
+  code: string;
+  planKey: string;
+  discountType: 'Percentage' | 'FixedAmount';
+  discountValue: number;
+  maxRedemptions: number | null;
+  timesRedeemed: number;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface AdminPage<T> {
   items: T[];
   total: number;
@@ -270,4 +283,28 @@ export function forceSignOut(id: string, totpCode: string): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ totpCode }),
   });
+}
+
+export function listPromoCodes(): Promise<AdminPromoCode[]> {
+  return adminFetch('/api/admin/promo-codes');
+}
+
+export function createPromoCodes(body: {
+  planKey: string;
+  discountType: 'Percentage' | 'FixedAmount';
+  discountValue: number;
+  quantity: number;
+  code?: string;
+  maxRedemptions?: number | null;
+  expiresAt?: string | null;
+}): Promise<AdminPromoCode[]> {
+  return adminFetch('/api/admin/promo-codes', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function setPromoCodeActive(id: string, active: boolean): Promise<void> {
+  return adminFetch(`/api/admin/promo-codes/${id}/active`, { method: 'POST', body: JSON.stringify({ active }) });
+}
+
+export function deletePromoCode(id: string): Promise<void> {
+  return adminFetch(`/api/admin/promo-codes/${id}`, { method: 'DELETE' });
 }

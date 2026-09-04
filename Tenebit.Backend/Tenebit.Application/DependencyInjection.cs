@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<GlobalSearchService>();
         services.AddScoped<AdminOverviewService>();
         services.AddScoped<AdminModerationService>();
+        services.AddScoped<PromoCodeAdminService>();
         services.AddScoped<AssetAuthorizationService>();
         services.AddScoped<AssetService>();
         services.AddScoped<LocationService>();

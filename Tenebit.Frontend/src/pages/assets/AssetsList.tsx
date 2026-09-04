@@ -2,7 +2,6 @@ import { ArrowDown, ArrowUp, Columns3, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
 import { EmptyState } from '../../components/StateViews';
 import { Pagination } from '../../components/Pagination';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -61,7 +60,7 @@ export function AssetsList(props: AssetsListProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
-    <Card>
+    <>
       <div className="sectionTitle">
         <div>
           <h2>{t('assets.listTitle')}</h2>
@@ -222,6 +221,6 @@ export function AssetsList(props: AssetsListProps) {
           <Pagination page={props.page} total={props.totalAssets} pageSize={props.pageSize} onPageChange={props.onPageChange} />
         </>
       )}
-    </Card>
+    </>
   );
 }

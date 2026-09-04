@@ -17,6 +17,7 @@ public sealed class SubscriptionService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPaymentGateway _paymentGateway;
     private readonly IAppLinkBuilder _appLinkBuilder;
+    private readonly IPromoCodeRepository _promoCodes;
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
@@ -27,7 +28,8 @@ public sealed class SubscriptionService
         IClock clock,
         IUnitOfWork unitOfWork,
         IPaymentGateway paymentGateway,
-        IAppLinkBuilder appLinkBuilder)
+        IAppLinkBuilder appLinkBuilder,
+        IPromoCodeRepository promoCodes)
     {
         _subscriptions = subscriptions;
         _processedEvents = processedEvents;
@@ -38,6 +40,7 @@ public sealed class SubscriptionService
         _unitOfWork = unitOfWork;
         _paymentGateway = paymentGateway;
         _appLinkBuilder = appLinkBuilder;
+        _promoCodes = promoCodes;
     }
 
     public async Task<Result<SubscriptionResponse>> GetCurrentAsync(CancellationToken cancellationToken)
@@ -154,8 +157,27 @@ public sealed class SubscriptionService
         }
     }
 
+    /// <summary>Looks up a promo code for the given plan without redeeming it - used to show the discounted
+    /// price in the checkout dialog before the customer commits to paying.</summary>
+    public async Task<Result<PromoCodeValidationResponse>> ValidatePromoCodeAsync(string planKey, string code, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<PromoCodeValidationResponse>.Failure(access.Error!);
+
+        var plan = SubscriptionPlan.FromKey(planKey);
+        if (plan is null || plan.Key == SubscriptionPlan.Free.Key)
+            return Result<PromoCodeValidationResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
+
+        var promo = string.IsNullOrWhiteSpace(code) ? null : await _promoCodes.GetByCodeAsync(code, cancellationToken);
+        if (promo is null || promo.PlanKey != plan.Key || !promo.IsUsable(_clock.UtcNow))
+            return Result<PromoCodeValidationResponse>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
+
+        return Result<PromoCodeValidationResponse>.Success(new PromoCodeValidationResponse(
+            promo.Code, promo.DiscountType.ToString(), promo.DiscountValue, plan.MonthlyPrice, promo.ApplyTo(plan.MonthlyPrice), plan.Currency));
+    }
+
     /// <summary>Starts a real Stripe Checkout flow for the given paid plan and returns the hosted checkout URL to redirect to.</summary>
-    public async Task<Result<string>> CreateCheckoutSessionAsync(string planKey, string successPath, string cancelPath, CancellationToken cancellationToken)
+    public async Task<Result<string>> CreateCheckoutSessionAsync(string planKey, string successPath, string cancelPath, CancellationToken cancellationToken, string? promoCode = null)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
@@ -166,6 +188,18 @@ public sealed class SubscriptionService
 
         if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key))
             return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane dla tego planu."));
+
+        PromoCodeDiscount? discount = null;
+        if (!string.IsNullOrWhiteSpace(promoCode))
+        {
+            var promo = await _promoCodes.GetByCodeAsync(promoCode, cancellationToken);
+            if (promo is null || promo.PlanKey != targetPlan.Key || !promo.IsUsable(_clock.UtcNow))
+                return Result<string>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
+
+            promo.Redeem();
+            discount = new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         var organizationId = _currentUser.OrganizationId;
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
@@ -218,7 +252,8 @@ public sealed class SubscriptionService
             _appLinkBuilder.BuildAppUrl(successPath),
             _appLinkBuilder.BuildAppUrl(cancelPath),
             $"tenebit-checkout-{attemptId:N}",
-            cancellationToken);
+            cancellationToken,
+            discount);
         return Result<string>.Success(checkoutUrl);
     }
 
@@ -377,3 +412,6 @@ public sealed record SubscriptionResponse(
 );
 
 public sealed record ResourceUsage(string Resource, int Current, int Limit);
+
+public sealed record PromoCodeValidationResponse(
+    string Code, string DiscountType, decimal DiscountValue, decimal OriginalPrice, decimal DiscountedPrice, string Currency);

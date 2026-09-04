@@ -69,7 +69,8 @@ public class ArchitectureTests
         "IDeviceTrustTokenRepository",
         "IExternalLoginRepository",
         "IOAuthTransactionRepository",
-        "IProcessedStripeEventRepository"
+        "IProcessedStripeEventRepository",
+        "IPromoCodeRepository"
     ];
 
     /// <summary>Pojedyncze metody bez organizationId w repozytoriach tenantowych - wyszukiwanie po haszu

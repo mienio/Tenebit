@@ -371,6 +371,24 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
 }
 
+public sealed class InMemoryPromoCodeRepository : IPromoCodeRepository
+{
+    public List<PromoCode> Codes { get; } = [];
+
+    public Task<PromoCode?> GetByCodeAsync(string code, CancellationToken cancellationToken) =>
+        Task.FromResult(Codes.FirstOrDefault(x => x.Code == code.Trim().ToUpperInvariant()));
+
+    public Task<PromoCode?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Codes.FirstOrDefault(x => x.Id == id));
+
+    public Task<IReadOnlyList<PromoCode>> ListAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PromoCode>>(Codes.OrderByDescending(x => x.CreatedAt).ToList());
+
+    public void Add(PromoCode promoCode) => Codes.Add(promoCode);
+
+    public void Remove(PromoCode promoCode) => Codes.Remove(promoCode);
+}
+
 public sealed class InMemoryProcessedStripeEventRepository : IProcessedStripeEventRepository
 {
     public List<ProcessedStripeEvent> Events { get; } = [];
@@ -544,6 +562,7 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastCustomerIdempotencyKey { get; private set; }
     public string? LastCheckoutIdempotencyKey { get; private set; }
     public string? LastCheckoutPlanKey { get; private set; }
+    public PromoCodeDiscount? LastDiscount { get; private set; }
     public int CheckoutCreateCalls { get; private set; }
 
     public bool IsPlanConfigured(string planKey) => AllPlansConfigured || ConfiguredPlanKeys.Contains(planKey);
@@ -554,10 +573,11 @@ public sealed class FakePaymentGateway : IPaymentGateway
         return Task.FromResult(NextCustomerId);
     }
 
-    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken)
+    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         LastCheckoutIdempotencyKey = idempotencyKey;
         LastCheckoutPlanKey = planKey;
+        LastDiscount = discount;
         CheckoutCreateCalls++;
         return Task.FromResult(NextCheckoutUrl);
     }
