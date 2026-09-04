@@ -31,7 +31,7 @@ internal sealed class SmtpEmailTransport : IEmailTransport
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(
             _configuration["Email:FromName"] ?? "Tenebit",
-            _configuration["Email:FromAddress"] ?? "no-reply@tenebit.app"));
+            _configuration["Email:FromAddress"] ?? "notify@teneb.it"));
         message.To.Add(MailboxAddress.Parse(to));
         message.Subject = subject;
         message.Body = new TextPart("html") { Text = htmlBody };

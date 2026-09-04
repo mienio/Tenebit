@@ -26,5 +26,15 @@ artifacts/
 .DS_Store
 Thumbs.db
 
+# Local AI coding agent state - machine/session-specific, never part of the shipped app
+.claude/
+.codex/
+
 # Deployment artifacts (zips are covered by *.zip; migrate.sql is generated from the migrations)
 Release/
+
+# Server-side deploy state (secrets, certs, ACME webroot, db dumps) - lives only on the deploy host
+certs/
+certbot-www/
+backups/
+credentials.txt

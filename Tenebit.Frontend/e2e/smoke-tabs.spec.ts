@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { registerOrg, authHeaders, firstCategoryId, createAsset, createPerson, uniqueSuffix } from './helpers';
+import { registerOrg, firstCategoryId, createAsset, createPerson, uniqueSuffix } from './helpers';
 
 const AUTH_TABS = [
   '/dashboard', '/my', '/assets', '/people', '/assignments', '/procedures',
