@@ -1,6 +1,10 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Tenebit.Application.Abstractions;
+using Tenebit.Application.Common;
 using Tenebit.Application.Subscriptions;
 using Tenebit.Domain.Assets;
+using Tenebit.Domain.Identity;
+using Tenebit.Domain.Organizations;
 using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
@@ -8,7 +12,14 @@ namespace Tenebit.Tests;
 
 public class SubscriptionServiceTests
 {
-    private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents, InMemoryPromoCodeRepository PromoCodes) CreateService()
+    private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents, InMemoryPromoCodeRepository PromoCodes) CreateService() =>
+        CreateServiceWithEmail(out _, out _, out _);
+
+    /// <summary>Same wiring as <see cref="CreateService"/>, but also hands back the email plumbing (email
+    /// sender, and the organization/owner-user repositories a webhook-triggered congratulations email
+    /// looks recipients up in) so a test can assert on what got sent.</summary>
+    private static (SubscriptionService Service, FakeCurrentUser User, InMemoryAssetRepository Assets, InMemorySubscriptionRepository Subscriptions, FakePaymentGateway PaymentGateway, InMemoryProcessedStripeEventRepository ProcessedEvents, InMemoryPromoCodeRepository PromoCodes) CreateServiceWithEmail(
+        out FakeEmailSender emailSender, out InMemoryOrganizationRepository organizations, out InMemoryOrganizationUserRepository organizationUsers)
     {
         var currentUser = new FakeCurrentUser();
         var assets = new InMemoryAssetRepository();
@@ -16,6 +27,9 @@ public class SubscriptionServiceTests
         var paymentGateway = new FakePaymentGateway();
         var processedEvents = new InMemoryProcessedStripeEventRepository();
         var promoCodes = new InMemoryPromoCodeRepository();
+        emailSender = new FakeEmailSender();
+        organizations = new InMemoryOrganizationRepository();
+        organizationUsers = new InMemoryOrganizationUserRepository();
         var service = new SubscriptionService(
             subscriptions,
             processedEvents,
@@ -26,7 +40,11 @@ public class SubscriptionServiceTests
             new FakeUnitOfWork(),
             paymentGateway,
             new FakeAppLinkBuilder(),
-            promoCodes);
+            promoCodes,
+            organizations,
+            organizationUsers,
+            emailSender,
+            NullLogger<SubscriptionService>.Instance);
         return (service, currentUser, assets, subscriptions, paymentGateway, processedEvents, promoCodes);
     }
 
@@ -564,6 +582,94 @@ public class SubscriptionServiceTests
         Assert.Null(local.PendingPlanEffectiveAt);
         Assert.Null(local.StripeScheduleId);
         Assert.Null(result.Value!.PendingPlanKey);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_SendsACongratulationsEmail_OnAnImmediateUpgrade()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateServiceWithEmail(out var emailSender, out _, out _);
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "cus_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
+
+        await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        var sent = Assert.Single(emailSender.Sent);
+        Assert.Equal(user.Email, sent.To);
+        Assert.Contains(SubscriptionPlan.Growth.Name, sent.Subject);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_SendsAFriendlyNotice_WhenSchedulingADowngrade()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateServiceWithEmail(out var emailSender, out _, out _);
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddMonths(1);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextSchedule = new PaymentScheduleState("sched_1", SubscriptionPlan.Starter.Key, periodEnd);
+
+        await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+
+        var sent = Assert.Single(emailSender.Sent);
+        Assert.Equal(user.Email, sent.To);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_SendsACongratulationsEmailToEveryOwner_OnFirstActivation()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateServiceWithEmail(out var emailSender, out var organizations, out var organizationUsers);
+        organizations.Add(Organization.CreateSeed(user.OrganizationId, "Acme", "PL", "en", "PLN", "Europe/Warsaw"));
+        var owner = new OrganizationUser(user.OrganizationId, "owner@acme.test", "Owner", true);
+        owner.Update("owner@acme.test", "Owner", true, [TenebitRoles.Owner]);
+        organizationUsers.Users.Add(owner);
+        var nonOwner = new OrganizationUser(user.OrganizationId, "employee@acme.test", "Employee", true);
+        nonOwner.Update("employee@acme.test", "Employee", true, [TenebitRoles.Employee]);
+        organizationUsers.Users.Add(nonOwner);
+
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
+        existing.AttachStripeCustomer("cus_123");
+        subscriptions.Add(existing);
+        var periodEnd = DateTimeOffset.UtcNow.AddMonths(1);
+        paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_created_1", "customer.subscription.created", "cus_123", "sub_123", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, periodEnd, null);
+
+        var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var sent = Assert.Single(emailSender.Sent);
+        Assert.Equal("owner@acme.test", sent.To);
+        Assert.Contains(SubscriptionPlan.Business.Name, sent.Subject);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_DoesNotEmail_OnAnOrdinaryRenewal()
+    {
+        // Only the free-or-cancelled -> paid transition is a "you just subscribed" moment - a routine
+        // renewal webhook for an org that was already on a paid plan must stay silent.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateServiceWithEmail(out var emailSender, out var organizations, out var organizationUsers);
+        organizations.Add(Organization.CreateSeed(user.OrganizationId, "Acme", "PL", "en", "PLN", "Europe/Warsaw"));
+        var owner = new OrganizationUser(user.OrganizationId, "owner@acme.test", "Owner", true);
+        owner.Update("owner@acme.test", "Owner", true, [TenebitRoles.Owner]);
+        organizationUsers.Users.Add(owner);
+
+        var now = DateTimeOffset.UtcNow;
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        existing.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now.AddMonths(-1), now, "sub_123", "cus_123", now.AddMonths(-1));
+        subscriptions.Add(existing);
+        paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_renewed_1", "customer.subscription.updated", "cus_123", "sub_123", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, now, now.AddMonths(1), null);
+
+        var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(emailSender.Sent);
     }
 
     [Fact]

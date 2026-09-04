@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
@@ -18,6 +19,11 @@ public sealed class SubscriptionService
     private readonly IPaymentGateway _paymentGateway;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly IPromoCodeRepository _promoCodes;
+    private readonly IOrganizationRepository _organizations;
+    private readonly IOrganizationUserRepository _organizationUsers;
+    private readonly IEmailSender _emailSender;
+    private readonly IEmailOutboxWriter? _emailOutbox;
+    private readonly ILogger<SubscriptionService> _logger;
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
@@ -29,7 +35,12 @@ public sealed class SubscriptionService
         IUnitOfWork unitOfWork,
         IPaymentGateway paymentGateway,
         IAppLinkBuilder appLinkBuilder,
-        IPromoCodeRepository promoCodes)
+        IPromoCodeRepository promoCodes,
+        IOrganizationRepository organizations,
+        IOrganizationUserRepository organizationUsers,
+        IEmailSender emailSender,
+        ILogger<SubscriptionService> logger,
+        IEmailOutboxWriter? emailOutbox = null)
     {
         _subscriptions = subscriptions;
         _processedEvents = processedEvents;
@@ -41,6 +52,48 @@ public sealed class SubscriptionService
         _paymentGateway = paymentGateway;
         _appLinkBuilder = appLinkBuilder;
         _promoCodes = promoCodes;
+        _organizations = organizations;
+        _organizationUsers = organizationUsers;
+        _emailSender = emailSender;
+        _logger = logger;
+        _emailOutbox = emailOutbox;
+    }
+
+    /// <summary>Best-effort delivery for the "nice to receive" plan-change emails (congratulations, or a
+    /// scheduled-downgrade notice) - through the outbox when available (retried on transient failure), a
+    /// direct send otherwise. Never lets an email problem fail the plan change itself.</summary>
+    private async Task SendPlanChangeEmailAsync(Guid organizationId, string recipient, string language, string subject, string html, string purpose, string idempotencyKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (_emailOutbox is not null)
+            {
+                await _emailOutbox.EnqueueAsync(organizationId, recipient, subject, html, purpose, idempotencyKey, cancellationToken);
+            }
+            else
+            {
+                await _emailSender.SendAsync(recipient, subject, html, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się wysłać e-maila o zmianie planu ({Purpose}) dla organizacji {OrganizationId}", purpose, organizationId);
+        }
+    }
+
+    /// <summary>Every current org owner's email + the org's own language preference - who and how to
+    /// notify about a plan change that happened outside an authenticated request (a Stripe webhook has no
+    /// <see cref="ICurrentUser"/> to address).</summary>
+    private async Task<(string Language, IReadOnlyList<string> OwnerEmails)> GetOrganizationOwnersAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        var users = await _organizationUsers.ListAsync(organizationId, cancellationToken);
+        var owners = users
+            .Where(u => u.Roles.Any(r => r.Role == TenebitRoles.Owner) && !string.IsNullOrWhiteSpace(u.Email))
+            .Select(u => u.Email)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return (organization?.Language ?? "pl", owners);
     }
 
     public async Task<Result<SubscriptionResponse>> GetCurrentAsync(CancellationToken cancellationToken)
@@ -301,6 +354,12 @@ public sealed class SubscriptionService
                 _clock.UtcNow));
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var (scheduledSubject, scheduledHtml) = EmailTemplates.PlanChangeScheduled(
+                _currentUser.Language, newPlan.Name, schedule.EffectiveAt, _appLinkBuilder.BuildAppUrl("/pricing"));
+            await SendPlanChangeEmailAsync(
+                organizationId, _currentUser.Email, _currentUser.Language, scheduledSubject, scheduledHtml,
+                "plan-change-scheduled", $"plan-change-scheduled:{subscription.Id:N}:{schedule.ScheduleId}:{newPlan.Key}", cancellationToken);
         }
         else
         {
@@ -339,6 +398,12 @@ public sealed class SubscriptionService
                 _clock.UtcNow));
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var (changedSubject, changedHtml) = EmailTemplates.PlanChanged(
+                _currentUser.Language, newPlan.Name, _appLinkBuilder.BuildAppUrl("/dashboard"));
+            await SendPlanChangeEmailAsync(
+                organizationId, _currentUser.Email, _currentUser.Language, changedSubject, changedHtml,
+                "plan-changed", $"plan-changed:{subscription.Id:N}:{canonical.SubscriptionId}:{newPlan.Key}:{canonical.CurrentPeriodStart:O}", cancellationToken);
         }
 
         return Result<SubscriptionResponse>.Success(await BuildSubscriptionResponseAsync(subscription, cancellationToken));
@@ -510,6 +575,7 @@ public sealed class SubscriptionService
             return Result.Success();
         }
 
+        var wasEntitledBefore = subscription.IsEntitledToPaidPlan;
         subscription.SyncFromStripe(appliedPlan, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
 
         _activity.Add(new ActivityLog(
@@ -522,6 +588,23 @@ public sealed class SubscriptionService
             _clock.UtcNow));
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // First activation (or reactivation after a cancellation) via Stripe Checkout - ChangePlanAsync's
+        // own immediate-upgrade branch sends its own congratulations for an in-app plan change, so this
+        // only needs to cover the "just paid for the first time" case that never goes through it.
+        if (!wasEntitledBefore && subscription.IsEntitledToPaidPlan)
+        {
+            var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+            var (language, ownerEmails) = await GetOrganizationOwnersAsync(subscription.OrganizationId, cancellationToken);
+            foreach (var ownerEmail in ownerEmails)
+            {
+                var (subject, html) = EmailTemplates.PlanChanged(language, plan.Name, _appLinkBuilder.BuildAppUrl("/dashboard"));
+                await SendPlanChangeEmailAsync(
+                    subscription.OrganizationId, ownerEmail, language, subject, html,
+                    "plan-changed", $"plan-changed:{subscription.Id:N}:{appliedSubscriptionId}:{plan.Key}:{appliedStart:O}", cancellationToken);
+            }
+        }
+
         return Result.Success();
     }
 

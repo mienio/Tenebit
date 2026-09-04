@@ -392,6 +392,130 @@ public static class EmailTemplates
         return (CleanSubject(copy.Subject), BuildShell(lang, copy.Eyebrow, copy.Title, copy.Intro, content, null, null, AlertFooter(lang)));
     }
 
+    /// <summary>Sent the moment a paid plan actually takes effect - a brand-new subscription, or an
+    /// in-app upgrade, both apply immediately. A scheduled downgrade uses <see cref="PlanChangeScheduled"/>
+    /// instead, since nothing has actually changed yet at the point that's sent.</summary>
+    public static (string Subject, string Html) PlanChanged(string? language, string planName, string dashboardLink)
+    {
+        var lang = Normalize(language);
+        var plan = Encode(planName);
+        var copy = lang switch
+        {
+            "en" => new SimpleActionCopy(
+                $"Welcome to {planName}! 🎉",
+                "Thank you",
+                $"Welcome to {plan}!",
+                "That's great news - your account just got more room to grow. Thank you for being with Tenebit; we'll keep working to make it worth your while.",
+                "Your plan",
+                "Go to dashboard",
+                "Questions about your invoice or plan? Just reply to this email - we're happy to help."),
+            "es" => new SimpleActionCopy(
+                $"¡Bienvenido al plan {planName}! 🎉",
+                "Gracias",
+                $"¡Bienvenido al plan {plan}!",
+                "Es una gran noticia: tu cuenta acaba de ganar más margen para crecer. Gracias por confiar en Tenebit; seguiremos trabajando para que merezca la pena.",
+                "Tu plan",
+                "Ir al panel",
+                "¿Dudas sobre tu factura o tu plan? Responde a este correo, estaremos encantados de ayudarte."),
+            "de" => new SimpleActionCopy(
+                $"Willkommen im Tarif {planName}! 🎉",
+                "Danke",
+                $"Willkommen im Tarif {plan}!",
+                "Das ist eine tolle Nachricht - dein Konto hat gerade mehr Raum zum Wachsen bekommen. Danke, dass du Tenebit nutzt; wir arbeiten weiter daran, dass es sich lohnt.",
+                "Dein Tarif",
+                "Zum Dashboard",
+                "Fragen zu deiner Rechnung oder deinem Tarif? Antworte einfach auf diese E-Mail - wir helfen gerne."),
+            "it" => new SimpleActionCopy(
+                $"Benvenuto nel piano {planName}! 🎉",
+                "Grazie",
+                $"Benvenuto nel piano {plan}!",
+                "Ottima notizia: il tuo account ha appena guadagnato più spazio per crescere. Grazie per essere con Tenebit; continueremo a impegnarci per ripagare questa scelta.",
+                "Il tuo piano",
+                "Vai alla dashboard",
+                "Domande sulla fattura o sul piano? Rispondi pure a questa e-mail, saremo felici di aiutarti."),
+            "fr" => new SimpleActionCopy(
+                $"Bienvenue dans le forfait {planName} ! 🎉",
+                "Merci",
+                $"Bienvenue dans le forfait {plan} !",
+                "C'est une excellente nouvelle - votre compte vient de gagner plus de marge de manœuvre. Merci de faire confiance à Tenebit ; nous continuons à faire en sorte que cela en vaille la peine.",
+                "Votre forfait",
+                "Aller au tableau de bord",
+                "Une question sur votre facture ou votre forfait ? Répondez simplement à cet e-mail, nous serons ravis de vous aider."),
+            _ => new SimpleActionCopy(
+                $"Witaj na planie {planName}! 🎉",
+                "Dziękujemy",
+                $"Witaj na planie {plan}!",
+                "To świetna wiadomość - Twoje konto właśnie zyskało więcej przestrzeni do rozwoju. Dziękujemy, że jesteś z Tenebit - robimy wszystko, żeby ta decyzja się opłaciła.",
+                "Twój plan",
+                "Przejdź do panelu",
+                "Masz pytania o fakturę albo plan? Po prostu odpowiedz na tego e-maila - chętnie pomożemy.")
+        };
+
+        return (CleanSubject(copy.Subject), BuildShell(lang, copy.Eyebrow, copy.Title, copy.Intro, BuildReference(copy.ReferenceLabel, plan), copy.ButtonLabel, dashboardLink, copy.FooterNote));
+    }
+
+    /// <summary>Sent the moment a downgrade is scheduled - the org keeps its current plan until
+    /// <paramref name="effectiveAt"/>, so this deliberately doesn't say the switch already happened.</summary>
+    public static (string Subject, string Html) PlanChangeScheduled(string? language, string planName, DateTimeOffset effectiveAt, string manageLink)
+    {
+        var lang = Normalize(language);
+        var plan = Encode(planName);
+        var date = Encode(effectiveAt.ToString("yyyy-MM-dd"));
+        var copy = lang switch
+        {
+            "en" => new SimpleActionCopy(
+                $"Your plan will switch to {planName} soon",
+                "Change scheduled",
+                "Thank you for staying with us",
+                $"We've scheduled your plan change to {plan}. Until then, everything stays exactly as it is - you keep every bit of what you already paid for.",
+                "New plan starts",
+                "Manage your plan",
+                "Changed your mind? You can cancel this scheduled change any time before it takes effect."),
+            "es" => new SimpleActionCopy(
+                $"Tu plan cambiará pronto a {planName}",
+                "Cambio programado",
+                "Gracias por seguir con nosotros",
+                $"Hemos programado el cambio de tu plan a {plan}. Hasta entonces, todo sigue exactamente igual: conservas todo lo que ya has pagado.",
+                "El nuevo plan empieza el",
+                "Gestionar tu plan",
+                "¿Has cambiado de opinión? Puedes cancelar este cambio programado en cualquier momento antes de que entre en vigor."),
+            "de" => new SimpleActionCopy(
+                $"Dein Tarif wechselt bald zu {planName}",
+                "Wechsel geplant",
+                "Danke, dass du bei uns bleibst",
+                $"Wir haben deinen Tarifwechsel zu {plan} geplant. Bis dahin bleibt alles genau so, wie es ist - du behältst alles, wofür du bereits bezahlt hast.",
+                "Neuer Tarif ab",
+                "Tarif verwalten",
+                "Hast du es dir anders überlegt? Du kannst diesen geplanten Wechsel jederzeit abbrechen, bevor er wirksam wird."),
+            "it" => new SimpleActionCopy(
+                $"Il tuo piano passerà presto a {planName}",
+                "Cambio programmato",
+                "Grazie per essere rimasto con noi",
+                $"Abbiamo programmato il passaggio del tuo piano a {plan}. Fino ad allora tutto resta esattamente com'è - mantieni tutto ciò per cui hai già pagato.",
+                "Il nuovo piano inizia il",
+                "Gestisci il tuo piano",
+                "Hai cambiato idea? Puoi annullare questo cambio programmato in qualsiasi momento prima che entri in vigore."),
+            "fr" => new SimpleActionCopy(
+                $"Votre forfait passera bientôt à {planName}",
+                "Changement planifié",
+                "Merci de rester avec nous",
+                $"Nous avons planifié le passage de votre forfait à {plan}. D'ici là, rien ne change - vous conservez tout ce pour quoi vous avez déjà payé.",
+                "Le nouveau forfait commence le",
+                "Gérer votre forfait",
+                "Vous avez changé d'avis ? Vous pouvez annuler ce changement planifié à tout moment avant sa prise d'effet."),
+            _ => new SimpleActionCopy(
+                $"Twój plan zmieni się wkrótce na {planName}",
+                "Zmiana zaplanowana",
+                "Dziękujemy, że zostajesz z nami",
+                $"Zaplanowaliśmy zmianę Twojego planu na {plan}. Do tego czasu wszystko zostaje dokładnie tak, jak jest - zachowujesz wszystko, za co już zapłaciłeś/aś.",
+                "Nowy plan od",
+                "Zarządzaj planem",
+                "Zmieniłeś/aś zdanie? Możesz anulować tę zaplanowaną zmianę w dowolnym momencie, zanim wejdzie w życie.")
+        };
+
+        return (CleanSubject(copy.Subject), BuildShell(lang, copy.Eyebrow, copy.Title, copy.Intro, BuildReference(copy.ReferenceLabel, date), copy.ButtonLabel, manageLink, copy.FooterNote));
+    }
+
     private static string BuildCodeEmail(string language, EmailCopy copy, string code, string link)
     {
         var encodedCode = Encode(code);
