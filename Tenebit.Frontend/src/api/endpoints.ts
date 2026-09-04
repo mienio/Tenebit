@@ -187,6 +187,7 @@ export const api = {
   // client-supplied full URL (audit AUD3-010, open redirect).
   createCheckoutSession: (planKey: string, successPath: string, cancelPath: string, promoCode?: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ planKey, successUrl: successPath, cancelUrl: cancelPath, promoCode: promoCode || null }) }),
   changeSubscriptionPlan: (planKey: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/change-plan', { method: 'POST', body: JSON.stringify({ planKey }) }),
+  cancelScheduledPlanChange: () => apiRequest<import('../types/domain').Subscription>('/api/subscription/cancel-scheduled-change', { method: 'POST' }),
   createBillingPortalSession: (returnPath: string) => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST', body: JSON.stringify({ returnUrl: returnPath }) }),
   validatePromoCode: (planKey: string, code: string) => apiRequest<import('../types/domain').PromoCodeValidation>('/api/subscription/promo-code/validate', { method: 'POST', body: JSON.stringify({ planKey, code }) }),
 

@@ -951,6 +951,9 @@ export interface Subscription {
   status: string;
   currentPeriodEnd: string;
   usage: ResourceUsage[];
+  pendingPlanKey: string | null;
+  pendingPlanName: string | null;
+  pendingPlanEffectiveAt: string | null;
 }
 
 export interface PromoCodeValidation {

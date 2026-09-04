@@ -8,6 +8,7 @@ import { PricingCards, type PlanDef } from '../components/PricingCards';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 import type { PromoCodeValidation } from '../types/domain';
+import { formatDate } from '../utils/format';
 
 export function PricingPage() {
   const { t } = useI18n();
@@ -21,6 +22,7 @@ export function PricingPage() {
   const [promoError, setPromoError] = useState<string | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<PromoCodeValidation | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [cancellingScheduled, setCancellingScheduled] = useState(false);
   const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
   // A live paid Stripe subscription already exists - switching plans must reuse it (Stripe proration)
   // instead of Checkout, which only ever creates a first subscription and refuses to create a second.
@@ -90,6 +92,19 @@ export function PricingPage() {
     }
   }
 
+  async function cancelScheduledChange() {
+    setCancellingScheduled(true);
+    try {
+      await api.cancelScheduledPlanChange();
+      await subscription.reload();
+      setMessage({ type: 'success', text: t('pricing.scheduledChangeCancelled') });
+    } catch (error) {
+      setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
+    } finally {
+      setCancellingScheduled(false);
+    }
+  }
+
   async function openBillingPortal() {
     setPortalLoading(true);
     try {
@@ -115,6 +130,15 @@ export function PricingPage() {
         <h1>{t('pricing.title')}</h1>
         <p>{t('pricing.lead')}</p>
       </div>
+
+      {subscription.data?.pendingPlanName && subscription.data.pendingPlanEffectiveAt && (
+        <div className="pricing-scheduledBanner">
+          <span>{t('pricing.scheduledChange', { plan: subscription.data.pendingPlanName, date: formatDate(subscription.data.pendingPlanEffectiveAt) })}</span>
+          <button type="button" className="pricing-promoToggle" onClick={cancelScheduledChange} disabled={cancellingScheduled}>
+            {t('pricing.cancelScheduledChange')}
+          </button>
+        </div>
+      )}
 
       <PricingCards
         renderCta={(plan) => {

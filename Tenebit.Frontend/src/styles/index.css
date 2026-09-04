@@ -843,6 +843,9 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-manageBilling .button { min-height: auto; padding: 4px 2px; border: none; background: none; color: var(--muted); font-size: 12px; text-transform: none; letter-spacing: normal; font-family: var(--font-sans); text-decoration: underline; text-underline-offset: 2px; }
 .pricing-manageBilling .button:hover { color: var(--text); background: none; }
 
+.pricing-scheduledBanner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--brand-soft); font-size: 14px; }
+.pricing-scheduledBanner .pricing-promoToggle { color: var(--text); font-weight: 600; }
+
 /* Promo codes are an edge case, not a checkout step everyone should see next to the price - collapsed
    behind a small link by default so it never competes with the actual payment summary. */
 .pricing-promoToggle { background: none; border: none; padding: 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
