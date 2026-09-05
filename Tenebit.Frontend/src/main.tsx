@@ -7,12 +7,15 @@ import { AuthProvider } from './auth/AuthProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CelebrationProvider } from './celebration/CelebrationProvider';
 import { I18nProvider } from './i18n/I18nProvider';
+import { initGoogleAnalyticsIfConsented } from './analytics/consent';
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/inter';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import './styles/index.css';
+
+initGoogleAnalyticsIfConsented();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

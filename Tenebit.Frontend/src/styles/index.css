@@ -550,14 +550,20 @@ button.authIcon:hover { filter: brightness(0.94); }
 .publicFooter__links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px 22px; }
 .publicFooter__links a { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 4px; transition: color .15s ease, text-decoration-color .15s ease; }
 .publicFooter__links a:hover { color: var(--text); text-decoration-color: currentColor; }
+.publicFooter__contactPrompt { font-size: 12px; margin-top: 2px; }
+.publicFooter__contactPrompt a { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color .15s ease, text-decoration-color .15s ease; }
+.publicFooter__contactPrompt a:hover { color: var(--text); text-decoration-color: currentColor; }
 .publicFooter--compact { width: min(620px, 100%); margin: 0 auto; padding: 20px 0 0; border-top-color: var(--border); }
 
 .storageNotice { position: fixed; z-index: 140; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: min(560px, calc(100vw - 36px)); display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px; border: 1px solid var(--border-strong); background: var(--surface); box-shadow: 6px 6px 0 rgba(34, 29, 24, .18); }
 .storageNotice strong { display: block; margin-bottom: 4px; font-family: var(--font-serif); font-size: 16px; }
 .storageNotice p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .storageNotice a { color: var(--accent); text-decoration: underline; }
+.storageNotice__actions { display: flex; flex: 0 0 auto; gap: 10px; }
 .storageNotice button { min-height: 38px; flex: 0 0 auto; padding: 0 14px; border: 1px solid var(--brand); background: var(--brand); color: #fff; font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
 .storageNotice button:hover { background: transparent; color: var(--brand); }
+.storageNotice__reject { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.storageNotice__reject:hover { background: var(--surface-strong); color: var(--text); }
 
 .legalShell { width: min(1180px, calc(100% - 48px)); min-height: 100vh; margin: 0 auto; display: grid; align-content: start; gap: 48px; padding: 24px 0 0; }
 .legalHeader { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 8px 0; background: rgba(245, 239, 226, .96); border-bottom: 1px solid transparent; backdrop-filter: blur(14px); }
@@ -657,6 +663,7 @@ button.authIcon:hover { filter: brightness(0.94); }
   .landing__featureGrid { grid-template-columns: 1fr; }
   .landing__featureCard { padding: 22px; }
   .storageNotice { left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: auto; align-items: stretch; flex-direction: column; gap: 12px; }
+  .storageNotice__actions { width: 100%; }
   .storageNotice button { width: 100%; }
   .legalHeader__actions .button { width: 42px; padding: 0; }
   .legalHeader__actions .button:not(:focus) { font-size: 0; }

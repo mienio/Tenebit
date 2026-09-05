@@ -2,23 +2,18 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider';
 import { legalContentFor } from '../legal/legalContent';
-
-const STORAGE_KEY = 'tenebit_storage_notice_dismissed';
-
-function wasDismissed() {
-  try { return window.localStorage.getItem(STORAGE_KEY) === '1'; } catch { return false; }
-}
+import { getStoredConsent, storeConsent, type ConsentChoice } from '../analytics/consent';
 
 export function StorageNotice() {
   const { language } = useI18n();
-  const [visible, setVisible] = useState(() => !wasDismissed());
+  const [choice, setChoice] = useState<ConsentChoice | null>(() => getStoredConsent());
   const ui = legalContentFor(language).ui;
 
-  if (!visible) return null;
+  if (choice) return null;
 
-  function dismiss() {
-    try { window.localStorage.setItem(STORAGE_KEY, '1'); } catch { /* storage can be unavailable */ }
-    setVisible(false);
+  function decide(next: ConsentChoice) {
+    storeConsent(next);
+    setChoice(next);
   }
 
   return (
@@ -27,7 +22,10 @@ export function StorageNotice() {
         <strong>{ui.storageNotice}</strong>
         <p>{ui.storageNoticeDetails} <Link to="/cookies">{ui.cookies}</Link></p>
       </div>
-      <button type="button" onClick={dismiss}>{ui.understand}</button>
+      <div className="storageNotice__actions">
+        <button type="button" className="storageNotice__reject" onClick={() => decide('rejected')}>{ui.consentReject}</button>
+        <button type="button" onClick={() => decide('accepted')}>{ui.consentAccept}</button>
+      </div>
     </aside>
   );
 }

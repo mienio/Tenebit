@@ -14,12 +14,16 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
         <div className="publicFooter__brand">
           <strong>Tenebit</strong>
           <span>© {new Date().getFullYear()} {ui.footerRights}</span>
+          {legalConfig.supportEmail ? (
+            <span className="publicFooter__contactPrompt">
+              {ui.contactPrompt} <a href={`mailto:${legalConfig.supportEmail}`}>{legalConfig.supportEmail}</a>
+            </span>
+          ) : null}
         </div>
         <nav className="publicFooter__links" aria-label={ui.contact}>
           <Link to="/privacy">{ui.privacy}</Link>
           <Link to="/terms">{ui.terms}</Link>
           <Link to="/cookies">{ui.cookies}</Link>
-          {legalConfig.supportEmail ? <a href={`mailto:${legalConfig.supportEmail}`}>{legalConfig.supportEmail}</a> : null}
         </nav>
       </footer>
       <StorageNotice />

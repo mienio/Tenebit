@@ -6,6 +6,7 @@ import { legalConfig } from '../config/legal';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import { useI18n } from '../i18n/I18nProvider';
 import { legalContentFor, type LegalDocumentKind } from '../legal/legalContent';
+import { clearConsent } from '../analytics/consent';
 
 export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
   const { language, t } = useI18n();
@@ -54,6 +55,11 @@ export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
                 {section.bullets ? <ul>{section.bullets.map(item => <li key={item}>{item}</li>)}</ul> : null}
               </section>
             ))}
+            {kind === 'cookies' && (
+              <button type="button" className="button button--ghost" onClick={() => { clearConsent(); window.location.reload(); }}>
+                {ui.manageConsent}
+              </button>
+            )}
           </div>
         </article>
       </div>

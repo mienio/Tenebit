@@ -1,12 +1,10 @@
 import { Copy, Eye, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
-import { EvidenceGallery } from '../../components/Evidence';
 import { SlidePanel } from '../../components/SlidePanel';
 import { StatusBadge } from '../../components/StatusBadge';
-import { api } from '../../api/endpoints';
 import { useI18n } from '../../i18n/I18nProvider';
-import type { ActivityLogEntry, Asset, AssetEvidence, ServiceTicket, ServiceTicketStatus } from '../../types/domain';
+import type { ActivityLogEntry, Asset, ServiceTicket, ServiceTicketStatus } from '../../types/domain';
 import { CategoryIcon } from '../../utils/categoryIcons';
 import { activityLabel } from '../../utils/labels';
 import { formatDate, formatDateTime, formatMoney } from '../../utils/format';
@@ -26,8 +24,6 @@ interface AssetDetailPanelProps {
   revealedFields: Record<string, string>;
   revealingKey: string | null;
   onRevealField(key: string): void;
-  evidence: AssetEvidence[] | null | undefined;
-  evidenceLoading: boolean;
   serviceTickets: ServiceTicket[] | null | undefined;
   serviceTicketsLoading: boolean;
   onOpenServiceTicket(): void;
@@ -95,19 +91,6 @@ export function AssetDetailPanel(props: AssetDetailPanelProps) {
               </Detail>
             ))}
           </dl>
-
-          <div className="formSectionTitle">{t('evidence.photos')}</div>
-          {props.evidenceLoading ? <p className="muted">{t('common.loading')}</p> : !props.evidence?.length ? (
-            <p className="muted">{t('evidence.noPhotos')}</p>
-          ) : (
-            <div className="pageStack">
-              {(['Issue', 'Return', 'Audit', 'Offboarding'] as const).map(phase => {
-                const ids = props.evidence!.filter(item => item.phase === phase).map(item => item.id);
-                if (!ids.length) return null;
-                return <div key={phase}><strong>{t(`evidence.phase.${phase}`)}</strong><EvidenceGallery ids={ids} getBlob={api.evidenceBlob} /></div>;
-              })}
-            </div>
-          )}
 
           <div className="formSectionTitle">{t('serviceTickets.title')}</div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>

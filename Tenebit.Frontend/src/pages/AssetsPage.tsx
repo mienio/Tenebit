@@ -184,11 +184,6 @@ export function AssetsPage() {
     [selected]
   );
   const history = useAsyncData(historyLoader, [historyLoader]);
-  const evidenceLoader = useMemo(
-    () => () => (selected ? api.assetEvidence(selected.id) : Promise.resolve(null)),
-    [selected]
-  );
-  const evidence = useAsyncData(evidenceLoader, [evidenceLoader]);
   const serviceTicketsLoader = useMemo(
     () => () => (selected ? api.assetServiceTickets(selected.id) : Promise.resolve(null)),
     [selected]
@@ -805,8 +800,6 @@ export function AssetsPage() {
         revealedFields={revealedFields}
         revealingKey={revealingKey}
         onRevealField={revealField}
-        evidence={evidence.data}
-        evidenceLoading={evidence.isLoading}
         serviceTickets={serviceTickets.data}
         serviceTicketsLoading={serviceTickets.isLoading}
         onOpenServiceTicket={() => setServiceTicketModalOpen(true)}
