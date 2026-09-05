@@ -638,7 +638,7 @@ export function SettingsPage() {
         {users.isLoading ? <p className="muted">{t('settings.loadingLogins')}</p> : users.error ? <ErrorState message={users.error} onRetry={users.reload} /> : !filteredUsers.length ? <EmptyState title={t('settings.emptyLoginsTitle')} description={t('settings.emptyLoginsDesc')} /> : (
           <>
             <div className="tableWrap"><table><thead><tr><th>{t('settings.colUser')}</th><th>{t('settings.colRoles')}</th><th>{t('assets.statusLabel')}</th><th></th></tr></thead><tbody>
-              {pagedUsers.items.map(user => <tr key={user.id}><td><strong>{user.displayName || user.email}</strong><small>{user.email}</small></td><td>{user.roles.join(', ') || '-'}</td><td>{user.isActive ? t('settings.active') : t('settings.inactive')}</td><td><Button variant="ghost" onClick={() => { setEditingUser(user); setModal('user'); }}>{t('common.edit')}</Button></td></tr>)}
+              {pagedUsers.items.map(user => <tr key={user.id}><td><strong>{user.displayName || user.email}</strong><small>{user.email}</small></td><td>{user.roles.map(key => roles.data?.find(r => r.key === key)?.label ?? key).join(', ') || '-'}</td><td>{user.isActive ? t('settings.active') : t('settings.inactive')}</td><td><Button variant="ghost" onClick={() => { setEditingUser(user); setModal('user'); }}>{t('common.edit')}</Button></td></tr>)}
             </tbody></table></div>
             <Pagination page={pagedUsers.page} total={pagedUsers.total} pageSize={pageSize} onPageChange={setPage} />
           </>

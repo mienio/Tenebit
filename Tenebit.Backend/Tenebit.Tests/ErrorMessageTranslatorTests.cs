@@ -226,4 +226,24 @@ public class ErrorMessageTranslatorTests
             Assert.True(leaked.Length == 0, $"{language}: polskie znaki w tlumaczeniu -> {result}");
         }
     }
+
+    // BUG-003: dla jezyka polskiego (zrodlowego) surowa nazwa wlasciwosci C# musi zostac zastapiona
+    // czytelna etykieta, zamiast wyciekac na ekran uzytkownika bez zadnego tlumaczenia.
+    [Theory]
+    [InlineData("Pole PurchasePrice nie może być ujemne.", "Cena zakupu nie może być ujemna.")]
+    [InlineData("Pole SeatsTotal ma nieprawidłową wartość.", "Liczba miejsc ma nieprawidłową wartość.")]
+    [InlineData("Pole Name nie może być puste.", "Nazwa nie może być pusta.")]
+    [InlineData("Pole Email może mieć maksymalnie 200 znaków.", "Adres e-mail może mieć maksymalnie 200 znaków.")]
+    [InlineData("Pole CategoryId musi zawierać prawidłowy identyfikator.", "Kategoria musi zawierać prawidłowy identyfikator.")]
+    public void Translate_ReplacesRawFieldNameWithPolishLabel_ForPolish(string message, string expected)
+    {
+        Assert.Equal(expected, ErrorMessageTranslator.Translate(message, "pl"));
+    }
+
+    [Fact]
+    public void Translate_FallsBackToHumanizedName_ForUnknownField_InPolish()
+    {
+        var result = ErrorMessageTranslator.Translate("Pole SomeUnmappedProperty nie może być puste.", "pl");
+        Assert.Equal("some unmapped property nie może być puste.", result);
+    }
 }

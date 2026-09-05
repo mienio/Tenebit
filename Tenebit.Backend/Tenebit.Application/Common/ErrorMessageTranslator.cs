@@ -386,22 +386,212 @@ public static class ErrorMessageTranslator
 
     private sealed record TemplateRule(Regex Pattern, Func<Match, string, string?> Build);
 
+    /// <summary>Rodzaj gramatyczny etykiety pola, o tyle o ile wpływa na odmianę orzecznika
+    /// (np. "pusty/pusta/puste", "ujemny/ujemna/ujemne"). <c>Default</c> obejmuje zarówno rodzaj
+    /// nijaki, jak i liczbę mnogą - obie formy współdzielą końcówkę "-e".</summary>
+    private enum PlGender { Default, Feminine, Masculine }
+
+    /// <summary>
+    /// Polskie etykiety pól kontraktów API, używane zamiast surowej nazwy właściwości C# w
+    /// komunikatach walidacji z <c>RequestObjectValidator</c> - patrz <see cref="FieldRule"/>.
+    /// </summary>
+    private static readonly Dictionary<string, string> FieldLabelsPl = new()
+    {
+        ["Password"] = "Hasło",
+        ["Token"] = "Token",
+        ["Code"] = "Kod",
+        ["Email"] = "Adres e-mail",
+        ["LogoUrl"] = "Logo",
+        ["PrivacyNoticeUrl"] = "Link do polityki prywatności",
+        ["Url"] = "Adres URL",
+        ["Uri"] = "Adres URL",
+        ["LayoutJson"] = "Układ",
+        ["FirstName"] = "Imię",
+        ["EmployeeFirstName"] = "Imię",
+        ["LastName"] = "Nazwisko",
+        ["EmployeeLastName"] = "Nazwisko",
+        ["Phone"] = "Telefon",
+        ["EmployeeNumber"] = "Numer pracownika",
+        ["RelationType"] = "Typ relacji",
+        ["JobTitle"] = "Stanowisko",
+        ["Language"] = "Język",
+        ["PreferredLanguage"] = "Język",
+        ["Country"] = "Kraj",
+        ["HolidayCalendarCountryCode"] = "Kod kraju kalendarza świąt",
+        ["Currency"] = "Waluta",
+        ["TimeZone"] = "Strefa czasowa",
+        ["DisplayName"] = "Nazwa wyświetlana",
+        ["OrganizationName"] = "Nazwa organizacji",
+        ["AssetName"] = "Nazwa aktywa",
+        ["AssetTag"] = "Numer inwentarzowy",
+        ["SerialNumber"] = "Numer seryjny",
+        ["Manufacturer"] = "Producent",
+        ["Model"] = "Model",
+        ["TeamName"] = "Nazwa zespołu",
+        ["CategoryName"] = "Nazwa kategorii",
+        ["ProcedureTitle"] = "Tytuł procedury",
+        ["Location"] = "Lokalizacja",
+        ["DestinationLocation"] = "Lokalizacja docelowa",
+        ["ReturnLocation"] = "Lokalizacja zwrotu",
+        ["DefaultReturnLocation"] = "Domyślna lokalizacja zwrotu",
+        ["CostCenter"] = "Centrum kosztów",
+        ["Key"] = "Klucz",
+        ["Label"] = "Etykieta",
+        ["Color"] = "Kolor",
+        ["BackgroundColor"] = "Kolor tła",
+        ["Icon"] = "Ikona",
+        ["RoleKey"] = "Rola",
+        ["PermissionKey"] = "Uprawnienie",
+        ["StatusKey"] = "Status",
+        ["PlanKey"] = "Plan",
+        ["Version"] = "Wersja",
+        ["Owner"] = "Właściciel",
+        ["AppliesTo"] = "Dotyczy",
+        ["LicenseKey"] = "Klucz licencji",
+        ["Caption"] = "Podpis",
+        ["IssueCondition"] = "Stan przy wydaniu",
+        ["ReturnCondition"] = "Stan przy zwrocie",
+        ["ReturnChecklistTemplate"] = "Szablon listy kontrolnej zwrotu",
+        ["Options"] = "Opcje",
+        ["Comment"] = "Komentarz",
+        ["DamageAssessmentNotes"] = "Notatki oceny uszkodzeń",
+        ["Resolution"] = "Rozwiązanie",
+        ["Reason"] = "Powód",
+        ["Message"] = "Wiadomość",
+        ["Name"] = "Nazwa",
+        ["Vendor"] = "Dostawca",
+        ["Description"] = "Opis",
+        ["Notes"] = "Notatki",
+        ["CustomEmails"] = "Dodatkowe adresy e-mail",
+        ["SuccessUrl"] = "Adres powodzenia",
+        ["CancelUrl"] = "Adres anulowania",
+        ["ReturnUrl"] = "Adres powrotu",
+        ["PurchasePrice"] = "Cena zakupu",
+        ["MonthlyPrice"] = "Cena miesięczna",
+        ["DiscountedPrice"] = "Cena po rabacie",
+        ["OriginalPrice"] = "Cena pierwotna",
+        ["ActualCost"] = "Rzeczywisty koszt",
+        ["EstimatedCost"] = "Szacowany koszt",
+        ["SeatsTotal"] = "Liczba miejsc",
+        ["LicenseSeatsTotal"] = "Liczba miejsc licencji",
+        ["LicenseSeatsUsed"] = "Liczba wykorzystanych miejsc licencji",
+        ["SeatsAssigned"] = "Liczba przypisanych miejsc",
+        ["Seats"] = "Liczba miejsc",
+        ["RetentionDays"] = "Okres retencji (dni)",
+        ["RetentionMonths"] = "Okres retencji (miesiące)",
+        ["CooldownDays"] = "Okres karencji (dni)",
+        ["SortOrder"] = "Kolejność sortowania",
+        ["ThresholdDays"] = "Próg (dni)",
+        ["PublicIpRetentionDays"] = "Okres retencji adresu IP (dni)",
+        ["DefaultEvidenceRetentionMonths"] = "Domyślny okres retencji dowodów (miesiące)",
+        ["PurchaseDate"] = "Data zakupu",
+        ["WarrantyUntil"] = "Data końca gwarancji",
+        ["ExpiresAt"] = "Data wygaśnięcia",
+        ["OrganizationId"] = "Organizacja",
+        ["PersonId"] = "Osoba",
+        ["CategoryId"] = "Kategoria",
+        ["TeamId"] = "Zespół",
+        ["AssetId"] = "Aktywo",
+        ["LicenseId"] = "Licencja",
+        ["UserId"] = "Użytkownik",
+        ["ManagerId"] = "Menedżer",
+        ["ManagerPersonId"] = "Menedżer",
+        ["AssignmentId"] = "Wydanie",
+        ["ProcedureId"] = "Procedura",
+        ["DocumentId"] = "Dokument",
+        ["ItemId"] = "Element",
+        ["TargetId"] = "Cel",
+        ["ParentId"] = "Element nadrzędny",
+        ["EntityId"] = "Obiekt",
+        ["Id"] = "Identyfikator",
+        ["ParticipantId"] = "Uczestnik",
+        ["RequesterPersonId"] = "Osoba zgłaszająca",
+        ["RequestedPersonId"] = "Osoba zgłaszająca",
+        ["AssignedPersonId"] = "Przypisana osoba",
+        ["NewOwnerPersonId"] = "Nowy właściciel",
+        ["DefaultManagerId"] = "Domyślny menedżer",
+        ["PendingUserId"] = "Oczekujący użytkownik",
+        ["JobProfileId"] = "Profil stanowiska",
+        ["OffboardingItemId"] = "Element offboardingu",
+        ["AssetAuditItemId"] = "Element audytu aktywów",
+        ["AssetInspectionId"] = "Kontrola aktywa",
+        ["IssuePhotoEvidenceId"] = "Zdjęcie dowodowe zgłoszenia",
+        ["PhotoEvidenceId"] = "Zdjęcie dowodowe",
+        ["ProcessOwnerId"] = "Właściciel procesu",
+        ["Status"] = "Status",
+        ["EmploymentStatus"] = "Status zatrudnienia",
+        ["AssetIds"] = "Aktywa",
+        ["Items"] = "Elementy",
+        ["CustomFields"] = "Pola własne",
+    };
+
+    /// <summary>Rodzaj gramatyczny etykiet, które są rodzaju żeńskiego lub męskiego w liczbie
+    /// pojedynczej - potrzebny tylko tam, gdzie orzecznik się odmienia (patrz <see cref="PlGender"/>).
+    /// Etykiety spoza tych zbiorów dostają formę domyślną, tak samo jak przed wprowadzeniem etykiet.</summary>
+    private static readonly HashSet<string> FeminineFieldsPl = new()
+    {
+        "Waluta", "Strefa czasowa", "Nazwa wyświetlana", "Nazwa organizacji", "Nazwa aktywa",
+        "Nazwa zespołu", "Nazwa kategorii", "Lokalizacja", "Lokalizacja docelowa", "Lokalizacja zwrotu",
+        "Domyślna lokalizacja zwrotu", "Etykieta", "Ikona", "Rola", "Wersja", "Wiadomość", "Nazwa",
+        "Cena zakupu", "Cena miesięczna", "Cena po rabacie", "Cena pierwotna",
+        "Liczba miejsc", "Liczba miejsc licencji", "Liczba wykorzystanych miejsc licencji",
+        "Liczba przypisanych miejsc",
+    };
+
+    private static readonly HashSet<string> MasculineFieldsPl = new()
+    {
+        "Token", "Kod", "Adres e-mail", "Link do polityki prywatności", "Adres URL", "Układ",
+        "Telefon", "Numer pracownika", "Typ relacji", "Język", "Kraj", "Kod kraju kalendarza świąt",
+        "Numer inwentarzowy", "Numer seryjny", "Producent", "Model", "Tytuł procedury", "Klucz",
+        "Kolor", "Kolor tła", "Status", "Plan", "Właściciel", "Klucz licencji", "Podpis",
+        "Stan przy wydaniu", "Stan przy zwrocie", "Szablon listy kontrolnej zwrotu", "Komentarz",
+        "Powód", "Dostawca", "Opis", "Adres powodzenia", "Adres anulowania", "Adres powrotu",
+        "Rzeczywisty koszt", "Szacowany koszt", "Menedżer", "Domyślny menedżer",
+    };
+
+    /// <summary>Zwraca polską etykietę pola albo, gdy jej brak w słowniku, jego nazwę techniczną
+    /// rozbitą na słowa (fallback dla pól spoza znanego zestawu kontraktów).</summary>
+    private static string FieldLabel(string propertyName) =>
+        FieldLabelsPl.TryGetValue(propertyName, out var label) ? label : HumanizePropertyName(propertyName);
+
+    private static string HumanizePropertyName(string propertyName) =>
+        Regex.Replace(propertyName, "(?<!^)([A-Z])", " $1").ToLowerInvariant();
+
+    private static PlGender GenderOf(string propertyName)
+    {
+        var label = FieldLabel(propertyName);
+        if (FeminineFieldsPl.Contains(label)) return PlGender.Feminine;
+        if (MasculineFieldsPl.Contains(label)) return PlGender.Masculine;
+        return PlGender.Default;
+    }
+
+    private static string Agree(PlGender gender, string @default, string feminine, string masculine) => gender switch
+    {
+        PlGender.Feminine => feminine,
+        PlGender.Masculine => masculine,
+        _ => @default,
+    };
+
     /// <summary>
     /// Buduje regułę dla komunikatów walidacji kontraktu żądania (<c>RequestObjectValidator</c>),
-    /// które różnią się wyłącznie nazwą pola i ewentualnym limitem. Nazwa pola celowo zostaje
-    /// nieprzetłumaczona - to identyfikator z kontraktu API, po którym klient podświetla właściwy
-    /// input; przetłumaczenie go zerwałoby to powiązanie.
+    /// które różnią się wyłącznie nazwą pola i ewentualnym limitem. Dla języków innych niż polski
+    /// nazwa pola celowo zostaje nieprzetłumaczona - to identyfikator z kontraktu API. Dla polskiego,
+    /// języka źródłowego, nazwa jest zastępowana czytelną etykietą (<see cref="FieldLabel"/>), bo tu
+    /// nie ma tłumaczenia do podmiany - bez tego użytkownik widziałby surową nazwę właściwości C#.
     ///
     /// <paramref name="suffixPattern"/> to reszta polskiego zdania jako wzorzec regex; może zawierać
-    /// grupę <c>limit</c>. W tłumaczeniach <c>{0}</c> to nazwa pola, <c>{1}</c> to limit.
+    /// grupę <c>limit</c>. W tłumaczeniach <c>{0}</c> to nazwa/etykieta pola, <c>{1}</c> to limit.
+    /// Reguła nie nadaje się do sufiksów z orzecznikiem odmieniającym się przez rodzaj (np. "puste",
+    /// "ujemne") - te mają własne, dedykowane reguły niżej.
     /// </summary>
-    private static TemplateRule FieldRule(string suffixPattern, string en, string es, string de, string it, string fr)
+    private static TemplateRule FieldRule(string suffixPattern, string pl, string en, string es, string de, string it, string fr)
     {
         var pattern = new Regex($@"^Pole (?<name>.+?) {suffixPattern}$");
         return new TemplateRule(pattern, (match, language) =>
         {
             var template = language switch
             {
+                "pl" => pl,
                 "en" => en,
                 "es" => es,
                 "de" => de,
@@ -413,7 +603,8 @@ public static class ErrorMessageTranslator
             if (template is null) return null;
 
             var limit = match.Groups["limit"].Success ? match.Groups["limit"].Value : string.Empty;
-            return string.Format(template, match.Groups["name"].Value, limit);
+            var name = language == AppLanguages.Source ? FieldLabel(match.Groups["name"].Value) : match.Groups["name"].Value;
+            return string.Format(template, name, limit);
         });
     }
 
@@ -728,83 +919,125 @@ public static class ErrorMessageTranslator
         // języka interfejsu. Reguły muszą stać po wzorcach z apostrofami ('nazwa') wyżej - tamte są
         // bardziej szczegółowe, a pierwsze dopasowanie wygrywa.
         FieldRule(@"może mieć maksymalnie (?<limit>\d+) znaków\.",
+            "{0} może mieć maksymalnie {1} znaków.",
             "The {0} field can be at most {1} characters long.",
             "El campo {0} puede tener como máximo {1} caracteres.",
             "Das Feld {0} darf höchstens {1} Zeichen lang sein.",
             "Il campo {0} può contenere al massimo {1} caratteri.",
             "Le champ {0} peut comporter au maximum {1} caractères."),
         FieldRule(@"może zawierać maksymalnie (?<limit>\d+) elementów\.",
+            "{0} może zawierać maksymalnie {1} elementów.",
             "The {0} field can contain at most {1} items.",
             "El campo {0} puede contener como máximo {1} elementos.",
             "Das Feld {0} darf höchstens {1} Elemente enthalten.",
             "Il campo {0} può contenere al massimo {1} elementi.",
             "Le champ {0} peut contenir au maximum {1} éléments."),
-        FieldRule(@"nie może być puste\.",
-            "The {0} field cannot be empty.",
-            "El campo {0} no puede estar vacío.",
-            "Das Feld {0} darf nicht leer sein.",
-            "Il campo {0} non può essere vuoto.",
-            "Le champ {0} ne peut pas être vide."),
+        // "nie może być puste"/"nie może być ujemne" mają dedykowane reguły niżej - orzecznik
+        // odmienia się przez rodzaj etykiety (pusty/pusta/puste, ujemny/ujemna/ujemne), więc nie
+        // pasują do jednego stałego szablonu FieldRule.
         FieldRule(@"nie zawiera prawidłowego adresu e-mail\.",
+            "{0} nie zawiera prawidłowego adresu e-mail.",
             "The {0} field does not contain a valid email address.",
             "El campo {0} no contiene una dirección de correo válida.",
             "Das Feld {0} enthält keine gültige E-Mail-Adresse.",
             "Il campo {0} non contiene un indirizzo e-mail valido.",
             "Le champ {0} ne contient pas d'adresse e-mail valide."),
         FieldRule(@"musi być względną ścieżką aplikacji\.",
+            "{0} musi być względną ścieżką aplikacji.",
             "The {0} field must be a relative application path.",
             "El campo {0} debe ser una ruta relativa de la aplicación.",
             "Das Feld {0} muss ein relativer Anwendungspfad sein.",
             "Il campo {0} deve essere un percorso relativo dell'applicazione.",
             "Le champ {0} doit être un chemin d'application relatif."),
         FieldRule(@"musi zawierać prawidłowy identyfikator\.",
+            "{0} musi zawierać prawidłowy identyfikator.",
             "The {0} field must contain a valid identifier.",
             "El campo {0} debe contener un identificador válido.",
             "Das Feld {0} muss eine gültige Kennung enthalten.",
             "Il campo {0} deve contenere un identificativo valido.",
             "Le champ {0} doit contenir un identifiant valide."),
         FieldRule(@"ma nieprawidłową wartość\.",
+            "{0} ma nieprawidłową wartość.",
             "The {0} field has an invalid value.",
             "El campo {0} tiene un valor no válido.",
             "Das Feld {0} hat einen ungültigen Wert.",
             "Il campo {0} ha un valore non valido.",
             "Le champ {0} a une valeur invalide."),
         FieldRule(@"ma wartość poza dozwolonym zakresem\.",
+            "{0} ma wartość poza dozwolonym zakresem.",
             "The {0} field has a value outside the allowed range.",
             "El campo {0} tiene un valor fuera del rango permitido.",
             "Das Feld {0} hat einen Wert außerhalb des zulässigen Bereichs.",
             "Il campo {0} ha un valore fuori dall'intervallo consentito.",
             "Le champ {0} a une valeur en dehors de la plage autorisée."),
-        FieldRule(@"nie może być ujemne\.",
-            "The {0} field cannot be negative.",
-            "El campo {0} no puede ser negativo.",
-            "Das Feld {0} darf nicht negativ sein.",
-            "Il campo {0} non può essere negativo.",
-            "Le champ {0} ne peut pas être négatif."),
         FieldRule(@"ma datę poza dozwolonym zakresem\.",
+            "{0} ma datę poza dozwolonym zakresem.",
             "The {0} field has a date outside the allowed range.",
             "El campo {0} tiene una fecha fuera del rango permitido.",
             "Das Feld {0} hat ein Datum außerhalb des zulässigen Bereichs.",
             "Il campo {0} ha una data fuori dall'intervallo consentito.",
             "Le champ {0} a une date en dehors de la plage autorisée."),
         FieldRule(@"zawiera nieprawidłową wartość tekstową\.",
+            "{0} zawiera nieprawidłową wartość tekstową.",
             "The {0} field contains an invalid text value.",
             "El campo {0} contiene un valor de texto no válido.",
             "Das Feld {0} enthält einen ungültigen Textwert.",
             "Il campo {0} contiene un valore testuale non valido.",
             "Le champ {0} contient une valeur textuelle invalide."),
         FieldRule(@"zawiera wartość poza dozwolonym zakresem 0-3650\.",
+            "{0} zawiera wartość poza dozwolonym zakresem 0-3650.",
             "The {0} field contains a value outside the allowed range 0-3650.",
             "El campo {0} contiene un valor fuera del rango permitido 0-3650.",
             "Das Feld {0} enthält einen Wert außerhalb des zulässigen Bereichs 0-3650.",
             "Il campo {0} contiene un valore fuori dall'intervallo consentito 0-3650.",
             "Le champ {0} contient une valeur en dehors de la plage autorisée 0-3650."),
         FieldRule(@"nie jest kolekcją\.",
+            "{0} nie jest kolekcją.",
             "The {0} field is not a collection.",
             "El campo {0} no es una colección.",
             "Das Feld {0} ist keine Sammlung.",
             "Il campo {0} non è una collezione.",
             "Le champ {0} n'est pas une collection."),
+        new TemplateRule(
+            new Regex(@"^Pole (?<name>.+?) nie może być puste\.$"),
+            (m, language) =>
+            {
+                if (language == AppLanguages.Source)
+                {
+                    var raw = m.Groups["name"].Value;
+                    var word = Agree(GenderOf(raw), "puste", "pusta", "pusty");
+                    return $"{FieldLabel(raw)} nie może być {word}.";
+                }
+                return language switch
+                {
+                    "en" => $"The {m.Groups["name"].Value} field cannot be empty.",
+                    "es" => $"El campo {m.Groups["name"].Value} no puede estar vacío.",
+                    "de" => $"Das Feld {m.Groups["name"].Value} darf nicht leer sein.",
+                    "it" => $"Il campo {m.Groups["name"].Value} non può essere vuoto.",
+                    "fr" => $"Le champ {m.Groups["name"].Value} ne peut pas être vide.",
+                    _ => null,
+                };
+            }),
+        new TemplateRule(
+            new Regex(@"^Pole (?<name>.+?) nie może być ujemne\.$"),
+            (m, language) =>
+            {
+                if (language == AppLanguages.Source)
+                {
+                    var raw = m.Groups["name"].Value;
+                    var word = Agree(GenderOf(raw), "ujemne", "ujemna", "ujemny");
+                    return $"{FieldLabel(raw)} nie może być {word}.";
+                }
+                return language switch
+                {
+                    "en" => $"The {m.Groups["name"].Value} field cannot be negative.",
+                    "es" => $"El campo {m.Groups["name"].Value} no puede ser negativo.",
+                    "de" => $"Das Feld {m.Groups["name"].Value} darf nicht negativ sein.",
+                    "it" => $"Il campo {m.Groups["name"].Value} non può essere negativo.",
+                    "fr" => $"Le champ {m.Groups["name"].Value} ne peut pas être négatif.",
+                    _ => null,
+                };
+            }),
         new TemplateRule(
             new Regex(@"^Klucz w polu (?<name>.+?) może mieć maksymalnie (?<limit>\d+) znaków\.$"),
             (m, lang) => lang switch
