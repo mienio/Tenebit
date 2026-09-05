@@ -16,7 +16,13 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
           <span>© {new Date().getFullYear()} {ui.footerRights}</span>
           {legalConfig.supportEmail ? (
             <span className="publicFooter__contactPrompt">
-              {ui.contactPrompt} <a href={`mailto:${legalConfig.supportEmail}`}>{legalConfig.supportEmail}</a>
+              {ui.contactPrompt}{' '}
+              <a
+                href="#"
+                onClick={event => { event.preventDefault(); window.location.href = `mailto:${legalConfig.supportEmail}`; }}
+              >
+                {legalConfig.supportEmail}
+              </a>
             </span>
           ) : null}
         </div>
