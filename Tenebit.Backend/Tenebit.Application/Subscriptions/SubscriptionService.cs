@@ -300,6 +300,38 @@ public sealed class SubscriptionService
     }
 
     /// <summary>
+    /// What ChangePlanAsync would actually do for this target plan, without doing it - lets the
+    /// confirmation dialog show a real number (an upgrade's exact proration, computed by Stripe) or a real
+    /// date (a downgrade's deferred effective date) instead of the new plan's flat list price, which is
+    /// wrong for a mid-cycle switch and is what made a correctly-charged upgrade look like nothing happened.
+    /// </summary>
+    public async Task<Result<PlanChangePreviewResponse>> PreviewPlanChangeAsync(string planKey, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<PlanChangePreviewResponse>.Failure(access.Error!);
+
+        var newPlan = SubscriptionPlan.FromKey(planKey);
+        if (newPlan is null || newPlan.Key == SubscriptionPlan.Free.Key)
+            return Result<PlanChangePreviewResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
+
+        var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
+        if (subscription is null || !subscription.HasLiveStripeSubscription)
+            return Result<PlanChangePreviewResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Stripe do zmiany - najpierw ją załóż przez płatność."));
+
+        var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+        if (newPlan.MonthlyPrice < currentPlan.MonthlyPrice)
+        {
+            // Mirrors ChangePlanAsync's downgrade branch: nothing is charged now, the switch (and its
+            // price) only takes effect at the end of the period already paid for.
+            return Result<PlanChangePreviewResponse>.Success(
+                new PlanChangePreviewResponse(0m, newPlan.Currency, false, subscription.CurrentPeriodEnd));
+        }
+
+        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.StripeSubscriptionId!, newPlan.Key, cancellationToken);
+        return Result<PlanChangePreviewResponse>.Success(new PlanChangePreviewResponse(preview.AmountDue, preview.Currency, true, null));
+    }
+
+    /// <summary>
     /// Switches an already-live paid subscription directly to a different paid plan, without a new
     /// Checkout Session (CreateCheckoutSessionAsync refuses to create a second one on purpose). Moving to
     /// Free still goes through the Billing Portal, since that's a cancellation, not a price swap.
@@ -328,6 +360,8 @@ public sealed class SubscriptionService
             return Result<SubscriptionResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Stripe do zmiany - najpierw ją załóż przez płatność."));
 
         var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
+        decimal? chargedAmount = null;
+        string? chargedCurrency = null;
 
         if (subscription.PlanKey == newPlan.Key)
         {
@@ -381,10 +415,10 @@ public sealed class SubscriptionService
             // that had no discount, or Stripe would reject the differently-shaped body under the same key.
             var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}";
 
-            PaymentSubscriptionState canonical;
+            PlanChangeResult result;
             try
             {
-                canonical = await _paymentGateway.ChangeSubscriptionPlanAsync(
+                result = await _paymentGateway.ChangeSubscriptionPlanAsync(
                     subscription.StripeSubscriptionId!,
                     newPlan.Key,
                     $"tenebit-planchange-{subscription.StripeSubscriptionId}-{newPlan.Key}-{discountKey}",
@@ -401,11 +435,14 @@ public sealed class SubscriptionService
                     "Płatność za zmianę planu nie powiodła się. Sprawdź metodę płatności w portalu rozliczeniowym Stripe i spróbuj ponownie."));
             }
 
+            var canonical = result.Subscription;
             if (!string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
                 throw new PaymentGatewayException("Stripe subscription association mismatch.");
 
             subscription.ReconcileFromStripe(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+            chargedAmount = result.AmountCharged;
+            chargedCurrency = result.Currency;
 
             _activity.Add(new ActivityLog(
                 organizationId,
@@ -425,7 +462,8 @@ public sealed class SubscriptionService
                 "plan-changed", $"plan-changed:{subscription.Id:N}:{canonical.SubscriptionId}:{newPlan.Key}:{canonical.CurrentPeriodStart:O}", cancellationToken);
         }
 
-        return Result<SubscriptionResponse>.Success(await BuildSubscriptionResponseAsync(subscription, cancellationToken));
+        var response = await BuildSubscriptionResponseAsync(subscription, cancellationToken);
+        return Result<SubscriptionResponse>.Success(response with { LastChargeAmount = chargedAmount, LastChargeCurrency = chargedCurrency });
     }
 
     /// <summary>Cancels a downgrade scheduled by <see cref="ChangePlanAsync"/> before it takes effect - the
@@ -666,10 +704,20 @@ public sealed record SubscriptionResponse(
     IReadOnlyList<ResourceUsage> Usage,
     string? PendingPlanKey = null,
     string? PendingPlanName = null,
-    DateTimeOffset? PendingPlanEffectiveAt = null
+    DateTimeOffset? PendingPlanEffectiveAt = null,
+    /// <summary>Set only on the response to a just-applied plan change - the exact amount Stripe charged
+    /// for it (post proration credit; can legitimately be 0). Null everywhere else, including a plain
+    /// GetCurrentAsync, where there's no "just happened" charge to report.</summary>
+    decimal? LastChargeAmount = null,
+    string? LastChargeCurrency = null
 );
 
 public sealed record ResourceUsage(string Resource, int Current, int Limit);
 
 public sealed record PromoCodeValidationResponse(
     string Code, string DiscountType, decimal DiscountValue, decimal OriginalPrice, decimal DiscountedPrice, string Currency);
+
+/// <summary>What a plan switch would actually do right now: either the exact amount Stripe would charge
+/// immediately (an upgrade), or - when ChargesNow is false - the date the new price takes effect for free
+/// with nothing charged today (a downgrade).</summary>
+public sealed record PlanChangePreviewResponse(decimal AmountDue, string Currency, bool ChargesNow, DateTimeOffset? EffectiveAt);

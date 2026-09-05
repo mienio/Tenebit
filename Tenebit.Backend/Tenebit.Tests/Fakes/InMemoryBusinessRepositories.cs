@@ -642,7 +642,10 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public PromoCodeDiscount? LastPlanChangeDiscount { get; private set; }
     public int PlanChangeCalls { get; private set; }
 
-    public Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public decimal NextChargedAmount { get; set; }
+    public string NextChargedCurrency { get; set; } = "EUR";
+
+    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         LastPlanChangeSubscriptionId = subscriptionId;
         LastPlanChangeNewPlanKey = newPlanKey;
@@ -650,8 +653,14 @@ public sealed class FakePaymentGateway : IPaymentGateway
         LastPlanChangeDiscount = discount;
         PlanChangeCalls++;
         if (ThrowOnPlanChange is not null) throw ThrowOnPlanChange;
-        return Task.FromResult(NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set"));
+        var subscription = NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set");
+        return Task.FromResult(new PlanChangeResult(subscription, NextChargedAmount, NextChargedCurrency));
     }
+
+    public PlanChangePreview? NextPlanChangePreview { get; set; }
+
+    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, CancellationToken cancellationToken) =>
+        Task.FromResult(NextPlanChangePreview ?? throw new InvalidOperationException("NextPlanChangePreview not set"));
 
     public PaymentScheduleState? NextSchedule { get; set; }
     public Exception? ThrowOnScheduleDowngrade { get; set; }

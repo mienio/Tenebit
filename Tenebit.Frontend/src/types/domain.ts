@@ -954,6 +954,17 @@ export interface Subscription {
   pendingPlanKey: string | null;
   pendingPlanName: string | null;
   pendingPlanEffectiveAt: string | null;
+  /** Set only on the response to a just-applied change-plan call - the exact amount Stripe charged for
+   * it (can legitimately be 0). Null on a plain subscription fetch. */
+  lastChargeAmount: number | null;
+  lastChargeCurrency: string | null;
+}
+
+export interface PlanChangePreview {
+  amountDue: number;
+  currency: string;
+  chargesNow: boolean;
+  effectiveAt: string | null;
 }
 
 export interface PromoCodeValidation {

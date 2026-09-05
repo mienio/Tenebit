@@ -12,7 +12,13 @@ public interface IPaymentGateway
     PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader);
     Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken);
     Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken);
-    Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
+    Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
+
+    /// <summary>Asks Stripe what an immediate switch to <paramref name="newPlanKey"/> would actually charge
+    /// right now - the exact proration (credit for the old plan's unused time against a full new period),
+    /// not the new plan's list price - so the confirmation dialog can show a real number before the
+    /// customer commits (audit: upgrades were applying with no visible charge amount, before or after).</summary>
+    Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, CancellationToken cancellationToken);
 
     /// <summary>Schedules a plan switch to take effect at the end of the subscription's current billing
     /// period, via a Stripe subscription schedule - the subscription stays on its current price/plan
@@ -62,6 +68,14 @@ public sealed record PaymentSubscriptionState(
 public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value);
 
 public sealed record PaymentScheduleState(string ScheduleId, string PendingPlanKey, DateTimeOffset EffectiveAt);
+
+/// <summary>What Stripe would charge right now for a plan switch, before it's actually applied.</summary>
+public sealed record PlanChangePreview(decimal AmountDue, string Currency);
+
+/// <summary>The outcome of an applied plan switch - the updated subscription plus what was actually
+/// charged (0 when the proration credit fully covered the new plan, which is a real, correct outcome and
+/// not a sign that nothing happened).</summary>
+public sealed record PlanChangeResult(PaymentSubscriptionState Subscription, decimal AmountCharged, string Currency);
 
 /// <summary>A single Stripe invoice - amounts in major currency units (already converted from Stripe's
 /// minor-unit cents), Currency as an ISO 4217 code (e.g. "EUR").</summary>

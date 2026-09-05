@@ -240,18 +240,9 @@ public sealed class StripePaymentGateway : IPaymentGateway
     /// subscription (<see cref="CreateCheckoutSessionAsync"/> refuses a second one on purpose); this is
     /// the path for changing an already-live one.
     /// </summary>
-    public async Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public async Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
-        if (!PlanPrices.TryGetValue(newPlanKey, out var newPriceId))
-            throw new PaymentGatewayException($"Stripe:Prices:{newPlanKey} is not configured.");
-
-        var current = await GetAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}?expand[]=items.data.price", cancellationToken);
-        if (!current.TryGetProperty("items", out var items) ||
-            !items.TryGetProperty("data", out var data) ||
-            data.ValueKind != JsonValueKind.Array ||
-            data.GetArrayLength() == 0)
-            throw new PaymentGatewayException("Stripe subscription has no item to switch.");
-        var itemId = RequiredString(data[0], "id");
+        var (itemId, newPriceId) = await ResolveSwitchTargetAsync(subscriptionId, newPlanKey, cancellationToken);
 
         // create_prorations (the Stripe default) only invoices immediately when the billing interval
         // changes or the customer moves from free to paid - a same-interval plan swap just books the
@@ -274,7 +265,10 @@ public sealed class StripePaymentGateway : IPaymentGateway
             ["proration_behavior"] = "always_invoice",
             ["payment_behavior"] = "error_if_incomplete",
             ["billing_cycle_anchor"] = "now",
-            ["expand[0]"] = "items.data.price"
+            ["expand[0]"] = "items.data.price",
+            // So the actual charge (post proration credit) can be reported back to the customer instead of
+            // just "success" with no number - see PlanChangeResult / AdminOverviewService's payment history.
+            ["expand[1]"] = "latest_invoice"
         };
 
         if (discount is not null)
@@ -284,7 +278,55 @@ public sealed class StripePaymentGateway : IPaymentGateway
         }
 
         var updated = await PostAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}", form, idempotencyKey, cancellationToken);
-        return MapSubscriptionState(updated);
+        var amountCharged = 0m;
+        var currency = "EUR";
+        if (updated.TryGetProperty("latest_invoice", out var invoice) && invoice.ValueKind == JsonValueKind.Object)
+        {
+            amountCharged = ReadAmountMajorUnits(invoice, "amount_paid");
+            currency = invoice.TryGetProperty("currency", out var invoiceCurrency)
+                ? (invoiceCurrency.GetString() ?? "eur").ToUpperInvariant()
+                : "EUR";
+        }
+
+        return new PlanChangeResult(MapSubscriptionState(updated), amountCharged, currency);
+    }
+
+    /// <summary>Previews - without applying anything - what ChangeSubscriptionPlanAsync would actually
+    /// charge right now for the same switch, using Stripe's invoice preview so the number shown to the
+    /// customer before they confirm is the real proration, not the new plan's list price.</summary>
+    public async Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, CancellationToken cancellationToken)
+    {
+        var (itemId, newPriceId) = await ResolveSwitchTargetAsync(subscriptionId, newPlanKey, cancellationToken);
+
+        var form = new Dictionary<string, string>
+        {
+            ["subscription"] = subscriptionId,
+            ["subscription_details[items][0][id]"] = itemId,
+            ["subscription_details[items][0][price]"] = newPriceId,
+            ["subscription_details[proration_behavior]"] = "always_invoice",
+            ["subscription_details[billing_cycle_anchor]"] = "now"
+        };
+
+        var preview = await PostAsync("invoices/create_preview", form, null, cancellationToken);
+        var currency = preview.TryGetProperty("currency", out var currencyProp)
+            ? (currencyProp.GetString() ?? "eur").ToUpperInvariant()
+            : "EUR";
+        return new PlanChangePreview(ReadAmountMajorUnits(preview, "amount_due"), currency);
+    }
+
+    private async Task<(string ItemId, string NewPriceId)> ResolveSwitchTargetAsync(string subscriptionId, string newPlanKey, CancellationToken cancellationToken)
+    {
+        if (!PlanPrices.TryGetValue(newPlanKey, out var newPriceId))
+            throw new PaymentGatewayException($"Stripe:Prices:{newPlanKey} is not configured.");
+
+        var current = await GetAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}?expand[]=items.data.price", cancellationToken);
+        if (!current.TryGetProperty("items", out var items) ||
+            !items.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Array ||
+            data.GetArrayLength() == 0)
+            throw new PaymentGatewayException("Stripe subscription has no item to switch.");
+
+        return (RequiredString(data[0], "id"), newPriceId);
     }
 
     /// <summary>

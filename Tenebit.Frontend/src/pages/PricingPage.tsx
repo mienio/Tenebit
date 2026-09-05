@@ -1,5 +1,5 @@
 import { Tag, Zap } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -7,7 +7,7 @@ import { TextInput } from '../components/FormFields';
 import { PLANS, PricingCards, type PlanDef } from '../components/PricingCards';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
-import type { PromoCodeValidation } from '../types/domain';
+import type { PlanChangePreview, PromoCodeValidation } from '../types/domain';
 import { formatDate } from '../utils/format';
 
 export function PricingPage() {
@@ -23,6 +23,10 @@ export function PricingPage() {
   const [appliedPromo, setAppliedPromo] = useState<PromoCodeValidation | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [cancellingScheduled, setCancellingScheduled] = useState(false);
+  const [preview, setPreview] = useState<PlanChangePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewRequestRef = useRef(0);
   const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
   // A live paid Stripe subscription already exists - switching plans must reuse it (Stripe proration)
   // instead of Checkout, which only ever creates a first subscription and refuses to create a second.
@@ -46,6 +50,21 @@ export function PricingPage() {
     setPromoError(null);
     setAppliedPromo(null);
     setSelectedPlan(plan);
+    setPreview(null);
+    setPreviewError(null);
+    if (!hasLivePaidSubscription) return;
+
+    // An existing paid subscription changes via real-time Stripe proration (credit for the old plan's
+    // unused time against the new plan) rather than the new plan's flat list price - fetch the exact
+    // number before the customer commits, instead of applying it silently and hoping they trust the
+    // toast (the amount was always correct, but with no number shown a real charge read as "nothing
+    // happened").
+    const requestId = ++previewRequestRef.current;
+    setPreviewLoading(true);
+    api.previewPlanChange(plan.key)
+      .then(result => { if (previewRequestRef.current === requestId) setPreview(result); })
+      .catch(error => { if (previewRequestRef.current === requestId) setPreviewError(error instanceof Error ? error.message : String(error)); })
+      .finally(() => { if (previewRequestRef.current === requestId) setPreviewLoading(false); });
   }
 
   function closeCheckout() {
@@ -83,9 +102,14 @@ export function PricingPage() {
     setUpgrading(true);
     try {
       if (isPlanChange) {
-        await api.changeSubscriptionPlan(plan.key, promoCode);
+        const result = await api.changeSubscriptionPlan(plan.key, promoCode);
         await subscription.reload();
-        setMessage({ type: 'success', text: t('pricing.changePlanSuccess', { plan: plan.name }) });
+        const successText = result.lastChargeAmount != null
+          ? t('pricing.changePlanChargedSuccess', { plan: plan.name, amount: result.lastChargeAmount.toFixed(2), currency: result.lastChargeCurrency ?? 'EUR' })
+          : result.pendingPlanEffectiveAt
+            ? t('pricing.scheduledChange', { plan: result.pendingPlanName ?? plan.name, date: formatDate(result.pendingPlanEffectiveAt) })
+            : t('pricing.changePlanSuccess', { plan: plan.name });
+        setMessage({ type: 'success', text: successText });
         setUpgrading(false);
       } else {
         const checkoutUrl = await api.createCheckoutSession(plan.key, '/dashboard?checkout=success', '/pricing?checkout=cancelled', promoCode);
@@ -186,6 +210,7 @@ export function PricingPage() {
         title={t(hasLivePaidSubscription ? 'pricing.confirmChangePlanTitle' : 'pricing.confirmUpgradeTitle')}
         description={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.confirmChangePlan' : 'pricing.confirmUpgrade', { plan: selectedPlan.name, price: totalPrice.toFixed(2) }) : ''}
         confirmLabel={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.changePlan' : 'pricing.upgrade', { plan: selectedPlan.name }) : ''}
+        confirmDisabled={hasLivePaidSubscription && (previewLoading || !!previewError || !preview)}
         onConfirm={confirmUpgrade}
         onClose={closeCheckout}
       >
@@ -195,20 +220,41 @@ export function PricingPage() {
               {t(hasLivePaidSubscription ? 'pricing.confirmChangePlanDetail' : 'pricing.confirmUpgradeDetail', { limit: selectedPlan.limitLabel })}
             </p>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 14 }}>
-              <span>{t('pricing.checkout.subtotal')}</span>
-              <span>{selectedPlan.price.toFixed(2)} €{t('landing.perMonth')}</span>
-            </div>
-            {appliedPromo && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 6, color: 'var(--success, #047857)' }}>
-                <span>{t('pricing.checkout.discount')} ({appliedPromo.code})</span>
-                <span>-{(appliedPromo.originalPrice - appliedPromo.discountedPrice).toFixed(2)} €</span>
+            {hasLivePaidSubscription ? (
+              <div style={{ marginTop: 14 }}>
+                {previewLoading ? (
+                  <p className="pricing-confirm-detail">{t('pricing.checkout.previewLoading')}</p>
+                ) : previewError ? (
+                  <p className="formMessage formMessage--error">{previewError}</p>
+                ) : preview?.chargesNow ? (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                    <span>{t('pricing.checkout.dueNow')}</span>
+                    <span>{preview.amountDue.toFixed(2)} {preview.currency}</span>
+                  </div>
+                ) : preview ? (
+                  <p className="pricing-confirm-detail">
+                    {t('pricing.checkout.downgradeNotice', { date: formatDate(preview.effectiveAt!) })}
+                  </p>
+                ) : null}
               </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 14 }}>
+                  <span>{t('pricing.checkout.subtotal')}</span>
+                  <span>{selectedPlan.price.toFixed(2)} €{t('landing.perMonth')}</span>
+                </div>
+                {appliedPromo && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 6, color: 'var(--success, #047857)' }}>
+                    <span>{t('pricing.checkout.discount')} ({appliedPromo.code})</span>
+                    <span>-{(appliedPromo.originalPrice - appliedPromo.discountedPrice).toFixed(2)} €</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <span>{t('pricing.checkout.total')}</span>
+                  <span>{totalPrice.toFixed(2)} €{t('landing.perMonth')}</span>
+                </div>
+              </>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-              <span>{t('pricing.checkout.total')}</span>
-              <span>{totalPrice.toFixed(2)} €{t('landing.perMonth')}</span>
-            </div>
 
             {!isDowngrade && (
               <div style={{ marginTop: 16 }}>

@@ -446,6 +446,66 @@ public class SubscriptionServiceTests
     }
 
     [Fact]
+    public async Task PreviewPlanChangeAsync_ReturnsStripesExactProrationAmount_ForAnUpgrade()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextPlanChangePreview = new PlanChangePreview(20.88m, "EUR");
+
+        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.ChargesNow);
+        Assert.Equal(20.88m, result.Value.AmountDue);
+        Assert.Equal("EUR", result.Value.Currency);
+        Assert.Null(result.Value.EffectiveAt);
+    }
+
+    [Fact]
+    public async Task PreviewPlanChangeAsync_ReturnsNoChargeAndTheEffectiveDate_ForADowngrade()
+    {
+        var (service, user, _, subscriptions, _, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddDays(12);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+
+        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value!.ChargesNow);
+        Assert.Equal(0m, result.Value.AmountDue);
+        Assert.Equal(periodEnd, result.Value.EffectiveAt);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_ReportsTheExactAmountStripeActuallyCharged()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "cus_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
+        paymentGateway.NextChargedAmount = 20.88m;
+        paymentGateway.NextChargedCurrency = "EUR";
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(20.88m, result.Value!.LastChargeAmount);
+        Assert.Equal("EUR", result.Value.LastChargeCurrency);
+    }
+
+    [Fact]
     public async Task ChangePlanAsync_RedeemsPromoCodeAndForwardsDiscountToGateway()
     {
         var (service, user, _, subscriptions, paymentGateway, _, promoCodes) = CreateService();
