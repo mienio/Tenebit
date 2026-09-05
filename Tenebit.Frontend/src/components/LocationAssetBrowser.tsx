@@ -104,12 +104,19 @@ function LocationAssetNode({ node, byParent, byId, expanded, loading, inventory,
   );
 }
 
-export function LocationAssetBrowser({ locations, categories, onSelectAsset }: { locations: LocationNode[]; categories: AssetCategory[]; onSelectAsset: (assetId: string) => void }) {
+export function LocationAssetBrowser({ locations, categories, onSelectAsset, reloadToken }: { locations: LocationNode[]; categories: AssetCategory[]; onSelectAsset: (assetId: string) => void; reloadToken?: number }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState<Set<string>>(() => new Set());
   const [inventory, setInventory] = useState<Record<string, LocationInventory>>({});
   const [search, setSearch] = useState('');
+
+  // An expanded location's rows are cached by id and never re-requested on their own; without this,
+  // editing an asset (e.g. its purchase price) leaves the stale cached row showing the old value
+  // here while the detail panel - which always re-fetches on select - shows the current one.
+  useEffect(() => {
+    setInventory({});
+  }, [reloadToken]);
 
   const byParent = useMemo(() => {
     const map = new Map<string, LocationNode[]>();

@@ -128,7 +128,11 @@ export function AssetsPage() {
   const totalAssets = assets.data?.total ?? 0;
   const selectionResetKey = `${debouncedSearch}|${status}|${location}|${team}|${owner}|${warranty}|${page}`;
   const { selectedIds, selectedAssets, allOnPageSelected, toggleSelected, toggleSelectAllOnPage, clearSelection, keepOnly } = useAssetSelection(rows, selectionResetKey);
-  const reloadAssets = useCallback(async () => { await Promise.all([assets.reload(), groupCounts.reload()]); }, [assets, groupCounts]);
+  const [browseReloadToken, setBrowseReloadToken] = useState(0);
+  const reloadAssets = useCallback(async () => {
+    setBrowseReloadToken(token => token + 1);
+    await Promise.all([assets.reload(), groupCounts.reload()]);
+  }, [assets, groupCounts]);
 
   const personGroups = useMemo<AssetGroup[]>(() => {
     const counts = groupCounts.data?.byPerson ?? {};
@@ -750,16 +754,16 @@ export function AssetsPage() {
         </div>
 
         {viewMode === 'location' && (
-          <LocationAssetBrowser locations={locations.data ?? []} categories={categories.data ?? []} onSelectAsset={handleSelectAssetFromTree} />
+          <LocationAssetBrowser locations={locations.data ?? []} categories={categories.data ?? []} onSelectAsset={handleSelectAssetFromTree} reloadToken={browseReloadToken} />
         )}
         {viewMode === 'person' && (
-          <GroupedAssetBrowser groups={personGroups} icon={<Users size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchPersonAssets} onSelectAsset={handleSelectAssetFromTree} />
+          <GroupedAssetBrowser groups={personGroups} icon={<Users size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchPersonAssets} onSelectAsset={handleSelectAssetFromTree} reloadToken={browseReloadToken} />
         )}
         {viewMode === 'status' && (
-          <GroupedAssetBrowser groups={statusGroups} icon={<CircleDot size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchStatusAssets} onSelectAsset={handleSelectAssetFromTree} />
+          <GroupedAssetBrowser groups={statusGroups} icon={<CircleDot size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchStatusAssets} onSelectAsset={handleSelectAssetFromTree} reloadToken={browseReloadToken} />
         )}
         {viewMode === 'category' && (
-          <GroupedAssetBrowser groups={categoryGroups} icon={<Tag size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchCategoryAssets} onSelectAsset={handleSelectAssetFromTree} />
+          <GroupedAssetBrowser groups={categoryGroups} icon={<Tag size={16} />} categories={categories.data ?? []} fetchGroupAssets={fetchCategoryAssets} onSelectAsset={handleSelectAssetFromTree} reloadToken={browseReloadToken} />
         )}
         {viewMode === 'list' && (
           <AssetsList

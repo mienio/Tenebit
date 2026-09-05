@@ -22,14 +22,22 @@ interface GroupedAssetBrowserProps {
   categories: AssetCategory[];
   fetchGroupAssets: (groupId: string) => Promise<{ items: GroupAssetRow[]; total: number }>;
   onSelectAsset: (assetId: string) => void;
+  reloadToken?: number;
 }
 
-export function GroupedAssetBrowser({ groups, icon, categories, fetchGroupAssets, onSelectAsset }: GroupedAssetBrowserProps) {
+export function GroupedAssetBrowser({ groups, icon, categories, fetchGroupAssets, onSelectAsset, reloadToken }: GroupedAssetBrowserProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState<Set<string>>(() => new Set());
   const [cache, setCache] = useState<Record<string, { items: GroupAssetRow[]; total: number }>>({});
   const [search, setSearch] = useState('');
+
+  // An expanded group's rows are cached by id and never re-requested on their own; without this,
+  // editing an asset (e.g. its purchase price) leaves the stale cached row showing the old value
+  // here while the detail panel - which always re-fetches on select - shows the current one.
+  useEffect(() => {
+    setCache({});
+  }, [reloadToken]);
 
   const trimmed = search.trim().toLowerCase();
   const visibleGroups = trimmed
