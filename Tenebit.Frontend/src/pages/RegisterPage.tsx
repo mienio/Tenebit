@@ -12,7 +12,43 @@ import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import { legalContentFor } from '../legal/legalContent';
 
-const currencies = ['PLN', 'EUR', 'USD', 'GBP', 'CHF', 'CZK', 'UAH'];
+// EUR first as the default/fallback (same role FALLBACK_LANGUAGE plays for language below), then the
+// rest of the roughly top 50 currencies by global trade volume.
+const currencies = [
+  'EUR', 'USD', 'GBP', 'CHF', 'JPY', 'CNY', 'AUD', 'CAD', 'NZD', 'SEK',
+  'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'RON', 'BGN', 'ISK', 'TRY', 'RUB',
+  'UAH', 'ILS', 'AED', 'SAR', 'QAR', 'KWD', 'BHD', 'OMR', 'JOD', 'EGP',
+  'ZAR', 'NGN', 'KES', 'GHS', 'MAD', 'INR', 'PKR', 'BDT', 'LKR', 'IDR',
+  'MYR', 'SGD', 'THB', 'PHP', 'VND', 'KRW', 'TWD', 'HKD', 'MXN', 'BRL'
+];
+
+const FALLBACK_CURRENCY = 'EUR';
+
+// Same idea as the language auto-detection above: guess a sane default from the visitor's own browser
+// locale (its region subtag, e.g. "pl" in "pl-PL") instead of always defaulting to one currency. A
+// country outside this map - or with no currency in our list - falls back to EUR, exactly like an
+// unsupported browser language falls back to English.
+const countryToCurrency: Record<string, string> = {
+  AT: 'EUR', BE: 'EUR', CY: 'EUR', EE: 'EUR', FI: 'EUR', FR: 'EUR', DE: 'EUR', GR: 'EUR', IE: 'EUR',
+  IT: 'EUR', LV: 'EUR', LT: 'EUR', LU: 'EUR', MT: 'EUR', NL: 'EUR', PT: 'EUR', SK: 'EUR', SI: 'EUR',
+  ES: 'EUR', HR: 'EUR',
+  US: 'USD', GB: 'GBP', CH: 'CHF', LI: 'CHF', JP: 'JPY', CN: 'CNY', AU: 'AUD', CA: 'CAD', NZ: 'NZD',
+  SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', CZ: 'CZK', HU: 'HUF', RO: 'RON', BG: 'BGN', IS: 'ISK',
+  TR: 'TRY', RU: 'RUB', UA: 'UAH', IL: 'ILS', AE: 'AED', SA: 'SAR', QA: 'QAR', KW: 'KWD', BH: 'BHD',
+  OM: 'OMR', JO: 'JOD', EG: 'EGP', ZA: 'ZAR', NG: 'NGN', KE: 'KES', GH: 'GHS', MA: 'MAD', IN: 'INR',
+  PK: 'PKR', BD: 'BDT', LK: 'LKR', ID: 'IDR', MY: 'MYR', SG: 'SGD', TH: 'THB', PH: 'PHP', VN: 'VND',
+  KR: 'KRW', TW: 'TWD', HK: 'HKD', MX: 'MXN', BR: 'BRL'
+};
+
+function detectInitialCurrency(): string {
+  const browserLanguages = window.navigator.languages ?? [window.navigator.language];
+  for (const browserLanguage of browserLanguages) {
+    const country = browserLanguage.split('-')[1]?.toUpperCase();
+    const currency = country ? countryToCurrency[country] : undefined;
+    if (currency && currencies.includes(currency)) return currency;
+  }
+  return FALLBACK_CURRENCY;
+}
 
 export function RegisterPage() {
   const auth = useAuth();
@@ -23,6 +59,7 @@ export function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [currency] = useState(detectInitialCurrency);
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -41,7 +78,7 @@ export function RegisterPage() {
         String(form.get('displayName') ?? ''),
         email,
         password,
-        String(form.get('currency') ?? 'PLN'),
+        String(form.get('currency') ?? FALLBACK_CURRENCY),
         language,
         form.get('acceptTerms') === 'on'
       );
@@ -73,7 +110,7 @@ export function RegisterPage() {
           <Field label={t('auth.displayNameLabel')}><TextInput name="displayName" required autoComplete="name" /></Field>
           <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required autoComplete="email" /></Field>
           <Field label={t('auth.currencyLabel')}>
-            <SelectInput name="currency" defaultValue="PLN">
+            <SelectInput name="currency" defaultValue={currency}>
               {currencies.map(code => <option key={code} value={code}>{code}</option>)}
             </SelectInput>
           </Field>
