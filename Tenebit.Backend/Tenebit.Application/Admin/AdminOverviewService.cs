@@ -24,6 +24,7 @@ public sealed class AdminOverviewService
     private readonly ILocationRepository _locations;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IAdminRepository _admin;
+    private readonly IPaymentGateway _paymentGateway;
 
     public AdminOverviewService(
         IOrganizationRepository organizations,
@@ -32,7 +33,8 @@ public sealed class AdminOverviewService
         IPersonRepository people,
         ILocationRepository locations,
         ISubscriptionRepository subscriptions,
-        IAdminRepository admin)
+        IAdminRepository admin,
+        IPaymentGateway paymentGateway)
     {
         _organizations = organizations;
         _users = users;
@@ -41,6 +43,7 @@ public sealed class AdminOverviewService
         _locations = locations;
         _subscriptions = subscriptions;
         _admin = admin;
+        _paymentGateway = paymentGateway;
     }
 
     /// <summary>
@@ -147,6 +150,32 @@ public sealed class AdminOverviewService
             peopleByStatus.Select(x => new AdminCountSlice(x.Label, x.Count)).ToArray(),
             summary.LocationCount,
             ToSeries("Nowe aktywa", assetsCreated));
+    }
+
+    /// <summary>
+    /// What an organization has actually paid, as evidence (billing disputes, chargebacks) - pulled live
+    /// from Stripe on every call rather than mirrored locally, since Stripe's own invoice is the record
+    /// that matters and this stays correct even if it changes on Stripe's side (refund, etc.) after the
+    /// fact. Returns an empty (zero-total) result, not null, for an organization that has never had a
+    /// Stripe customer - null only means the organization itself doesn't exist.
+    /// </summary>
+    public async Task<AdminOrganizationPayments?> GetOrganizationPaymentsAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        var organization = await _organizations.GetAsync(organizationId, cancellationToken);
+        if (organization is null) return null;
+
+        var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
+        if (subscription is null || string.IsNullOrWhiteSpace(subscription.StripeCustomerId))
+            return new AdminOrganizationPayments(0m, "EUR", []);
+
+        var invoices = await _paymentGateway.ListInvoicesAsync(subscription.StripeCustomerId, cancellationToken);
+        var currency = invoices.Count > 0 ? invoices[0].Currency : "EUR";
+
+        return new AdminOrganizationPayments(
+            invoices.Sum(x => x.AmountPaid),
+            currency,
+            invoices.Select(x => new AdminPaymentEntry(
+                x.Id, x.Number, x.AmountPaid, x.AmountDue, x.Currency, x.Status, x.Created, x.HostedInvoiceUrl, x.InvoicePdfUrl)).ToArray());
     }
 
     private async Task<Dictionary<Guid, DateTimeOffset>> BuildLastLoginLookupAsync(

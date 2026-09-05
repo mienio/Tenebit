@@ -568,6 +568,15 @@ public sealed class InMemoryAssetAuditItemRepository : IAssetAuditItemRepository
 
 public sealed class FakePaymentGateway : IPaymentGateway
 {
+    public IReadOnlyList<PaymentInvoice> NextInvoices { get; set; } = [];
+    public string? LastListInvoicesCustomerId { get; private set; }
+
+    public Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken)
+    {
+        LastListInvoicesCustomerId = customerId;
+        return Task.FromResult(NextInvoices);
+    }
+
     public bool IsConfigured { get; set; } = true;
     public bool AllPlansConfigured { get; set; } = true;
     public HashSet<string> ConfiguredPlanKeys { get; } = [];
@@ -630,13 +639,15 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastPlanChangeIdempotencyKey { get; private set; }
     public string? LastPlanChangeSubscriptionId { get; private set; }
     public string? LastPlanChangeNewPlanKey { get; private set; }
+    public PromoCodeDiscount? LastPlanChangeDiscount { get; private set; }
     public int PlanChangeCalls { get; private set; }
 
-    public Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken)
+    public Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         LastPlanChangeSubscriptionId = subscriptionId;
         LastPlanChangeNewPlanKey = newPlanKey;
         LastPlanChangeIdempotencyKey = idempotencyKey;
+        LastPlanChangeDiscount = discount;
         PlanChangeCalls++;
         if (ThrowOnPlanChange is not null) throw ThrowOnPlanChange;
         return Task.FromResult(NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set"));

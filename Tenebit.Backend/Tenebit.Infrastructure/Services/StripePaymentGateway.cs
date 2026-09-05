@@ -131,6 +131,40 @@ public sealed class StripePaymentGateway : IPaymentGateway
         return RequiredString(json, "url");
     }
 
+    /// <summary>Read-only lookup used by the admin panel to show what an organization has actually paid
+    /// (see AdminOverviewService.GetOrganizationPaymentsAsync) - this never feeds Tenebit's own billing
+    /// state, so it deliberately doesn't go through ParseWebhookEvent/PaymentSubscriptionState.</summary>
+    public async Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(customerId)) return [];
+
+        var json = await GetAsync($"invoices?customer={Uri.EscapeDataString(customerId)}&limit=100", cancellationToken);
+        if (!json.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var invoices = new List<PaymentInvoice>(data.GetArrayLength());
+        foreach (var obj in data.EnumerateArray())
+        {
+            invoices.Add(new PaymentInvoice(
+                RequiredString(obj, "id"),
+                obj.TryGetProperty("number", out var numberProp) ? numberProp.GetString() : null,
+                ReadAmountMajorUnits(obj, "amount_paid"),
+                ReadAmountMajorUnits(obj, "amount_due"),
+                obj.TryGetProperty("currency", out var currencyProp) ? (currencyProp.GetString() ?? "eur").ToUpperInvariant() : "EUR",
+                obj.TryGetProperty("status", out var statusProp) ? statusProp.GetString() ?? "unknown" : "unknown",
+                RequiredUnix(obj, "created"),
+                obj.TryGetProperty("hosted_invoice_url", out var hostedProp) ? hostedProp.GetString() : null,
+                obj.TryGetProperty("invoice_pdf", out var pdfProp) ? pdfProp.GetString() : null));
+        }
+
+        return invoices;
+    }
+
+    private static decimal ReadAmountMajorUnits(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.TryGetInt64(out var minorUnits)
+            ? minorUnits / 100m
+            : 0m;
+
     public PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader)
     {
         VerifySignature(payload, signatureHeader);
@@ -206,7 +240,7 @@ public sealed class StripePaymentGateway : IPaymentGateway
     /// subscription (<see cref="CreateCheckoutSessionAsync"/> refuses a second one on purpose); this is
     /// the path for changing an already-live one.
     /// </summary>
-    public async Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken)
+    public async Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         if (!PlanPrices.TryGetValue(newPlanKey, out var newPriceId))
             throw new PaymentGatewayException($"Stripe:Prices:{newPlanKey} is not configured.");
@@ -242,6 +276,12 @@ public sealed class StripePaymentGateway : IPaymentGateway
             ["billing_cycle_anchor"] = "now",
             ["expand[0]"] = "items.data.price"
         };
+
+        if (discount is not null)
+        {
+            var couponId = await EnsureCouponAsync(discount, cancellationToken);
+            form["discounts[0][coupon]"] = couponId;
+        }
 
         var updated = await PostAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}", form, idempotencyKey, cancellationToken);
         return MapSubscriptionState(updated);

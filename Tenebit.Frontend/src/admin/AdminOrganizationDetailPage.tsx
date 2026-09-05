@@ -6,10 +6,12 @@ import { LoadingState } from '../components/StateViews';
 import {
   AdminApiError,
   getAdminOrganization,
+  getAdminOrganizationPayments,
   restoreOrganization,
   suspendOrganization,
   type AdminCountSlice,
   type AdminOrganizationDetail,
+  type AdminOrganizationPayments,
 } from './adminApi';
 import { AdminActionDialog, type AdminActionRequest } from './AdminActionDialog';
 import { AdminDateRange, defaultRange, type DateRange } from './AdminDateRange';
@@ -24,6 +26,8 @@ export function AdminOrganizationDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [action, setAction] = useState<AdminActionRequest | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [payments, setPayments] = useState<AdminOrganizationPayments | null>(null);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -38,6 +42,23 @@ export function AdminOrganizationDetailPage() {
       });
     return () => { cancelled = true; };
   }, [id, navigate, range, reloadKey]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setPayments(null);
+    setPaymentsError(null);
+    // Pulled live from Stripe (see AdminOverviewService.GetOrganizationPaymentsAsync) - kept on its own
+    // request so a slow/failed Stripe call never blocks the rest of the organization page.
+    getAdminOrganizationPayments(id)
+      .then(result => { if (!cancelled) setPayments(result); })
+      .catch(err => {
+        if (cancelled) return;
+        setPaymentsError(err instanceof Error ? err.message : 'Nie udało się pobrać historii płatności ze Stripe.');
+        if (err instanceof AdminApiError && err.status === 401) navigate('/admin/login', { replace: true });
+      });
+    return () => { cancelled = true; };
+  }, [id, navigate, reloadKey]);
 
   if (error) {
     return <AdminShell><p className="formMessage formMessage--error">{error}</p></AdminShell>;
@@ -145,9 +166,53 @@ export function AdminOrganizationDetailPage() {
         </div>
       </section>
 
+      <section className="adminSection">
+        <h2 className="adminCardTitle">Płatności{payments ? ` — łącznie ${formatMoney(payments.totalPaid, payments.currency)}` : ''}</h2>
+        <div className="card adminTableCard">
+          {paymentsError ? (
+            <p className="formMessage formMessage--error">{paymentsError}</p>
+          ) : !payments ? (
+            <LoadingState />
+          ) : (
+            <table className="adminTable">
+              <thead>
+                <tr><th>Data</th><th>Faktura</th><th>Kwota zapłacona</th><th>Do zapłaty</th><th>Status</th><th>Dokument</th></tr>
+              </thead>
+              <tbody>
+                {payments.invoices.map(invoice => (
+                  <tr key={invoice.id}>
+                    <td>{new Date(invoice.createdAt).toLocaleString('pl-PL')}</td>
+                    <td>{invoice.number ?? invoice.id}</td>
+                    <td>{formatMoney(invoice.amountPaid, invoice.currency)}</td>
+                    <td>{formatMoney(invoice.amountDue, invoice.currency)}</td>
+                    <td><span className="adminTag">{invoice.status}</span></td>
+                    <td>
+                      {invoice.hostedInvoiceUrl ? (
+                        <a href={invoice.hostedInvoiceUrl} target="_blank" rel="noreferrer">Zobacz</a>
+                      ) : invoice.invoicePdfUrl ? (
+                        <a href={invoice.invoicePdfUrl} target="_blank" rel="noreferrer">PDF</a>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+                {payments.invoices.length === 0 ? <tr><td colSpan={6} className="adminMuted">Brak płatności w Stripe.</td></tr> : null}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+
       <AdminActionDialog request={action} onClose={() => setAction(null)} onDone={() => setReloadKey(key => key + 1)} />
     </AdminShell>
   );
+}
+
+function formatMoney(amount: number, currency: string): string {
+  try {
+    return amount.toLocaleString('pl-PL', { style: 'currency', currency });
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
 }
 
 function Breakdown({ title, slices }: { title: string; slices: AdminCountSlice[] }) {

@@ -4,7 +4,7 @@ import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TextInput } from '../components/FormFields';
-import { PricingCards, type PlanDef } from '../components/PricingCards';
+import { PLANS, PricingCards, type PlanDef } from '../components/PricingCards';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 import type { PromoCodeValidation } from '../types/domain';
@@ -27,6 +27,11 @@ export function PricingPage() {
   // A live paid Stripe subscription already exists - switching plans must reuse it (Stripe proration)
   // instead of Checkout, which only ever creates a first subscription and refuses to create a second.
   const hasLivePaidSubscription = !!subscription.data && subscription.data.planKey !== 'free' && subscription.data.status !== 'Cancelled';
+  const currentPlan = currentPlanKey ? PLANS.find(p => p.key === currentPlanKey) ?? null : null;
+  // A plan change to a cheaper plan is scheduled for the end of the paid period, not charged now (see
+  // SubscriptionService.ChangePlanAsync) - a promo code has nothing to discount there, so only offer it
+  // for a real upgrade (equal-or-higher price), which bills immediately.
+  const isDowngrade = hasLivePaidSubscription && !!selectedPlan && !!currentPlan && selectedPlan.price < currentPlan.price;
 
   useEffect(() => {
     if (!message) return;
@@ -78,7 +83,7 @@ export function PricingPage() {
     setUpgrading(true);
     try {
       if (isPlanChange) {
-        await api.changeSubscriptionPlan(plan.key);
+        await api.changeSubscriptionPlan(plan.key, promoCode);
         await subscription.reload();
         setMessage({ type: 'success', text: t('pricing.changePlanSuccess', { plan: plan.name }) });
         setUpgrading(false);
@@ -205,7 +210,7 @@ export function PricingPage() {
               <span>{totalPrice.toFixed(2)} €{t('landing.perMonth')}</span>
             </div>
 
-            {!hasLivePaidSubscription && (
+            {!isDowngrade && (
               <div style={{ marginTop: 16 }}>
                 {!promoOpen && promoStatus !== 'applied' ? (
                   <button type="button" className="pricing-promoToggle" onClick={() => setPromoOpen(true)}>

@@ -142,6 +142,12 @@ public static class AdminEndpoints
             return detail is null ? Results.NotFound() : Results.Ok(detail);
         });
 
+        admin.MapGet("/organizations/{id:guid}/payments", async (Guid id, AdminOverviewService service, CancellationToken cancellationToken) =>
+        {
+            var payments = await service.GetOrganizationPaymentsAsync(id, cancellationToken);
+            return payments is null ? Results.NotFound() : Results.Ok(payments);
+        });
+
         admin.MapGet("/users", async (string? search, int? page, int? pageSize, AdminOverviewService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.ListUsersAsync(search, page ?? 1, pageSize ?? 50, cancellationToken)));
 

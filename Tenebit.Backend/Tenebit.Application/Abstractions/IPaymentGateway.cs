@@ -12,7 +12,7 @@ public interface IPaymentGateway
     PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader);
     Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken);
     Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken);
-    Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken);
+    Task<PaymentSubscriptionState> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
 
     /// <summary>Schedules a plan switch to take effect at the end of the subscription's current billing
     /// period, via a Stripe subscription schedule - the subscription stays on its current price/plan
@@ -23,6 +23,11 @@ public interface IPaymentGateway
     /// <summary>Cancels a pending scheduled plan change, leaving the subscription on its current plan
     /// indefinitely (release, not cancel - the underlying subscription itself is untouched).</summary>
     Task ReleaseScheduleAsync(string scheduleId, CancellationToken cancellationToken);
+
+    /// <summary>Lists a customer's Stripe invoices, newest first - the actual payment record (amount
+    /// charged, currency, status, hosted/PDF copy) behind a subscription. Stripe is the only place this is
+    /// stored; Tenebit's own database never mirrors it (see AdminOverviewService.GetOrganizationPaymentsAsync).</summary>
+    Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken);
 }
 
 public sealed class PaymentWebhookValidationException : Exception
@@ -57,3 +62,9 @@ public sealed record PaymentSubscriptionState(
 public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value);
 
 public sealed record PaymentScheduleState(string ScheduleId, string PendingPlanKey, DateTimeOffset EffectiveAt);
+
+/// <summary>A single Stripe invoice - amounts in major currency units (already converted from Stripe's
+/// minor-unit cents), Currency as an ISO 4217 code (e.g. "EUR").</summary>
+public sealed record PaymentInvoice(
+    string Id, string? Number, decimal AmountPaid, decimal AmountDue, string Currency, string Status,
+    DateTimeOffset Created, string? HostedInvoiceUrl, string? InvoicePdfUrl);

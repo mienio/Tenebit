@@ -201,6 +201,23 @@ public sealed class SubscriptionService
             promo.Code, promo.DiscountType.ToString(), promo.DiscountValue, plan.MonthlyPrice, promo.ApplyTo(plan.MonthlyPrice), plan.Currency));
     }
 
+    /// <summary>Looks up, validates and redeems a promo code for the given target plan, shared by both the
+    /// first-time checkout and a live upgrade - a null/blank code is a no-op success with no discount.
+    /// Redemption (incrementing TimesRedeemed) happens here, before the Stripe call, so a code can't be
+    /// spent twice by two concurrent requests racing past a validate-only check.</summary>
+    private async Task<Result<PromoCodeDiscount?>> RedeemPromoCodeAsync(SubscriptionPlan targetPlan, string? promoCode, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(promoCode)) return Result<PromoCodeDiscount?>.Success(null);
+
+        var promo = await _promoCodes.GetByCodeAsync(promoCode, cancellationToken);
+        if (promo is null || promo.PlanKey != targetPlan.Key || !promo.IsUsable(_clock.UtcNow))
+            return Result<PromoCodeDiscount?>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
+
+        promo.Redeem();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<PromoCodeDiscount?>.Success(new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue));
+    }
+
     /// <summary>Starts a real Stripe Checkout flow for the given paid plan and returns the hosted checkout URL to redirect to.</summary>
     public async Task<Result<string>> CreateCheckoutSessionAsync(string planKey, string successPath, string cancelPath, CancellationToken cancellationToken, string? promoCode = null)
     {
@@ -214,17 +231,9 @@ public sealed class SubscriptionService
         if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key))
             return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane dla tego planu."));
 
-        PromoCodeDiscount? discount = null;
-        if (!string.IsNullOrWhiteSpace(promoCode))
-        {
-            var promo = await _promoCodes.GetByCodeAsync(promoCode, cancellationToken);
-            if (promo is null || promo.PlanKey != targetPlan.Key || !promo.IsUsable(_clock.UtcNow))
-                return Result<string>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
-
-            promo.Redeem();
-            discount = new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        var promoResult = await RedeemPromoCodeAsync(targetPlan, promoCode, cancellationToken);
+        if (promoResult.IsFailure) return Result<string>.Failure(promoResult.Error!);
+        var discount = promoResult.Value;
 
         var organizationId = _currentUser.OrganizationId;
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
@@ -301,7 +310,7 @@ public sealed class SubscriptionService
     /// Stripe's side instead (StripePaymentGateway.ScheduleDowngradeAsync): the plan, price and entitlements
     /// stay put until then.
     /// </summary>
-    public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, CancellationToken cancellationToken)
+    public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<SubscriptionResponse>.Failure(access.Error!);
@@ -363,14 +372,24 @@ public sealed class SubscriptionService
         }
         else
         {
+            var promoResult = await RedeemPromoCodeAsync(newPlan, promoCode, cancellationToken);
+            if (promoResult.IsFailure) return Result<SubscriptionResponse>.Failure(promoResult.Error!);
+            var discount = promoResult.Value;
+
+            // Salt the idempotency key with the discount shape (mirrors CreateCheckoutSessionAsync): a
+            // retry that adds/changes the code must not be dropped as a duplicate of an earlier attempt
+            // that had no discount, or Stripe would reject the differently-shaped body under the same key.
+            var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}";
+
             PaymentSubscriptionState canonical;
             try
             {
                 canonical = await _paymentGateway.ChangeSubscriptionPlanAsync(
                     subscription.StripeSubscriptionId!,
                     newPlan.Key,
-                    $"tenebit-planchange-{subscription.StripeSubscriptionId}-{newPlan.Key}",
-                    cancellationToken);
+                    $"tenebit-planchange-{subscription.StripeSubscriptionId}-{newPlan.Key}-{discountKey}",
+                    cancellationToken,
+                    discount);
             }
             catch (PaymentGatewayException ex) when (ex.StatusCode == 402)
             {

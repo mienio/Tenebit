@@ -103,6 +103,24 @@ export interface AdminCountSlice {
   count: number;
 }
 
+export interface AdminPaymentEntry {
+  id: string;
+  number: string | null;
+  amountPaid: number;
+  amountDue: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  hostedInvoiceUrl: string | null;
+  invoicePdfUrl: string | null;
+}
+
+export interface AdminOrganizationPayments {
+  totalPaid: number;
+  currency: string;
+  invoices: AdminPaymentEntry[];
+}
+
 export interface AdminOrganizationDetail {
   summary: AdminOrganizationSummary;
   users: AdminUserSummary[];
@@ -219,6 +237,10 @@ export function listAdminOrganizations(): Promise<AdminOrganizationSummary[]> {
 
 export function getAdminOrganization(id: string, from: string, to: string): Promise<AdminOrganizationDetail> {
   return adminFetch(`/api/admin/organizations/${id}?from=${from}&to=${to}`);
+}
+
+export function getAdminOrganizationPayments(id: string): Promise<AdminOrganizationPayments> {
+  return adminFetch(`/api/admin/organizations/${id}/payments`);
 }
 
 export function listAdminUsers(search: string, page = 1, pageSize = 50): Promise<AdminPage<AdminUserListItem>> {

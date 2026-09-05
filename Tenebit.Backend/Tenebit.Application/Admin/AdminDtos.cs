@@ -115,3 +115,23 @@ public sealed record AdminAuditEntry(
     DateTimeOffset CreatedAt);
 
 public sealed record AdminPage<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);
+
+/// <summary>One Stripe invoice for an organization - a financial record of the organization itself, not
+/// personal data of anyone who works there, so (unlike the rest of this file) it is not masked.</summary>
+public sealed record AdminPaymentEntry(
+    string Id,
+    string? Number,
+    decimal AmountPaid,
+    decimal AmountDue,
+    string Currency,
+    string Status,
+    DateTimeOffset CreatedAt,
+    string? HostedInvoiceUrl,
+    string? InvoicePdfUrl);
+
+/// <summary>An organization's payment history, pulled live from Stripe (Tenebit keeps no local copy) -
+/// see AdminOverviewService.GetOrganizationPaymentsAsync.</summary>
+public sealed record AdminOrganizationPayments(
+    decimal TotalPaid,
+    string Currency,
+    IReadOnlyList<AdminPaymentEntry> Invoices);

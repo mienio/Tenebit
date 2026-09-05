@@ -446,6 +446,49 @@ public class SubscriptionServiceTests
     }
 
     [Fact]
+    public async Task ChangePlanAsync_RedeemsPromoCodeAndForwardsDiscountToGateway()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, promoCodes) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "cus_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
+        var promo = new PromoCode("UPGRADE20", SubscriptionPlan.Growth.Key, PromoDiscountType.Percentage, 20m, 5, null, now);
+        promoCodes.Add(promo);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None, "upgrade20");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, promo.TimesRedeemed);
+        Assert.NotNull(paymentGateway.LastPlanChangeDiscount);
+        Assert.Equal(PromoDiscountType.Percentage, paymentGateway.LastPlanChangeDiscount!.Type);
+        Assert.Equal(20m, paymentGateway.LastPlanChangeDiscount.Value);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_RejectsExhaustedPromoCode_WithoutChangingPlan()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, promoCodes) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
+        local.AttachStripeCustomer("cus_1");
+        local.SyncFromStripe(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "cus_1", now);
+        subscriptions.Add(local);
+        var promo = new PromoCode("SPENT", SubscriptionPlan.Growth.Key, PromoDiscountType.FixedAmount, 5m, 1, null, now);
+        promo.Redeem();
+        promoCodes.Add(promo);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None, "SPENT");
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
+    }
+
+    [Fact]
     public async Task ChangePlanAsync_LeavesPlanUnchanged_WhenStripeDeclinesTheProrationPayment()
     {
         // Regression for the free-upgrade audit finding: a declined card must not leave the org on the
