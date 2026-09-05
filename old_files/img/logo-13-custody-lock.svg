@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect x="4" y="4" width="120" height="120" rx="20" fill="#f6e9e6"/>
-  <!-- custody: box secured with a lock shackle -->
-  <path d="M46 52 L46 38 Q46 22 64 22 Q82 22 82 38 L82 52" fill="none" stroke="#221d18" stroke-width="6" stroke-linecap="round"/>
-  <rect x="32" y="52" width="64" height="50" rx="8" fill="#f6e9e6" stroke="#221d18" stroke-width="5.5"/>
-  <circle cx="64" cy="76" r="7" fill="#a63a2e"/>
-</svg>

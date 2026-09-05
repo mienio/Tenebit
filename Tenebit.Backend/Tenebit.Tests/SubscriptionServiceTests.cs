@@ -649,6 +649,36 @@ public class SubscriptionServiceTests
     }
 
     [Fact]
+    public async Task HandleWebhookAsync_EmailsWhenAScheduledDowngradeFinallyTakesEffect()
+    {
+        // The org asked for a smaller plan a month ago; Stripe's schedule flips the price at the period
+        // end and tells us by webhook. That is the moment they actually move to the smaller plan, so it
+        // gets the same warm email as any other plan change - and the pending markers clear.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateServiceWithEmail(out var emailSender, out var organizations, out var organizationUsers);
+        organizations.Add(Organization.CreateSeed(user.OrganizationId, "Acme", "PL", "en", "PLN", "Europe/Warsaw"));
+        var owner = new OrganizationUser(user.OrganizationId, "owner@acme.test", "Owner", true);
+        owner.Update("owner@acme.test", "Owner", true, [TenebitRoles.Owner]);
+        organizationUsers.Users.Add(owner);
+
+        var now = DateTimeOffset.UtcNow;
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        existing.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now.AddMonths(-1), now, "sub_123", "cus_123", now.AddMonths(-1));
+        existing.ScheduleDowngrade(SubscriptionPlan.Starter.Key, now, "sched_1");
+        subscriptions.Add(existing);
+        paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_phase_1", "customer.subscription.updated", "cus_123", "sub_123", SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now, now.AddMonths(1), null);
+
+        var result = await service.HandleWebhookAsync("{}", "t=1,v1=fake", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SubscriptionPlan.Starter.Key, existing.PlanKey);
+        Assert.Null(existing.PendingPlanKey);
+        var sent = Assert.Single(emailSender.Sent);
+        Assert.Equal("owner@acme.test", sent.To);
+        Assert.Contains(SubscriptionPlan.Starter.Name, sent.Subject);
+    }
+
+    [Fact]
     public async Task HandleWebhookAsync_DoesNotEmail_OnAnOrdinaryRenewal()
     {
         // Only the free-or-cancelled -> paid transition is a "you just subscribed" moment - a routine

@@ -575,6 +575,7 @@ public sealed class SubscriptionService
             return Result.Success();
         }
 
+        var planBefore = subscription.PlanKey;
         var wasEntitledBefore = subscription.IsEntitledToPaidPlan;
         subscription.SyncFromStripe(appliedPlan, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
 
@@ -589,10 +590,16 @@ public sealed class SubscriptionService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // First activation (or reactivation after a cancellation) via Stripe Checkout - ChangePlanAsync's
-        // own immediate-upgrade branch sends its own congratulations for an in-app plan change, so this
-        // only needs to cover the "just paid for the first time" case that never goes through it.
-        if (!wasEntitledBefore && subscription.IsEntitledToPaidPlan)
+        // Two moments deserve the congratulations mail, and neither of them goes through ChangePlanAsync:
+        // a first activation (or reactivation) completing via Stripe Checkout, and a plan the org lands on
+        // without asking us again right then - above all a scheduled downgrade finally taking effect at the
+        // period end, which is exactly the "moved to a smaller plan" moment, but also any switch made
+        // straight in Stripe's billing portal. An in-app change already updated PlanKey synchronously
+        // before Stripe's echo webhook arrives, so it reads as "no change" here and can't double-send;
+        // the outbox's idempotency key is the second line of defence for that race.
+        var becameEntitled = !wasEntitledBefore && subscription.IsEntitledToPaidPlan;
+        var switchedPaidPlan = wasEntitledBefore && subscription.IsEntitledToPaidPlan && subscription.PlanKey != planBefore;
+        if (becameEntitled || switchedPaidPlan)
         {
             var plan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
             var (language, ownerEmails) = await GetOrganizationOwnersAsync(subscription.OrganizationId, cancellationToken);

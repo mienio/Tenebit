@@ -30,6 +30,9 @@ Thumbs.db
 .claude/
 .codex/
 
+# Retired specs, scripts, screenshots and drafts - kept on disk for reference, out of the repo
+old_files/
+
 # Deployment artifacts (zips are covered by *.zip; migrate.sql is generated from the migrations)
 Release/
 
