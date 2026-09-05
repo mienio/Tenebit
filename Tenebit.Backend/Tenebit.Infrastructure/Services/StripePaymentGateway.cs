@@ -226,12 +226,20 @@ public sealed class StripePaymentGateway : IPaymentGateway
         // that eventual charge ever succeeds. That combination let an org switch to any configured plan
         // for free. always_invoice forces an invoice for the proration now, and error_if_incomplete makes
         // Stripe reject the whole update - the plan stays unchanged - unless that invoice is actually paid.
+        //
+        // billing_cycle_anchor=now resets the renewal date to the moment of the switch instead of leaving
+        // it at the old plan's period end (Stripe's default). Combined with always_invoice this bills one
+        // full period of the new plan right away, credited for the unused time left on the old one - the
+        // same shape customers already know from Claude.ai's own Pro-to-Max upgrade - rather than a partial
+        // top-up that leaves the org on the new plan's entitlements for whatever days happened to be left
+        // on the old billing cycle.
         var form = new Dictionary<string, string>
         {
             ["items[0][id]"] = itemId,
             ["items[0][price]"] = newPriceId,
             ["proration_behavior"] = "always_invoice",
             ["payment_behavior"] = "error_if_incomplete",
+            ["billing_cycle_anchor"] = "now",
             ["expand[0]"] = "items.data.price"
         };
 

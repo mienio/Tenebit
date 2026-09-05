@@ -80,6 +80,7 @@ public class StripePaymentGatewayTests
         var update = handler.Requests.Single(r => r.Method == HttpMethod.Post);
         Assert.Contains("proration_behavior=always_invoice", update.Body);
         Assert.Contains("payment_behavior=error_if_incomplete", update.Body);
+        Assert.Contains("billing_cycle_anchor=now", update.Body);
         Assert.Contains("items%5B0%5D%5Bprice%5D=price_growth", update.Body);
     }
 
