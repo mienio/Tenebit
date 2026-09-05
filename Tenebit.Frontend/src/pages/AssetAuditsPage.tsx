@@ -255,7 +255,12 @@ function NewCampaignWizard({ open, onClose, onCreated }: { open: boolean; onClos
 
   async function handleDetailsSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!name.trim() || !dueDate) {
+    // A native <input type="date"> normally only ever yields "" or a strict YYYY-MM-DD value, but a
+    // browser/webview that falls back to a plain text field for it can let through anything the user
+    // types (e.g. a locale-formatted "20.09.2026"). The backend rejects that while parsing the request
+    // body, before any of its usual validation runs, so catching it here is the only way to show a
+    // clear message instead of the wizard silently failing on the next step (BUG-006).
+    if (!name.trim() || !dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       setError(t('assetAudits.formRequired'));
       return;
     }

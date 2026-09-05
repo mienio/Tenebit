@@ -665,7 +665,7 @@ export function AssetsPage() {
     }
   }
 
-  if ((assets.isLoading && !assets.data) || categories.isLoading || locations.isLoading) return <LoadingState title={t('assets.loadingTitle')} description={t('assets.loadingDesc')} />;
+  if ((assets.isLoading && !assets.data) || (categories.isLoading && !categories.data) || (locations.isLoading && !locations.data)) return <LoadingState title={t('assets.loadingTitle')} description={t('assets.loadingDesc')} />;
   if (assets.error) return <ErrorState message={assets.error} onRetry={reloadAssets} />;
 
   const category = selected ? categories.data?.find(c => c.id === selected.categoryId) : null;

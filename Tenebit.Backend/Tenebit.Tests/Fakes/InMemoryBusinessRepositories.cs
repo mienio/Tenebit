@@ -26,6 +26,17 @@ public sealed class InMemoryAssetRepository : IAssetRepository
     public List<AssetInspection> AssetInspections { get; } = [];
     public List<ServiceTicket> ServiceTickets { get; } = [];
 
+    // Mirrors AssetRepository.ApplyBasicFilters (case-insensitive, matches Name/AssetTag/SerialNumber) so
+    // unit tests against this fake actually exercise the same matching semantics as the real Postgres query.
+    private static bool MatchesSearch(Asset x, string? search)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return true;
+        var term = search.Trim();
+        return Contains(x.Name, term) || Contains(x.AssetTag, term) || (x.SerialNumber != null && Contains(x.SerialNumber, term));
+    }
+
+    private static bool Contains(string value, string term) => value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
     public Task<IReadOnlyList<Asset>> ListAsync(Guid organizationId, string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
         var prefix = string.IsNullOrWhiteSpace(location) ? null : location.Trim() + " / ";
@@ -33,6 +44,7 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         IReadOnlyList<Asset> rows = Assets
             .Where(x => x.OrganizationId == organizationId
                 && (!status.HasValue || x.Status == status.Value)
+                && MatchesSearch(x, search)
                 && (normalized is null
                     || x.Location == normalized
                     || (x.Location != null && prefix != null && x.Location.StartsWith(prefix))))
@@ -52,6 +64,8 @@ public sealed class InMemoryAssetRepository : IAssetRepository
         var normalized = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
         var rows = Assets
             .Where(x => x.OrganizationId == organizationId
+                && (!status.HasValue || x.Status == status.Value)
+                && MatchesSearch(x, search)
                 && (normalized is null
                     || x.Location == normalized
                     || (x.Location != null && prefix != null && x.Location.StartsWith(prefix))))

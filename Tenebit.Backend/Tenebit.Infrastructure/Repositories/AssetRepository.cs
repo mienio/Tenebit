@@ -84,7 +84,7 @@ public sealed class AssetRepository : IAssetRepository
     {
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim().ToLower();
+            var term = search.Trim().ToLowerInvariant();
             query = query.Where(x => x.Name.ToLower().Contains(term) || x.AssetTag.ToLower().Contains(term) || (x.SerialNumber != null && x.SerialNumber.ToLower().Contains(term)));
         }
 

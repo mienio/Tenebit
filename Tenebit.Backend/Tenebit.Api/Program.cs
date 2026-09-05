@@ -332,6 +332,29 @@ app.UseCors("Frontend");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Minimal APIs short-circuit a failed [FromBody] JSON conversion (e.g. an unparsable DateTimeOffset
+// string like a localized date) by writing a bare, empty-bodied 400 directly - only in Development does
+// the same failure surface as a BadHttpRequestException that the handler above can translate into
+// {message, code}. In Production the caller gets a 400 with no body at all, indistinguishable from a
+// dead backend (BUG-006: the asset-audit wizard's "Podgląd" step hit exactly this with an invalid due
+// date and just showed a generic error). This backstops that gap for every endpoint, not just this one.
+app.Use(async (context, next) =>
+{
+    await next(context);
+
+    if (context.Request.Path.StartsWithSegments("/api") &&
+        context.Response.StatusCode == StatusCodes.Status400BadRequest &&
+        !context.Response.HasStarted &&
+        context.Response.ContentLength is null or 0)
+    {
+        context.Response.ContentLength = null;
+        context.Response.ContentType = "application/json";
+        var message = Tenebit.Api.Http.ResultExtensions.Localize("Nieprawidłowe żądanie.");
+        await context.Response.WriteAsJsonAsync(new { message, code = "BAD_REQUEST" });
+    }
+});
+
 app.MapTenebitApi();
 app.MapAdminEndpoints();
 
