@@ -1,5 +1,5 @@
 import { ArrowLeft, LogIn, ShieldCheck } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BackButton } from '../components/BackButton';
 import { Button } from '../components/Button';
@@ -25,6 +25,11 @@ export function LoginPage() {
   const [challengeToken, setChallengeToken] = useState<string | null>(
     typeof routeState?.challengeToken === 'string' ? routeState.challengeToken : null
   );
+  // Captured once at mount: RequireAuth bounces here the instant the token refresh gives up, and the
+  // flag must survive long enough to render the notice, but a subsequent unrelated visit to /login
+  // (e.g. after a deliberate logout) should not keep echoing a stale "session expired" message.
+  const [showSessionExpired] = useState(auth.sessionExpired);
+  useEffect(() => { auth.clearSessionExpired(); }, [auth]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +100,7 @@ export function LoginPage() {
           <LanguageSwitcher />
         </div>
         <h1>{t('auth.loginTitle')}</h1>
+        {showSessionExpired ? <p className="formMessage formMessage--error">{t('auth.sessionExpired')}</p> : null}
         <SocialLoginButtons returnUrl={returnTo} />
         <p className="authCard__hint">
           {t('auth.socialTermsNotice')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.

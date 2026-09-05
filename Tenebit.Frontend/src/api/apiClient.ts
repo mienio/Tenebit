@@ -87,7 +87,11 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     const newToken = await refreshAccessToken();
     if (newToken) {
       response = await performFetch(path, init, newToken);
-    } else if (token) {
+    }
+    // Either the refresh itself failed, or the retried call was rejected anyway (e.g. the session was
+    // revoked in the interim) - either way the caller is left with a 401 it cannot recover from, so the
+    // whole app must fall back to the login screen instead of leaving a page stuck on a raw fetch error.
+    if (response.status === 401 && token) {
       window.dispatchEvent(new Event('tenebit:session-expired'));
     }
   }
@@ -122,7 +126,8 @@ export async function apiBlob(path: string): Promise<Blob> {
     const newToken = await refreshAccessToken();
     if (newToken) {
       response = await performFetch(path, init, newToken);
-    } else if (token) {
+    }
+    if (response.status === 401 && token) {
       window.dispatchEvent(new Event('tenebit:session-expired'));
     }
   }

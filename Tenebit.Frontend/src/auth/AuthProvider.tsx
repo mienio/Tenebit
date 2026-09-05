@@ -21,6 +21,8 @@ export type RegisterOutcome = { requiresEmailVerification: boolean };
 type AuthContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
+  sessionExpired: boolean;
+  clearSessionExpired: () => void;
   userName: string;
   userEmail: string;
   organizationName: string;
@@ -66,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const initialUser = useRef(user).current;
   const [isLoading, setIsLoading] = useState(initialUser === null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const bootstrapRefresh = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
@@ -73,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearStoredToken();
       setUser(null);
       setIsLoading(false);
+      setSessionExpired(true);
     };
     window.addEventListener('tenebit:session-expired', onSessionExpired);
     return () => window.removeEventListener('tenebit:session-expired', onSessionExpired);
@@ -99,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoredToken(response.token);
     setUser({ ...response.user });
     setIsLoading(false);
+    setSessionExpired(false);
   }, []);
 
   const completeExternalLogin = useCallback(async () => {
@@ -119,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(fromToken);
     setIsLoading(false);
+    setSessionExpired(false);
     return true;
   }, []);
 
@@ -129,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearStoredToken();
     setUser(null);
     setIsLoading(false);
+    setSessionExpired(false);
 
     try {
       await revoke;
@@ -141,6 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     isAuthenticated: Boolean(user),
     isLoading,
+    sessionExpired,
+    clearSessionExpired: () => setSessionExpired(false),
     userName: user?.displayName ?? '',
     userEmail: user?.email ?? '',
     organizationName: user?.organizationName ?? '',
@@ -170,6 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStoredToken(token);
       setUser(fromToken);
       setIsLoading(false);
+      setSessionExpired(false);
       return true;
     },
     updateDisplayName: async (displayName: string) => {
@@ -182,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     completeExternalLogin,
     logout
-  }), [applySession, completeExternalLogin, isLoading, logout, user]);
+  }), [applySession, completeExternalLogin, isLoading, logout, sessionExpired, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

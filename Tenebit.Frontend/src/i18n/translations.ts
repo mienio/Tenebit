@@ -249,6 +249,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'landing.perMonth': '/miesiąc',
 
     'auth.loginTitle': 'Logowanie do Tenebit',
+    'auth.sessionExpired': 'Twoja sesja wygasła. Zaloguj się ponownie.',
     'auth.emailLabel': 'E-mail',
     'auth.passwordLabel': 'Hasło',
     'auth.currencyLabel': 'Waluta rozliczeniowa firmy',
@@ -450,6 +451,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'status.Reviewed': 'Przejrzano',
     'status.InProgress': 'W trakcie',
     'status.Submitted': 'Wysłano',
+    'status.Completed': 'Zakończona',
 
     'publicAssetAudit.loadingTitle': 'Wczytywanie...',
     'publicAssetAudit.loadingDesc': 'Pobieramy szczegóły audytu.',
@@ -2132,6 +2134,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'landing.perMonth': '/month',
 
     'auth.loginTitle': 'Log in to Tenebit',
+    'auth.sessionExpired': 'Your session has expired. Please log in again.',
     'auth.emailLabel': 'Email',
     'auth.passwordLabel': 'Password',
     'auth.currencyLabel': "Company's billing currency",
@@ -2356,6 +2359,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'status.Reviewed': 'Reviewed',
     'status.InProgress': 'In progress',
     'status.Submitted': 'Submitted',
+    'status.Completed': 'Completed',
 
     'publicAssetAudit.loadingTitle': 'Loading...',
     'publicAssetAudit.loadingDesc': 'Fetching audit details.',
@@ -3922,6 +3926,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'landing.perMonth': '/mes',
 
     'auth.loginTitle': 'Inicia sesión en Tenebit',
+    'auth.sessionExpired': 'Tu sesión ha caducado. Inicia sesión de nuevo.',
     'auth.emailLabel': 'Correo electrónico',
     'auth.passwordLabel': 'Contraseña',
     'auth.loginButton': 'Iniciar sesión',
@@ -4302,6 +4307,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'status.Reviewed': 'Revisado',
     'status.InProgress': 'En curso',
     'status.Submitted': 'Enviado',
+    'status.Completed': 'Completada',
 
     'publicAssetAudit.loadingTitle': 'Cargando...',
     'publicAssetAudit.loadingDesc': 'Obteniendo los detalles de la auditoría.',
@@ -5779,6 +5785,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'landing.perMonth': '/Monat',
 
     'auth.loginTitle': 'Bei Tenebit anmelden',
+    'auth.sessionExpired': 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
     'auth.emailLabel': 'E-Mail',
     'auth.passwordLabel': 'Passwort',
     'auth.loginButton': 'Anmelden',
@@ -6159,6 +6166,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'status.Reviewed': 'Geprüft',
     'status.InProgress': 'In Bearbeitung',
     'status.Submitted': 'Gesendet',
+    'status.Completed': 'Abgeschlossen',
 
     'publicAssetAudit.loadingTitle': 'Wird geladen...',
     'publicAssetAudit.loadingDesc': 'Audit-Details werden abgerufen.',
@@ -7564,6 +7572,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'status.Reviewed': 'Revisionato',
     'status.InProgress': 'In corso',
     'status.Submitted': 'Inviato',
+    'status.Completed': 'Completata',
     'status.PendingApproval': 'In attesa di approvazione',
     'status.Approved': 'Approvato',
     'status.Rejected': 'Respinto',
@@ -7612,6 +7621,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'page.assetAudits.eyebrow': 'Verifiche degli asset',
     'page.assetAudits.title': 'Campagne di conferma degli asset',
     'auth.loginTitle': 'Accedi a Tenebit',
+    'auth.sessionExpired': 'La sessione è scaduta. Accedi di nuovo.',
     'auth.emailLabel': 'E-mail',
     'auth.passwordLabel': 'Password',
     'auth.currencyLabel': 'Valuta di fatturazione della società',
@@ -9403,6 +9413,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'status.Reviewed': 'Revu',
     'status.InProgress': 'En cours',
     'status.Submitted': 'Soumis',
+    'status.Completed': 'Terminée',
     'status.PendingApproval': 'En attente d\'approbation',
     'status.Approved': 'Approuvé',
     'status.Rejected': 'Rejeté',
@@ -9451,6 +9462,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'page.assetAudits.eyebrow': 'Audits des actifs',
     'page.assetAudits.title': 'Campagnes de confirmation des actifs',
     'auth.loginTitle': 'Connectez-vous à Tenebit',
+    'auth.sessionExpired': 'Votre session a expiré. Veuillez vous reconnecter.',
     'auth.emailLabel': 'E-mail',
     'auth.passwordLabel': 'Mot de passe',
     'auth.currencyLabel': 'Devise de facturation de l\'entreprise',
