@@ -832,6 +832,15 @@ button.authIcon:hover { filter: brightness(0.94); }
    OrganizationSubscription.GetResourceLimit on the backend) rather than one shared pool. This legend
    explains the 8 categories ONCE, above the cards, so each card only has to show its number - listing
    all 8 again per card (x5 plans) was pure repetition. */
+/* Sized so .pricing-cards below can query its REAL available width via @container - this component
+   renders both inside the landing page's fixed 1180px reading column and inside the app shell's
+   sidebar-relative content area, two contexts with no shared relationship to viewport width. Plain
+   viewport @media breakpoints (the pattern used elsewhere in this file) assumed container ≈ viewport
+   and silently broke on the landing page: at any desktop viewport width the 5-column layout never
+   collapsed, even though the actual 1180px-capped container only had room for 3 comfortable columns -
+   cards rendered ~217px wide, unreadably cramped, regardless of how wide the monitor was. */
+.pricing-section { container-type: inline-size; }
+
 .pricing-legend { max-width: 800px; margin: 0 0 28px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; }
 .pricing-legend__head { display: flex; gap: 12px; align-items: flex-start; }
 .pricing-legend__head svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
@@ -840,6 +849,10 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-legend__grid { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
 .pricing-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
 .pricing-chip svg { flex: 0 0 auto; color: var(--accent); }
+/* Current AND future limited resource types share this one limit - rather than naming them all (or
+   going stale when a new one is added), this chip just signals "plus more", dashed to read as open-ended
+   rather than another concrete category. */
+.pricing-chip--more { border-style: dashed; color: var(--muted); background: transparent; }
 
 .pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
 .pricing-card { min-width: 0; padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
@@ -883,19 +896,20 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-promoField .input { min-height: 34px; padding: 0 10px; font-size: 13px; max-width: 160px; }
 .pricing-promoField .button { min-height: 34px; padding: 0 10px; font-size: 12px; }
 
-/* Pięć planów mieści się obok siebie dopiero od ~1300px. Poniżej schodzimy na trzy kolumny zamiast
-   ściskać karty do nieczytelnej szerokości. */
-@media (max-width: 1300px) {
+/* Container queries (against .pricing-section above), not viewport media queries: five plans only fit
+   side by side once there's actually ~1300px of container to give them, and that has to be measured
+   against the real container, not the browser window - see the comment on .pricing-section. */
+@container (max-width: 1300px) {
   .pricing-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-@media (max-width: 1024px) {
+@container (max-width: 1024px) {
   .pricing-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pricing-card--featured { transform: none; }
   .pricing-card--featured:hover { transform: translateY(-4px); }
 }
 
-@media (max-width: 560px) {
+@container (max-width: 560px) {
   .pricing-cards { grid-template-columns: 1fr; }
 }
 

@@ -41,7 +41,7 @@ export function PricingCards({ renderCta }: { renderCta: (plan: PlanDef) => Reac
   const formatLimit = (limit: number) => new Intl.NumberFormat(language).format(limit);
 
   return (
-    <>
+    <div className="pricing-section">
       <div className="pricing-legend">
         <div className="pricing-legend__head">
           <Info size={20} />
@@ -57,6 +57,7 @@ export function PricingCards({ renderCta }: { renderCta: (plan: PlanDef) => Reac
               <span>{t(`pricing.legend.${key}`)}</span>
             </span>
           ))}
+          <span className="pricing-chip pricing-chip--more">{t('pricing.legend.more')}</span>
         </div>
       </div>
 
@@ -98,6 +99,6 @@ export function PricingCards({ renderCta }: { renderCta: (plan: PlanDef) => Reac
           </Card>
         ))}
       </div>
-    </>
+    </div>
   );
 }
