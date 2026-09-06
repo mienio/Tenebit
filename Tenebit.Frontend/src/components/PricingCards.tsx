@@ -1,5 +1,5 @@
-import { ClipboardList, Info, KeyRound, MapPin, Package, User, Users } from 'lucide-react';
-import type { ComponentType, ReactNode } from 'react';
+import { ClipboardList, Info, KeyRound, MapPin, Package, User, Users, type LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useI18n } from '../i18n/I18nProvider';
 import { Card } from './Card';
 
@@ -7,7 +7,7 @@ export interface PlanDef {
   key: string;
   name: string;
   price: number;
-  /** Real, enforced ceiling - applies independently to each of the 8 categories below (see
+  /** Real, enforced ceiling - applies independently to every resource type (see
    * OrganizationSubscription.GetResourceLimit on the backend), not a shared pool. */
   limit: number;
   badge?: 'free' | 'recommended' | 'max';
@@ -27,7 +27,7 @@ export const PLANS: PlanDef[] = [
 // Job profiles and equipment categories are enforced by the same limit too (GetResourceLimit applies
 // there as well), but stay off this list on purpose - an org realistically never has enough of either
 // to make that limit a selling point, so calling it out would just be noise.
-const LIMIT_CATEGORIES: { key: string; icon: ComponentType<{ size?: number }> }[] = [
+const LIMIT_CATEGORIES: { key: string; icon: LucideIcon }[] = [
   { key: 'assets', icon: Package },
   { key: 'people', icon: User },
   { key: 'procedures', icon: ClipboardList },
