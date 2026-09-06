@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { ErrorState, LoadingState } from '../components/StateViews';
@@ -13,6 +13,7 @@ type ScanState =
   | { kind: 'loading' }
   | { kind: 'internal'; assetId: string }
   | { kind: 'public'; organizationName: string }
+  | { kind: 'loginRequired' }
   | { kind: 'error'; message: string };
 
 /**
@@ -40,6 +41,7 @@ function readScanTarget(params: { organizationId?: string; assetId?: string; cod
 export function PublicAssetScanPage() {
   const { t } = useI18n();
   const auth = useAuth();
+  const location = useLocation();
   const params = useParams<{ organizationId?: string; assetId?: string; code?: string }>();
   const target = useMemo(
     () => readScanTarget({ organizationId: params.organizationId, assetId: params.assetId, code: params.code }),
@@ -53,6 +55,9 @@ export function PublicAssetScanPage() {
 
   useEffect(() => {
     if (!target) return;
+    // Sesja moze byc jeszcze w trakcie odtwarzania z zapisanego tokenu - jesli zdecydujemy tu za
+    // wczesnie, zalogowany uzytkownik dostanie na ulamek sekundy publiczny widok z nazwa firmy.
+    if (auth.isLoading) return;
     let cancelled = false;
 
     async function load() {
@@ -69,21 +74,27 @@ export function PublicAssetScanPage() {
         } catch {
           // Nie ta sesja albo brak dostepu - schodzimy do widoku publicznego ponizej.
         }
+
+        try {
+          const data = target!.kind === 'code'
+            ? await api.publicAssetScanByCode(target!.code)
+            : await api.publicAssetScan(target!.organizationId, target!.assetId);
+          if (!cancelled) setState({ kind: 'public', organizationName: data.organizationName });
+        } catch (error) {
+          if (!cancelled) setState({ kind: 'error', message: error instanceof Error ? error.message : t('scan.invalidCode') });
+        }
+        return;
       }
 
-      try {
-        const data = target!.kind === 'code'
-          ? await api.publicAssetScanByCode(target!.code)
-          : await api.publicAssetScan(target!.organizationId, target!.assetId);
-        if (!cancelled) setState({ kind: 'public', organizationName: data.organizationName });
-      } catch (error) {
-        if (!cancelled) setState({ kind: 'error', message: error instanceof Error ? error.message : t('scan.invalidCode') });
-      }
+      // Zaden anonimowy skan nie moze dostac nazwy firmy - kod z etykiety nosi ktos obcy tak samo
+      // czesto jak pracownik. Bez sesji jedyna droga to zalogowanie sie; po nim wracamy tu i
+      // rozpoznanie idzie normalnie galezia wyzej.
+      if (!cancelled) setState({ kind: 'loginRequired' });
     }
 
     void load();
     return () => { cancelled = true; };
-  }, [target, auth.isAuthenticated, t]);
+  }, [target, auth.isAuthenticated, auth.isLoading, t]);
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -105,6 +116,9 @@ export function PublicAssetScanPage() {
   if (!target) return <ErrorState message={t('scan.invalidCode')} />;
   if (state.kind === 'loading') return <LoadingState title={t('scan.loadingTitle')} description={t('scan.loadingDesc')} />;
   if (state.kind === 'internal') return <Navigate to={`/assets?openAssetId=${state.assetId}`} replace />;
+  if (state.kind === 'loginRequired') {
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
+  }
   if (state.kind === 'error') return <ErrorState message={state.message} />;
 
   return (
