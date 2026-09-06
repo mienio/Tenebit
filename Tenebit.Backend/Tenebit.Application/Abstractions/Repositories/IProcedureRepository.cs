@@ -31,6 +31,8 @@ public interface IProcedureRepository
     Task<bool> HasDocumentsAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken);
     Task<ProcedureDocument?> GetDocumentAsync(Guid organizationId, Guid procedureId, Guid documentId, CancellationToken cancellationToken);
     Task<bool> DeleteDocumentAsync(Guid organizationId, Guid procedureId, Guid documentId, CancellationToken cancellationToken);
+    Task<bool> IsReferencedByJobProfileAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken);
     void Add(Procedure procedure);
+    void Remove(Procedure procedure);
     void AddDocument(ProcedureDocument document);
 }

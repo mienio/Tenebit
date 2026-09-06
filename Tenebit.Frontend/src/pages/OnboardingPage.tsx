@@ -14,7 +14,7 @@ import { toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
 
 export function OnboardingPage() {
-  const { t } = useI18n();
+  const { t, tPlural } = useI18n();
   const people = useAsyncData(() => api.people(), []);
   const assets = useAsyncData(() => api.assets({ status: 'InStock' }), []);
   const procedures = useAsyncData(() => api.procedures(), []);
@@ -180,7 +180,7 @@ export function OnboardingPage() {
             </div>
           </section>
 
-          <div className="formActions formActions--split"><span className="muted">{t('onboarding.selectedSummary', { assets: selectedAssetIds.length, procedures: selectedProcedureIds.length })}</span><Button disabled={saving} icon={<Rocket size={16} />}>{saving ? t('onboarding.creatingPackage') : t('onboarding.create')}</Button></div>
+          <div className="formActions formActions--split"><span className="muted">{t('onboarding.selectedSummary', { assets: selectedAssetIds.length, assetsNoun: tPlural('count.assets', selectedAssetIds.length), procedures: selectedProcedureIds.length, proceduresNoun: tPlural('count.procedures', selectedProcedureIds.length) })}</span><Button disabled={saving} icon={<Rocket size={16} />}>{saving ? t('onboarding.creatingPackage') : t('onboarding.create')}</Button></div>
         </form>
       </Card>
 

@@ -139,6 +139,48 @@ public sealed class ProcedureServiceAuthorizationTests
     }
 
     [Fact]
+    public async Task DeleteAsync_RemovesDraftProcedure()
+    {
+        var (service, _, _, _, procedures, _, _) = CreateService();
+        var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
+        Assert.True(created.IsSuccess);
+
+        var result = await service.DeleteAsync(created.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(procedures.Procedures);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RejectsPublishedProcedure()
+    {
+        var (service, _, _, _, _, _, _) = CreateService();
+        var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
+        var pdf = System.Text.Encoding.ASCII.GetBytes("%PDF-1.7\nminimal-test");
+        await service.AttachDocumentAsync(created.Value!.Id, "policy.pdf", "application/pdf", pdf, CancellationToken.None);
+        var published = await service.PublishAsync(created.Value!.Id, CancellationToken.None);
+        Assert.True(published.IsSuccess);
+
+        var result = await service.DeleteAsync(created.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_RejectsDraftProcedureReferencedByJobProfile()
+    {
+        var (service, user, _, _, procedures, _, _) = CreateService();
+        var created = await service.CreateAsync(new CreateProcedureRequest("Policy", "1.0", "HR", null, null, true), CancellationToken.None);
+        var profile = new Tenebit.Domain.JobProfiles.JobProfile(user.OrganizationId, "Developer", null, null);
+        profile.SetProcedures([created.Value!.Id]);
+        procedures.JobProfiles.Add(profile);
+
+        var result = await service.DeleteAsync(created.Value!.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsWhenAtSubscriptionResourceLimit()
     {
         var (service, user, _, _, procedures, _, subscriptions) = CreateService();

@@ -29,6 +29,7 @@ public interface IAssignmentRepository
     Task<IReadOnlyList<Guid>> ListProcedureIdsByPersonIdsAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
     Task<bool> HasProcedureAssignmentAsync(Guid organizationId, Guid personId, Guid procedureId, CancellationToken cancellationToken);
     Task<bool> HasProcedureAssignmentForPeopleAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, Guid procedureId, CancellationToken cancellationToken);
+    Task<bool> HasAnyProcedureAcceptanceAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken);
     Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<Assignment?> FindByPublicTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
     void Add(Assignment assignment);

@@ -48,6 +48,19 @@ export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
           </dl>
 
           <div className="legalSections">
+            <section>
+              <h2>{ui.operator}</h2>
+              {legalConfig.operatorName ? (
+                <dl className="legalMeta">
+                  <div><dt>{ui.operator}</dt><dd>{legalConfig.operatorName}</dd></div>
+                  {legalConfig.operatorAddress ? <div><dt>{ui.address}</dt><dd>{legalConfig.operatorAddress}</dd></div> : null}
+                  {legalConfig.operatorRegistration ? <div><dt>{ui.registration}</dt><dd>{legalConfig.operatorRegistration}</dd></div> : null}
+                  {legalConfig.operatorTaxId ? <div><dt>{ui.taxId}</dt><dd>{legalConfig.operatorTaxId}</dd></div> : null}
+                </dl>
+              ) : (
+                <p>{ui.missingOperator}</p>
+              )}
+            </section>
             {document.sections.map(section => (
               <section key={section.title}>
                 <h2>{section.title}</h2>

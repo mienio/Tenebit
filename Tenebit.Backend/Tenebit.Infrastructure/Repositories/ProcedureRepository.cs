@@ -91,7 +91,14 @@ public sealed class ProcedureRepository : IProcedureRepository
             .Where(x => x.OrganizationId == organizationId && x.ProcedureId == procedureId && x.Id == documentId)
             .ExecuteDeleteAsync(cancellationToken) == 1;
 
+    public Task<bool> IsReferencedByJobProfileAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken) =>
+        _db.JobProfiles.AsNoTracking().AnyAsync(
+            x => x.OrganizationId == organizationId && x.Procedures.Any(p => p.ProcedureId == procedureId),
+            cancellationToken);
+
     public void Add(Procedure procedure) => _db.Procedures.Add(procedure);
+
+    public void Remove(Procedure procedure) => _db.Procedures.Remove(procedure);
 
     public void AddDocument(ProcedureDocument document) => _db.ProcedureDocuments.Add(document);
 

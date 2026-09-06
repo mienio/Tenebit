@@ -44,6 +44,11 @@ public sealed class AssignmentRepository : IAssignmentRepository
             x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId) && x.ProcedureAcceptances.Any(a => a.ProcedureId == procedureId),
             cancellationToken);
 
+    public Task<bool> HasAnyProcedureAcceptanceAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken) =>
+        _db.Assignments.AsNoTracking().AnyAsync(
+            x => x.OrganizationId == organizationId && x.ProcedureAcceptances.Any(a => a.ProcedureId == procedureId),
+            cancellationToken);
+
     public Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         _db.Assignments
             .Include(x => x.Assets)

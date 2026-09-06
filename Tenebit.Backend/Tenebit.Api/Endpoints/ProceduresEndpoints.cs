@@ -102,6 +102,10 @@ public static class ProceduresEndpoints
                 (await service.RemoveDocumentAsync(id, documentId, cancellationToken)).ToHttpResult())
             .WithTags("Procedures");
 
+        api.MapDelete("/procedures/{id:guid}", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
+                (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
+            .WithTags("Procedures");
+
         api.MapPost("/procedures/{id:guid}/publish", async (Guid id, ProcedureService service, CancellationToken cancellationToken) =>
                 (await service.PublishAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Procedures");

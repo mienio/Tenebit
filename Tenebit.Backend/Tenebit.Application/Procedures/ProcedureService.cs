@@ -312,6 +312,34 @@ public sealed class ProcedureService
         }, cancellationToken);
     }
 
+    public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        if (access.IsFailure) return access;
+
+        var organizationId = _currentUser.OrganizationId;
+        return await _unitOfWork.ExecuteWithResourceLocksAsync(organizationId, "procedure", [id], async ct =>
+        {
+            var procedure = await _procedures.GetAsync(organizationId, id, ct);
+            if (procedure is null) return Result.Failure(Error.NotFound("Procedura nie istnieje."));
+
+            if (procedure.Status != ProcedureStatus.Draft)
+            {
+                return Result.Failure(Error.Validation("Można usunąć wyłącznie szkic procedury. Opublikowaną lub zarchiwizowaną procedurę zarchiwizuj i utwórz nową wersję."));
+            }
+
+            if (await _procedures.IsReferencedByJobProfileAsync(organizationId, id, ct) || await _assignments.HasAnyProcedureAcceptanceAsync(organizationId, id, ct))
+            {
+                return Result.Failure(Error.Validation("Nie można usunąć procedury powiązanej z zestawem stanowiskowym lub wydaniem pracownikowi. Usuń najpierw te powiązania."));
+            }
+
+            _procedures.Remove(procedure);
+            _activity.Add(new ActivityLog(organizationId, "procedure.deleted", "procedure", procedure.Id, _currentUser.Subject, procedure.Title, _clock.UtcNow));
+            await _unitOfWork.SaveChangesAsync(ct);
+            return Result.Success();
+        }, cancellationToken);
+    }
+
     public async Task<Result<ProcedureResponse>> RemoveDocumentAsync(Guid id, Guid documentId, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);

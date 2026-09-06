@@ -254,6 +254,7 @@ public sealed class InMemoryPersonRelationTypeRepository : IPersonRelationTypeRe
 public sealed class InMemoryProcedureRepository : IProcedureRepository
 {
     public List<Procedure> Procedures { get; } = [];
+    public List<JobProfile> JobProfiles { get; } = [];
 
     public Task<IReadOnlyList<Procedure>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Procedure>>(Procedures.Where(x => x.OrganizationId == organizationId).ToList());
@@ -302,7 +303,11 @@ public sealed class InMemoryProcedureRepository : IProcedureRepository
         return Task.FromResult(true);
     }
 
+    public Task<bool> IsReferencedByJobProfileAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken) =>
+        Task.FromResult(JobProfiles.Any(x => x.OrganizationId == organizationId && x.Procedures.Any(p => p.ProcedureId == procedureId)));
+
     public void Add(Procedure procedure) => Procedures.Add(procedure);
+    public void Remove(Procedure procedure) => Procedures.Remove(procedure);
     public void AddDocument(ProcedureDocument document) { }
 }
 
@@ -359,6 +364,9 @@ public sealed class InMemoryAssignmentRepository : IAssignmentRepository
 
     public Task<bool> HasProcedureAssignmentForPeopleAsync(Guid organizationId, IReadOnlyCollection<Guid> personIds, Guid procedureId, CancellationToken cancellationToken) =>
         Task.FromResult(Assignments.Any(x => x.OrganizationId == organizationId && personIds.Contains(x.PersonId) && x.ProcedureAcceptances.Any(a => a.ProcedureId == procedureId)));
+
+    public Task<bool> HasAnyProcedureAcceptanceAsync(Guid organizationId, Guid procedureId, CancellationToken cancellationToken) =>
+        Task.FromResult(Assignments.Any(x => x.OrganizationId == organizationId && x.ProcedureAcceptances.Any(a => a.ProcedureId == procedureId)));
 
     public Task<Assignment?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Assignments.FirstOrDefault(x => x.OrganizationId == organizationId && x.Id == id));

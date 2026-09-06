@@ -32,6 +32,7 @@ type ProcedureDialog =
 type ConfirmAction =
   | { kind: 'publish'; procedure: Procedure }
   | { kind: 'archive'; procedure: Procedure }
+  | { kind: 'delete'; procedure: Procedure }
   | { kind: 'removeDoc'; documentId: string; fileName: string }
   | null;
 
@@ -155,6 +156,18 @@ export function ProceduresPage() {
     }
   }
 
+  async function deleteProcedure(item: Procedure) {
+    setMessage(null);
+    try {
+      await api.deleteProcedure(item.id);
+      setMessage({ type: 'success', text: t('procedures.deleted') });
+      if (editedProcedure?.id === item.id) setDialog(null);
+      await procedures.reload();
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : t('procedures.deleteFailed') });
+    }
+  }
+
   async function uploadFiles(files: File[]) {
     if (!files.length || !editedProcedure || editedProcedure.status !== 'Draft') return;
     setUploading(true);
@@ -268,6 +281,7 @@ export function ProceduresPage() {
                   <Button variant="ghost" onClick={() => setDialog({ mode: 'edit', procedure: item })} icon={<Pencil size={16} />}>{t('procedures.openSet')}</Button>
                   {item.status === 'Draft' ? <Button variant="secondary" onClick={() => requestPublish(item)} icon={<Send size={16} />}>{t('procedures.publish')}</Button> : null}
                   {item.status === 'Published' ? <Button variant="secondary" onClick={() => setConfirmAction({ kind: 'archive', procedure: item })} icon={<Archive size={16} />}>{t('procedures.archive')}</Button> : null}
+                  {item.status === 'Draft' ? <Button variant="ghost" onClick={() => setConfirmAction({ kind: 'delete', procedure: item })} icon={<Trash2 size={16} />}>{t('common.delete')}</Button> : null}
                 </div>
               </article>)}
             </div>
@@ -287,7 +301,11 @@ export function ProceduresPage() {
             <Field label={t('procedures.reviewDateLabel')}><TextInput name="reviewDate" type="date" defaultValue={editedProcedure?.reviewDate ?? ''} /></Field>
             <Field label={t('procedures.scopeLabel')}><TextArea name="appliesTo" defaultValue={editedProcedure?.appliesTo ?? ''} /></Field>
             <label className="checkField"><input name="requiresAcceptance" type="checkbox" defaultChecked={editedProcedure?.requiresAcceptance ?? true} /> {t('procedures.requiresAcceptance')}</label>
-            <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setDialog(null)}>{t('common.close')}</Button><Button disabled={saving} icon={<FileCheck2 size={16} />}>{saving ? t('common.saving') : t('procedures.save')}</Button></div>
+            <div className="formActions formActions--split">
+              <Button type="button" variant="ghost" onClick={() => setDialog(null)}>{t('common.close')}</Button>
+              {editedProcedure?.status === 'Draft' ? <Button type="button" variant="ghost" onClick={() => setConfirmAction({ kind: 'delete', procedure: editedProcedure })} icon={<Trash2 size={16} />}>{t('common.delete')}</Button> : null}
+              <Button disabled={saving} icon={<FileCheck2 size={16} />}>{saving ? t('common.saving') : t('procedures.save')}</Button>
+            </div>
           </form>
         )}
 
@@ -349,14 +367,16 @@ export function ProceduresPage() {
 
       <ConfirmDialog
         open={!!confirmAction}
-        title={confirmAction?.kind === 'publish' ? t('procedures.publishConfirmTitle') : confirmAction?.kind === 'archive' ? t('procedures.archiveConfirmTitle') : t('procedures.removeFileConfirmTitle')}
+        title={confirmAction?.kind === 'publish' ? t('procedures.publishConfirmTitle') : confirmAction?.kind === 'archive' ? t('procedures.archiveConfirmTitle') : confirmAction?.kind === 'delete' ? t('procedures.deleteConfirmTitle') : t('procedures.removeFileConfirmTitle')}
         description={confirmAction?.kind === 'publish'
           ? t('procedures.publishConfirmDesc', { title: confirmAction.procedure.title, version: confirmAction.procedure.version })
           : confirmAction?.kind === 'archive'
             ? t('procedures.archiveConfirmDesc', { title: confirmAction.procedure.title, version: confirmAction.procedure.version })
-            : confirmAction?.kind === 'removeDoc'
-              ? t('procedures.removeFileConfirmDesc', { file: confirmAction.fileName })
-              : ''}
+            : confirmAction?.kind === 'delete'
+              ? t('procedures.deleteConfirmDesc', { title: confirmAction.procedure.title, version: confirmAction.procedure.version })
+              : confirmAction?.kind === 'removeDoc'
+                ? t('procedures.removeFileConfirmDesc', { file: confirmAction.fileName })
+                : ''}
         confirmLabel={confirmAction?.kind === 'publish' ? t('procedures.publish') : confirmAction?.kind === 'archive' ? t('procedures.archive') : t('common.delete')}
         onConfirm={() => {
           const action = confirmAction;
@@ -364,6 +384,7 @@ export function ProceduresPage() {
           if (!action) return;
           if (action.kind === 'publish') void publish(action.procedure);
           else if (action.kind === 'archive') void archive(action.procedure);
+          else if (action.kind === 'delete') void deleteProcedure(action.procedure);
           else void removeDocument(action.documentId);
         }}
         onClose={() => setConfirmAction(null)}
