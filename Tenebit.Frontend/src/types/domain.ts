@@ -954,7 +954,7 @@ export interface Subscription {
   pendingPlanKey: string | null;
   pendingPlanName: string | null;
   pendingPlanEffectiveAt: string | null;
-  /** Set only on the response to a just-applied change-plan call - the exact amount Stripe charged for
+  /** Set only on the response to a just-applied change-plan call - the exact amount Paddle charged for
    * it (can legitimately be 0). Null on a plain subscription fetch. */
   lastChargeAmount: number | null;
   lastChargeCurrency: string | null;
@@ -974,6 +974,21 @@ export interface PromoCodeValidation {
   originalPrice: number;
   discountedPrice: number;
   currency: string;
+  durationType: 'Once' | 'Repeating' | 'Forever';
+  durationInMonths: number | null;
+  description: string | null;
+}
+
+/** What Paddle.js needs to open a checkout overlay for a new subscription - no secrets. */
+export interface CheckoutParams {
+  priceId: string;
+  customerId: string;
+  discountId: string | null;
+}
+
+export interface PaddleClientConfig {
+  clientToken: string;
+  environment: 'sandbox' | 'production';
 }
 
 export type EquipmentReservationStatus = 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected' | 'Cancelled' | 'ReadyForPickup' | 'CheckedOut' | 'Completed' | 'Expired';

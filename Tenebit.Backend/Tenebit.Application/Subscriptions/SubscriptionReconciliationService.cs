@@ -5,7 +5,7 @@ using Tenebit.Domain.Audit;
 namespace Tenebit.Application.Subscriptions;
 
 /// <summary>
-/// Periodically reconciles local billing state with Stripe's canonical subscription object. Webhooks
+/// Periodically reconciles local billing state with Paddle's canonical subscription object. Webhooks
 /// remain the fast path, while this closes gaps caused by delayed/lost delivery or operator changes.
 /// Mismatched provider identifiers are quarantined instead of being applied to another tenant.
 /// </summary>
@@ -35,10 +35,10 @@ public sealed class SubscriptionReconciliationService
     {
         if (!_paymentGateway.IsConfigured) return;
 
-        var rows = await _subscriptions.ListWithStripeSubscriptionAsync(cancellationToken);
+        var rows = await _subscriptions.ListWithPaddleSubscriptionAsync(cancellationToken);
         foreach (var subscription in rows)
         {
-            var subscriptionId = subscription.StripeSubscriptionId;
+            var subscriptionId = subscription.PaddleSubscriptionId;
             if (string.IsNullOrWhiteSpace(subscriptionId)) continue;
 
             PaymentSubscriptionState? canonical;
@@ -55,10 +55,10 @@ public sealed class SubscriptionReconciliationService
                 SecurityTelemetry.ReconciliationFailure();
                 _activity.Add(new ActivityLog(
                     subscription.OrganizationId,
-                    "subscription.stripe_reconciliation_failed",
+                    "subscription.paddle_reconciliation_failed",
                     "subscription",
                     subscription.Id,
-                    "stripe-reconciliation",
+                    "paddle-reconciliation",
                     "canonical_fetch_failed",
                     _clock.UtcNow));
                 continue;
@@ -66,24 +66,24 @@ public sealed class SubscriptionReconciliationService
 
             var mismatch = canonical is null
                 || !string.Equals(canonical.SubscriptionId, subscriptionId, StringComparison.Ordinal)
-                || (!string.IsNullOrWhiteSpace(subscription.StripeCustomerId)
-                    && !string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal))
+                || (!string.IsNullOrWhiteSpace(subscription.PaddleCustomerId)
+                    && !string.Equals(canonical.CustomerId, subscription.PaddleCustomerId, StringComparison.Ordinal))
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != subscription.OrganizationId);
 
             if (mismatch)
             {
                 _activity.Add(new ActivityLog(
                     subscription.OrganizationId,
-                    "subscription.stripe_reconciliation_mismatch",
+                    "subscription.paddle_reconciliation_mismatch",
                     "subscription",
                     subscription.Id,
-                    "stripe-reconciliation",
+                    "paddle-reconciliation",
                     "canonical_association_mismatch",
                     _clock.UtcNow));
                 continue;
             }
 
-            subscription.ReconcileFromStripe(
+            subscription.ReconcileFromPaddle(
                 canonical!.PlanKey,
                 canonical.Status,
                 canonical.CurrentPeriodStart,
@@ -93,10 +93,10 @@ public sealed class SubscriptionReconciliationService
 
             _activity.Add(new ActivityLog(
                 subscription.OrganizationId,
-                "subscription.stripe_reconciled",
+                "subscription.paddle_reconciled",
                 "subscription",
                 subscription.Id,
-                "stripe-reconciliation",
+                "paddle-reconciliation",
                 $"{subscription.PlanKey}/{subscription.Status}",
                 _clock.UtcNow));
         }
@@ -105,19 +105,19 @@ public sealed class SubscriptionReconciliationService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    /// <summary>Discovers subscriptions Stripe knows about for organizations that started billing (have a
-    /// customer) but never got their StripeSubscriptionId linked - the gap a lost or rejected
-    /// created-subscription webhook leaves behind. A customer with no Stripe subscription at all (never
+    /// <summary>Discovers subscriptions Paddle knows about for organizations that started billing (have a
+    /// customer) but never got their PaddleSubscriptionId linked - the gap a lost or rejected
+    /// created-subscription webhook leaves behind. A customer with no Paddle subscription at all (never
     /// checked out, or cancelled without ever completing one) is the ordinary case, not a failure.</summary>
     private async Task ReconcilePendingLinksAsync(CancellationToken cancellationToken)
     {
-        var pending = await _subscriptions.ListPendingStripeLinkAsync(cancellationToken);
+        var pending = await _subscriptions.ListPendingPaddleLinkAsync(cancellationToken);
         foreach (var subscription in pending)
         {
             PaymentSubscriptionState? canonical;
             try
             {
-                canonical = await _paymentGateway.FindSubscriptionByCustomerAsync(subscription.StripeCustomerId!, cancellationToken);
+                canonical = await _paymentGateway.FindSubscriptionByCustomerAsync(subscription.PaddleCustomerId!, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -128,10 +128,10 @@ public sealed class SubscriptionReconciliationService
                 SecurityTelemetry.ReconciliationFailure();
                 _activity.Add(new ActivityLog(
                     subscription.OrganizationId,
-                    "subscription.stripe_reconciliation_failed",
+                    "subscription.paddle_reconciliation_failed",
                     "subscription",
                     subscription.Id,
-                    "stripe-reconciliation",
+                    "paddle-reconciliation",
                     "customer_lookup_failed",
                     _clock.UtcNow));
                 continue;
@@ -139,31 +139,31 @@ public sealed class SubscriptionReconciliationService
 
             if (canonical is null) continue;
 
-            var mismatch = !string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
+            var mismatch = !string.Equals(canonical.CustomerId, subscription.PaddleCustomerId, StringComparison.Ordinal)
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != subscription.OrganizationId);
             if (mismatch)
             {
                 _activity.Add(new ActivityLog(
                     subscription.OrganizationId,
-                    "subscription.stripe_reconciliation_mismatch",
+                    "subscription.paddle_reconciliation_mismatch",
                     "subscription",
                     subscription.Id,
-                    "stripe-reconciliation",
+                    "paddle-reconciliation",
                     "canonical_association_mismatch",
                     _clock.UtcNow));
                 continue;
             }
 
-            subscription.ReconcileFromStripe(
+            subscription.ReconcileFromPaddle(
                 canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd,
                 canonical.SubscriptionId, canonical.CustomerId);
 
             _activity.Add(new ActivityLog(
                 subscription.OrganizationId,
-                "subscription.stripe_reconciled",
+                "subscription.paddle_reconciled",
                 "subscription",
                 subscription.Id,
-                "stripe-reconciliation",
+                "paddle-reconciliation",
                 $"{subscription.PlanKey}/{subscription.Status}",
                 _clock.UtcNow));
         }

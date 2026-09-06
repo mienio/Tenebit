@@ -104,6 +104,7 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .assetQuota__bar { display: block; flex: 1 1 auto; height: 4px; margin-bottom: 0; }
 .assetQuota__count { font-family: var(--font-mono); white-space: nowrap; }
 .assetQuota .inlineAction { font-size: 12px; white-space: nowrap; }
+.assetQuota__upgradeCta { min-height: 30px; padding: 0 12px; font-size: 11px; white-space: nowrap; flex-shrink: 0; }
 
 .metricGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 14px; }
 /* Liczniki dashboardu poza siatką widgetów (telefon, tablet): zawsze dwie kolumny na wąskim ekranie,

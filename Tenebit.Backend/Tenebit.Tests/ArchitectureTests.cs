@@ -69,13 +69,13 @@ public class ArchitectureTests
         "IDeviceTrustTokenRepository",
         "IExternalLoginRepository",
         "IOAuthTransactionRepository",
-        "IProcessedStripeEventRepository",
+        "IProcessedPaddleEventRepository",
         "IPromoCodeRepository"
     ];
 
     /// <summary>Pojedyncze metody bez organizationId w repozytoriach tenantowych - wyszukiwanie po haszu
     /// publicznego tokenu (organizacja wynika ze znalezionego wiersza), czyszczenie retencyjne w tle
-    /// oraz uzgadnianie subskrypcji po identyfikatorze klienta Stripe.
+    /// oraz uzgadnianie subskrypcji po identyfikatorze klienta Paddle.
     ///
     /// Kod z etykiety QR dołącza do tej listy z tego samego powodu co hasze tokenów: skanujący ma tylko
     /// dziesięć znaków ze skanera, organizacja wynika dopiero ze znalezionego wiersza. Zawężenie robią
@@ -89,9 +89,9 @@ public class ArchitectureTests
         "IAssetAuditParticipantRepository.FindByTokenHashAsync",
         "IAssignmentRepository.FindByPublicTokenHashAsync",
         "IOffboardingCaseRepository.FindByPublicTokenHashAsync",
-        "ISubscriptionRepository.GetByStripeCustomerAsync",
-        "ISubscriptionRepository.ListWithStripeSubscriptionAsync",
-        "ISubscriptionRepository.ListPendingStripeLinkAsync"
+        "ISubscriptionRepository.GetByPaddleCustomerAsync",
+        "ISubscriptionRepository.ListWithPaddleSubscriptionAsync",
+        "ISubscriptionRepository.ListPendingPaddleLinkAsync"
     ];
 
     /// <summary>

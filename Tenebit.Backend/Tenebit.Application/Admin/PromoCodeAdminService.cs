@@ -35,7 +35,9 @@ public sealed class PromoCodeAdminService
 
     public async Task<Result<IReadOnlyList<PromoCodeResponse>>> CreateAsync(
         string planKey, PromoDiscountType discountType, decimal discountValue, int quantity,
-        string? code, int? maxRedemptions, DateTimeOffset? expiresAt, string? actorIp, CancellationToken cancellationToken)
+        string? code, int? maxRedemptions, DateTimeOffset? expiresAt,
+        PromoDurationType durationType, int? durationInMonths, string? description,
+        string? actorIp, CancellationToken cancellationToken)
     {
         if (quantity is < 1 or > MaxQuantity)
             return Result<IReadOnlyList<PromoCodeResponse>>.Failure(Error.Validation($"Liczba kodów musi być w zakresie 1-{MaxQuantity}."));
@@ -48,14 +50,14 @@ public sealed class PromoCodeAdminService
                 var explicitCode = code.Trim().ToUpperInvariant();
                 if (await _promoCodes.GetByCodeAsync(explicitCode, cancellationToken) is not null)
                     return Result<IReadOnlyList<PromoCodeResponse>>.Failure(Error.Conflict("Taki kod już istnieje."));
-                created.Add(new PromoCode(explicitCode, planKey, discountType, discountValue, maxRedemptions, expiresAt, _clock.UtcNow));
+                created.Add(new PromoCode(explicitCode, planKey, discountType, discountValue, maxRedemptions, expiresAt, durationType, durationInMonths, description, _clock.UtcNow));
             }
             else
             {
                 for (var i = 0; i < quantity; i++)
                 {
                     var generated = await GenerateUniqueCodeAsync(code, cancellationToken);
-                    created.Add(new PromoCode(generated, planKey, discountType, discountValue, maxRedemptions, expiresAt, _clock.UtcNow));
+                    created.Add(new PromoCode(generated, planKey, discountType, discountValue, maxRedemptions, expiresAt, durationType, durationInMonths, description, _clock.UtcNow));
                 }
             }
         }
@@ -117,9 +119,13 @@ public sealed class PromoCodeAdminService
 
     private static PromoCodeResponse ToResponse(PromoCode promo) => new(
         promo.Id, promo.Code, promo.PlanKey, promo.DiscountType.ToString(), promo.DiscountValue,
-        promo.MaxRedemptions, promo.TimesRedeemed, promo.ExpiresAt, promo.IsActive, promo.CreatedAt);
+        promo.MaxRedemptions, promo.TimesRedeemed, promo.ExpiresAt,
+        promo.DurationType.ToString(), promo.DurationInMonths, promo.Description,
+        promo.IsActive, promo.CreatedAt);
 }
 
 public sealed record PromoCodeResponse(
     Guid Id, string Code, string PlanKey, string DiscountType, decimal DiscountValue,
-    int? MaxRedemptions, int TimesRedeemed, DateTimeOffset? ExpiresAt, bool IsActive, DateTimeOffset CreatedAt);
+    int? MaxRedemptions, int TimesRedeemed, DateTimeOffset? ExpiresAt,
+    string DurationType, int? DurationInMonths, string? Description,
+    bool IsActive, DateTimeOffset CreatedAt);

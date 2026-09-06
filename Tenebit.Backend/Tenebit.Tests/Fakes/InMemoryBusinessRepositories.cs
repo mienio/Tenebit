@@ -376,15 +376,15 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
     public Task<OrganizationSubscription?> GetByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult(Subscriptions.FirstOrDefault(x => x.OrganizationId == organizationId));
 
-    public Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken) =>
-        Task.FromResult(Subscriptions.FirstOrDefault(x => x.StripeCustomerId == stripeCustomerId));
+    public Task<OrganizationSubscription?> GetByPaddleCustomerAsync(string paddleCustomerId, CancellationToken cancellationToken) =>
+        Task.FromResult(Subscriptions.FirstOrDefault(x => x.PaddleCustomerId == paddleCustomerId));
 
-    public Task<IReadOnlyList<OrganizationSubscription>> ListWithStripeSubscriptionAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions.Where(x => !string.IsNullOrWhiteSpace(x.StripeSubscriptionId)).ToList());
+    public Task<IReadOnlyList<OrganizationSubscription>> ListWithPaddleSubscriptionAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions.Where(x => !string.IsNullOrWhiteSpace(x.PaddleSubscriptionId)).ToList());
 
-    public Task<IReadOnlyList<OrganizationSubscription>> ListPendingStripeLinkAsync(CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<OrganizationSubscription>> ListPendingPaddleLinkAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions
-            .Where(x => !string.IsNullOrWhiteSpace(x.StripeCustomerId) && string.IsNullOrWhiteSpace(x.StripeSubscriptionId))
+            .Where(x => !string.IsNullOrWhiteSpace(x.PaddleCustomerId) && string.IsNullOrWhiteSpace(x.PaddleSubscriptionId))
             .ToList());
 
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
@@ -408,14 +408,14 @@ public sealed class InMemoryPromoCodeRepository : IPromoCodeRepository
     public void Remove(PromoCode promoCode) => Codes.Remove(promoCode);
 }
 
-public sealed class InMemoryProcessedStripeEventRepository : IProcessedStripeEventRepository
+public sealed class InMemoryProcessedPaddleEventRepository : IProcessedPaddleEventRepository
 {
-    public List<ProcessedStripeEvent> Events { get; } = [];
+    public List<ProcessedPaddleEvent> Events { get; } = [];
 
     public Task<bool> ExistsAsync(string eventId, CancellationToken cancellationToken) =>
         Task.FromResult(Events.Any(x => x.EventId == eventId));
 
-    public void Add(ProcessedStripeEvent processedEvent) => Events.Add(processedEvent);
+    public void Add(ProcessedPaddleEvent processedEvent) => Events.Add(processedEvent);
 }
 
 public sealed class InMemoryDashboardLayoutRepository : IDashboardLayoutRepository
@@ -580,15 +580,15 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public bool IsConfigured { get; set; } = true;
     public bool AllPlansConfigured { get; set; } = true;
     public HashSet<string> ConfiguredPlanKeys { get; } = [];
-    public string NextCustomerId { get; set; } = "cus_fake";
-    public string NextCheckoutUrl { get; set; } = "https://checkout.stripe.com/fake-session";
-    public string NextPortalUrl { get; set; } = "https://billing.stripe.com/fake-portal";
+    public string NextCustomerId { get; set; } = "ctm_fake";
+    public PaddleCheckoutParams NextCheckoutParams { get; set; } = new("pri_fake", "ctm_fake", null);
+    public string NextPortalUrl { get; set; } = "https://customer-portal.paddle.com/fake-session";
     public PaymentWebhookEvent? NextWebhookEvent { get; set; }
     public PaymentSubscriptionState? NextCanonicalSubscription { get; set; }
     public bool ThrowOnParseWebhookEvent { get; set; }
 
     public string? LastCustomerIdempotencyKey { get; private set; }
-    public string? LastCheckoutIdempotencyKey { get; private set; }
+    public string? LastCheckoutCustomerId { get; private set; }
     public string? LastCheckoutPlanKey { get; private set; }
     public PromoCodeDiscount? LastDiscount { get; private set; }
     public int CheckoutCreateCalls { get; private set; }
@@ -601,21 +601,28 @@ public sealed class FakePaymentGateway : IPaymentGateway
         return Task.FromResult(NextCustomerId);
     }
 
-    public Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
-        LastCheckoutIdempotencyKey = idempotencyKey;
+        LastCheckoutCustomerId = customerId;
         LastCheckoutPlanKey = planKey;
         LastDiscount = discount;
         CheckoutCreateCalls++;
-        return Task.FromResult(NextCheckoutUrl);
+        return Task.FromResult(NextCheckoutParams);
     }
 
-    public Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken) =>
-        Task.FromResult(NextPortalUrl);
+    public string? LastPortalCustomerId { get; private set; }
+    public string? LastPortalSubscriptionId { get; private set; }
+
+    public Task<string> CreateCustomerPortalSessionAsync(string customerId, string? subscriptionId, CancellationToken cancellationToken)
+    {
+        LastPortalCustomerId = customerId;
+        LastPortalSubscriptionId = subscriptionId;
+        return Task.FromResult(NextPortalUrl);
+    }
 
     public PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader)
     {
-        if (ThrowOnParseWebhookEvent) throw new PaymentWebhookValidationException("Invalid Stripe webhook signature.");
+        if (ThrowOnParseWebhookEvent) throw new PaymentWebhookValidationException("Invalid Paddle webhook signature.");
         return NextWebhookEvent;
     }
 
@@ -639,55 +646,45 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastPlanChangeIdempotencyKey { get; private set; }
     public string? LastPlanChangeSubscriptionId { get; private set; }
     public string? LastPlanChangeNewPlanKey { get; private set; }
+    public PlanChangeTiming? LastPlanChangeTiming { get; private set; }
     public PromoCodeDiscount? LastPlanChangeDiscount { get; private set; }
     public int PlanChangeCalls { get; private set; }
 
     public decimal NextChargedAmount { get; set; }
     public string NextChargedCurrency { get; set; } = "EUR";
+    public DateTimeOffset? NextPendingEffectiveAt { get; set; }
 
-    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         LastPlanChangeSubscriptionId = subscriptionId;
         LastPlanChangeNewPlanKey = newPlanKey;
+        LastPlanChangeTiming = timing;
         LastPlanChangeIdempotencyKey = idempotencyKey;
         LastPlanChangeDiscount = discount;
         PlanChangeCalls++;
         if (ThrowOnPlanChange is not null) throw ThrowOnPlanChange;
         var subscription = NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set");
-        return Task.FromResult(new PlanChangeResult(subscription, NextChargedAmount, NextChargedCurrency));
+        return Task.FromResult(new PlanChangeResult(subscription, NextChargedAmount, NextChargedCurrency, NextPendingEffectiveAt));
     }
 
     public PlanChangePreview? NextPlanChangePreview { get; set; }
+    public PlanChangeTiming? LastPreviewTiming { get; private set; }
 
-    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, CancellationToken cancellationToken) =>
-        Task.FromResult(NextPlanChangePreview ?? throw new InvalidOperationException("NextPlanChangePreview not set"));
-
-    public PaymentScheduleState? NextSchedule { get; set; }
-    public Exception? ThrowOnScheduleDowngrade { get; set; }
-    public string? LastScheduleDowngradeSubscriptionId { get; private set; }
-    public string? LastScheduleDowngradeExistingScheduleId { get; private set; }
-    public string? LastScheduleDowngradeNewPlanKey { get; private set; }
-    public int ScheduleDowngradeCalls { get; private set; }
-
-    public Task<PaymentScheduleState> ScheduleDowngradeAsync(string subscriptionId, string? existingScheduleId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken)
+    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, CancellationToken cancellationToken)
     {
-        LastScheduleDowngradeSubscriptionId = subscriptionId;
-        LastScheduleDowngradeExistingScheduleId = existingScheduleId;
-        LastScheduleDowngradeNewPlanKey = newPlanKey;
-        ScheduleDowngradeCalls++;
-        if (ThrowOnScheduleDowngrade is not null) throw ThrowOnScheduleDowngrade;
-        return Task.FromResult(NextSchedule ?? throw new InvalidOperationException("NextSchedule not set"));
+        LastPreviewTiming = timing;
+        return Task.FromResult(NextPlanChangePreview ?? throw new InvalidOperationException("NextPlanChangePreview not set"));
     }
 
-    public Exception? ThrowOnReleaseSchedule { get; set; }
-    public string? LastReleasedScheduleId { get; private set; }
-    public int ReleaseScheduleCalls { get; private set; }
+    public Exception? ThrowOnCancelScheduledChange { get; set; }
+    public string? LastCancelScheduledSubscriptionId { get; private set; }
+    public int CancelScheduledChangeCalls { get; private set; }
 
-    public Task ReleaseScheduleAsync(string scheduleId, CancellationToken cancellationToken)
+    public Task CancelScheduledChangeAsync(string subscriptionId, CancellationToken cancellationToken)
     {
-        LastReleasedScheduleId = scheduleId;
-        ReleaseScheduleCalls++;
-        if (ThrowOnReleaseSchedule is not null) throw ThrowOnReleaseSchedule;
+        LastCancelScheduledSubscriptionId = subscriptionId;
+        CancelScheduledChangeCalls++;
+        if (ThrowOnCancelScheduledChange is not null) throw ThrowOnCancelScheduledChange;
         return Task.CompletedTask;
     }
 }

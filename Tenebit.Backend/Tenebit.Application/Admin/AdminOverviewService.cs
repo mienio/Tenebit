@@ -154,10 +154,10 @@ public sealed class AdminOverviewService
 
     /// <summary>
     /// What an organization has actually paid, as evidence (billing disputes, chargebacks) - pulled live
-    /// from Stripe on every call rather than mirrored locally, since Stripe's own invoice is the record
-    /// that matters and this stays correct even if it changes on Stripe's side (refund, etc.) after the
+    /// from Paddle on every call rather than mirrored locally, since Paddle's own invoice is the record
+    /// that matters and this stays correct even if it changes on Paddle's side (refund, etc.) after the
     /// fact. Returns an empty (zero-total) result, not null, for an organization that has never had a
-    /// Stripe customer - null only means the organization itself doesn't exist.
+    /// Paddle customer - null only means the organization itself doesn't exist.
     /// </summary>
     public async Task<AdminOrganizationPayments?> GetOrganizationPaymentsAsync(Guid organizationId, CancellationToken cancellationToken)
     {
@@ -165,10 +165,10 @@ public sealed class AdminOverviewService
         if (organization is null) return null;
 
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
-        if (subscription is null || string.IsNullOrWhiteSpace(subscription.StripeCustomerId))
+        if (subscription is null || string.IsNullOrWhiteSpace(subscription.PaddleCustomerId))
             return new AdminOrganizationPayments(0m, "EUR", []);
 
-        var invoices = await _paymentGateway.ListInvoicesAsync(subscription.StripeCustomerId, cancellationToken);
+        var invoices = await _paymentGateway.ListInvoicesAsync(subscription.PaddleCustomerId, cancellationToken);
         var currency = invoices.Count > 0 ? invoices[0].Currency : "EUR";
 
         return new AdminOrganizationPayments(

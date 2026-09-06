@@ -14,10 +14,10 @@ export interface PlanDef {
 
 export const PLANS: PlanDef[] = [
   { key: 'free', name: 'Free', price: 0, limitLabel: '10', featureCount: 1, badge: 'free' },
-  { key: 'starter', name: 'Starter', price: 12, limitLabel: '100', featureCount: 1 },
-  { key: 'growth', name: 'Growth', price: 29, limitLabel: '300', featureCount: 1, badge: 'recommended' },
-  { key: 'business', name: 'Business', price: 59, limitLabel: '1000', featureCount: 1 },
-  { key: 'enterprise', name: 'Scale', price: 99, limitLabel: '1000+', featureCount: 1 },
+  { key: 'starter', name: 'Starter', price: 11.95, limitLabel: '100', featureCount: 1 },
+  { key: 'growth', name: 'Growth', price: 28.95, limitLabel: '300', featureCount: 1, badge: 'recommended' },
+  { key: 'business', name: 'Business', price: 58.95, limitLabel: '1000', featureCount: 1 },
+  { key: 'enterprise', name: 'MAX', price: 98.95, limitLabel: '1000+', featureCount: 1 },
 ];
 
 export function PricingCards({ renderCta }: { renderCta: (plan: PlanDef) => ReactNode }) {

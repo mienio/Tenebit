@@ -182,14 +182,17 @@ export const api = {
 
   subscription: () => apiRequest<import('../types/domain').Subscription>('/api/subscription'),
   upgradeSubscription: (planKey: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/upgrade', { method: 'POST', body: JSON.stringify({ planKey }) }),
-  // successPath/cancelPath/returnPath are relative paths (e.g. "/dashboard?checkout=success") - the
-  // backend builds the actual absolute redirect URL from its own configured origin, never from a
-  // client-supplied full URL (audit AUD3-010, open redirect).
-  createCheckoutSession: (planKey: string, successPath: string, cancelPath: string, promoCode?: string) => apiRequest<string>('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ planKey, successUrl: successPath, cancelUrl: cancelPath, promoCode: promoCode || null }) }),
+  // Paddle Billing has no server-generated hosted checkout redirect URL (unlike the old Stripe Checkout
+  // Session) - this just returns what Paddle.js needs to open its own checkout overlay client-side.
+  checkoutParams: (planKey: string, promoCode?: string) => apiRequest<import('../types/domain').CheckoutParams>('/api/subscription/checkout-params', { method: 'POST', body: JSON.stringify({ planKey, promoCode: promoCode || null }) }),
+  paddleConfig: () => apiRequest<import('../types/domain').PaddleClientConfig>('/api/subscription/paddle-config'),
   changeSubscriptionPlan: (planKey: string, promoCode?: string) => apiRequest<import('../types/domain').Subscription>('/api/subscription/change-plan', { method: 'POST', body: JSON.stringify({ planKey, promoCode: promoCode || null }) }),
   previewPlanChange: (planKey: string) => apiRequest<import('../types/domain').PlanChangePreview>('/api/subscription/change-plan/preview', { method: 'POST', body: JSON.stringify({ planKey, promoCode: null }) }),
   cancelScheduledPlanChange: () => apiRequest<import('../types/domain').Subscription>('/api/subscription/cancel-scheduled-change', { method: 'POST' }),
-  createBillingPortalSession: (returnPath: string) => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST', body: JSON.stringify({ returnUrl: returnPath }) }),
+  // Unlike Stripe's Billing Portal, Paddle's customer portal session has no return-url concept - the
+  // customer closes it (or the app tab) to come back, there's nothing for the backend to build a redirect
+  // from.
+  createBillingPortalSession: () => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST' }),
   validatePromoCode: (planKey: string, code: string) => apiRequest<import('../types/domain').PromoCodeValidation>('/api/subscription/promo-code/validate', { method: 'POST', body: JSON.stringify({ planKey, code }) }),
 
   assets: (params?: { search?: string; status?: AssetStatus | ''; location?: string | '' }) => {

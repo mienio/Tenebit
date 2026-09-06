@@ -55,7 +55,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     /// wierszu) zapisywała się do bazy bez żadnego sygnału. Sprawdzana jest też wartość oryginalna, żeby
     /// przepisanie cudzego wiersza na własną organizację nie przeszło jako "zgodne z tenantem".
     ///
-    /// Przepływy bez tenanta - publiczne, webhook Stripe, zadania w tle, panel platform-admina - mają
+    /// Przepływy bez tenanta - publiczne, webhook Paddle, zadania w tle, panel platform-admina - mają
     /// Guid.Empty i są celowo pomijane; tam obowiązują jawne filtry repozytoriów, dokładnie jak w filtrze
     /// zapytań. Mismatch przy zalogowanym tenancie to zawsze błąd, nie przypadek biznesowy, więc leci
     /// wyjątek i żądanie kończy się 500 z correlation id zamiast cichego zapisu.
@@ -150,7 +150,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<OrganizationSubscription> Subscriptions => Set<OrganizationSubscription>();
     public DbSet<PromoCode> PromoCodes => Set<PromoCode>();
-    public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
+    public DbSet<ProcessedPaddleEvent> ProcessedPaddleEvents => Set<ProcessedPaddleEvent>();
     public DbSet<SentAlert> SentAlerts => Set<SentAlert>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
     public DbSet<AlertDigestSettings> AlertDigestSettings => Set<AlertDigestSettings>();
@@ -1192,17 +1192,16 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PlanKey).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
-            entity.Property(x => x.StripeCustomerId).HasMaxLength(80);
-            entity.Property(x => x.StripeSubscriptionId).HasMaxLength(80);
+            entity.Property(x => x.PaddleCustomerId).HasMaxLength(80);
+            entity.Property(x => x.PaddleSubscriptionId).HasMaxLength(80);
             entity.Property(x => x.PendingPlanKey).HasMaxLength(40);
-            entity.Property(x => x.StripeScheduleId).HasMaxLength(80);
             entity.HasIndex(x => x.OrganizationId).IsUnique();
-            entity.HasIndex(x => x.StripeCustomerId);
+            entity.HasIndex(x => x.PaddleCustomerId);
         });
 
-        modelBuilder.Entity<ProcessedStripeEvent>(entity =>
+        modelBuilder.Entity<ProcessedPaddleEvent>(entity =>
         {
-            entity.ToTable("processed_stripe_events");
+            entity.ToTable("processed_paddle_events");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.EventId).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => x.EventId).IsUnique();
@@ -1216,6 +1215,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.PlanKey).HasMaxLength(40).IsRequired();
             entity.Property(x => x.DiscountType).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.DiscountValue).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.DurationType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
             entity.HasIndex(x => x.Code).IsUnique();
             entity.HasIndex(x => x.PlanKey);
         });

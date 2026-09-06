@@ -134,7 +134,7 @@ export function DashboardPage() {
             <span style={{ width: `${assetPercent}%`, background: assetsNearLimit ? '#c08a1f' : undefined }} />
           </span>
           {assetsNearLimit && subData.planKey.toLowerCase() !== 'enterprise' && (
-            <Link className="inlineAction" to="/pricing">{t('dashboard.upgradeToPro')}</Link>
+            <Link className="button button--primary assetQuota__upgradeCta" to="/pricing">{t('dashboard.upgradeToPro')}</Link>
           )}
         </div>
       )}

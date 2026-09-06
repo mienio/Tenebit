@@ -16,10 +16,10 @@ public sealed class SubscriptionReconciliationServiceTests
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Business.Key);
         var webhookAt = clock.UtcNow.AddHours(-1);
-        local.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, webhookAt, webhookAt.AddMonths(1), "sub_1", "cus_1", webhookAt);
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, webhookAt, webhookAt.AddMonths(1), "sub_1", "ctm_1", webhookAt);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
-            "cus_1",
+            "ctm_1",
             "sub_1",
             SubscriptionPlan.Free.Key,
             SubscriptionStatus.Unknown,
@@ -34,7 +34,7 @@ public sealed class SubscriptionReconciliationServiceTests
         Assert.Equal(SubscriptionStatus.Unknown, local.Status);
         Assert.Equal(SubscriptionPlan.Free.AssetLimit, local.GetAssetLimit());
         Assert.Equal(webhookAt, local.LastWebhookEventAt);
-        Assert.Contains(activity.Logs, x => x.Action == "subscription.stripe_reconciled");
+        Assert.Contains(activity.Logs, x => x.Action == "subscription.paddle_reconciled");
     }
 
     [Fact]
@@ -45,10 +45,10 @@ public sealed class SubscriptionReconciliationServiceTests
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Business.Key);
-        local.SyncFromStripe(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, clock.UtcNow, clock.UtcNow.AddMonths(1), "sub_1", "cus_1", clock.UtcNow);
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, clock.UtcNow, clock.UtcNow.AddMonths(1), "sub_1", "ctm_1", clock.UtcNow);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
-            "cus_other",
+            "ctm_other",
             "sub_1",
             SubscriptionPlan.Business.Key,
             SubscriptionStatus.Active,
@@ -59,8 +59,8 @@ public sealed class SubscriptionReconciliationServiceTests
         var service = new SubscriptionReconciliationService(subscriptions, gateway, activity, new FakeUnitOfWork(), clock);
         await service.RunAsync(CancellationToken.None);
 
-        Assert.Equal("cus_1", local.StripeCustomerId);
-        Assert.Contains(activity.Logs, x => x.Action == "subscription.stripe_reconciliation_mismatch");
+        Assert.Equal("ctm_1", local.PaddleCustomerId);
+        Assert.Contains(activity.Logs, x => x.Action == "subscription.paddle_reconciliation_mismatch");
     }
 
     [Fact]
@@ -71,10 +71,10 @@ public sealed class SubscriptionReconciliationServiceTests
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Free.Key);
-        local.AttachStripeCustomer("cus_1");
+        local.AttachPaddleCustomer("ctm_1");
         subscriptions.Add(local);
         gateway.NextSubscriptionByCustomer = new PaymentSubscriptionState(
-            "cus_1",
+            "ctm_1",
             "sub_1",
             SubscriptionPlan.Starter.Key,
             SubscriptionStatus.Active,
@@ -86,45 +86,46 @@ public sealed class SubscriptionReconciliationServiceTests
         await service.RunAsync(CancellationToken.None);
 
         Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
-        Assert.Equal("sub_1", local.StripeSubscriptionId);
-        Assert.Contains(activity.Logs, x => x.Action == "subscription.stripe_reconciled");
+        Assert.Equal("sub_1", local.PaddleSubscriptionId);
+        Assert.Contains(activity.Logs, x => x.Action == "subscription.paddle_reconciled");
     }
 
     [Fact]
-    public async Task Reconciliation_LeavesFreeCustomerAlone_WhenStripeHasNoSubscriptionForThem()
+    public async Task Reconciliation_LeavesFreeCustomerAlone_WhenPaddleHasNoSubscriptionForThem()
     {
         var subscriptions = new InMemorySubscriptionRepository();
         var activity = new InMemoryActivityLogRepository();
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Free.Key);
-        local.AttachStripeCustomer("cus_1");
+        local.AttachPaddleCustomer("ctm_1");
         subscriptions.Add(local);
 
         var service = new SubscriptionReconciliationService(subscriptions, gateway, activity, new FakeUnitOfWork(), clock);
         await service.RunAsync(CancellationToken.None);
 
         Assert.Equal(SubscriptionPlan.Free.Key, local.PlanKey);
-        Assert.Null(local.StripeSubscriptionId);
-        Assert.DoesNotContain(activity.Logs, x => x.Action.StartsWith("subscription.stripe_reconcil"));
+        Assert.Null(local.PaddleSubscriptionId);
+        Assert.DoesNotContain(activity.Logs, x => x.Action.StartsWith("subscription.paddle_reconcil"));
     }
 
     [Fact]
-    public async Task Reconciliation_ClearsPendingDowngrade_OnceStripesScheduledPhaseHasApplied()
+    public async Task Reconciliation_ClearsPendingDowngrade_OncePaddlesScheduledChangeHasApplied()
     {
-        // The subscription schedule (see StripePaymentGateway.ScheduleDowngradeAsync) applies the price
-        // switch on Stripe's side with no action from us - reconciliation just needs to notice the
-        // canonical plan has caught up to what was pending and drop the local "still waiting" markers.
+        // The scheduled change (see PaddlePaymentGateway.ChangeSubscriptionPlanAsync with
+        // PlanChangeTiming.NextBillingPeriod) applies the price switch on Paddle's side with no action
+        // from us - reconciliation just needs to notice the canonical plan has caught up to what was
+        // pending and drop the local "still waiting" markers.
         var subscriptions = new InMemorySubscriptionRepository();
         var activity = new InMemoryActivityLogRepository();
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Growth.Key);
-        local.SyncFromStripe(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, clock.UtcNow.AddMonths(-1), clock.UtcNow, "sub_1", "cus_1", clock.UtcNow.AddMonths(-1));
-        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, clock.UtcNow, "sched_1");
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, clock.UtcNow.AddMonths(-1), clock.UtcNow, "sub_1", "ctm_1", clock.UtcNow.AddMonths(-1));
+        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, clock.UtcNow);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
-            "cus_1", "sub_1", SubscriptionPlan.Starter.Key, SubscriptionStatus.Active,
+            "ctm_1", "sub_1", SubscriptionPlan.Starter.Key, SubscriptionStatus.Active,
             clock.UtcNow, clock.UtcNow.AddMonths(1), local.OrganizationId);
 
         var service = new SubscriptionReconciliationService(subscriptions, gateway, activity, new FakeUnitOfWork(), clock);
@@ -133,6 +134,5 @@ public sealed class SubscriptionReconciliationServiceTests
         Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
         Assert.Null(local.PendingPlanKey);
         Assert.Null(local.PendingPlanEffectiveAt);
-        Assert.Null(local.StripeScheduleId);
     }
 }

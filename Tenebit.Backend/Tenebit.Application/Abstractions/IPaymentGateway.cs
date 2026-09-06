@@ -5,35 +5,56 @@ namespace Tenebit.Application.Abstractions;
 public interface IPaymentGateway
 {
     bool IsConfigured { get; }
-    Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken);
-    Task<string> CreateCheckoutSessionAsync(string customerId, Guid organizationId, string planKey, string successUrl, string cancelUrl, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
     bool IsPlanConfigured(string planKey);
-    Task<string> CreateBillingPortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken);
+    Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken);
+
+    /// <summary>Resolves what the frontend needs to open a Paddle.js checkout for a brand-new subscription.
+    /// Unlike Stripe Checkout Sessions there is no server-generated hosted redirect URL in Paddle Billing -
+    /// Paddle.js runs client-side and opens the checkout overlay itself from these parameters.</summary>
+    Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
+
+    /// <summary>Creates a one-time authenticated link into Paddle's customer portal (payment method,
+    /// invoices, cancellation) - optionally scoped to a single subscription. Not cacheable; generate a new
+    /// one per request, same as Stripe's billing portal session.</summary>
+    Task<string> CreateCustomerPortalSessionAsync(string customerId, string? subscriptionId, CancellationToken cancellationToken);
+
     PaymentWebhookEvent? ParseWebhookEvent(string payload, string signatureHeader);
     Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken);
     Task<PaymentSubscriptionState?> FindSubscriptionByCustomerAsync(string customerId, CancellationToken cancellationToken);
-    Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
 
-    /// <summary>Asks Stripe what an immediate switch to <paramref name="newPlanKey"/> would actually charge
-    /// right now - the exact proration (credit for the old plan's unused time against a full new period),
-    /// not the new plan's list price - so the confirmation dialog can show a real number before the
-    /// customer commits (audit: upgrades were applying with no visible charge amount, before or after).</summary>
-    Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, CancellationToken cancellationToken);
+    /// <summary>
+    /// Switches an existing live subscription directly to a different configured plan via Paddle's own
+    /// subscription-item price swap - both upgrade (<see cref="PlanChangeTiming.Immediately"/>, prorated and
+    /// charged now) and downgrade (<see cref="PlanChangeTiming.NextBillingPeriod"/>, deferred - Paddle keeps
+    /// the subscription on its current plan and tracks the pending switch on the subscription itself, no
+    /// separate schedule object needed, unlike Stripe subscription schedules).
+    /// </summary>
+    Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
 
-    /// <summary>Schedules a plan switch to take effect at the end of the subscription's current billing
-    /// period, via a Stripe subscription schedule - the subscription stays on its current price/plan
-    /// until then. Pass <paramref name="existingScheduleId"/> to retarget an already-scheduled change
-    /// instead of creating a second schedule (Stripe allows only one per subscription).</summary>
-    Task<PaymentScheduleState> ScheduleDowngradeAsync(string subscriptionId, string? existingScheduleId, string newPlanKey, string idempotencyKey, CancellationToken cancellationToken);
+    /// <summary>Previews - without applying anything - what ChangeSubscriptionPlanAsync would actually do
+    /// for the same switch: the exact amount charged now for an immediate upgrade, or the deferred effective
+    /// date for a downgrade - so the confirmation dialog can show a real number/date before the customer
+    /// commits, instead of the new plan's flat list price (wrong for a mid-cycle switch).</summary>
+    Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, CancellationToken cancellationToken);
 
-    /// <summary>Cancels a pending scheduled plan change, leaving the subscription on its current plan
-    /// indefinitely (release, not cancel - the underlying subscription itself is untouched).</summary>
-    Task ReleaseScheduleAsync(string scheduleId, CancellationToken cancellationToken);
+    /// <summary>Cancels a pending scheduled plan change (set via <see cref="ChangeSubscriptionPlanAsync"/>
+    /// with <see cref="PlanChangeTiming.NextBillingPeriod"/>), leaving the subscription on its current plan
+    /// indefinitely.</summary>
+    Task CancelScheduledChangeAsync(string subscriptionId, CancellationToken cancellationToken);
 
-    /// <summary>Lists a customer's Stripe invoices, newest first - the actual payment record (amount
-    /// charged, currency, status, hosted/PDF copy) behind a subscription. Stripe is the only place this is
+    /// <summary>Lists a customer's Paddle transactions, newest first - the actual payment record (amount
+    /// charged, currency, status, invoice PDF link) behind a subscription. Paddle is the only place this is
     /// stored; Tenebit's own database never mirrors it (see AdminOverviewService.GetOrganizationPaymentsAsync).</summary>
     Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken);
+}
+
+/// <summary>When to apply a plan switch: right now (upgrade - prorated and charged immediately) or at the
+/// end of the current billing period (downgrade - nothing charged today, the org keeps its current plan's
+/// entitlements until then).</summary>
+public enum PlanChangeTiming
+{
+    Immediately,
+    NextBillingPeriod
 }
 
 public sealed class PaymentWebhookValidationException : Exception
@@ -43,8 +64,8 @@ public sealed class PaymentWebhookValidationException : Exception
 
 public sealed class PaymentGatewayException : Exception
 {
-    /// <summary>The upstream HTTP status Stripe returned, when the exception came from a non-2xx Stripe
-    /// response - lets callers distinguish an expected business outcome (402: card declined) from an
+    /// <summary>The upstream HTTP status Paddle returned, when the exception came from a non-2xx Paddle
+    /// response - lets callers distinguish an expected business outcome (payment declined) from an
     /// unexpected transport/config failure without parsing the message string.</summary>
     public int? StatusCode { get; }
 
@@ -65,20 +86,25 @@ public sealed record PaymentSubscriptionState(
     string CustomerId, string SubscriptionId, string PlanKey, SubscriptionStatus Status,
     DateTimeOffset CurrentPeriodStart, DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId);
 
-public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value);
+public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value, PromoDurationType DurationType, int? DurationInMonths);
 
-public sealed record PaymentScheduleState(string ScheduleId, string PendingPlanKey, DateTimeOffset EffectiveAt);
+/// <summary>What Paddle.js needs to open a checkout overlay for a new subscription - no secrets, safe to
+/// return to the frontend (the same trust level as a Stripe Checkout Session's client_secret used to be,
+/// but here it's just the plan's Price ID plus the customer/discount to prefill).</summary>
+public sealed record PaddleCheckoutParams(string PriceId, string CustomerId, string? DiscountId);
 
-/// <summary>What Stripe would charge right now for a plan switch, before it's actually applied.</summary>
-public sealed record PlanChangePreview(decimal AmountDue, string Currency);
+/// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
+/// immediately (an upgrade), or - when EffectiveAt is set - the date the new price takes effect for free
+/// with nothing charged today (a downgrade).</summary>
+public sealed record PlanChangePreview(decimal AmountDue, string Currency, DateTimeOffset? EffectiveAt);
 
 /// <summary>The outcome of an applied plan switch - the updated subscription plus what was actually
-/// charged (0 when the proration credit fully covered the new plan, which is a real, correct outcome and
-/// not a sign that nothing happened).</summary>
-public sealed record PlanChangeResult(PaymentSubscriptionState Subscription, decimal AmountCharged, string Currency);
+/// charged (0 for a downgrade, or when the proration credit fully covered the new plan - a real, correct
+/// outcome and not a sign that nothing happened).</summary>
+public sealed record PlanChangeResult(PaymentSubscriptionState Subscription, decimal AmountCharged, string Currency, DateTimeOffset? PendingEffectiveAt = null);
 
-/// <summary>A single Stripe invoice - amounts in major currency units (already converted from Stripe's
-/// minor-unit cents), Currency as an ISO 4217 code (e.g. "EUR").</summary>
+/// <summary>A single Paddle transaction - amounts in major currency units (already converted from Paddle's
+/// minor-unit string amounts), Currency as an ISO 4217 code (e.g. "EUR").</summary>
 public sealed record PaymentInvoice(
     string Id, string? Number, decimal AmountPaid, decimal AmountDue, string Currency, string Status,
     DateTimeOffset Created, string? HostedInvoiceUrl, string? InvoicePdfUrl);

@@ -265,10 +265,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId", "AssetTag")
+                    b.HasIndex("ScanCode")
                         .IsUnique();
 
-                    b.HasIndex("ScanCode")
+                    b.HasIndex("OrganizationId", "AssetTag")
                         .IsUnique();
 
                     b.HasIndex("OrganizationId", "AssignedPersonId");
@@ -309,11 +309,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
@@ -476,6 +471,82 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasFilter("\"ParentId\" IS NOT NULL");
 
                     b.ToTable("asset_locations", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Assets.MaintenanceSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("IntervalMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastPerformedBy")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<DateOnly?>("LastPerformedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateOnly>("NextDueOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("OrganizationId", "Id");
+
+                    b.HasIndex("OrganizationId", "AssetId");
+
+                    b.HasIndex("OrganizationId", "NextDueOn");
+
+                    b.ToTable("maintenance_schedules", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Assets.PublicReportThrottle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReporterHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "AssetId", "CreatedAt");
+
+                    b.HasIndex("OrganizationId", "ReporterHash", "CreatedAt");
+
+                    b.ToTable("public_report_throttle", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Assets.ServiceTicket", b =>
@@ -666,9 +737,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId", "CreatedAt");
-
                     b.HasIndex("SourceIpExpiresAt");
+
+                    b.HasIndex("OrganizationId", "CreatedAt");
 
                     b.ToTable("activity_logs", "tenebit");
                 });
@@ -843,11 +914,11 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasDatabaseName("IX_asset_audit_participants_TokenHash")
                         .HasFilter("\"TokenHash\" IS NOT NULL");
 
-                    b.HasIndex("OrganizationId", "CampaignId", "PersonId")
-                        .IsUnique();
-
                     b.HasIndex("OrganizationId", "PersonId")
                         .HasDatabaseName("IX_tenant_audit_participants_person");
+
+                    b.HasIndex("OrganizationId", "CampaignId", "PersonId")
+                        .IsUnique();
 
                     b.ToTable("asset_audit_participants", "tenebit");
                 });
@@ -855,7 +926,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
             modelBuilder.Entity("Tenebit.Domain.Dashboards.DashboardLayout", b =>
                 {
                     b.Property<Guid>("OrganizationUserId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("LayoutJson")
@@ -987,121 +1057,17 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId", "AssignmentId");
-
                     b.HasIndex("OrganizationId", "AssetAuditItemId")
                         .HasDatabaseName("IX_tenant_evidence_audit_item");
 
-                    b.HasIndex("OrganizationId", "AssetId", "Phase");
+                    b.HasIndex("OrganizationId", "AssignmentId");
 
                     b.HasIndex("OrganizationId", "OffboardingItemId")
                         .HasDatabaseName("IX_tenant_evidence_offboarding_item");
 
+                    b.HasIndex("OrganizationId", "AssetId", "Phase");
+
                     b.ToTable("asset_evidence", "tenebit");
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Identity.DeviceTrustToken", b =>
-                {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
-                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
-                    b.Property<DateTimeOffset?>("RevokedAt").HasColumnType("timestamp with time zone");
-                    b.Property<string>("TokenHash").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
-                    b.HasKey("Id");
-                    b.HasIndex("OrganizationUserId", "TokenHash").IsUnique();
-                    b.ToTable("device_trust_tokens", "tenebit");
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Identity.EmailVerificationToken", b =>
-                {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
-                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
-                    b.Property<string>("TokenHash").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
-                    b.Property<DateTimeOffset?>("UsedAt").HasColumnType("timestamp with time zone");
-                    b.HasKey("Id");
-                    b.HasIndex("OrganizationUserId");
-                    b.HasIndex("TokenHash").IsUnique();
-                    b.ToTable("email_verification_tokens", "tenebit");
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Identity.ExternalLogin", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("OrganizationUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("ProviderUserId")
-                        .IsRequired()
-                        .HasMaxLength(240)
-                        .HasColumnType("character varying(240)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Provider", "ProviderUserId")
-                        .IsUnique();
-
-                    b.ToTable("external_logins", "tenebit");
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Assets.MaintenanceSchedule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AssetId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("IntervalMonths")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateOnly?>("LastPerformedOn")
-                        .HasColumnType("date");
-
-                    b.Property<string>("LastPerformedBy")
-                        .HasMaxLength(240)
-                        .HasColumnType("character varying(240)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(160)
-                        .HasColumnType("character varying(160)");
-
-                    b.Property<DateOnly>("NextDueOn")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("OrganizationId", "Id");
-
-                    b.HasIndex("OrganizationId", "AssetId");
-
-                    b.HasIndex("OrganizationId", "NextDueOn");
-
-                    b.ToTable("maintenance_schedules", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.AdminAuditLog", b =>
@@ -1144,6 +1110,100 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.ToTable("admin_audit_logs", "tenebit");
                 });
 
+            modelBuilder.Entity("Tenebit.Domain.Identity.DeviceTrustToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationUserId", "TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("device_trust_tokens", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Identity.EmailVerificationToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationUserId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("email_verification_tokens", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Identity.ExternalLogin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ProviderUserId")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Provider", "ProviderUserId")
+                        .IsUnique();
+
+                    b.ToTable("external_logins", "tenebit");
+                });
+
             modelBuilder.Entity("Tenebit.Domain.Identity.LoginEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1175,25 +1235,80 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<bool>("Succeeded")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("UserAgent")
                         .HasMaxLength(400)
                         .HasColumnType("character varying(400)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("Email", "CreatedAt");
-
                     b.HasIndex("IpExpiresAt")
                         .HasFilter("\"IpExpiresAt\" IS NOT NULL");
+
+                    b.HasIndex("Email", "CreatedAt");
 
                     b.HasIndex("OrganizationId", "CreatedAt");
 
                     b.ToTable("login_events", "tenebit");
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Identity.OAuthTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodeVerifier")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CorrelationHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nonce")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("ReturnPath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("StateHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("StateHash")
+                        .IsUnique();
+
+                    b.ToTable("oauth_transactions", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.OrganizationUser", b =>
@@ -1292,58 +1407,91 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.ToTable("password_reset_tokens", "tenebit");
                 });
 
-            modelBuilder.Entity("Tenebit.Domain.Identity.OAuthTransaction", b =>
+            modelBuilder.Entity("Tenebit.Domain.Identity.RefreshToken", b =>
                 {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<string>("CodeVerifier").IsRequired().HasMaxLength(160).HasColumnType("character varying(160)");
-                    b.Property<DateTimeOffset?>("ConsumedAt").HasColumnType("timestamp with time zone");
-                    b.Property<string>("CorrelationHash").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
-                    b.Property<string>("Nonce").IsRequired().HasMaxLength(160).HasColumnType("character varying(160)");
-                    b.Property<string>("Provider").IsRequired().HasMaxLength(40).HasColumnType("character varying(40)");
-                    b.Property<string>("ReturnPath").IsRequired().HasMaxLength(1024).HasColumnType("character varying(1024)");
-                    b.Property<string>("StateHash").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentTokenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReplacedByTokenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RevocationReason")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
                     b.HasKey("Id");
-                    b.HasIndex("ExpiresAt");
-                    b.HasIndex("StateHash").IsUnique();
-                    b.ToTable("oauth_transactions", "tenebit");
+
+                    b.HasIndex("FamilyId");
+
+                    b.HasIndex("OrganizationUserId");
+
+                    b.HasIndex("ParentTokenId");
+
+                    b.HasIndex("ReplacedByTokenId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("refresh_tokens", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.TwoFactorChallenge", b =>
                 {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<DateTimeOffset?>("ConsumedAt").HasColumnType("timestamp with time zone");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
-                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
-                    b.Property<string>("TicketHash").IsRequired().HasMaxLength(128).HasColumnType("character varying(128)");
-                    b.HasKey("Id");
-                    b.HasIndex("ExpiresAt");
-                    b.HasIndex("OrganizationUserId");
-                    b.HasIndex("TicketHash").IsUnique();
-                    b.ToTable("two_factor_challenges", "tenebit");
-                });
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
-            modelBuilder.Entity("Tenebit.Domain.Identity.RefreshToken", b =>
-                {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
-                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
-                    b.Property<Guid>("FamilyId").HasColumnType("uuid");
-                    b.Property<Guid>("OrganizationUserId").HasColumnType("uuid");
-                    b.Property<Guid?>("ParentTokenId").HasColumnType("uuid");
-                    b.Property<DateTimeOffset?>("RevokedAt").HasColumnType("timestamp with time zone");
-                    b.Property<string>("RevocationReason").HasMaxLength(80).HasColumnType("character varying(80)");
-                    b.Property<Guid?>("ReplacedByTokenId").HasColumnType("uuid");
-                    b.Property<string>("TokenHash").IsRequired().HasMaxLength(120).HasColumnType("character varying(120)");
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TicketHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.HasKey("Id");
-                    b.HasIndex("FamilyId");
+
+                    b.HasIndex("ExpiresAt");
+
                     b.HasIndex("OrganizationUserId");
-                    b.HasIndex("ParentTokenId");
-                    b.HasIndex("ReplacedByTokenId");
-                    b.HasIndex("TokenHash").IsUnique();
-                    b.ToTable("refresh_tokens", "tenebit");
+
+                    b.HasIndex("TicketHash")
+                        .IsUnique();
+
+                    b.ToTable("two_factor_challenges", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Identity.TwoFactorRecoveryCode", b =>
@@ -1681,6 +1829,9 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<int?>("DefaultEvidenceRetentionMonths")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsSuspended")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Language")
                         .IsRequired()
                         .HasMaxLength(8)
@@ -1706,50 +1857,16 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<int?>("PublicIpRetentionDays")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("QrLabelShowName")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("QrLabelShowTag")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("QrLabelShowSerialNumber")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<bool>("QrLabelShowOrganizationName")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("QrLabelCustomText")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("QrLabelLogo")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("None");
-
-                    b.Property<byte[]>("QrLabelLogoImage")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("QrLabelLogoContentType")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
                     b.Property<string>("QrLabelCodeSize")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Medium");
+
+                    b.Property<string>("QrLabelCustomText")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
 
                     b.Property<string>("QrLabelFormat")
                         .IsRequired()
@@ -1758,21 +1875,51 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("Medium63");
 
+                    b.Property<string>("QrLabelLogo")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("None");
+
+                    b.Property<string>("QrLabelLogoContentType")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<byte[]>("QrLabelLogoImage")
+                        .HasColumnType("bytea");
+
+                    b.Property<bool>("QrLabelShowName")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("QrLabelShowOrganizationName")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("QrLabelShowSerialNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("QrLabelShowTag")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<TimeOnly?>("QuietHoursEnd")
                         .HasColumnType("time without time zone");
 
                     b.Property<TimeOnly?>("QuietHoursStart")
                         .HasColumnType("time without time zone");
 
-                    b.Property<bool>("IsSuspended")
-                        .HasColumnType("boolean");
-
                     b.Property<DateTimeOffset?>("SuspendedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SuspendedReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<string>("TimeZone")
                         .IsRequired()
@@ -2127,10 +2274,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrganizationId", "RequesterPersonId");
-
                     b.HasIndex("OrganizationId", "AssignmentId")
                         .HasDatabaseName("IX_tenant_reservations_assignment");
+
+                    b.HasIndex("OrganizationId", "RequesterPersonId");
 
                     b.HasIndex("OrganizationId", "Status", "StartAt", "EndAt");
 
@@ -2273,11 +2420,11 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset?>("CancelledAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("CheckoutAttemptId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset?>("CheckoutAttemptExpiresAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CheckoutAttemptId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2294,12 +2441,20 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("PendingPlanKey")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
+                    b.Property<string>("PaddleCustomerId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("PaddleSubscriptionId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<DateTimeOffset?>("PendingPlanEffectiveAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PendingPlanKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<string>("PlanKey")
                         .IsRequired()
@@ -2311,18 +2466,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
-                    b.Property<string>("StripeCustomerId")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("StripeScheduleId")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("StripeSubscriptionId")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2331,12 +2474,12 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.HasIndex("OrganizationId")
                         .IsUnique();
 
-                    b.HasIndex("StripeCustomerId");
+                    b.HasIndex("PaddleCustomerId");
 
                     b.ToTable("subscriptions", "tenebit");
                 });
 
-            modelBuilder.Entity("Tenebit.Domain.Subscriptions.ProcessedStripeEvent", b =>
+            modelBuilder.Entity("Tenebit.Domain.Subscriptions.ProcessedPaddleEvent", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -2355,7 +2498,7 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.HasIndex("EventId")
                         .IsUnique();
 
-                    b.ToTable("processed_stripe_events", "tenebit");
+                    b.ToTable("processed_paddle_events", "tenebit");
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Subscriptions.PromoCode", b =>
@@ -2372,6 +2515,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("DiscountType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2379,6 +2526,14 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                     b.Property<decimal>("DiscountValue")
                         .HasColumnType("numeric(10,2)");
+
+                    b.Property<int?>("DurationInMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DurationType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
@@ -2409,6 +2564,12 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Tenebit.Domain.Assets.Asset", b =>
                 {
+                    b.HasOne("Tenebit.Domain.People.Person", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssignedPersonId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Tenebit.Domain.Assets.AssetCategory", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "CategoryId")
@@ -2419,12 +2580,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.HasOne("Tenebit.Domain.Assets.Location", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "LocationId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Tenebit.Domain.People.Person", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "AssignedPersonId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
 
@@ -2504,6 +2659,57 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Navigation("FieldDefinitions");
                 });
 
+            modelBuilder.Entity("Tenebit.Domain.Assets.AssetInspection", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssetId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Tenebit.Domain.Assignments.Assignment", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssignmentId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Tenebit.Domain.Offboarding.OffboardingItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "OffboardingItemId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Assets.Location", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Assets.Location", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ParentId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Assets.MaintenanceSchedule", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssetId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Assets.PublicReportThrottle", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssetId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Tenebit.Domain.Assets.ServiceTicket", b =>
                 {
                     b.HasOne("Tenebit.Domain.Assets.Asset", null)
@@ -2534,17 +2740,16 @@ namespace Tenebit.Infrastructure.Data.Migrations
                             b1.Property<Guid>("AssignmentId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<Guid>("OrganizationId")
-                                .HasColumnType("uuid");
-
                             b1.Property<Guid>("AssetId")
-                                .ValueGeneratedOnAdd()
                                 .HasColumnType("uuid");
 
                             b1.Property<string>("IssueCondition")
                                 .IsRequired()
                                 .HasMaxLength(400)
                                 .HasColumnType("character varying(400)");
+
+                            b1.Property<Guid>("OrganizationId")
+                                .HasColumnType("uuid");
 
                             b1.Property<string>("ReturnCondition")
                                 .HasMaxLength(400)
@@ -2642,6 +2847,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                             b1.ToTable("procedure_acceptances", "tenebit");
 
+                            b1.WithOwner()
+                                .HasForeignKey("OrganizationId", "AssignmentId")
+                                .HasPrincipalKey("OrganizationId", "Id");
+
                             b1.HasOne("Tenebit.Domain.People.Person", null)
                                 .WithMany()
                                 .HasForeignKey("OrganizationId", "PersonId")
@@ -2655,10 +2864,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
                                 .HasPrincipalKey("OrganizationId", "Id")
                                 .OnDelete(DeleteBehavior.Restrict)
                                 .IsRequired();
-
-                            b1.WithOwner()
-                                .HasForeignKey("OrganizationId", "AssignmentId")
-                                .HasPrincipalKey("OrganizationId", "Id");
                         });
 
                     b.Navigation("Assets");
@@ -2668,11 +2873,25 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Tenebit.Domain.Audits.AssetAuditItem", b =>
                 {
+                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssetId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Tenebit.Domain.Audits.AssetAuditCampaign", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "CampaignId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Tenebit.Domain.People.Person", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ExpectedPersonId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Tenebit.Domain.Audits.AssetAuditParticipant", null)
@@ -2681,19 +2900,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "AssetId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tenebit.Domain.People.Person", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ExpectedPersonId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Tenebit.Domain.Audits.AssetAuditParticipant", b =>
@@ -2713,8 +2919,24 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Tenebit.Domain.Dashboards.DashboardLayout", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Identity.OrganizationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "OrganizationUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Tenebit.Domain.Evidence.AssetEvidence", b =>
                 {
+                    b.HasOne("Tenebit.Domain.Audits.AssetAuditItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssetAuditItemId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Tenebit.Domain.Assets.Asset", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "AssetId")
@@ -2727,12 +2949,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasForeignKey("OrganizationId", "AssignmentId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Tenebit.Domain.Audits.AssetAuditItem", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "AssetAuditItemId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Tenebit.Domain.Offboarding.OffboardingItem", null)
                         .WithMany()
@@ -2769,6 +2985,28 @@ namespace Tenebit.Infrastructure.Data.Migrations
                     b.Navigation("Roles");
                 });
 
+            modelBuilder.Entity("Tenebit.Domain.Identity.RefreshToken", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Identity.RefreshToken", null)
+                        .WithMany()
+                        .HasForeignKey("ParentTokenId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Tenebit.Domain.Identity.RefreshToken", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacedByTokenId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Tenebit.Domain.Identity.TwoFactorChallenge", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Identity.OrganizationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Tenebit.Domain.JobProfiles.JobProfile", b =>
                 {
                     b.HasOne("Tenebit.Domain.People.Person", null)
@@ -2782,11 +3020,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
                             b1.Property<Guid>("JobProfileId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<Guid>("OrganizationId")
+                            b1.Property<Guid>("AssetCategoryId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<Guid>("AssetCategoryId")
-                                .ValueGeneratedOnAdd()
+                            b1.Property<Guid>("OrganizationId")
                                 .HasColumnType("uuid");
 
                             b1.HasKey("JobProfileId", "AssetCategoryId");
@@ -2816,11 +3053,10 @@ namespace Tenebit.Infrastructure.Data.Migrations
                             b1.Property<Guid>("JobProfileId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<Guid>("OrganizationId")
+                            b1.Property<Guid>("ProcedureId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<Guid>("ProcedureId")
-                                .ValueGeneratedOnAdd()
+                            b1.Property<Guid>("OrganizationId")
                                 .HasColumnType("uuid");
 
                             b1.HasKey("JobProfileId", "ProcedureId");
@@ -2833,16 +3069,16 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                             b1.ToTable("job_profile_procedures", "tenebit");
 
+                            b1.WithOwner()
+                                .HasForeignKey("OrganizationId", "JobProfileId")
+                                .HasPrincipalKey("OrganizationId", "Id");
+
                             b1.HasOne("Tenebit.Domain.Procedures.Procedure", null)
                                 .WithMany()
                                 .HasForeignKey("OrganizationId", "ProcedureId")
                                 .HasPrincipalKey("OrganizationId", "Id")
                                 .OnDelete(DeleteBehavior.Restrict)
                                 .IsRequired();
-
-                            b1.WithOwner()
-                                .HasForeignKey("OrganizationId", "JobProfileId")
-                                .HasPrincipalKey("OrganizationId", "Id");
                         });
 
                     b.Navigation("AssetCategories");
@@ -2857,15 +3093,14 @@ namespace Tenebit.Infrastructure.Data.Migrations
                             b1.Property<Guid>("LicenseId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<Guid>("OrganizationId")
-                                .HasColumnType("uuid");
-
                             b1.Property<Guid>("PersonId")
-                                .ValueGeneratedOnAdd()
                                 .HasColumnType("uuid");
 
                             b1.Property<DateTimeOffset>("AssignedAt")
                                 .HasColumnType("timestamp with time zone");
+
+                            b1.Property<Guid>("OrganizationId")
+                                .HasColumnType("uuid");
 
                             b1.HasKey("LicenseId", "PersonId");
 
@@ -2877,16 +3112,16 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
                             b1.ToTable("license_seats", "tenebit");
 
+                            b1.WithOwner()
+                                .HasForeignKey("OrganizationId", "LicenseId")
+                                .HasPrincipalKey("OrganizationId", "Id");
+
                             b1.HasOne("Tenebit.Domain.People.Person", null)
                                 .WithMany()
                                 .HasForeignKey("OrganizationId", "PersonId")
                                 .HasPrincipalKey("OrganizationId", "Id")
                                 .OnDelete(DeleteBehavior.Restrict)
                                 .IsRequired();
-
-                            b1.WithOwner()
-                                .HasForeignKey("OrganizationId", "LicenseId")
-                                .HasPrincipalKey("OrganizationId", "Id");
                         });
 
                     b.Navigation("Seats");
@@ -2910,13 +3145,6 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Tenebit.Domain.Offboarding.OffboardingItem", b =>
                 {
-                    b.HasOne("Tenebit.Domain.Offboarding.OffboardingCase", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "OffboardingCaseId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("Tenebit.Domain.Assets.Asset", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "AssetId")
@@ -2934,6 +3162,13 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .HasForeignKey("OrganizationId", "LicenseId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Tenebit.Domain.Offboarding.OffboardingCase", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "OffboardingCaseId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Tenebit.Domain.People.Person", b =>
@@ -2976,6 +3211,22 @@ namespace Tenebit.Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Tenebit.Domain.Reservations.EquipmentReservation", b =>
+                {
+                    b.HasOne("Tenebit.Domain.Assignments.Assignment", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "AssignmentId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Tenebit.Domain.People.Person", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "RequesterPersonId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Tenebit.Domain.Reservations.EquipmentReservationItem", b =>
                 {
                     b.HasOne("Tenebit.Domain.Assets.Asset", null)
@@ -3012,83 +3263,7 @@ namespace Tenebit.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Tenebit.Domain.Reservations.EquipmentReservation", b =>
                 {
-                    b.HasOne("Tenebit.Domain.Assignments.Assignment", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "AssignmentId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Tenebit.Domain.People.Person", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "RequesterPersonId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Assets.AssetInspection", b =>
-                {
-                    b.HasOne("Tenebit.Domain.Assets.Asset", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "AssetId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Tenebit.Domain.Assignments.Assignment", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "AssignmentId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Tenebit.Domain.Offboarding.OffboardingItem", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "OffboardingItemId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Assets.Location", b =>
-                {
-                    b.HasOne("Tenebit.Domain.Assets.Location", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "ParentId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Dashboards.DashboardLayout", b =>
-                {
-                    b.HasOne("Tenebit.Domain.Identity.OrganizationUser", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId", "OrganizationUserId")
-                        .HasPrincipalKey("OrganizationId", "Id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Identity.RefreshToken", b =>
-                {
-                    b.HasOne("Tenebit.Domain.Identity.RefreshToken", null)
-                        .WithMany()
-                        .HasForeignKey("ParentTokenId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Tenebit.Domain.Identity.RefreshToken", null)
-                        .WithMany()
-                        .HasForeignKey("ReplacedByTokenId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Tenebit.Domain.Identity.TwoFactorChallenge", b =>
-                {
-                    b.HasOne("Tenebit.Domain.Identity.OrganizationUser", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

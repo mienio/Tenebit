@@ -25,12 +25,14 @@ x-backend-env: &backend-env
   Email__FromAddress: ${TENEBIT_SMTP_FROM:?required}
   Email__FromName: ${TENEBIT_SMTP_FROM_NAME:-Tenebit}
   Email__UseSsl: ${TENEBIT_SMTP_USE_SSL:-true}
-  Stripe__SecretKey: ${TENEBIT_STRIPE_SECRET_KEY:-}
-  Stripe__WebhookSecret: ${TENEBIT_STRIPE_WEBHOOK_SECRET:-}
-  Stripe__Prices__starter: ${TENEBIT_STRIPE_PRICE_STARTER:-}
-  Stripe__Prices__growth: ${TENEBIT_STRIPE_PRICE_GROWTH:-}
-  Stripe__Prices__business: ${TENEBIT_STRIPE_PRICE_BUSINESS:-}
-  Stripe__Prices__enterprise: ${TENEBIT_STRIPE_PRICE_ENTERPRISE:-}
+  Paddle__Environment: ${TENEBIT_PADDLE_ENVIRONMENT:-sandbox}
+  Paddle__ApiKey: ${TENEBIT_PADDLE_API_KEY:-}
+  Paddle__ClientSideToken: ${TENEBIT_PADDLE_CLIENT_TOKEN:-}
+  Paddle__WebhookSecret: ${TENEBIT_PADDLE_WEBHOOK_SECRET:-}
+  Paddle__Prices__starter: ${TENEBIT_PADDLE_PRICE_STARTER:-}
+  Paddle__Prices__growth: ${TENEBIT_PADDLE_PRICE_GROWTH:-}
+  Paddle__Prices__business: ${TENEBIT_PADDLE_PRICE_BUSINESS:-}
+  Paddle__Prices__enterprise: ${TENEBIT_PADDLE_PRICE_ENTERPRISE:-}
 services:
   db:
     image: postgres:17-alpine

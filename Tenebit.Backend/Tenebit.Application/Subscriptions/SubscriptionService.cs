@@ -9,8 +9,16 @@ namespace Tenebit.Application.Subscriptions;
 
 public sealed class SubscriptionService
 {
+    /// <summary>Paddle rejects any chargeable transaction at or below ~0.70 USD
+    /// (transaction_balance_less_than_charge_limit - verified against the real sandbox API) - a deep
+    /// enough promo code on an already-cheap plan can push the discounted price under that floor. 1.00 EUR
+    /// is a safety margin above it (covers FX movement between EUR and the USD-denominated limit) so a
+    /// customer gets a clear validation message here instead of a raw Paddle API error inside the checkout
+    /// overlay.</summary>
+    private const decimal MinimumChargeableAmount = 1.00m;
+
     private readonly ISubscriptionRepository _subscriptions;
-    private readonly IProcessedStripeEventRepository _processedEvents;
+    private readonly IProcessedPaddleEventRepository _processedEvents;
     private readonly IAssetRepository _assets;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
@@ -27,7 +35,7 @@ public sealed class SubscriptionService
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
-        IProcessedStripeEventRepository processedEvents,
+        IProcessedPaddleEventRepository processedEvents,
         IAssetRepository assets,
         IActivityLogRepository activity,
         ICurrentUser currentUser,
@@ -82,7 +90,7 @@ public sealed class SubscriptionService
     }
 
     /// <summary>Every current org owner's email + the org's own language preference - who and how to
-    /// notify about a plan change that happened outside an authenticated request (a Stripe webhook has no
+    /// notify about a plan change that happened outside an authenticated request (a Paddle webhook has no
     /// <see cref="ICurrentUser"/> to address).</summary>
     private async Task<(string Language, IReadOnlyList<string> OwnerEmails)> GetOrganizationOwnersAsync(Guid organizationId, CancellationToken cancellationToken)
     {
@@ -124,8 +132,8 @@ public sealed class SubscriptionService
 
     /// <summary>
     /// Direct, no-billing plan switch. Only the Free plan can be reached this way - moving to a paid
-    /// plan requires real payment via <see cref="CreateCheckoutSessionAsync"/>. Downgrading away from an
-    /// active Stripe subscription must go through the Stripe billing portal so cancellation actually
+    /// plan requires real payment via <see cref="GetCheckoutParamsAsync"/>. Downgrading away from an
+    /// active Paddle subscription must go through the Paddle customer portal so cancellation actually
     /// stops the charges instead of just editing our own record.
     /// </summary>
     public async Task<Result<SubscriptionResponse>> UpgradeAsync(string planKey, CancellationToken cancellationToken)
@@ -141,7 +149,7 @@ public sealed class SubscriptionService
 
         if (newPlan.Key != SubscriptionPlan.Free.Key)
         {
-            return Result<SubscriptionResponse>.Failure(Error.Validation($"Aby przejść na plan {newPlan.Name}, użyj płatności Stripe (checkout)."));
+            return Result<SubscriptionResponse>.Failure(Error.Validation($"Aby przejść na plan {newPlan.Name}, użyj płatności Paddle (checkout)."));
         }
 
         try
@@ -155,9 +163,9 @@ public sealed class SubscriptionService
             }
             else
             {
-                if (subscription.HasLiveStripeSubscription)
+                if (subscription.HasLivePaddleSubscription)
                 {
-                    return Result<SubscriptionResponse>.Failure(Error.Validation("Ta organizacja ma aktywną płatną subskrypcję. Zarządzaj nią (w tym anulowaniem) w portalu rozliczeń Stripe."));
+                    return Result<SubscriptionResponse>.Failure(Error.Validation("Ta organizacja ma aktywną płatną subskrypcję. Zarządzaj nią (w tym anulowaniem) w portalu rozliczeń Paddle."));
                 }
 
                 subscription.Upgrade(planKey);
@@ -197,13 +205,18 @@ public sealed class SubscriptionService
         if (promo is null || promo.PlanKey != plan.Key || !promo.IsUsable(_clock.UtcNow))
             return Result<PromoCodeValidationResponse>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
 
+        var discountedPrice = promo.ApplyTo(plan.MonthlyPrice);
+        if (discountedPrice < MinimumChargeableAmount)
+            return Result<PromoCodeValidationResponse>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
+
         return Result<PromoCodeValidationResponse>.Success(new PromoCodeValidationResponse(
-            promo.Code, promo.DiscountType.ToString(), promo.DiscountValue, plan.MonthlyPrice, promo.ApplyTo(plan.MonthlyPrice), plan.Currency));
+            promo.Code, promo.DiscountType.ToString(), promo.DiscountValue, plan.MonthlyPrice, discountedPrice, plan.Currency,
+            promo.DurationType.ToString(), promo.DurationInMonths, promo.Description));
     }
 
     /// <summary>Looks up, validates and redeems a promo code for the given target plan, shared by both the
     /// first-time checkout and a live upgrade - a null/blank code is a no-op success with no discount.
-    /// Redemption (incrementing TimesRedeemed) happens here, before the Stripe call, so a code can't be
+    /// Redemption (incrementing TimesRedeemed) happens here, before the Paddle call, so a code can't be
     /// spent twice by two concurrent requests racing past a validate-only check.</summary>
     private async Task<Result<PromoCodeDiscount?>> RedeemPromoCodeAsync(SubscriptionPlan targetPlan, string? promoCode, CancellationToken cancellationToken)
     {
@@ -213,26 +226,33 @@ public sealed class SubscriptionService
         if (promo is null || promo.PlanKey != targetPlan.Key || !promo.IsUsable(_clock.UtcNow))
             return Result<PromoCodeDiscount?>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
 
+        if (promo.ApplyTo(targetPlan.MonthlyPrice) < MinimumChargeableAmount)
+            return Result<PromoCodeDiscount?>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
+
         promo.Redeem();
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<PromoCodeDiscount?>.Success(new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue));
+        return Result<PromoCodeDiscount?>.Success(new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue, promo.DurationType, promo.DurationInMonths));
     }
 
-    /// <summary>Starts a real Stripe Checkout flow for the given paid plan and returns the hosted checkout URL to redirect to.</summary>
-    public async Task<Result<string>> CreateCheckoutSessionAsync(string planKey, string successPath, string cancelPath, CancellationToken cancellationToken, string? promoCode = null)
+    /// <summary>
+    /// Resolves what the frontend needs to open a Paddle.js checkout overlay for the given paid plan -
+    /// there is no server-generated hosted redirect URL in Paddle Billing (unlike the old Stripe Checkout
+    /// Session), so this returns the Price ID / customer ID / discount ID for Paddle.js to use directly.
+    /// </summary>
+    public async Task<Result<CheckoutParamsResponse>> GetCheckoutParamsAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
-        if (access.IsFailure) return Result<string>.Failure(access.Error!);
+        if (access.IsFailure) return Result<CheckoutParamsResponse>.Failure(access.Error!);
 
         var targetPlan = SubscriptionPlan.FromKey(planKey);
         if (targetPlan is null || targetPlan.Key == SubscriptionPlan.Free.Key)
-            return Result<string>.Failure(Error.Validation($"Unknown plan: {planKey}"));
+            return Result<CheckoutParamsResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
         if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key))
-            return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane dla tego planu."));
+            return Result<CheckoutParamsResponse>.Failure(Error.Validation("Płatności Paddle nie są jeszcze skonfigurowane dla tego planu."));
 
         var promoResult = await RedeemPromoCodeAsync(targetPlan, promoCode, cancellationToken);
-        if (promoResult.IsFailure) return Result<string>.Failure(promoResult.Error!);
+        if (promoResult.IsFailure) return Result<CheckoutParamsResponse>.Failure(promoResult.Error!);
         var discount = promoResult.Value;
 
         var organizationId = _currentUser.OrganizationId;
@@ -244,64 +264,35 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        if (!string.IsNullOrWhiteSpace(subscription.StripeSubscriptionId))
+        if (!string.IsNullOrWhiteSpace(subscription.PaddleSubscriptionId))
         {
-            var canonical = await _paymentGateway.GetSubscriptionAsync(subscription.StripeSubscriptionId, cancellationToken)
-                ?? throw new PaymentGatewayException("Stripe subscription state could not be verified.");
-            if (!string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
+            var canonical = await _paymentGateway.GetSubscriptionAsync(subscription.PaddleSubscriptionId, cancellationToken)
+                ?? throw new PaymentGatewayException("Paddle subscription state could not be verified.");
+            if (!string.Equals(canonical.CustomerId, subscription.PaddleCustomerId, StringComparison.Ordinal)
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
-                throw new PaymentGatewayException("Stripe subscription association mismatch.");
+                throw new PaymentGatewayException("Paddle subscription association mismatch.");
 
-            subscription.ReconcileFromStripe(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+            subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             if (canonical.Status != SubscriptionStatus.Cancelled)
-                return Result<string>.Failure(Error.Validation("Istnieje subskrypcja Stripe wymagająca naprawy lub zarządzania. Użyj portalu rozliczeniowego zamiast tworzyć drugą subskrypcję."));
+                return Result<CheckoutParamsResponse>.Failure(Error.Validation("Istnieje subskrypcja Paddle wymagająca naprawy lub zarządzania. Użyj portalu rozliczeniowego zamiast tworzyć drugą subskrypcję."));
         }
 
-        if (string.IsNullOrWhiteSpace(subscription.StripeCustomerId))
+        if (string.IsNullOrWhiteSpace(subscription.PaddleCustomerId))
         {
             var customerId = await _paymentGateway.CreateCustomerAsync(
                 _currentUser.Email, organizationId, $"tenebit-customer-{organizationId:N}", cancellationToken);
-            subscription.AttachStripeCustomer(customerId);
+            subscription.AttachPaddleCustomer(customerId);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var attemptId = await _unitOfWork.ExecuteWithResourceLocksAsync(
-            organizationId,
-            "subscription-checkout",
-            [organizationId],
-            async ct =>
-        {
-            var locked = await _subscriptions.GetByOrganizationAsync(organizationId, ct)
-                ?? throw new InvalidOperationException("Subscription disappeared during checkout claim.");
-            var id = locked.GetOrCreateCheckoutAttempt(_clock.UtcNow, TimeSpan.FromMinutes(30));
-            await _unitOfWork.SaveChangesAsync(ct);
-            return id;
-        }, cancellationToken);
-
-        // GetOrCreateCheckoutAttempt reuses attemptId (and so this Idempotency-Key) for up to 30 minutes,
-        // to dedupe genuine double-clicks into one Stripe call. But Stripe ties an Idempotency-Key to the
-        // exact request body it first saw - if the plan or promo code differs between retries within that
-        // window (e.g. no code, then the same checkout retried with a promo code), reusing the key sends a
-        // *different* body under the same key and Stripe rejects it outright. Salting the key with the plan
-        // and discount shape keeps real duplicate retries deduped while giving a differently-shaped retry
-        // its own key.
-        var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}";
-        var checkoutUrl = await _paymentGateway.CreateCheckoutSessionAsync(
-            subscription.StripeCustomerId!,
-            organizationId,
-            targetPlan.Key,
-            _appLinkBuilder.BuildAppUrl(successPath),
-            _appLinkBuilder.BuildAppUrl(cancelPath),
-            $"tenebit-checkout-{attemptId:N}-{targetPlan.Key}-{discountKey}",
-            cancellationToken,
-            discount);
-        return Result<string>.Success(checkoutUrl);
+        var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, cancellationToken, discount);
+        return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId));
     }
 
     /// <summary>
     /// What ChangePlanAsync would actually do for this target plan, without doing it - lets the
-    /// confirmation dialog show a real number (an upgrade's exact proration, computed by Stripe) or a real
+    /// confirmation dialog show a real number (an upgrade's exact proration, computed by Paddle) or a real
     /// date (a downgrade's deferred effective date) instead of the new plan's flat list price, which is
     /// wrong for a mid-cycle switch and is what made a correctly-charged upgrade look like nothing happened.
     /// </summary>
@@ -315,32 +306,27 @@ public sealed class SubscriptionService
             return Result<PlanChangePreviewResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
         var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
-        if (subscription is null || !subscription.HasLiveStripeSubscription)
-            return Result<PlanChangePreviewResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Stripe do zmiany - najpierw ją załóż przez płatność."));
+        if (subscription is null || !subscription.HasLivePaddleSubscription)
+            return Result<PlanChangePreviewResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Paddle do zmiany - najpierw ją załóż przez płatność."));
 
         var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
-        if (newPlan.MonthlyPrice < currentPlan.MonthlyPrice)
-        {
-            // Mirrors ChangePlanAsync's downgrade branch: nothing is charged now, the switch (and its
-            // price) only takes effect at the end of the period already paid for.
-            return Result<PlanChangePreviewResponse>.Success(
-                new PlanChangePreviewResponse(0m, newPlan.Currency, false, subscription.CurrentPeriodEnd));
-        }
+        var timing = newPlan.MonthlyPrice < currentPlan.MonthlyPrice ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
 
-        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.StripeSubscriptionId!, newPlan.Key, cancellationToken);
-        return Result<PlanChangePreviewResponse>.Success(new PlanChangePreviewResponse(preview.AmountDue, preview.Currency, true, null));
+        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.PaddleSubscriptionId!, newPlan.Key, timing, cancellationToken);
+        var chargesNow = timing == PlanChangeTiming.Immediately;
+        return Result<PlanChangePreviewResponse>.Success(new PlanChangePreviewResponse(
+            preview.AmountDue, preview.Currency, chargesNow, chargesNow ? null : preview.EffectiveAt ?? subscription.CurrentPeriodEnd));
     }
 
     /// <summary>
-    /// Switches an already-live paid subscription directly to a different paid plan, without a new
-    /// Checkout Session (CreateCheckoutSessionAsync refuses to create a second one on purpose). Moving to
-    /// Free still goes through the Billing Portal, since that's a cancellation, not a price swap.
+    /// Switches an already-live paid subscription directly to a different paid plan. Moving to Free still
+    /// goes through the Paddle customer portal, since that's a cancellation, not a price swap.
     ///
-    /// An upgrade applies immediately, gated on Stripe actually collecting the prorated payment now (see
-    /// StripePaymentGateway.ChangeSubscriptionPlanAsync). A downgrade must not take effect - or credit
-    /// anything - until the current period the org already paid for actually ends, so it's scheduled on
-    /// Stripe's side instead (StripePaymentGateway.ScheduleDowngradeAsync): the plan, price and entitlements
-    /// stay put until then.
+    /// An upgrade applies immediately, gated on Paddle actually collecting the prorated payment now (see
+    /// PaddlePaymentGateway.ChangeSubscriptionPlanAsync, on_payment_failure=prevent_change). A downgrade
+    /// must not take effect - or credit anything - until the current period the org already paid for
+    /// actually ends, so Paddle is told to apply it at the next billing period instead: the plan, price and
+    /// entitlements stay put until then, no separate schedule object needed (unlike Stripe).
     /// </summary>
     public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null)
     {
@@ -352,12 +338,12 @@ public sealed class SubscriptionService
             return Result<SubscriptionResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
         if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(newPlan.Key))
-            return Result<SubscriptionResponse>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane dla tego planu."));
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Płatności Paddle nie są jeszcze skonfigurowane dla tego planu."));
 
         var organizationId = _currentUser.OrganizationId;
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
-        if (subscription is null || !subscription.HasLiveStripeSubscription)
-            return Result<SubscriptionResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Stripe do zmiany - najpierw ją załóż przez płatność."));
+        if (subscription is null || !subscription.HasLivePaddleSubscription)
+            return Result<SubscriptionResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Paddle do zmiany - najpierw ją załóż przez płatność."));
 
         var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
         decimal? chargedAmount = null;
@@ -367,99 +353,90 @@ public sealed class SubscriptionService
         {
             // No-op: already on the requested plan.
         }
-        else if (newPlan.MonthlyPrice < currentPlan.MonthlyPrice)
-        {
-            PaymentScheduleState schedule;
-            try
-            {
-                schedule = await _paymentGateway.ScheduleDowngradeAsync(
-                    subscription.StripeSubscriptionId!,
-                    subscription.StripeScheduleId,
-                    newPlan.Key,
-                    $"tenebit-scheduledowngrade-{subscription.StripeSubscriptionId}-{newPlan.Key}",
-                    cancellationToken);
-            }
-            catch (PaymentGatewayException ex) when (ex.StatusCode is >= 400 and < 500)
-            {
-                return Result<SubscriptionResponse>.Failure(Error.Validation(
-                    "Nie udało się zaplanować zmiany planu. Spróbuj ponownie później."));
-            }
-
-            subscription.ScheduleDowngrade(schedule.PendingPlanKey, schedule.EffectiveAt, schedule.ScheduleId);
-
-            _activity.Add(new ActivityLog(
-                organizationId,
-                "subscription.plan_change_scheduled",
-                "subscription",
-                subscription.Id,
-                _currentUser.Subject,
-                $"Scheduled downgrade to {newPlan.Name} effective {schedule.EffectiveAt:O}",
-                _clock.UtcNow));
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-            var (scheduledSubject, scheduledHtml) = EmailTemplates.PlanChangeScheduled(
-                _currentUser.Language, newPlan.Name, schedule.EffectiveAt, _appLinkBuilder.BuildAppUrl("/pricing"));
-            await SendPlanChangeEmailAsync(
-                organizationId, _currentUser.Email, _currentUser.Language, scheduledSubject, scheduledHtml,
-                "plan-change-scheduled", $"plan-change-scheduled:{subscription.Id:N}:{schedule.ScheduleId}:{newPlan.Key}", cancellationToken);
-        }
         else
         {
-            var promoResult = await RedeemPromoCodeAsync(newPlan, promoCode, cancellationToken);
+            var timing = newPlan.MonthlyPrice < currentPlan.MonthlyPrice ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
+            var promoResult = timing == PlanChangeTiming.Immediately
+                ? await RedeemPromoCodeAsync(newPlan, promoCode, cancellationToken)
+                : Result<PromoCodeDiscount?>.Success(null); // A deferred downgrade charges nothing today - nothing for a promo code to discount.
             if (promoResult.IsFailure) return Result<SubscriptionResponse>.Failure(promoResult.Error!);
             var discount = promoResult.Value;
 
-            // Salt the idempotency key with the discount shape (mirrors CreateCheckoutSessionAsync): a
-            // retry that adds/changes the code must not be dropped as a duplicate of an earlier attempt
-            // that had no discount, or Stripe would reject the differently-shaped body under the same key.
-            var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}";
+            // Salt the idempotency key with the discount shape: a retry that adds/changes the code must not
+            // be dropped as a duplicate of an earlier attempt that had no discount.
+            var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}-{discount.DurationType}-{discount.DurationInMonths}";
 
             PlanChangeResult result;
             try
             {
                 result = await _paymentGateway.ChangeSubscriptionPlanAsync(
-                    subscription.StripeSubscriptionId!,
+                    subscription.PaddleSubscriptionId!,
                     newPlan.Key,
-                    $"tenebit-planchange-{subscription.StripeSubscriptionId}-{newPlan.Key}-{discountKey}",
+                    timing,
+                    $"tenebit-planchange-{subscription.PaddleSubscriptionId}-{newPlan.Key}-{discountKey}",
                     cancellationToken,
                     discount);
             }
             catch (PaymentGatewayException ex) when (ex.StatusCode == 402)
             {
-                // error_if_incomplete (see StripePaymentGateway.ChangeSubscriptionPlanAsync) makes Stripe
-                // reject the whole update when the proration invoice can't be paid - the plan on both
-                // Stripe's side and ours is untouched, so this is a normal declined-card outcome, not a
-                // system failure.
+                // on_payment_failure=prevent_change (see PaddlePaymentGateway.ChangeSubscriptionPlanAsync)
+                // makes Paddle reject the whole update when the proration payment can't be collected - the
+                // plan on both Paddle's side and ours is untouched, so this is a normal declined-card
+                // outcome, not a system failure.
                 return Result<SubscriptionResponse>.Failure(Error.Validation(
-                    "Płatność za zmianę planu nie powiodła się. Sprawdź metodę płatności w portalu rozliczeniowym Stripe i spróbuj ponownie."));
+                    "Płatność za zmianę planu nie powiodła się. Sprawdź metodę płatności w portalu rozliczeniowym Paddle i spróbuj ponownie."));
             }
 
             var canonical = result.Subscription;
-            if (!string.Equals(canonical.CustomerId, subscription.StripeCustomerId, StringComparison.Ordinal)
+            if (!string.Equals(canonical.CustomerId, subscription.PaddleCustomerId, StringComparison.Ordinal)
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
-                throw new PaymentGatewayException("Stripe subscription association mismatch.");
+                throw new PaymentGatewayException("Paddle subscription association mismatch.");
 
-            subscription.ReconcileFromStripe(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
-            chargedAmount = result.AmountCharged;
-            chargedCurrency = result.Currency;
+            if (timing == PlanChangeTiming.NextBillingPeriod)
+            {
+                var effectiveAt = result.PendingEffectiveAt ?? subscription.CurrentPeriodEnd;
+                subscription.ScheduleDowngrade(newPlan.Key, effectiveAt);
 
-            _activity.Add(new ActivityLog(
-                organizationId,
-                "subscription.plan_changed",
-                "subscription",
-                subscription.Id,
-                _currentUser.Subject,
-                $"Changed to {newPlan.Name}",
-                _clock.UtcNow));
+                _activity.Add(new ActivityLog(
+                    organizationId,
+                    "subscription.plan_change_scheduled",
+                    "subscription",
+                    subscription.Id,
+                    _currentUser.Subject,
+                    $"Scheduled downgrade to {newPlan.Name} effective {effectiveAt:O}",
+                    _clock.UtcNow));
 
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            var (changedSubject, changedHtml) = EmailTemplates.PlanChanged(
-                _currentUser.Language, newPlan.Name, _appLinkBuilder.BuildAppUrl("/dashboard"));
-            await SendPlanChangeEmailAsync(
-                organizationId, _currentUser.Email, _currentUser.Language, changedSubject, changedHtml,
-                "plan-changed", $"plan-changed:{subscription.Id:N}:{canonical.SubscriptionId}:{newPlan.Key}:{canonical.CurrentPeriodStart:O}", cancellationToken);
+                var (scheduledSubject, scheduledHtml) = EmailTemplates.PlanChangeScheduled(
+                    _currentUser.Language, newPlan.Name, effectiveAt, _appLinkBuilder.BuildAppUrl("/pricing"));
+                await SendPlanChangeEmailAsync(
+                    organizationId, _currentUser.Email, _currentUser.Language, scheduledSubject, scheduledHtml,
+                    "plan-change-scheduled", $"plan-change-scheduled:{subscription.Id:N}:{effectiveAt:O}:{newPlan.Key}", cancellationToken);
+            }
+            else
+            {
+                subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+                chargedAmount = result.AmountCharged;
+                chargedCurrency = result.Currency;
+
+                _activity.Add(new ActivityLog(
+                    organizationId,
+                    "subscription.plan_changed",
+                    "subscription",
+                    subscription.Id,
+                    _currentUser.Subject,
+                    $"Changed to {newPlan.Name}",
+                    _clock.UtcNow));
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                var (changedSubject, changedHtml) = EmailTemplates.PlanChanged(
+                    _currentUser.Language, newPlan.Name, _appLinkBuilder.BuildAppUrl("/dashboard"));
+                await SendPlanChangeEmailAsync(
+                    organizationId, _currentUser.Email, _currentUser.Language, changedSubject, changedHtml,
+                    "plan-changed", $"plan-changed:{subscription.Id:N}:{canonical.SubscriptionId}:{newPlan.Key}:{canonical.CurrentPeriodStart:O}", cancellationToken);
+            }
         }
 
         var response = await BuildSubscriptionResponseAsync(subscription, cancellationToken);
@@ -474,12 +451,12 @@ public sealed class SubscriptionService
         if (access.IsFailure) return Result<SubscriptionResponse>.Failure(access.Error!);
 
         var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
-        if (subscription?.StripeScheduleId is not { } scheduleId)
+        if (subscription?.PendingPlanKey is null || string.IsNullOrWhiteSpace(subscription.PaddleSubscriptionId))
             return Result<SubscriptionResponse>.Failure(Error.Validation("Brak zaplanowanej zmiany planu do anulowania."));
 
         try
         {
-            await _paymentGateway.ReleaseScheduleAsync(scheduleId, cancellationToken);
+            await _paymentGateway.CancelScheduledChangeAsync(subscription.PaddleSubscriptionId, cancellationToken);
         }
         catch (PaymentGatewayException)
         {
@@ -525,29 +502,28 @@ public sealed class SubscriptionService
         );
     }
 
-    /// <summary>Opens the Stripe Billing Portal so the owner can manage payment method, invoices, or cancel.</summary>
-    public async Task<Result<string>> CreateBillingPortalSessionAsync(string returnPath, CancellationToken cancellationToken)
+    /// <summary>Opens the Paddle customer portal so the owner can manage payment method, invoices, or cancel.</summary>
+    public async Task<Result<string>> CreateCustomerPortalSessionAsync(CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         if (!_paymentGateway.IsConfigured)
         {
-            return Result<string>.Failure(Error.Validation("Płatności Stripe nie są jeszcze skonfigurowane."));
+            return Result<string>.Failure(Error.Validation("Płatności Paddle nie są jeszcze skonfigurowane."));
         }
 
         var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
-        if (string.IsNullOrWhiteSpace(subscription?.StripeCustomerId))
+        if (string.IsNullOrWhiteSpace(subscription?.PaddleCustomerId))
         {
-            return Result<string>.Failure(Error.Validation("Organizacja nie ma jeszcze konta rozliczeniowego Stripe."));
+            return Result<string>.Failure(Error.Validation("Organizacja nie ma jeszcze konta rozliczeniowego Paddle."));
         }
 
-        var returnUrl = _appLinkBuilder.BuildAppUrl(returnPath);
-        var url = await _paymentGateway.CreateBillingPortalSessionAsync(subscription.StripeCustomerId, returnUrl, cancellationToken);
+        var url = await _paymentGateway.CreateCustomerPortalSessionAsync(subscription.PaddleCustomerId, subscription.PaddleSubscriptionId, cancellationToken);
         return Result<string>.Success(url);
     }
 
-    /// <summary>Handles Stripe's customer.subscription.created/updated/deleted webhooks and syncs our own record.</summary>
+    /// <summary>Handles Paddle's subscription.created/updated/canceled webhooks and syncs our own record.</summary>
     public async Task<Result> HandleWebhookAsync(string payload, string signatureHeader, CancellationToken cancellationToken)
     {
         PaymentWebhookEvent? webhookEvent;
@@ -558,23 +534,23 @@ public sealed class SubscriptionService
         catch (PaymentWebhookValidationException)
         {
             SecurityTelemetry.WebhookRejected();
-            return Result.Failure(Error.Validation("Nieprawidłowy webhook Stripe."));
+            return Result.Failure(Error.Validation("Nieprawidłowy webhook Paddle."));
         }
 
         if (webhookEvent is null) return Result.Success();
 
-        // Stripe retries webhook delivery on timeout/5xx - replaying the same EventId must be a no-op
-        // instead of reapplying (and re-logging) the same state change twice (audyt P0.6).
+        // Paddle retries webhook delivery on timeout/5xx - replaying the same notification_id must be a
+        // no-op instead of reapplying (and re-logging) the same state change twice (audyt P0.6).
         if (await _processedEvents.ExistsAsync(webhookEvent.EventId, cancellationToken))
         {
             return Result.Success();
         }
 
-        _processedEvents.Add(new ProcessedStripeEvent(webhookEvent.EventId, _clock.UtcNow));
+        _processedEvents.Add(new ProcessedPaddleEvent(webhookEvent.EventId, _clock.UtcNow));
 
         var subscription = webhookEvent.OrganizationId.HasValue
             ? await _subscriptions.GetByOrganizationAsync(webhookEvent.OrganizationId.Value, cancellationToken)
-            : await _subscriptions.GetByStripeCustomerAsync(webhookEvent.CustomerId, cancellationToken);
+            : await _subscriptions.GetByPaddleCustomerAsync(webhookEvent.CustomerId, cancellationToken);
 
         if (subscription is null)
         {
@@ -582,24 +558,22 @@ public sealed class SubscriptionService
             return Result.Success();
         }
 
-        // Metadata routing is a convenience, not proof of ownership - once a subscription already has a
-        // Stripe customer attached (from our own CreateCheckoutSessionAsync flow), an event whose
-        // customer/subscription IDs don't match that record must not be applied to it. Without this, a
-        // crafted or misrouted metadata.organizationId could point one organization's webhook event at
-        // another organization's subscription record (audyt AUD3-010).
-        var customerMismatch = !string.IsNullOrWhiteSpace(subscription.StripeCustomerId)
-            && !string.Equals(subscription.StripeCustomerId, webhookEvent.CustomerId, StringComparison.Ordinal);
-        var subscriptionMismatch = !string.IsNullOrWhiteSpace(subscription.StripeSubscriptionId)
+        // Once a subscription already has a Paddle customer attached (from our own
+        // GetCheckoutParamsAsync/CreateCustomerAsync flow), an event whose customer/subscription IDs don't
+        // match that record must not be applied to it (audyt AUD3-010).
+        var customerMismatch = !string.IsNullOrWhiteSpace(subscription.PaddleCustomerId)
+            && !string.Equals(subscription.PaddleCustomerId, webhookEvent.CustomerId, StringComparison.Ordinal);
+        var subscriptionMismatch = !string.IsNullOrWhiteSpace(subscription.PaddleSubscriptionId)
             && !string.IsNullOrWhiteSpace(webhookEvent.SubscriptionId)
-            && !string.Equals(subscription.StripeSubscriptionId, webhookEvent.SubscriptionId, StringComparison.Ordinal);
+            && !string.Equals(subscription.PaddleSubscriptionId, webhookEvent.SubscriptionId, StringComparison.Ordinal);
         if (customerMismatch || subscriptionMismatch)
         {
             _activity.Add(new ActivityLog(
                 subscription.OrganizationId,
-                "subscription.stripe_association_mismatch",
+                "subscription.paddle_association_mismatch",
                 "subscription",
                 subscription.Id,
-                "stripe-webhook",
+                "paddle-webhook",
                 $"event={webhookEvent.EventId} customer={webhookEvent.CustomerId} subscription={webhookEvent.SubscriptionId}",
                 _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -613,15 +587,15 @@ public sealed class SubscriptionService
         var appliedSubscriptionId = webhookEvent.SubscriptionId;
         var appliedCustomerId = webhookEvent.CustomerId;
 
-        if (webhookEvent.EventType != "customer.subscription.deleted" && !string.IsNullOrWhiteSpace(webhookEvent.SubscriptionId))
+        if (webhookEvent.EventType != "subscription.canceled" && !string.IsNullOrWhiteSpace(webhookEvent.SubscriptionId))
         {
             var canonical = await _paymentGateway.GetSubscriptionAsync(webhookEvent.SubscriptionId, cancellationToken)
-                ?? throw new PaymentGatewayException("Stripe canonical subscription was not found.");
+                ?? throw new PaymentGatewayException("Paddle canonical subscription was not found.");
             if (!string.Equals(canonical.CustomerId, webhookEvent.CustomerId, StringComparison.Ordinal)
                 || !string.Equals(canonical.SubscriptionId, webhookEvent.SubscriptionId, StringComparison.Ordinal)
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId != subscription.OrganizationId))
             {
-                throw new PaymentGatewayException("Stripe canonical association mismatch.");
+                throw new PaymentGatewayException("Paddle canonical association mismatch.");
             }
             appliedPlan = canonical.PlanKey; appliedStatus = canonical.Status; appliedStart = canonical.CurrentPeriodStart;
             appliedEnd = canonical.CurrentPeriodEnd; appliedSubscriptionId = canonical.SubscriptionId; appliedCustomerId = canonical.CustomerId;
@@ -634,25 +608,25 @@ public sealed class SubscriptionService
 
         var planBefore = subscription.PlanKey;
         var wasEntitledBefore = subscription.IsEntitledToPaidPlan;
-        subscription.SyncFromStripe(appliedPlan, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
+        subscription.SyncFromPaddle(appliedPlan, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
 
         _activity.Add(new ActivityLog(
             subscription.OrganizationId,
-            "subscription.stripe_synced",
+            "subscription.paddle_synced",
             "subscription",
             subscription.Id,
-            "stripe-webhook",
+            "paddle-webhook",
             $"{webhookEvent.EventType}: {subscription.PlanKey}/{subscription.Status}",
             _clock.UtcNow));
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Two moments deserve the congratulations mail, and neither of them goes through ChangePlanAsync:
-        // a first activation (or reactivation) completing via Stripe Checkout, and a plan the org lands on
+        // a first activation (or reactivation) completing via Paddle Checkout, and a plan the org lands on
         // without asking us again right then - above all a scheduled downgrade finally taking effect at the
         // period end, which is exactly the "moved to a smaller plan" moment, but also any switch made
-        // straight in Stripe's billing portal. An in-app change already updated PlanKey synchronously
-        // before Stripe's echo webhook arrives, so it reads as "no change" here and can't double-send;
+        // straight in Paddle's customer portal. An in-app change already updated PlanKey synchronously
+        // before Paddle's echo webhook arrives, so it reads as "no change" here and can't double-send;
         // the outbox's idempotency key is the second line of defence for that race.
         var becameEntitled = !wasEntitledBefore && subscription.IsEntitledToPaidPlan;
         var switchedPaidPlan = wasEntitledBefore && subscription.IsEntitledToPaidPlan && subscription.PlanKey != planBefore;
@@ -705,7 +679,7 @@ public sealed record SubscriptionResponse(
     string? PendingPlanKey = null,
     string? PendingPlanName = null,
     DateTimeOffset? PendingPlanEffectiveAt = null,
-    /// <summary>Set only on the response to a just-applied plan change - the exact amount Stripe charged
+    /// <summary>Set only on the response to a just-applied plan change - the exact amount Paddle charged
     /// for it (post proration credit; can legitimately be 0). Null everywhere else, including a plain
     /// GetCurrentAsync, where there's no "just happened" charge to report.</summary>
     decimal? LastChargeAmount = null,
@@ -715,9 +689,13 @@ public sealed record SubscriptionResponse(
 public sealed record ResourceUsage(string Resource, int Current, int Limit);
 
 public sealed record PromoCodeValidationResponse(
-    string Code, string DiscountType, decimal DiscountValue, decimal OriginalPrice, decimal DiscountedPrice, string Currency);
+    string Code, string DiscountType, decimal DiscountValue, decimal OriginalPrice, decimal DiscountedPrice, string Currency,
+    string DurationType, int? DurationInMonths, string? Description);
 
-/// <summary>What a plan switch would actually do right now: either the exact amount Stripe would charge
+/// <summary>What Paddle.js needs to open a checkout overlay - no secrets, safe to hand to the frontend.</summary>
+public sealed record CheckoutParamsResponse(string PriceId, string CustomerId, string? DiscountId);
+
+/// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
 /// immediately (an upgrade), or - when ChargesNow is false - the date the new price takes effect for free
 /// with nothing charged today (a downgrade).</summary>
 public sealed record PlanChangePreviewResponse(decimal AmountDue, string Currency, bool ChargesNow, DateTimeOffset? EffectiveAt);

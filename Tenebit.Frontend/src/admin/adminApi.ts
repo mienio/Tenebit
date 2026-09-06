@@ -216,6 +216,9 @@ export interface AdminPromoCode {
   maxRedemptions: number | null;
   timesRedeemed: number;
   expiresAt: string | null;
+  durationType: 'Once' | 'Repeating' | 'Forever';
+  durationInMonths: number | null;
+  description: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -319,6 +322,9 @@ export function createPromoCodes(body: {
   code?: string;
   maxRedemptions?: number | null;
   expiresAt?: string | null;
+  durationType: 'Once' | 'Repeating' | 'Forever';
+  durationInMonths?: number | null;
+  description?: string | null;
 }): Promise<AdminPromoCode[]> {
   return adminFetch('/api/admin/promo-codes', { method: 'POST', body: JSON.stringify(body) });
 }

@@ -6,7 +6,7 @@ using Tenebit.Application.Subscriptions;
 
 namespace Tenebit.Infrastructure.Services;
 
-/// <summary>Shared-state-safe periodic Stripe reconciliation. PostgresJobLock prevents duplicate work across replicas.</summary>
+/// <summary>Shared-state-safe periodic Paddle reconciliation. PostgresJobLock prevents duplicate work across replicas.</summary>
 public sealed class SubscriptionReconciliationBackgroundService : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
@@ -28,7 +28,7 @@ public sealed class SubscriptionReconciliationBackgroundService : BackgroundServ
                 using var scope = _scopeFactory.CreateScope();
                 var gate = scope.ServiceProvider.GetRequiredService<PostgresJobLock>();
                 var service = scope.ServiceProvider.GetRequiredService<SubscriptionReconciliationService>();
-                await gate.TryRunAsync("stripe-subscription-reconciliation", Interval, service.RunAsync, stoppingToken);
+                await gate.TryRunAsync("paddle-subscription-reconciliation", Interval, service.RunAsync, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -37,7 +37,7 @@ public sealed class SubscriptionReconciliationBackgroundService : BackgroundServ
             catch (Exception ex)
             {
                 SecurityTelemetry.BackgroundJobFailure();
-                _logger.LogError(ex, "Stripe subscription reconciliation cycle failed.");
+                _logger.LogError(ex, "Paddle subscription reconciliation cycle failed.");
             }
 
             try

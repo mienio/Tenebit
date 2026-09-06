@@ -157,7 +157,7 @@ public class ErrorMessageTranslatorTests
         "Limit procedur przekroczony. Plan Free pozwala na 10 procedur. Przejdź na wyższy plan.",
         "Nieznane uprawnienie: assets.superdelete.",
         "Nieznany status aktywa: Teleported.",
-        "Aby przejść na plan Business, użyj płatności Stripe (checkout).",
+        "Aby przejść na plan Business, użyj płatności Paddle (checkout).",
     ];
 
     [Theory]

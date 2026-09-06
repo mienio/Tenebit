@@ -48,13 +48,13 @@ export function AdminOrganizationDetailPage() {
     let cancelled = false;
     setPayments(null);
     setPaymentsError(null);
-    // Pulled live from Stripe (see AdminOverviewService.GetOrganizationPaymentsAsync) - kept on its own
-    // request so a slow/failed Stripe call never blocks the rest of the organization page.
+    // Pulled live from Paddle (see AdminOverviewService.GetOrganizationPaymentsAsync) - kept on its own
+    // request so a slow/failed Paddle call never blocks the rest of the organization page.
     getAdminOrganizationPayments(id)
       .then(result => { if (!cancelled) setPayments(result); })
       .catch(err => {
         if (cancelled) return;
-        setPaymentsError(err instanceof Error ? err.message : 'Nie udało się pobrać historii płatności ze Stripe.');
+        setPaymentsError(err instanceof Error ? err.message : 'Nie udało się pobrać historii płatności z Paddle.');
         if (err instanceof AdminApiError && err.status === 401) navigate('/admin/login', { replace: true });
       });
     return () => { cancelled = true; };
@@ -195,7 +195,7 @@ export function AdminOrganizationDetailPage() {
                     </td>
                   </tr>
                 ))}
-                {payments.invoices.length === 0 ? <tr><td colSpan={6} className="adminMuted">Brak płatności w Stripe.</td></tr> : null}
+                {payments.invoices.length === 0 ? <tr><td colSpan={6} className="adminMuted">Brak płatności w Paddle.</td></tr> : null}
               </tbody>
             </table>
           )}

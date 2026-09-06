@@ -34,7 +34,10 @@ public sealed record AdminCreatePromoCodeRequest(
     [property: Range(1, 200)] int Quantity,
     string? Code,
     [property: Range(1, int.MaxValue)] int? MaxRedemptions,
-    DateTimeOffset? ExpiresAt);
+    DateTimeOffset? ExpiresAt,
+    [property: Required] PromoDurationType DurationType,
+    [property: Range(1, 1200)] int? DurationInMonths,
+    [property: StringLength(500)] string? Description);
 
 [ValidatedRequest]
 public sealed record AdminSetPromoCodeActiveRequest(bool Active);
@@ -227,6 +230,7 @@ public static class AdminEndpoints
             (await service.CreateAsync(
                 request.PlanKey, request.DiscountType, request.DiscountValue, request.Quantity,
                 request.Code, request.MaxRedemptions, request.ExpiresAt,
+                request.DurationType, request.DurationInMonths, request.Description,
                 http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToHttpResult());
 
         admin.MapPost("/promo-codes/{id:guid}/active", async (

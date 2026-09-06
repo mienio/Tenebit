@@ -23,6 +23,12 @@ function isExhausted(code: AdminPromoCode): boolean {
   return code.maxRedemptions !== null && code.timesRedeemed >= code.maxRedemptions;
 }
 
+function durationLabel(code: Pick<AdminPromoCode, 'durationType' | 'durationInMonths'>): string {
+  if (code.durationType === 'Forever') return 'Bezterminowo';
+  if (code.durationType === 'Repeating') return `${code.durationInMonths} mies.`;
+  return 'Pierwszy okres';
+}
+
 export function AdminPromoCodesPage() {
   const [codes, setCodes] = useState<AdminPromoCode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +44,9 @@ export function AdminPromoCodesPage() {
   const [code, setCode] = useState('');
   const [maxRedemptions, setMaxRedemptions] = useState('1');
   const [expiresAt, setExpiresAt] = useState('');
+  const [durationType, setDurationType] = useState<'Once' | 'Repeating' | 'Forever'>('Once');
+  const [durationInMonths, setDurationInMonths] = useState('3');
+  const [description, setDescription] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -62,11 +71,15 @@ export function AdminPromoCodesPage() {
         code: code.trim() || undefined,
         maxRedemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+        durationType,
+        durationInMonths: durationType === 'Repeating' ? Number(durationInMonths) : null,
+        description: description.trim() || null,
       });
       setSuccess(created.length === 1
         ? `Utworzono kod ${created[0].code}.`
         : `Utworzono ${created.length} kodów: ${created.map(c => c.code).join(', ')}.`);
       setCode('');
+      setDescription('');
       setReloadKey(key => key + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nie udało się utworzyć kodu.');
@@ -149,6 +162,24 @@ export function AdminPromoCodesPage() {
             <TextInput type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} />
           </Field>
 
+          <Field label="Czas trwania zniżki">
+            <SelectInput value={durationType} onChange={e => setDurationType(e.target.value as 'Once' | 'Repeating' | 'Forever')}>
+              <option value="Once">Tylko pierwszy okres</option>
+              <option value="Repeating">Określona liczba miesięcy</option>
+              <option value="Forever">Bezterminowo</option>
+            </SelectInput>
+          </Field>
+
+          {durationType === 'Repeating' && (
+            <Field label="Liczba miesięcy">
+              <TextInput type="number" min="1" value={durationInMonths} onChange={e => setDurationInMonths(e.target.value)} required />
+            </Field>
+          )}
+
+          <Field label="Opis dla klienta (opcjonalnie)" info="Pokazywany klientowi po zaakceptowaniu kodu.">
+            <TextInput value={description} onChange={e => setDescription(e.target.value)} placeholder="np. 50% zniżki przez pierwsze 3 miesiące" />
+          </Field>
+
           <div className="formActions">
             <Button type="submit" icon={<Plus size={16} />} disabled={creating}>
               {creating ? 'Tworzenie…' : 'Utwórz kod'}
@@ -165,6 +196,7 @@ export function AdminPromoCodesPage() {
                 <th>Kod</th>
                 <th>Plan</th>
                 <th>Zniżka</th>
+                <th>Czas trwania</th>
                 <th>Użycia</th>
                 <th>Wygasa</th>
                 <th>Status</th>
@@ -178,9 +210,13 @@ export function AdminPromoCodesPage() {
                 const exhausted = isExhausted(item);
                 return (
                   <tr key={item.id} className={!item.isActive ? 'adminTable__row--muted' : undefined}>
-                    <td><code>{item.code}</code></td>
+                    <td>
+                      <code>{item.code}</code>
+                      {item.description ? <div className="adminMuted" style={{ marginTop: 2 }}>{item.description}</div> : null}
+                    </td>
                     <td>{planName}</td>
                     <td>{item.discountType === 'Percentage' ? `${item.discountValue}%` : `${item.discountValue} €`}</td>
+                    <td>{durationLabel(item)}</td>
                     <td>{item.timesRedeemed}{item.maxRedemptions !== null ? ` / ${item.maxRedemptions}` : ''}</td>
                     <td>{item.expiresAt ? new Date(item.expiresAt).toLocaleDateString('pl-PL') : '—'}</td>
                     <td>
@@ -206,7 +242,7 @@ export function AdminPromoCodesPage() {
                   </tr>
                 );
               })}
-              {codes.length === 0 ? <tr><td colSpan={7} className="adminMuted">Brak kodów promocyjnych.</td></tr> : null}
+              {codes.length === 0 ? <tr><td colSpan={8} className="adminMuted">Brak kodów promocyjnych.</td></tr> : null}
             </tbody>
           </table>
         </div>

@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
@@ -50,8 +51,8 @@ public static class SubscriptionEndpoints
                 (await service.UpgradeAsync(request.PlanKey, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");
 
-        api.MapPost("/subscription/checkout", async (CheckoutSessionRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.CreateCheckoutSessionAsync(request.PlanKey, request.SuccessUrl, request.CancelUrl, cancellationToken, request.PromoCode)).ToHttpResult())
+        api.MapPost("/subscription/checkout-params", async (CheckoutParamsRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.GetCheckoutParamsAsync(request.PlanKey, cancellationToken, request.PromoCode)).ToHttpResult())
             .WithTags("Subscription");
 
         api.MapPost("/subscription/change-plan", async (ChangePlanRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
@@ -70,15 +71,24 @@ public static class SubscriptionEndpoints
                 (await service.ValidatePromoCodeAsync(request.PlanKey, request.Code, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");
 
-        api.MapPost("/subscription/billing-portal", async (BillingPortalRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.CreateBillingPortalSessionAsync(request.ReturnUrl, cancellationToken)).ToHttpResult())
+        api.MapPost("/subscription/billing-portal", async (SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.CreateCustomerPortalSessionAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Subscription");
+
+        // Public, unauthenticated config Paddle.js needs to initialize in the browser - a client-side
+        // token, not a secret (same trust level Stripe's pk_... publishable key had).
+        api.MapGet("/subscription/paddle-config", (IConfiguration configuration) =>
+                Results.Ok(new PaddleClientConfig(
+                    configuration["Paddle:ClientSideToken"] ?? "",
+                    string.Equals(configuration["Paddle:Environment"], "production", StringComparison.OrdinalIgnoreCase) ? "production" : "sandbox")))
+            .AllowAnonymous()
             .WithTags("Subscription");
 
         api.MapPost("/subscription/webhook", async (HttpRequest httpRequest, SubscriptionService service, CancellationToken cancellationToken) =>
             {
                 using var reader = new StreamReader(httpRequest.Body);
                 var payload = await reader.ReadToEndAsync(cancellationToken);
-                var signature = httpRequest.Headers["Stripe-Signature"].ToString();
+                var signature = httpRequest.Headers["Paddle-Signature"].ToString();
                 return (await service.HandleWebhookAsync(payload, signature, cancellationToken)).ToNoContentResult();
             })
             .AllowAnonymous()
@@ -91,11 +101,11 @@ public static class SubscriptionEndpoints
     [ValidatedRequest]
     private sealed record UpgradeRequest(string PlanKey);
     [ValidatedRequest]
-    private sealed record CheckoutSessionRequest(string PlanKey, string SuccessUrl, string CancelUrl, string? PromoCode);
+    private sealed record CheckoutParamsRequest(string PlanKey, string? PromoCode);
     [ValidatedRequest]
     private sealed record ChangePlanRequest(string PlanKey, string? PromoCode);
     [ValidatedRequest]
-    private sealed record BillingPortalRequest(string ReturnUrl);
-    [ValidatedRequest]
     private sealed record PromoCodeValidateRequest(string PlanKey, string Code);
+
+    private sealed record PaddleClientConfig(string ClientToken, string Environment);
 }

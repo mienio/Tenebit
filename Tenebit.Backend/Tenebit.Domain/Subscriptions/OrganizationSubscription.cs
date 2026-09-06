@@ -27,26 +27,26 @@ public sealed class OrganizationSubscription
     public DateTimeOffset? CancelledAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
-    public string? StripeCustomerId { get; private set; }
-    public string? StripeSubscriptionId { get; private set; }
+    public string? PaddleCustomerId { get; private set; }
+    public string? PaddleSubscriptionId { get; private set; }
 
     /// <summary>A downgrade in progress: <see cref="PlanKey"/> (and its entitlements) stays on the current,
-    /// higher plan until <see cref="PendingPlanEffectiveAt"/> - Stripe applies the actual price switch via
-    /// a subscription schedule (<see cref="StripeScheduleId"/>) at that date, no local cron needed.</summary>
+    /// higher plan until <see cref="PendingPlanEffectiveAt"/> - Paddle applies the actual price switch
+    /// itself (proration_billing_mode=full_next_billing_period on the subscription, no separate schedule
+    /// object needed) at that date, no local cron needed.</summary>
     public string? PendingPlanKey { get; private set; }
     public DateTimeOffset? PendingPlanEffectiveAt { get; private set; }
-    public string? StripeScheduleId { get; private set; }
 
-    /// <summary>Timestamp (Stripe event `created`) of the last webhook event actually applied to this
-    /// record - Stripe does not guarantee delivery order, so a retried/out-of-order older event must
+    /// <summary>Timestamp (Paddle webhook `occurred_at`) of the last webhook event actually applied to this
+    /// record - Paddle does not guarantee delivery order, so a retried/out-of-order older event must
     /// never overwrite state a newer event already applied (audyt P0.6).</summary>
     public DateTimeOffset? LastWebhookEventAt { get; private set; }
 
     public bool IsEntitledToPaidPlan => Status == SubscriptionStatus.Active && PlanKey != SubscriptionPlan.Free.Key;
 
     /// <summary>A provider subscription still exists and must be recovered/managed instead of duplicated.</summary>
-    public bool HasLiveStripeSubscription =>
-        !string.IsNullOrWhiteSpace(StripeSubscriptionId) && Status != SubscriptionStatus.Cancelled;
+    public bool HasLivePaddleSubscription =>
+        !string.IsNullOrWhiteSpace(PaddleSubscriptionId) && Status != SubscriptionStatus.Cancelled;
 
     public Guid? CheckoutAttemptId { get; private set; }
     public DateTimeOffset? CheckoutAttemptExpiresAt { get; private set; }
@@ -96,20 +96,19 @@ public sealed class OrganizationSubscription
     /// number as the plan's asset limit. Not surfaced in the pricing UI; see Terms of Service.</summary>
     public int GetResourceLimit() => GetAssetLimit();
 
-    public void AttachStripeCustomer(string stripeCustomerId)
+    public void AttachPaddleCustomer(string paddleCustomerId)
     {
-        StripeCustomerId = stripeCustomerId;
+        PaddleCustomerId = paddleCustomerId;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// <summary>Records a downgrade scheduled on Stripe's side to take effect at <paramref name="effectiveAt"/>
-    /// (the current period end) - entitlements are untouched until then; see <see cref="SyncFromStripe"/>
-    /// for how the pending state clears once Stripe actually applies it.</summary>
-    public void ScheduleDowngrade(string planKey, DateTimeOffset effectiveAt, string scheduleId)
+    /// <summary>Records a downgrade scheduled on Paddle's side to take effect at <paramref name="effectiveAt"/>
+    /// (the current period end) - entitlements are untouched until then; see <see cref="SyncFromPaddle"/>
+    /// for how the pending state clears once Paddle actually applies it.</summary>
+    public void ScheduleDowngrade(string planKey, DateTimeOffset effectiveAt)
     {
         PendingPlanKey = planKey;
         PendingPlanEffectiveAt = effectiveAt;
-        StripeScheduleId = scheduleId;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
@@ -117,29 +116,27 @@ public sealed class OrganizationSubscription
     {
         PendingPlanKey = null;
         PendingPlanEffectiveAt = null;
-        StripeScheduleId = null;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// <summary>
-    /// Applies the state of a Stripe subscription (from checkout completion or a webhook) to this record.
+    /// Applies the state of a Paddle subscription (from checkout completion or a webhook) to this record.
     /// A Cancelled status always reverts the organization to the Free plan, regardless of what plan the
-    /// caller passed in - an org can never keep paid-plan benefits once Stripe says the subscription is gone.
+    /// caller passed in - an org can never keep paid-plan benefits once Paddle says the subscription is gone.
     /// </summary>
-    public void SyncFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? stripeSubscriptionId, string stripeCustomerId, DateTimeOffset webhookEventCreatedAt)
+    public void SyncFromPaddle(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? paddleSubscriptionId, string paddleCustomerId, DateTimeOffset webhookEventCreatedAt)
     {
-        // A pending downgrade resolves itself once Stripe's schedule actually applies the new price (the
-        // canonical planKey catches up to what we scheduled) or the subscription is gone - no local cron
-        // needed, this just needs to notice either has happened.
+        // A pending downgrade resolves itself once Paddle actually applies the new price (the canonical
+        // planKey catches up to what we scheduled) or the subscription is gone - no local cron needed,
+        // this just needs to notice either has happened.
         if (PendingPlanKey is not null && (status == SubscriptionStatus.Cancelled || planKey == PendingPlanKey))
         {
             PendingPlanKey = null;
             PendingPlanEffectiveAt = null;
-            StripeScheduleId = null;
         }
 
-        StripeCustomerId = stripeCustomerId;
-        StripeSubscriptionId = stripeSubscriptionId;
+        PaddleCustomerId = paddleCustomerId;
+        PaddleSubscriptionId = paddleSubscriptionId;
         Status = status;
 
         if (status == SubscriptionStatus.Cancelled)
@@ -165,10 +162,10 @@ public sealed class OrganizationSubscription
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    public void ReconcileFromStripe(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string subscriptionId, string stripeCustomerId)
+    public void ReconcileFromPaddle(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string subscriptionId, string paddleCustomerId)
     {
         var lastWebhook = LastWebhookEventAt;
-        SyncFromStripe(planKey, status, currentPeriodStart, currentPeriodEnd, subscriptionId, stripeCustomerId, lastWebhook ?? DateTimeOffset.MinValue);
+        SyncFromPaddle(planKey, status, currentPeriodStart, currentPeriodEnd, subscriptionId, paddleCustomerId, lastWebhook ?? DateTimeOffset.MinValue);
         LastWebhookEventAt = lastWebhook;
     }
 }

@@ -52,10 +52,10 @@ internal static class ProductionSecurityConfiguration
         if (string.IsNullOrWhiteSpace(connectionString) || connectionString.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase))
             errors.Add("Production database connection string is missing or uses the repository default password.");
 
-        var stripeCoreParts = new[] { configuration["Stripe:SecretKey"], configuration["Stripe:WebhookSecret"] };
-        var stripeAnyPriceConfigured = configuration.GetSection("Stripe:Prices").GetChildren().Any(x => !string.IsNullOrWhiteSpace(x.Value));
-        if (stripeCoreParts.Any(x => !string.IsNullOrWhiteSpace(x)) && (stripeCoreParts.Any(string.IsNullOrWhiteSpace) || !stripeAnyPriceConfigured))
-            errors.Add("Stripe must be either fully disabled or configured with SecretKey, WebhookSecret and at least one Stripe:Prices:<plan> entry together.");
+        var paddleCoreParts = new[] { configuration["Paddle:ApiKey"], configuration["Paddle:ClientSideToken"], configuration["Paddle:WebhookSecret"] };
+        var paddleAnyPriceConfigured = configuration.GetSection("Paddle:Prices").GetChildren().Any(x => !string.IsNullOrWhiteSpace(x.Value));
+        if (paddleCoreParts.Any(x => !string.IsNullOrWhiteSpace(x)) && (paddleCoreParts.Any(string.IsNullOrWhiteSpace) || !paddleAnyPriceConfigured))
+            errors.Add("Paddle must be either fully disabled or configured with ApiKey, ClientSideToken, WebhookSecret and at least one Paddle:Prices:<plan> entry together.");
 
         var emailEnabled = configuration.GetValue("Email:Enabled", false);
         if (emailEnabled && (string.IsNullOrWhiteSpace(configuration["Email:Host"]) || string.IsNullOrWhiteSpace(configuration["Email:FromAddress"])))

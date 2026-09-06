@@ -81,7 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IJobProfileRepository, JobProfileRepository>();
         services.AddScoped<IAssetStatusSettingRepository, AssetStatusSettingRepository>();
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
-        services.AddScoped<IProcessedStripeEventRepository, ProcessedStripeEventRepository>();
+        services.AddScoped<IProcessedPaddleEventRepository, ProcessedPaddleEventRepository>();
         services.AddScoped<IPromoCodeRepository, PromoCodeRepository>();
         services.AddScoped<ISentAlertRepository, SentAlertRepository>();
         services.AddScoped<IAlertRuleRepository, AlertRuleRepository>();
@@ -108,11 +108,9 @@ public static class DependencyInjection
         services.AddSingleton<IEmailAvailability, EmailAvailability>();
         services.AddScoped<IEmailOutboxWriter, PostgresEmailOutboxWriter>();
         services.AddSingleton<IAppLinkBuilder, AppLinkBuilder>();
-        services.AddHttpClient<IPaymentGateway, StripePaymentGateway>(client =>
-        {
-            client.BaseAddress = new Uri("https://api.stripe.com/v1/");
-            client.Timeout = TimeSpan.FromSeconds(15);
-        });
+        // BaseAddress is left unset here - PaddlePaymentGateway picks sandbox vs production based on
+        // Paddle:Environment in its own constructor, since (unlike Stripe) the two are different hosts.
+        services.AddHttpClient<IPaymentGateway, PaddlePaymentGateway>();
         services.AddSingleton<IFieldEncryptor, FieldEncryptor>();
         services.AddSingleton<IPublicCapabilitySessionProtector, PublicCapabilitySessionProtector>();
         services.AddScoped<DefaultDataSeeder>();

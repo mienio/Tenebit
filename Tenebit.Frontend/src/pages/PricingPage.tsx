@@ -1,6 +1,7 @@
 import { Tag, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
+import { ensurePaddleReady, openPaddleCheckout } from '../api/paddleClient';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TextInput } from '../components/FormFields';
@@ -28,14 +29,33 @@ export function PricingPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewRequestRef = useRef(0);
   const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
-  // A live paid Stripe subscription already exists - switching plans must reuse it (Stripe proration)
-  // instead of Checkout, which only ever creates a first subscription and refuses to create a second.
+  // A live paid Paddle subscription already exists - switching plans must reuse it (Paddle proration)
+  // instead of a fresh checkout, which only ever creates a first subscription.
   const hasLivePaidSubscription = !!subscription.data && subscription.data.planKey !== 'free' && subscription.data.status !== 'Cancelled';
   const currentPlan = currentPlanKey ? PLANS.find(p => p.key === currentPlanKey) ?? null : null;
   // A plan change to a cheaper plan is scheduled for the end of the paid period, not charged now (see
   // SubscriptionService.ChangePlanAsync) - a promo code has nothing to discount there, so only offer it
   // for a real upgrade (equal-or-higher price), which bills immediately.
   const isDowngrade = hasLivePaidSubscription && !!selectedPlan && !!currentPlan && selectedPlan.price < currentPlan.price;
+
+  // Paddle's overlay checkout never navigates the browser on its own after a successful payment (unlike a
+  // classic hosted-redirect flow) - without this, the app keeps showing whatever plan/asset-limit state it
+  // had cached before the purchase (Layout's own sidebar subscription fetch in particular only ever runs
+  // once per app session) until the customer manually hard-refreshes. A full navigation here guarantees
+  // every cached bit of subscription state across the whole app is fetched fresh.
+  function handlePaddleCheckoutCompleted() {
+    window.location.href = '/dashboard?checkout=success';
+  }
+
+  // Paddle.js is only ever needed for a brand-new checkout (no live paid subscription yet) - loading it
+  // eagerly for every visitor keeps the pricing page paying that cost even for existing paid customers who
+  // will only ever use the in-app plan-change/preview flow below.
+  useEffect(() => {
+    if (hasLivePaidSubscription) return;
+    api.paddleConfig()
+      .then(config => { if (config.clientToken) ensurePaddleReady(config.clientToken, config.environment, handlePaddleCheckoutCompleted); })
+      .catch(() => { /* Paddle not configured yet - checkout will surface its own error when attempted. */ });
+  }, [hasLivePaidSubscription]);
 
   useEffect(() => {
     if (!message) return;
@@ -54,7 +74,7 @@ export function PricingPage() {
     setPreviewError(null);
     if (!hasLivePaidSubscription) return;
 
-    // An existing paid subscription changes via real-time Stripe proration (credit for the old plan's
+    // An existing paid subscription changes via real-time Paddle proration (credit for the old plan's
     // unused time against the new plan) rather than the new plan's flat list price - fetch the exact
     // number before the customer commits, instead of applying it silently and hoping they trust the
     // toast (the amount was always correct, but with no number shown a real charge read as "nothing
@@ -86,6 +106,12 @@ export function PricingPage() {
     }
   }
 
+  function promoDurationText(promo: PromoCodeValidation): string {
+    if (promo.durationType === 'Forever') return t('pricing.checkout.promoDurationForever');
+    if (promo.durationType === 'Repeating') return t('pricing.checkout.promoDurationMonths', { months: promo.durationInMonths ?? 0 });
+    return t('pricing.checkout.promoDurationOnce');
+  }
+
   function removePromoCode() {
     setAppliedPromo(null);
     setPromoInput('');
@@ -112,8 +138,17 @@ export function PricingPage() {
         setMessage({ type: 'success', text: successText });
         setUpgrading(false);
       } else {
-        const checkoutUrl = await api.createCheckoutSession(plan.key, '/dashboard?checkout=success', '/pricing?checkout=cancelled', promoCode);
-        window.location.assign(checkoutUrl);
+        const config = await api.paddleConfig();
+        if (!config.clientToken) throw new Error('Paddle is not configured yet.');
+        const paddle = await ensurePaddleReady(config.clientToken, config.environment, handlePaddleCheckoutCompleted);
+        const params = await api.checkoutParams(plan.key, promoCode);
+        openPaddleCheckout(paddle, {
+          items: [{ priceId: params.priceId, quantity: 1 }],
+          customer: { id: params.customerId },
+          discountId: params.discountId,
+          settings: { successUrl: `${window.location.origin}/dashboard?checkout=success`, allowQuantity: false }
+        });
+        setUpgrading(false);
       }
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
@@ -137,7 +172,7 @@ export function PricingPage() {
   async function openBillingPortal() {
     setPortalLoading(true);
     try {
-      const portalUrl = await api.createBillingPortalSession('/pricing');
+      const portalUrl = await api.createBillingPortalSession();
       window.location.assign(portalUrl);
     } catch (error) {
       setMessage({ type: 'error', text: t('pricing.upgradeError', { error: String(error) }) });
@@ -286,7 +321,13 @@ export function PricingPage() {
                   </div>
                 )}
                 {promoStatus === 'error' && promoError && <p className="formMessage formMessage--error" style={{ marginTop: 8 }}>{promoError}</p>}
-                {promoStatus === 'applied' && <p className="formMessage formMessage--success" style={{ marginTop: 8 }}>{t('pricing.checkout.promoApplied', { code: appliedPromo!.code })}</p>}
+                {promoStatus === 'applied' && appliedPromo && (
+                  <>
+                    <p className="formMessage formMessage--success" style={{ marginTop: 8 }}>{t('pricing.checkout.promoApplied', { code: appliedPromo.code })}</p>
+                    <p className="pricing-confirm-detail">{promoDurationText(appliedPromo)}</p>
+                    {appliedPromo.description && <p className="pricing-confirm-detail">{appliedPromo.description}</p>}
+                  </>
+                )}
               </div>
             )}
           </>

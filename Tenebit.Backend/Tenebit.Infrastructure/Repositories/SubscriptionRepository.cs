@@ -21,26 +21,26 @@ internal sealed class SubscriptionRepository : ISubscriptionRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<OrganizationSubscription?> GetByStripeCustomerAsync(string stripeCustomerId, CancellationToken cancellationToken)
+    public async Task<OrganizationSubscription?> GetByPaddleCustomerAsync(string paddleCustomerId, CancellationToken cancellationToken)
     {
         return await _context.Subscriptions
-            .Where(s => s.StripeCustomerId == stripeCustomerId)
+            .Where(s => s.PaddleCustomerId == paddleCustomerId)
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<OrganizationSubscription>> ListWithStripeSubscriptionAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<OrganizationSubscription>> ListWithPaddleSubscriptionAsync(CancellationToken cancellationToken)
     {
         return await _context.Subscriptions
-            .Where(x => x.StripeSubscriptionId != null && x.StripeSubscriptionId != "")
+            .Where(x => x.PaddleSubscriptionId != null && x.PaddleSubscriptionId != "")
             .OrderBy(x => x.OrganizationId)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<OrganizationSubscription>> ListPendingStripeLinkAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<OrganizationSubscription>> ListPendingPaddleLinkAsync(CancellationToken cancellationToken)
     {
         return await _context.Subscriptions
-            .Where(x => x.StripeCustomerId != null && x.StripeCustomerId != ""
-                && (x.StripeSubscriptionId == null || x.StripeSubscriptionId == ""))
+            .Where(x => x.PaddleCustomerId != null && x.PaddleCustomerId != ""
+                && (x.PaddleSubscriptionId == null || x.PaddleSubscriptionId == ""))
             .OrderBy(x => x.OrganizationId)
             .ToListAsync(cancellationToken);
     }
