@@ -10,6 +10,7 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
 {
     private const int DefaultPixelsPerModule = 4;
     private const int LabelPadding = 8;
+    private const int LogoTopPadding = 20;
     private const int LogoHeight = 34;
     private const int HeaderLineHeight = 18;
     private const int FooterLineHeight = 22;
@@ -44,7 +45,7 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
         }
 
         var width = Math.Max(qrSize, MinimumWidth);
-        var logoHeight = logo is null ? 0 : LogoHeight + LabelPadding;
+        var logoHeight = logo is null ? 0 : LogoHeight + LogoTopPadding;
         var headerHeight = headerLines.Count * HeaderLineHeight;
         var footerHeight = footerLines.Count * FooterLineHeight;
         var topBlock = LabelPadding + logoHeight + headerHeight;
@@ -61,7 +62,7 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
         if (logo is not null)
         {
             sb.Append(logo.Replace("{{x}}", ((width - LogoHeight * 2) / 2).ToString())
-                          .Replace("{{y}}", LabelPadding.ToString())
+                          .Replace("{{y}}", LogoTopPadding.ToString())
                           .Replace("{{w}}", (LogoHeight * 2).ToString())
                           .Replace("{{h}}", LogoHeight.ToString()));
         }
@@ -97,10 +98,10 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
         {
             // The product mark, drawn as paths so it stays crisp at any print size. Colours are literal
             // because a standalone SVG has no stylesheet to resolve the brand custom properties against.
-            return "<svg x=\"{{x}}\" y=\"{{y}}\" width=\"{{w}}\" height=\"{{h}}\" viewBox=\"0 0 128 128\">"
-                 + "<path d=\"M64 30 L92 46 L64 62 L36 46 Z\" fill=\"#a63a2e\"/>"
-                 + "<path d=\"M36 46 L64 62 L64 96 L36 80 Z\" fill=\"#221d18\"/>"
-                 + "<path d=\"M92 46 L64 62 L64 96 L92 80 Z\" fill=\"#a89681\"/>"
+            return "<svg x=\"{{x}}\" y=\"{{y}}\" width=\"{{w}}\" height=\"{{h}}\" viewBox=\"29 28 70 70\">"
+                 + "<path d=\"M 70.95 35.47 L 82.43 42.03 Q 89.38 46 82.43 49.97 L 70.95 56.53 Q 64 60.5 57.05 56.53 L 45.57 49.97 Q 38.62 46 45.57 42.03 L 57.05 35.47 Q 64 31.5 70.95 35.47 Z\" fill=\"#b8483a\"/>"
+                 + "<path d=\"M 44.25 52.21 L 55.75 58.79 Q 62.7 62.75 62.7 70.75 L 62.7 85.76 Q 62.7 93.76 55.75 89.79 L 44.25 83.21 Q 37.3 79.25 37.3 71.25 L 37.3 56.24 Q 37.3 48.24 44.25 52.21 Z\" fill=\"#2e2822\"/>"
+                 + "<path d=\"M 83.75 52.21 L 72.25 58.79 Q 65.3 62.75 65.3 70.75 L 65.3 85.76 Q 65.3 93.76 72.25 89.79 L 83.75 83.21 Q 90.7 79.25 90.7 71.25 L 90.7 56.24 Q 90.7 48.24 83.75 52.21 Z\" fill=\"#b8a894\"/>"
                  + "</svg>";
         }
 
