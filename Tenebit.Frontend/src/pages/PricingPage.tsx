@@ -12,7 +12,7 @@ import type { PlanChangePreview, PromoCodeValidation } from '../types/domain';
 import { formatDate } from '../utils/format';
 
 export function PricingPage() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const subscription = useAsyncData(api.subscription, []);
   const [upgrading, setUpgrading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanDef | null>(null);
@@ -252,7 +252,7 @@ export function PricingPage() {
         {selectedPlan && (
           <>
             <p className="pricing-confirm-detail">
-              {t(hasLivePaidSubscription ? 'pricing.confirmChangePlanDetail' : 'pricing.confirmUpgradeDetail', { limit: selectedPlan.limitLabel })}
+              {t(hasLivePaidSubscription ? 'pricing.confirmChangePlanDetail' : 'pricing.confirmUpgradeDetail', { limit: new Intl.NumberFormat(language).format(selectedPlan.limit) })}
             </p>
 
             {hasLivePaidSubscription ? (

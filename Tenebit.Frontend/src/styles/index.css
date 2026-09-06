@@ -827,20 +827,41 @@ button.authIcon:hover { filter: brightness(0.94); }
    picked its track count from available width, and above ~1300px that put only 4 cards per row,
    wrapping the 5th onto its own row without stretching it. `minmax(0, 1fr)` (no hard floor) lets the
    columns shrink instead of forcing overflow, same as the auto-fit version did. */
+/* Every plan enforces the same numeric limit independently per resource type (assets, people,
+   procedures, licenses, locations, teams, job profiles, categories - see
+   OrganizationSubscription.GetResourceLimit on the backend) rather than one shared pool. This legend
+   explains the 8 categories ONCE, above the cards, so each card only has to show its number - listing
+   all 8 again per card (x5 plans) was pure repetition. */
+.pricing-legend { max-width: 800px; margin: 0 0 28px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; }
+.pricing-legend__head { display: flex; gap: 12px; align-items: flex-start; }
+.pricing-legend__head svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
+.pricing-legend__title { font-size: 14px; font-weight: 700; }
+.pricing-legend__body { margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.55; }
+.pricing-legend__grid { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.pricing-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.pricing-chip svg { flex: 0 0 auto; color: var(--accent); }
+
 .pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
 .pricing-card { min-width: 0; padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
 .pricing-card--featured { border-color: var(--brand); box-shadow: 8px 8px 0 rgba(34,29,24,.18); background: var(--brand-soft); transform: scale(1.045); z-index: 1; }
+/* MAX gets its own eye-catching treatment (colored border + badge) so it stands out from the plain
+   middle-tier cards - but deliberately skips the scale/shadow/tint Growth uses, so it never competes
+   with the actually-recommended plan for attention. */
+.pricing-card--max { border-color: var(--accent); }
 .pricing-card__badge { position: absolute; top: -12px; left: 24px; padding: 6px 12px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
 .pricing-card__badge--recommended { background: var(--brand); color: #fff; }
 .pricing-card__badge--free { background: var(--surface); color: var(--text); border: 1.5px solid var(--border-strong); }
+.pricing-card__badge--max { background: var(--accent); color: #fff; }
 .pricing-card:hover { transform: translateY(-4px); box-shadow: 6px 6px 0 rgba(34,29,24,.12); }
 .pricing-card--featured:hover { transform: scale(1.045) translateY(-4px); box-shadow: 8px 8px 0 rgba(34,29,24,.15); }
 .pricing-card h3 { margin: 0; font-size: 24px; font-weight: 700; }
 .pricing-price { font-size: 48px; font-weight: 780; letter-spacing: -0.04em; }
 .pricing-price small { font-size: 18px; color: var(--muted); font-weight: 500; }
-.pricing-features { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
-.pricing-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.5; }
-.pricing-features svg { color: var(--success); flex: 0 0 20px; margin-top: 2px; }
+.pricing-hero-limit { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; text-align: center; }
+.pricing-card--featured .pricing-hero-limit, .pricing-card--max .pricing-hero-limit { background: var(--surface); }
+.pricing-hero-limit__num { font-family: var(--font-serif); font-weight: 700; font-size: 30px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.pricing-card--featured .pricing-hero-limit__num, .pricing-card--max .pricing-hero-limit__num { color: var(--accent); }
+.pricing-hero-limit__cap { margin-top: 2px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .pricing-cta { width: 100%; min-height: 48px; }
 .pricing-confirm-detail { margin-top: -4px; padding: 10px 12px; border-radius: var(--radius); background: var(--brand-soft); font-size: 14px; }
 

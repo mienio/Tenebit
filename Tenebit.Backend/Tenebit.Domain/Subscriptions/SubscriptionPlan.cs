@@ -9,11 +9,11 @@ public sealed class SubscriptionPlan
     public static readonly SubscriptionPlan Growth = new("growth", "Growth", 300, 28.95m, "EUR", "300");
     public static readonly SubscriptionPlan Business = new("business", "Business", 1000, 58.95m, "EUR", "1000");
 
-    // Marketed as "1000+" / custom - the real enforcement ceiling is set well above what's advertised
-    // as fair-use headroom against runaway scripts/bots, and is intentionally not surfaced in the API
-    // response or UI copy. Key stays "enterprise" (wired into Paddle:Prices:enterprise config, existing
-    // PlanKey values, translation keys) even though the marketed name is "MAX" - purely a display rename.
-    public static readonly SubscriptionPlan ThousandPlus = new("enterprise", "MAX", 10_000, 98.95m, "EUR", "1000+");
+    // The 10,000 ceiling is the real, enforced limit and is now advertised as-is on the pricing page
+    // (previously shown as the vaguer "1000+"). Key stays "enterprise" (wired into Paddle:Prices:enterprise
+    // config, existing PlanKey values, translation keys) even though the marketed name is "Max" - purely a
+    // display rename.
+    public static readonly SubscriptionPlan ThousandPlus = new("enterprise", "Max", 10_000, 98.95m, "EUR", "10000");
 
     public static readonly IReadOnlyList<SubscriptionPlan> All = [Free, Starter, Growth, Business, ThousandPlus];
 
