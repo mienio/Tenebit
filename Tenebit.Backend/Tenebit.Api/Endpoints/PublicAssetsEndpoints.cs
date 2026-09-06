@@ -45,10 +45,14 @@ public static class PublicAssetsEndpoints
         // wcześniej mają ją wypaloną w kodzie QR i muszą działać dalej.
         api.MapGet("/public/scan/{scanCode}", async (string scanCode, AssetService service, CancellationToken cancellationToken) =>
                 (await service.GetPublicScanByCodeAsync(scanCode, cancellationToken)).ToHttpResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assets");
 
         api.MapPost("/public/scan/{scanCode}/report", async (string scanCode, ReportAssetIssueRequest request, AssetService service, CancellationToken cancellationToken) =>
                 (await service.ReportPublicIssueByCodeAsync(scanCode, request, cancellationToken)).ToNoContentResult())
+            .AllowAnonymous()
+            .RequireRateLimiting("public")
             .WithTags("Public assets");
 
         api.MapGet("/public/assets/{organizationId:guid}/{assetId:guid}", async (Guid organizationId, Guid assetId, AssetService service, CancellationToken cancellationToken) =>
