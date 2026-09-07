@@ -5,6 +5,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { Layout, canSee, nav } from './components/Layout';
 import { LoadingState } from './components/StateViews';
 import { ForbiddenPage, NotFoundPage } from './pages/ErrorPages';
+import { PartnerLocaleProvider, type PartnerLocale } from './partner/i18n';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
@@ -45,6 +46,7 @@ const AdminAffiliateDetailPage = lazy(() => import('./admin/AdminAffiliateDetail
 const AdminAffiliateSettingsPage = lazy(() => import('./admin/AdminAffiliateSettingsPage').then(m => ({ default: m.AdminAffiliateSettingsPage })));
 const AdminAffiliateMessagesPage = lazy(() => import('./admin/AdminAffiliateMessagesPage').then(m => ({ default: m.AdminAffiliateMessagesPage })));
 
+const PartnerLandingPage = lazy(() => import('./partner/PartnerLandingPage').then(m => ({ default: m.PartnerLandingPage })));
 const PartnerLoginPage = lazy(() => import('./partner/PartnerLoginPage').then(m => ({ default: m.PartnerLoginPage })));
 const PartnerRegisterPage = lazy(() => import('./partner/PartnerRegisterPage').then(m => ({ default: m.PartnerRegisterPage })));
 const PartnerVerifyEmailPage = lazy(() => import('./partner/PartnerVerifyEmailPage').then(m => ({ default: m.PartnerVerifyEmailPage })));
@@ -57,6 +59,22 @@ const PartnerConversionsPage = lazy(() => import('./partner/PartnerConversionsPa
 const PartnerPayoutsPage = lazy(() => import('./partner/PartnerPayoutsPage').then(m => ({ default: m.PartnerPayoutsPage })));
 const PartnerMessagesPage = lazy(() => import('./partner/PartnerMessagesPage').then(m => ({ default: m.PartnerMessagesPage })));
 const PartnerProfilePage = lazy(() => import('./partner/PartnerProfilePage').then(m => ({ default: m.PartnerProfilePage })));
+
+const partnerRoutes: { subpath: string; element: ReactNode }[] = [
+  { subpath: '', element: <PartnerLandingPage /> },
+  { subpath: 'login', element: <PartnerLoginPage /> },
+  { subpath: 'register', element: <PartnerRegisterPage /> },
+  { subpath: 'verify-email', element: <PartnerVerifyEmailPage /> },
+  { subpath: 'forgot-password', element: <PartnerForgotPasswordPage /> },
+  { subpath: 'reset-password', element: <PartnerResetPasswordPage /> },
+  { subpath: 'terms', element: <PartnerTermsPage /> },
+  { subpath: 'dashboard', element: <PartnerDashboardPage /> },
+  { subpath: 'codes', element: <PartnerCodesPage /> },
+  { subpath: 'conversions', element: <PartnerConversionsPage /> },
+  { subpath: 'payouts', element: <PartnerPayoutsPage /> },
+  { subpath: 'messages', element: <PartnerMessagesPage /> },
+  { subpath: 'profile', element: <PartnerProfilePage /> },
+];
 
 function HomeRoute() {
   const auth = useAuth();
@@ -107,20 +125,18 @@ export function App() {
         <Route path="/admin/affiliate-settings" element={<AdminAffiliateSettingsPage />} />
         <Route path="/admin/affiliate-messages" element={<AdminAffiliateMessagesPage />} />
 
-        {/* Hidden partner portal (spec §2): not linked from any public nav, noindex on every page,
-            entirely separate auth/session from both the tenant app and the admin panel. */}
-        <Route path="/partner/login" element={<PartnerLoginPage />} />
-        <Route path="/partner/register" element={<PartnerRegisterPage />} />
-        <Route path="/partner/verify-email" element={<PartnerVerifyEmailPage />} />
-        <Route path="/partner/forgot-password" element={<PartnerForgotPasswordPage />} />
-        <Route path="/partner/reset-password" element={<PartnerResetPasswordPage />} />
-        <Route path="/partner/terms" element={<PartnerTermsPage />} />
-        <Route path="/partner/dashboard" element={<PartnerDashboardPage />} />
-        <Route path="/partner/codes" element={<PartnerCodesPage />} />
-        <Route path="/partner/conversions" element={<PartnerConversionsPage />} />
-        <Route path="/partner/payouts" element={<PartnerPayoutsPage />} />
-        <Route path="/partner/messages" element={<PartnerMessagesPage />} />
-        <Route path="/partner/profile" element={<PartnerProfilePage />} />
+        {/* Partner portal: public landing page at /partner invites sign-ups; not linked from the main
+            site nav, but discoverable on its own. Entirely separate auth/session from both the tenant
+            app and the admin panel. English is the canonical language (bare /partner/*); a full Polish
+            mirror lives under /partner/pl/* - both trees render the same page components, switched via
+            PartnerLocaleProvider rather than duplicated routes. */}
+        {(['en', 'pl'] as PartnerLocale[]).flatMap(locale => partnerRoutes.map(({ subpath, element }) => (
+          <Route
+            key={`partner-${locale}-${subpath}`}
+            path={locale === 'en' ? `/partner${subpath ? `/${subpath}` : ''}` : `/partner/pl${subpath ? `/${subpath}` : ''}`}
+            element={<PartnerLocaleProvider locale={locale}>{element}</PartnerLocaleProvider>}
+          />
+        )))}
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<RequireRoles path="/dashboard"><DashboardPage /></RequireRoles>} />
           <Route path="my" element={<MyWorkspacePage />} />

@@ -11,6 +11,13 @@ function setPartnerToken(token: string | null) {
   accessToken = token;
 }
 
+// Mirrors the main app's X-Ui-Language header (see api/apiClient.ts) so backend error/validation
+// messages come back in the partner portal's current language instead of defaulting to Polish.
+let partnerLanguage = 'en';
+export function setPartnerLanguage(language: string) {
+  partnerLanguage = language;
+}
+
 export class PartnerApiError extends Error {
   status: number;
   code: string;
@@ -43,6 +50,7 @@ async function performFetch(path: string, init: RequestInit, token: string | nul
   const headers = new Headers(init.headers);
   if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  headers.set('X-Ui-Language', partnerLanguage);
   return fetch(`${apiBaseUrl}${path}`, { ...init, headers, credentials: 'include' });
 }
 
@@ -58,7 +66,7 @@ async function partnerFetch<T>(path: string, init: RequestInit = {}, isRetry = f
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     if (response.status === 401) setPartnerToken(null);
-    throw new PartnerApiError(body?.message ?? `Błąd (${response.status})`, response.status, body?.code ?? '');
+    throw new PartnerApiError(body?.message ?? `Error (${response.status})`, response.status, body?.code ?? '');
   }
   if (response.status === 204 || response.status === 202) return (await response.json().catch(() => undefined)) as T;
   return response.json() as Promise<T>;

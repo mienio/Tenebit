@@ -5,19 +5,57 @@ import { Field, TextInput } from '../components/FormFields';
 import { LoadingState } from '../components/StateViews';
 import { PartnerLayout, PartnerPageHeader } from './PartnerLayout';
 import { createMyCode, listMyCodes, setMyCodeActive, type AffiliateCode } from './partnerApi';
+import { usePartnerLocale, type PartnerLocale } from './i18n';
 
-function CopyButton({ text }: { text: string }) {
+const content: Record<PartnerLocale, {
+  copyLink: string; copied: string;
+  title: string; description: string; fetchError: string; createError: string; toggleError: string;
+  customCodeLabel: (activeCount: number) => string; customCodeInfo: string; customCodePlaceholder: string;
+  create: string; creating: string;
+  colCode: string; colLink: string; colClicks: string; colStatus: string;
+  active: string; disabled: string; disable: string; enable: string;
+  empty: string;
+}> = {
+  en: {
+    copyLink: 'Copy link', copied: 'Copied',
+    title: 'Your codes', description: 'Every code has its own ready-to-copy link. Codes never expire.',
+    fetchError: 'Could not fetch codes.', createError: 'Could not create the code.', toggleError: 'Could not change the code status.',
+    customCodeLabel: activeCount => `Custom code (optional) - ${activeCount} active`,
+    customCodeInfo: 'Leave blank to generate a code automatically.',
+    customCodePlaceholder: 'e.g. DAMIAN20',
+    create: 'Create code', creating: 'Creating…',
+    colCode: 'Code', colLink: 'Link', colClicks: 'Clicks', colStatus: 'Status',
+    active: 'Active', disabled: 'Disabled', disable: 'Disable', enable: 'Enable',
+    empty: 'No codes yet - create your first one above.',
+  },
+  pl: {
+    copyLink: 'Kopiuj link', copied: 'Skopiowano',
+    title: 'Twoje kody', description: 'Każdy kod ma osobny, gotowy do skopiowania link. Kody nie wygasają.',
+    fetchError: 'Nie udało się pobrać kodów.', createError: 'Nie udało się utworzyć kodu.', toggleError: 'Nie udało się zmienić statusu kodu.',
+    customCodeLabel: activeCount => `Własny kod (opcjonalnie) - ${activeCount} aktywnych`,
+    customCodeInfo: 'Zostaw puste, aby wygenerować kod automatycznie.',
+    customCodePlaceholder: 'np. DAMIAN20',
+    create: 'Utwórz kod', creating: 'Tworzenie…',
+    colCode: 'Kod', colLink: 'Link', colClicks: 'Kliknięcia', colStatus: 'Status',
+    active: 'Aktywny', disabled: 'Wyłączony', disable: 'Wyłącz', enable: 'Włącz',
+    empty: 'Brak kodów - utwórz pierwszy powyżej.',
+  },
+};
+
+function CopyButton({ text, copyLabel, copiedLabel }: { text: string; copyLabel: string; copiedLabel: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       variant="secondary"
       icon={copied ? <Check size={14} /> : <Copy size={14} />}
       onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
-    >{copied ? 'Skopiowano' : 'Kopiuj link'}</Button>
+    >{copied ? copiedLabel : copyLabel}</Button>
   );
 }
 
 export function PartnerCodesPage() {
+  const { locale } = usePartnerLocale();
+  const t = content[locale];
   const [codes, setCodes] = useState<AffiliateCode[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -29,8 +67,9 @@ export function PartnerCodesPage() {
     let cancelled = false;
     listMyCodes()
       .then(result => { if (!cancelled) setCodes(result); })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Nie udało się pobrać kodów.'); });
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t.fetchError); });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
 
   async function handleCreate(event: FormEvent) {
@@ -42,7 +81,7 @@ export function PartnerCodesPage() {
       setCustomCode('');
       setReloadKey(k => k + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się utworzyć kodu.');
+      setError(err instanceof Error ? err.message : t.createError);
     } finally {
       setCreating(false);
     }
@@ -54,7 +93,7 @@ export function PartnerCodesPage() {
       await setMyCodeActive(code.id, !code.isActive);
       setReloadKey(k => k + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się zmienić statusu kodu.');
+      setError(err instanceof Error ? err.message : t.toggleError);
     } finally {
       setBusyId(null);
     }
@@ -64,16 +103,16 @@ export function PartnerCodesPage() {
 
   return (
     <PartnerLayout>
-      <PartnerPageHeader title="Twoje kody" description="Każdy kod ma osobny, gotowy do skopiowania link. Kody nie wygasają." />
+      <PartnerPageHeader title={t.title} description={t.description} />
       {error ? <p className="formMessage formMessage--error">{error}</p> : null}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <form className="formGrid" onSubmit={handleCreate}>
-          <Field label={`Własny kod (opcjonalnie) - ${activeCount} aktywnych`} info="Zostaw puste, aby wygenerować kod automatycznie.">
-            <TextInput value={customCode} onChange={e => setCustomCode(e.target.value.toUpperCase())} placeholder="np. DAMIAN20" />
+          <Field label={t.customCodeLabel(activeCount)} info={t.customCodeInfo}>
+            <TextInput value={customCode} onChange={e => setCustomCode(e.target.value.toUpperCase())} placeholder={t.customCodePlaceholder} />
           </Field>
           <div className="formActions">
-            <Button type="submit" icon={<Plus size={16} />} disabled={creating}>{creating ? 'Tworzenie…' : 'Utwórz kod'}</Button>
+            <Button type="submit" icon={<Plus size={16} />} disabled={creating}>{creating ? t.creating : t.create}</Button>
           </div>
         </form>
       </div>
@@ -81,22 +120,22 @@ export function PartnerCodesPage() {
       {!codes ? <LoadingState /> : (
         <div className="card adminTableCard">
           <table className="adminTable">
-            <thead><tr><th>Kod</th><th>Link</th><th>Kliknięcia</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>{t.colCode}</th><th>{t.colLink}</th><th>{t.colClicks}</th><th>{t.colStatus}</th><th /></tr></thead>
             <tbody>
               {codes.map(c => (
                 <tr key={c.id}>
                   <td><code>{c.code}</code></td>
-                  <td><CopyButton text={c.trackingUrl} /></td>
+                  <td><CopyButton text={c.trackingUrl} copyLabel={t.copyLink} copiedLabel={t.copied} /></td>
                   <td>{c.clickCount}</td>
-                  <td>{c.isActive ? <span className="adminTag adminTag--ok">Aktywny</span> : <span className="adminTag">Wyłączony</span>}</td>
+                  <td>{c.isActive ? <span className="adminTag adminTag--ok">{t.active}</span> : <span className="adminTag">{t.disabled}</span>}</td>
                   <td>
                     <Button variant="secondary" icon={<Power size={14} />} disabled={busyId === c.id} onClick={() => handleToggle(c)}>
-                      {c.isActive ? 'Wyłącz' : 'Włącz'}
+                      {c.isActive ? t.disable : t.enable}
                     </Button>
                   </td>
                 </tr>
               ))}
-              {codes.length === 0 ? <tr><td colSpan={5} className="adminMuted">Brak kodów - utwórz pierwszy powyżej.</td></tr> : null}
+              {codes.length === 0 ? <tr><td colSpan={5} className="adminMuted">{t.empty}</td></tr> : null}
             </tbody>
           </table>
         </div>

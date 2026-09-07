@@ -4,8 +4,37 @@ import { Field, TextInput } from '../components/FormFields';
 import { PartnerLayout, PartnerPageHeader } from './PartnerLayout';
 import { usePartnerAuth } from './PartnerAuthProvider';
 import { updateMyProfile } from './partnerApi';
+import { usePartnerLocale, type PartnerLocale } from './i18n';
+
+const content: Record<PartnerLocale, {
+  title: string; missingRevtag: string; saveError: string; saveSuccess: string;
+  firstName: string; lastName: string; phone: string; country: string; company: string; taxId: string;
+  revtag: string; revtagInfo: string; revtagPlaceholder: string;
+  save: string; saving: string;
+}> = {
+  en: {
+    title: 'Your profile',
+    missingRevtag: 'Add your Revolut revtag below - without it we cannot pay out your commission.',
+    saveError: 'Could not save changes.', saveSuccess: 'Changes saved.',
+    firstName: 'First name', lastName: 'Last name', phone: 'Phone (optional)',
+    country: 'Country (ISO code, optional)', company: 'Company (optional)', taxId: 'Tax ID (optional)',
+    revtag: 'Revolut revtag', revtagInfo: 'Format @name - commission payouts go there.', revtagPlaceholder: '@your-name',
+    save: 'Save changes', saving: 'Saving…',
+  },
+  pl: {
+    title: 'Twój profil',
+    missingRevtag: 'Uzupełnij revtag Revolut poniżej - bez niego nie możemy zrealizować wypłaty prowizji.',
+    saveError: 'Nie udało się zapisać zmian.', saveSuccess: 'Zapisano zmiany.',
+    firstName: 'Imię', lastName: 'Nazwisko', phone: 'Telefon (opcjonalnie)',
+    country: 'Kraj (kod ISO, opcjonalnie)', company: 'Firma (opcjonalnie)', taxId: 'NIP (opcjonalnie)',
+    revtag: 'Revtag Revolut', revtagInfo: 'Format @nazwa - tam trafiają wypłaty prowizji.', revtagPlaceholder: '@twoja-nazwa',
+    save: 'Zapisz zmiany', saving: 'Zapisywanie…',
+  },
+};
 
 export function PartnerProfilePage() {
+  const { locale } = usePartnerLocale();
+  const t = content[locale];
   const { affiliate, refreshProfile } = usePartnerAuth();
   const [firstName, setFirstName] = useState(affiliate?.firstName ?? '');
   const [lastName, setLastName] = useState(affiliate?.lastName ?? '');
@@ -33,9 +62,9 @@ export function PartnerProfilePage() {
         revolutTag: revolutTag.trim() || null,
       });
       await refreshProfile();
-      setSuccess('Zapisano zmiany.');
+      setSuccess(t.saveSuccess);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nie udało się zapisać zmian.');
+      setError(err instanceof Error ? err.message : t.saveError);
     } finally {
       setSaving(false);
     }
@@ -45,39 +74,37 @@ export function PartnerProfilePage() {
 
   return (
     <PartnerLayout>
-      <PartnerPageHeader title="Twój profil" description={affiliate.email} />
+      <PartnerPageHeader title={t.title} description={affiliate.email} />
       {!affiliate.revolutTag ? (
-        <p className="formMessage formMessage--error">
-          Uzupełnij revtag Revolut poniżej - bez niego nie możemy zrealizować wypłaty prowizji.
-        </p>
+        <p className="formMessage formMessage--error">{t.missingRevtag}</p>
       ) : null}
       <div className="card">
         <form className="formGrid" onSubmit={handleSubmit}>
-          <Field label="Imię">
+          <Field label={t.firstName}>
             <TextInput value={firstName} onChange={e => setFirstName(e.target.value)} required />
           </Field>
-          <Field label="Nazwisko">
+          <Field label={t.lastName}>
             <TextInput value={lastName} onChange={e => setLastName(e.target.value)} required />
           </Field>
-          <Field label="Telefon (opcjonalnie)">
+          <Field label={t.phone}>
             <TextInput value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} />
           </Field>
-          <Field label="Kraj (kod ISO, opcjonalnie)">
+          <Field label={t.country}>
             <TextInput value={countryCode} onChange={e => setCountryCode(e.target.value.toUpperCase())} maxLength={2} />
           </Field>
-          <Field label="Firma (opcjonalnie)">
+          <Field label={t.company}>
             <TextInput value={companyName} onChange={e => setCompanyName(e.target.value)} />
           </Field>
-          <Field label="NIP (opcjonalnie)">
+          <Field label={t.taxId}>
             <TextInput value={taxId} onChange={e => setTaxId(e.target.value)} />
           </Field>
-          <Field label="Revtag Revolut" info="Format @nazwa - tam trafiają wypłaty prowizji.">
-            <TextInput value={revolutTag} onChange={e => setRevolutTag(e.target.value)} placeholder="@twoja-nazwa" />
+          <Field label={t.revtag} info={t.revtagInfo}>
+            <TextInput value={revolutTag} onChange={e => setRevolutTag(e.target.value)} placeholder={t.revtagPlaceholder} />
           </Field>
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
           {success ? <p className="formMessage formMessage--success">{success}</p> : null}
           <div className="formActions">
-            <Button type="submit" disabled={saving}>{saving ? 'Zapisywanie…' : 'Zapisz zmiany'}</Button>
+            <Button type="submit" disabled={saving}>{saving ? t.saving : t.save}</Button>
           </div>
         </form>
       </div>
