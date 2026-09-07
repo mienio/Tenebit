@@ -55,9 +55,13 @@ async function performFetch(path: string, init: RequestInit, token: string | nul
 }
 
 async function partnerFetch<T>(path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
-  const response = await performFetch(path, init, accessToken);
-
+  // Login/register/refresh must run as anonymous requests, even when a still-valid token from an
+  // earlier silent session-restore happens to be sitting in memory - otherwise the backend
+  // authenticates the "anonymous" request as that affiliate (who carries no organization_id claim)
+  // and the tenant-write guard rejects the refresh-token insert these endpoints perform.
   const isAuthRoute = path.startsWith('/api/partner/login') || path.startsWith('/api/partner/register') || path === '/api/partner/refresh';
+  const response = await performFetch(path, init, isAuthRoute ? null : accessToken);
+
   if (response.status === 401 && !isAuthRoute && !isRetry) {
     const newToken = await refreshPartnerToken();
     if (newToken) return partnerFetch<T>(path, init, true);
