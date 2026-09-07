@@ -96,12 +96,32 @@ Rozstrzygnięte wprost przez właściciela — nie są już otwartymi pytaniami 
   `AffiliateConversion`). **Pozostaje do zrobienia** (celowo poza zakresem tej sesji, patrz §17
   planu źródłowego): (a) weryfikacja na realnym koncie testowym Paddle, że `custom_data` faktycznie
   przechodzi przez cały cykl checkout→webhook i że `details.totals.earnings` ma dokładnie ten
-  kształt, jaki zakłada `ParseTransactionCompleted`; (b) `transaction.refunded`/`adjustment.created`
-  → `AffiliateConversion.CreateRefundCompensation` (domenowa metoda już istnieje od Fazy 1, ale
-  nigdy nie jest wołana — Paddle Billing API najprawdopodobniej wysyła to jako `adjustment.created`,
-  nie `transaction.refunded`, co wymaga własnej weryfikacji kształtu payloadu przed wdrożeniem).
-- **C14 / leaf 2.2 — kody per-kraj + rabat Paddle przy checkout (spec §5.3/§13.2) — nadal
-  odłożone**, poza zakresem tej sesji (Faza 4 planu źródłowego).
+  kształt, jaki zakłada `ParseTransactionCompleted`.
+- **C13b / leaf 2.1b — refundy/chargebacki: WDROŻONE 2026-09-07, z wyższym ryzykiem niż
+  transaction.completed.** `adjustment.created` jest teraz parsowane (`ParseAdjustmentCreated`,
+  tylko status `"approved"` — `pending_approval`/`rejected` są ignorowane) i woła
+  `AffiliateConversionRecordingService`'s nową `RecordRefundAsync` →
+  `AffiliateConversion.CreateRefundCompensation` (metoda domenowa z Fazy 1, wcześniej nigdy nie
+  wołana). Kompensacja jest **zawsze** przypisywana do okresu odpowiadającego dacie zwrotu, nigdy do
+  oryginalnego okresu sprzedaży — jeśli ten already `Paid`, ujemna kwota nettuje się z bieżącym
+  otwartym okresem zamiast nadpisywać zamrożoną, już wypłaconą sumę (zgodnie z §7.2 "saldo
+  przechodzi na potrącenie z następnej wypłaty"). **To jest bardziej spekulatywne niż
+  transaction.completed** — Paddle Billing Adjustments API jest mniej centralnym mechanizmem niż
+  Transactions, kształt payloadu (`data.totals`, `data.status`, `data.transaction_id`) nie został
+  zweryfikowany na żadnym realnym payloadzie Paddle, nawet bardziej niż transaction.completed.
+  Właściciel produktu powinien to zweryfikować na koncie testowym **przed pierwszym realnym
+  zwrotem**, nie tylko przed pierwszą wypłatą.
+- **C14 / leaf 2.2 — kody per-kraj + rabat Paddle przy checkout (spec §5.3/§13.2) — celowo NIE
+  wdrożone, wymaga dalszej analizy technicznej.** Spec (§5.3) wymaga porównania
+  `AffiliateCode.CountryCode` z **realnym adresem rozliczeniowym klienta z Paddle** ("jeśli kod ma
+  CountryCode=DE, a adres rozliczeniowy to Francja — rabat NIE jest stosowany") - ale ten adres jest
+  znany dopiero wewnątrz Paddle.js checkout overlay, długo po naszym
+  `GET /api/subscription/checkout-params`, i (o ile wiadomo) Paddle Discount API nie ma natywnego
+  ograniczenia "tylko dla kraju rozliczeniowego X". Zastosowanie zniżki up-front na podstawie samego
+  `AffiliateCode.CountryCode` (bez weryfikacji faktycznego adresu) złamałoby wprost regułę
+  antyarbitrażową ze spec — to nie jest "brak czasu", tylko brak potwierdzonego mechanizmu Paddle do
+  poprawnego wdrożenia. Wymaga: sprawdzenia w dokumentacji/koncie Paddle czy Discounty wspierają
+  ograniczenie per-kraj, albo korekty po fakcie na podstawie faktycznego adresu z webhooka.
 - Stawka prowizji/okno prowizyjne/próg minimalny wypłaty/status prawny (B2B vs nagroda)/ranking
   publiczny — zostają **ustawieniami w adminie** (`AffiliateProgramSettings`) z sensownymi
   wartościami domyślnymi (prowizja 20%, podstawa netto, okno dożywotnie, brak progu minimalnego,
@@ -133,8 +153,22 @@ Rozstrzygnięte wprost przez właściciela — nie są już otwartymi pytaniami 
 - 2 Faza 2+ ..................................... GATES.md (G9-G12)
   - 2.1 Podłączenie realnych kwot z Paddle (transaction.completed) — VERIFIED (nie na realnym
     koncie Paddle — patrz zastrzeżenie w "Decyzje odłożone" wyżej)
-  - 2.1b Refund/adjustment compensation — WAITING, kształt payloadu Paddle do zweryfikowania
-  - 2.2 Kraje/rabaty per-kraj, ranking, heurystyki antyfraudowe — WAITING (Faza 4 planu źródłowego)
+  - 2.1b Refund/adjustment compensation — VERIFIED (kod), NIE zweryfikowane na realnym payloadzie
+    Paddle — wyższe ryzyko niż 2.1, patrz "Decyzje odłożone"
+  - 2.2 Kody per-kraj + rabat Paddle (§5.3/§13.2) — WAITING, brak potwierdzonego mechanizmu Paddle
+    (patrz "Decyzje odłożone" C14)
+  - 2.3 Ranking/leaderboard (§9, §16.6) — WAITING, wymaga decyzji właściciela (widoczność
+    publiczna/prywatna nigdy jawnie nie potwierdzona w briefie — `AffiliateProgramSettings.PublicLeaderboardEnabled`
+    istnieje z domyślną wartością `false`, ale sama funkcja rankingu/UI nie jest zbudowana)
+  - 2.4 Heurystyki antyfraudowe poza self-referral (anomaly detection click→conversion, §12.7) —
+    WAITING, zbyt nieokreślone w spec by zaimplementować bez dalszych decyzji
+  - 2.5 2FA dla afiliantów o wysokich obrotach (§15 Faza 4) — WAITING, spec mówi wprost
+    "rozważenie", nie twardy wymóg; próg "wysokie obroty" nigdy nie zdefiniowany
+  - 2.6 Testy integracyjne/E2E — WAITING, jawna decyzja właściciela z briefu (#7: "najpierw
+    jednostkowe, inne na kolejną sesję") ORAZ zablokowane środowiskowo (brak żywego Postgresa w
+    tym sandboxie, patrz GATES.md G4 z Fazy 1)
+  - 2.7 Weryfikacja całości na realnym koncie testowym Paddle — WAITING, brak dostępu do konta w
+    tym środowisku
 
 ## Tabela dyspozycji leafów
 

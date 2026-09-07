@@ -405,4 +405,63 @@ public class PaddlePaymentGatewayTests
         Assert.Equal(SubscriptionStatus.Unknown, parsed!.Status);
         Assert.Equal(SubscriptionPlan.Free.Key, parsed.PlanKey);
     }
+
+    [Fact]
+    public void ParseWebhookEvent_AdjustmentCreated_ReadsOriginalTransactionAndNetAmount()
+    {
+        const string secret = "whsec_test_secret";
+        var gateway = CreateWebhookOnlyGateway(secret, out var http);
+        using var _ = http;
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_adj_1",
+            event_type = "adjustment.created",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "adj_1",
+                transaction_id = "txn_abc",
+                status = "approved",
+                currency_code = "eur",
+                totals = new { total = "1700", fee = "150", earnings = "1550" }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        Assert.NotNull(parsed);
+        Assert.Equal("adjustment.created", parsed!.EventType);
+        Assert.Equal("adj_1", parsed.TransactionId);
+        Assert.Equal("txn_abc", parsed.OriginalTransactionId);
+        Assert.Equal(17.00m, parsed.GrossAmount);
+        Assert.Equal(15.50m, parsed.NetAmount);
+        Assert.Equal("EUR", parsed.Currency);
+    }
+
+    [Fact]
+    public void ParseWebhookEvent_AdjustmentCreated_IgnoresAnUnapprovedAdjustment()
+    {
+        const string secret = "whsec_test_secret";
+        var gateway = CreateWebhookOnlyGateway(secret, out var http);
+        using var _ = http;
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_adj_2",
+            event_type = "adjustment.created",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "adj_2",
+                transaction_id = "txn_abc",
+                status = "pending_approval",
+                totals = new { total = "1700", earnings = "1550" }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        Assert.Null(parsed);
+    }
 }

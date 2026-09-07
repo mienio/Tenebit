@@ -562,12 +562,13 @@ public sealed class SubscriptionService
 
         if (webhookEvent is null) return Result.Success();
 
-        // transaction.completed carries the actual money, not a subscription entitlement change - it is
-        // meaningless to this method's SyncFromPaddle/MapStatus logic (Status/PlanKey/CurrentPeriod* are
-        // just placeholders on that shape, see PaymentWebhookEvent) and is handled entirely by
-        // AffiliateConversionRecordingService.HandleWebhookAsync instead (spec §13.3), invoked separately
-        // by the same /subscription/webhook endpoint from the same raw payload.
-        if (webhookEvent.EventType == "transaction.completed") return Result.Success();
+        // transaction.completed and adjustment.created (a refund/chargeback) carry money, not a
+        // subscription entitlement change - both are meaningless to this method's SyncFromPaddle/MapStatus
+        // logic (Status/PlanKey/CurrentPeriod* are just placeholders on those shapes, see
+        // PaymentWebhookEvent) and are handled entirely by AffiliateConversionRecordingService.HandleWebhookAsync
+        // instead (spec §13.3/§13.4), invoked separately by the same /subscription/webhook endpoint from
+        // the same raw payload.
+        if (webhookEvent.EventType is "transaction.completed" or "adjustment.created") return Result.Success();
 
         // Paddle retries webhook delivery on timeout/5xx - replaying the same notification_id must be a
         // no-op instead of reapplying (and re-logging) the same state change twice (audyt P0.6).

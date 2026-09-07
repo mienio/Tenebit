@@ -46,13 +46,14 @@ public sealed class AffiliateConversionRecordingService
     }
 
     /// <summary>
-    /// The Paddle webhook entry point (spec §13.3). Re-parses the same raw payload
+    /// The Paddle webhook entry point (spec §13.3/§13.4). Re-parses the same raw payload
     /// <see cref="Tenebit.Application.Subscriptions.SubscriptionService.HandleWebhookAsync"/> already
     /// verified the signature of - a second HMAC/JSON pass is cheap and keeps this service from needing
     /// to know anything about that one's <c>ProcessedPaddleEvent</c> idempotency bookkeeping. Silently a
-    /// no-op for every event type except <c>transaction.completed</c>, for a transaction with no
-    /// affiliate attribution (no <c>custom_data.affiliate_code</c> - the overwhelmingly common case), or
-    /// for a customer Tenebit has no subscription record for.
+    /// no-op for every event type except <c>transaction.completed</c> and <c>adjustment.created</c>
+    /// (refund/chargeback), for a transaction with no affiliate attribution (no
+    /// <c>custom_data.affiliate_code</c> - the overwhelmingly common case), for a refund whose original
+    /// transaction was never an affiliate sale, or for a customer/transaction Tenebit has no record of.
     /// </summary>
     public async Task<Result> HandleWebhookAsync(string payload, string signatureHeader, CancellationToken cancellationToken)
     {
@@ -68,7 +69,19 @@ public sealed class AffiliateConversionRecordingService
             return Result.Success();
         }
 
-        if (webhookEvent is null || webhookEvent.EventType != "transaction.completed") return Result.Success();
+        if (webhookEvent is null) return Result.Success();
+
+        if (webhookEvent.EventType == "adjustment.created")
+        {
+            if (string.IsNullOrWhiteSpace(webhookEvent.TransactionId) || string.IsNullOrWhiteSpace(webhookEvent.OriginalTransactionId))
+                return Result.Success();
+
+            return await RecordRefundAsync(
+                webhookEvent.OriginalTransactionId, webhookEvent.TransactionId, webhookEvent.EventCreatedAt,
+                webhookEvent.GrossAmount, webhookEvent.NetAmount, cancellationToken);
+        }
+
+        if (webhookEvent.EventType != "transaction.completed") return Result.Success();
         if (string.IsNullOrWhiteSpace(webhookEvent.AffiliateCode) || string.IsNullOrWhiteSpace(webhookEvent.TransactionId))
             return Result.Success();
 
@@ -133,20 +146,60 @@ public sealed class AffiliateConversionRecordingService
 
         if (!requiresReview && isWithinWindow)
         {
-            var (periodStart, periodEnd) = AffiliatePayoutPeriod.ResolveMonthBounds(occurredAt);
-            var period = await _periods.GetOpenForMonthAsync(affiliate.Id, periodStart, cancellationToken);
-            if (period is null)
-            {
-                period = AffiliatePayoutPeriod.OpenFor(affiliate.Id, occurredAt, _clock.UtcNow);
-                _periods.Add(period);
-            }
-
+            var period = await GetOrOpenPeriodAsync(affiliate.Id, occurredAt, cancellationToken);
             period.AddCommission(conversion.CommissionAmount);
             conversion.AssignToPeriod(period.Id);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// A refund/chargeback compensating an earlier conversion (spec §7.2/§13.4). Deliberately assigned
+    /// to the payout period matching the REFUND's own <paramref name="occurredAt"/> - never back onto the
+    /// original sale's period - so an already-<c>Paid</c> period's frozen total is never rewritten;
+    /// instead the negative amount nets out against whatever period is open now (per spec: "jeśli już
+    /// wypłacony, saldo przechodzi na potrącenie z następnej wypłaty"). A no-op (not an error) when the
+    /// original transaction was never an affiliate sale, or the refund was already processed.
+    /// </summary>
+    private async Task<Result> RecordRefundAsync(
+        string originalPaddleTransactionId, string refundTransactionId, DateTimeOffset occurredAt,
+        decimal refundedGrossAmount, decimal refundedNetAmount, CancellationToken cancellationToken)
+    {
+        if (await _conversions.ExistsByPaddleTransactionAsync(refundTransactionId, cancellationToken))
+        {
+            return Result.Success();
+        }
+
+        var original = await _conversions.GetByPaddleTransactionAsync(originalPaddleTransactionId, cancellationToken);
+        if (original is null || refundedGrossAmount <= 0m || refundedNetAmount <= 0m)
+        {
+            return Result.Success();
+        }
+
+        var compensation = AffiliateConversion.CreateRefundCompensation(original, refundTransactionId, occurredAt, refundedGrossAmount, refundedNetAmount);
+        _conversions.Add(compensation);
+
+        var period = await GetOrOpenPeriodAsync(original.AffiliateId, occurredAt, cancellationToken);
+        period.AddCommission(compensation.CommissionAmount);
+        compensation.AssignToPeriod(period.Id);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+
+    private async Task<AffiliatePayoutPeriod> GetOrOpenPeriodAsync(Guid affiliateId, DateTimeOffset occurredAt, CancellationToken cancellationToken)
+    {
+        var (periodStart, _) = AffiliatePayoutPeriod.ResolveMonthBounds(occurredAt);
+        var period = await _periods.GetOpenForMonthAsync(affiliateId, periodStart, cancellationToken);
+        if (period is null)
+        {
+            period = AffiliatePayoutPeriod.OpenFor(affiliateId, occurredAt, _clock.UtcNow);
+            _periods.Add(period);
+        }
+
+        return period;
     }
 
     /// <summary>Heuristic only (spec §6.4/§12.7): exact-match or same-domain e-mail. Never blocks the

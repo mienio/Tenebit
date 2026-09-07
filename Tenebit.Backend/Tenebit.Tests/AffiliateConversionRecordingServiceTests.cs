@@ -178,4 +178,93 @@ public class AffiliateConversionRecordingServiceTests
         Assert.True(result.IsSuccess);
         Assert.Empty(fixture.Conversions.Conversions);
     }
+
+    [Fact]
+    public async Task HandleWebhookAsync_AdjustmentCreated_compensates_the_original_conversion_in_its_own_still_open_period()
+    {
+        var (fixture, _, code) = CreateFixture();
+        await fixture.Service.RecordConversionAsync(
+            code.Code, Guid.NewGuid(), Guid.NewGuid(), "txn_refunded", AffiliateConversionEventType.InitialSale,
+            fixture.Clock.UtcNow, 100m, 90m, "EUR", "buyer@other.test", CancellationToken.None);
+        var original = Assert.Single(fixture.Conversions.Conversions);
+        var originalPeriod = Assert.Single(fixture.Periods.Periods);
+
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_refund_1", "adjustment.created", "", null, "", SubscriptionStatus.Unknown,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow, null,
+            TransactionId: "adj_1", GrossAmount: 100m, NetAmount: 90m, OriginalTransactionId: "txn_refunded");
+
+        var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, fixture.Conversions.Conversions.Count);
+        var compensation = fixture.Conversions.Conversions.Single(c => c.PaddleTransactionId == "adj_1");
+        Assert.Equal(-original.CommissionAmount, compensation.CommissionAmount);
+        Assert.Equal(originalPeriod.Id, compensation.AffiliatePayoutPeriodId);
+        Assert.Equal(0m, originalPeriod.TotalCommission);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_AdjustmentCreated_nets_out_against_the_current_period_instead_of_rewriting_an_already_paid_one()
+    {
+        var (fixture, _, code) = CreateFixture();
+        var saleDate = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+        await fixture.Service.RecordConversionAsync(
+            code.Code, Guid.NewGuid(), Guid.NewGuid(), "txn_refunded", AffiliateConversionEventType.InitialSale,
+            saleDate, 100m, 90m, "EUR", "buyer@other.test", CancellationToken.None);
+        var original = Assert.Single(fixture.Conversions.Conversions);
+        var julyPeriod = Assert.Single(fixture.Periods.Periods);
+        julyPeriod.Close(fixture.Clock.UtcNow);
+        julyPeriod.MarkPaid();
+
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_refund_2", "adjustment.created", "", null, "", SubscriptionStatus.Unknown,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow, null,
+            TransactionId: "adj_2", GrossAmount: 100m, NetAmount: 90m, OriginalTransactionId: "txn_refunded");
+
+        var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(18m, original.CommissionAmount); // sanity: 90 * 20%
+        Assert.Equal(18m, julyPeriod.TotalCommission); // untouched - already paid
+        var compensation = fixture.Conversions.Conversions.Single(c => c.PaddleTransactionId == "adj_2");
+        var septemberPeriod = fixture.Periods.Periods.Single(p => p.Id != julyPeriod.Id);
+        Assert.Equal(new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero), septemberPeriod.PeriodStart);
+        Assert.Equal(-18m, septemberPeriod.TotalCommission);
+        Assert.Equal(septemberPeriod.Id, compensation.AffiliatePayoutPeriodId);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_AdjustmentCreated_is_idempotent_on_replay()
+    {
+        var (fixture, _, code) = CreateFixture();
+        await fixture.Service.RecordConversionAsync(
+            code.Code, Guid.NewGuid(), Guid.NewGuid(), "txn_refunded", AffiliateConversionEventType.InitialSale,
+            fixture.Clock.UtcNow, 100m, 90m, "EUR", "buyer@other.test", CancellationToken.None);
+
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_refund_3", "adjustment.created", "", null, "", SubscriptionStatus.Unknown,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow, null,
+            TransactionId: "adj_3", GrossAmount: 100m, NetAmount: 90m, OriginalTransactionId: "txn_refunded");
+
+        await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+        await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.Equal(2, fixture.Conversions.Conversions.Count); // original + exactly one compensation
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_AdjustmentCreated_ignores_a_refund_for_a_transaction_that_was_never_an_affiliate_sale()
+    {
+        var (fixture, _, _) = CreateFixture();
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_refund_4", "adjustment.created", "", null, "", SubscriptionStatus.Unknown,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow, null,
+            TransactionId: "adj_4", GrossAmount: 100m, NetAmount: 90m, OriginalTransactionId: "txn_never_existed");
+
+        var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(fixture.Conversions.Conversions);
+    }
 }

@@ -138,12 +138,62 @@ realnym koncie Paddle - to zastrzeżenie jest udokumentowane wprost powyżej i w
 dostępu do takiego konta w tym środowisku.
 -->
 
-# Poza zakresem tej sesji (Faza 2b+)
+# Gates: Faza 2.1b — Refundy/chargebacki (adjustment.created) (2026-09-07)
 
-- `transaction.refunded`/`adjustment.created` → `AffiliateConversion.CreateRefundCompensation` -
-  metoda domenowa istnieje od Fazy 1, ale nic jej nie woła. Paddle Billing API prawdopodobnie
-  wysyła to jako `adjustment.created`, nie `transaction.refunded` - inny kształt payloadu niż
-  `transaction.completed`, wymaga własnej weryfikacji przed wdrożeniem.
+OWNS (dodatkowo): parsowanie `adjustment.created` w `PaddlePaymentGateway`,
+`AffiliateConversionRecordingService.RecordRefundAsync`/`GetOrOpenPeriodAsync`.
+
+**Zastrzeżenie, WYŻSZE ryzyko niż G9-G12**: kształt payloadu Paddle Adjustments (`data.totals`,
+`data.status`, `data.transaction_id`) jest zbudowany z pamięci szkoleniowej, nie z dokumentacji
+otwartej w tej sesji ani z realnego konta Paddle - Adjustments to mniej centralny mechanizm niż
+Transactions. Właściciel produktu powinien zweryfikować to przed pierwszym realnym zwrotem, nie
+tylko przed pierwszą wypłatą.
+
+- [x] G13: Parsowanie adjustment.created (kwoty, oryginalny transaction_id, filtr statusu approved)
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet test Tenebit.Tests --filter "FullyQualifiedName~ParseWebhookEvent_AdjustmentCreated" -v quiet'
+  EXPECT: Passed!
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Passed, 2/2 (net earnings + original transaction id; pending_approval poprawnie
+    zignorowany, zwraca null).
+
+- [x] G14: Kompensacja przypisywana do okresu zwrotu, nigdy do zamrożonego już-wypłaconego okresu
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet test Tenebit.Tests --filter "FullyQualifiedName~AdjustmentCreated" -v quiet'
+  EXPECT: Passed!
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Passed, 6/6 (filtr łapie też 2 testy parsowania z G13 plus 4 testy serwisu: kompensacja
+    w tym samym otwartym okresie co sprzedaż; nettowanie z bieżącym okresem gdy oryginalny już Paid,
+    bez zmiany jego zamrożonej sumy; idempotencja przy replay; brak-oryginalnej-konwersji jest cichym
+    no-opem).
+
+- [x] G15: Pełna suita backendu bez regresji po dodaniu refundów + frontend bez zmian, build/lint/test
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet test Tenebit.Tests --filter "FullyQualifiedName!~Integration" -v quiet; cd ../Tenebit.Frontend && npm run build && npm run lint && npm test -- --run'
+  EXPECT: Passed! / built in / no lint errors / all vitest tests passed
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Backend 828/829 (jedyny fail to ten sam pre-existing ErrorMessageCoverageTests,
+    niezwiązany). Frontend: build OK, lint clean, vitest 48/48 - refund flow jest czysto
+    webhook-driven backendem, brak potrzeby zmian frontendowych.
+
+<!--
+G13-G15 są uruchamialne i zweryfikowane w tym środowisku. Weryfikacja na realnym payloadzie Paddle
+pozostaje zadaniem właściciela produktu.
+-->
+
+# Poza zakresem tej sesji (Faza 2c+)
+
+- Kody per-kraj + rabat Paddle przy checkout (spec §5.3/§13.2) - świadomie NIE zaimplementowane:
+  spec wymaga porównania z realnym adresem rozliczeniowym z Paddle, znanym dopiero wewnątrz
+  checkout overlay, długo po naszym `GET /api/subscription/checkout-params`; zastosowanie zniżki
+  wcześniej (samo na podstawie `AffiliateCode.CountryCode`) złamałoby regułę antyarbitrażową ze
+  spec. Wymaga potwierdzenia czy Paddle Discount API wspiera ograniczenie per-kraj.
+- Ranking/leaderboard (§9, §16.6) - `AffiliateProgramSettings.PublicLeaderboardEnabled` istnieje
+  jako ustawienie, ale sama funkcja (endpoint + UI) nie jest zbudowana; widoczność
+  publiczna/prywatna nigdy jawnie nie potwierdzona przez właściciela.
+- Heurystyki antyfraudowe poza self-referral email-match (już zbudowane w Fazie 1) - "anomaly
+  detection" ze spec §12.7 jest zbyt nieokreślone by zaimplementować bez dalszych decyzji (jaki
+  próg? jaka metryka?).
+- 2FA dla afiliantów o wysokich obrotach (§15 Faza 4) - spec mówi "rozważenie", nie twardy wymóg;
+  próg "wysokie obroty" nigdy nie zdefiniowany.
+- Testy integracyjne/E2E - jawna decyzja właściciela z briefu (#7) ORAZ zablokowane środowiskowo
+  (brak żywego Postgresa w tym sandboxie).
 - Weryfikacja na realnym koncie testowym Paddle (custom_data round-trip, dokładny kształt
-  `details.totals`).
-- Kody per-kraj + rabat Paddle przy checkout (spec §5.3/§13.2, Faza 4 planu źródłowego).
+  `details.totals` i `adjustment.totals`) - brak dostępu do konta w tym środowisku.

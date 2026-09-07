@@ -31,7 +31,12 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         // Affiliate commission source (spec §13.3) - parsed into the same PaymentWebhookEvent record via
         // a wholly separate branch in ParseWebhookEvent (see ParseTransactionCompleted), never touched by
         // SubscriptionService's entitlement-sync logic.
-        "transaction.completed"
+        "transaction.completed",
+        // Refund/chargeback compensation (spec §7.2/§13.4, see ParseAdjustmentCreated) - higher-confidence
+        // risk than transaction.completed: Paddle's Adjustments API is less central than Transactions, so
+        // this shape is more speculative and has NOT been checked against a real Paddle payload any more
+        // than transaction.completed has (see PLAN.md "Decyzje odłożone").
+        "adjustment.created"
     };
 
     private readonly HttpClient _http;
@@ -226,6 +231,7 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             var data = root.GetProperty("data");
 
             if (type == "transaction.completed") return ParseTransactionCompleted(eventId, data, occurredAt);
+            if (type == "adjustment.created") return ParseAdjustmentCreated(eventId, data, occurredAt);
 
             var customer = RequiredString(data, "customer_id");
             var subscriptionId = RequiredString(data, "id");
@@ -316,6 +322,48 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             eventId, "transaction.completed", customer, subscriptionId, SubscriptionPlan.Free.Key,
             SubscriptionStatus.Unknown, billedAt, billedAt, billedAt, null,
             transactionId, affiliateCode, grossAmount, netAmount, currency, isRenewal);
+    }
+
+    /// <summary>
+    /// A Paddle Adjustment - a refund, credit, or chargeback against an earlier transaction (spec
+    /// §7.2/§13.4). Returns null (treated as "not handled" by the caller) for anything not yet an
+    /// approved, real money movement: Paddle adjustments go through <c>pending_approval</c> before
+    /// <c>approved</c>/<c>rejected</c>, and only an approved one should ever create a compensating
+    /// <see cref="Tenebit.Domain.Affiliates.AffiliateConversion"/>. This shape is more speculative than
+    /// <see cref="ParseTransactionCompleted"/> - Paddle's Adjustments API is less central than
+    /// Transactions and has not been checked against a real payload (see PLAN.md).
+    /// </summary>
+    private static PaymentWebhookEvent? ParseAdjustmentCreated(string eventId, JsonElement data, DateTimeOffset occurredAt)
+    {
+        var status = data.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
+        if (!string.Equals(status, "approved", StringComparison.Ordinal)) return null;
+
+        var adjustmentId = RequiredString(data, "id");
+        var originalTransactionId = RequiredString(data, "transaction_id");
+        var currency = data.TryGetProperty("currency_code", out var currencyProp) && currencyProp.ValueKind == JsonValueKind.String
+            ? currencyProp.GetString()!.ToUpperInvariant()
+            : "EUR";
+
+        var grossAmount = 0m;
+        var netAmount = 0m;
+        if (data.TryGetProperty("totals", out var totals))
+        {
+            grossAmount = ReadAmountMajorUnits(totals, "total");
+            netAmount = ReadAmountMajorUnits(totals, "earnings");
+            if (netAmount == 0m)
+            {
+                var fee = ReadAmountMajorUnits(totals, "fee");
+                netAmount = fee > 0m ? grossAmount - fee : grossAmount;
+            }
+        }
+        // Nothing meaningful to compensate - never construct a zero/negative-magnitude refund row (the
+        // domain factory itself would reject it anyway).
+        if (grossAmount <= 0m || netAmount <= 0m) return null;
+
+        return new PaymentWebhookEvent(
+            eventId, "adjustment.created", string.Empty, null, SubscriptionPlan.Free.Key, SubscriptionStatus.Unknown,
+            occurredAt, occurredAt, occurredAt, null,
+            adjustmentId, null, grossAmount, netAmount, currency, false, originalTransactionId);
     }
 
     public async Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken)

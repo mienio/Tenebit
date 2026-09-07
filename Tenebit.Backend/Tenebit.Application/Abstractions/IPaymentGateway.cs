@@ -91,7 +91,12 @@ public sealed record PaymentWebhookEvent(
     // still goes through a single ParseWebhookEvent/signature-verification path; callers must branch on
     // EventType before touching the subscription-only fields.
     string? TransactionId = null, string? AffiliateCode = null, decimal GrossAmount = 0m, decimal NetAmount = 0m,
-    string? Currency = null, bool IsRenewal = false);
+    string? Currency = null, bool IsRenewal = false,
+    // Populated only when EventType == "adjustment.created" (spec §7.2/§13.4 - a refund/chargeback
+    // compensating an earlier transaction.completed). TransactionId above is the adjustment's own id
+    // (used as the compensation AffiliateConversion's idempotency key); this is the id of the original
+    // transaction it refunds, used to look up which AffiliateConversion to compensate.
+    string? OriginalTransactionId = null);
 
 public sealed record PaymentSubscriptionState(
     string CustomerId, string SubscriptionId, string PlanKey, SubscriptionStatus Status,
