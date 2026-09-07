@@ -42,14 +42,21 @@ const content: Record<PartnerLocale, {
   },
 };
 
+function displayUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '');
+}
+
 function CopyButton({ text, copyLabel, copiedLabel }: { text: string; copyLabel: string; copiedLabel: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       variant="secondary"
+      iconOnly
+      title={copied ? copiedLabel : copyLabel}
+      aria-label={copied ? copiedLabel : copyLabel}
       icon={copied ? <Check size={14} /> : <Copy size={14} />}
       onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}
-    >{copied ? copiedLabel : copyLabel}</Button>
+    />
   );
 }
 
@@ -109,7 +116,7 @@ export function PartnerCodesPage() {
       <div className="card" style={{ marginBottom: 16 }}>
         <form className="formGrid" onSubmit={handleCreate}>
           <Field label={t.customCodeLabel(activeCount)} info={t.customCodeInfo}>
-            <TextInput value={customCode} onChange={e => setCustomCode(e.target.value.toUpperCase())} placeholder={t.customCodePlaceholder} />
+            <TextInput value={customCode} onChange={e => setCustomCode(e.target.value.toUpperCase())} placeholder={t.customCodePlaceholder} minLength={7} maxLength={20} />
           </Field>
           <div className="formActions">
             <Button type="submit" icon={<Plus size={16} />} disabled={creating}>{creating ? t.creating : t.create}</Button>
@@ -125,10 +132,15 @@ export function PartnerCodesPage() {
               {codes.map(c => (
                 <tr key={c.id}>
                   <td><code>{c.code}</code></td>
-                  <td><CopyButton text={c.trackingUrl} copyLabel={t.copyLink} copiedLabel={t.copied} /></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="adminMuted" style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{displayUrl(c.trackingUrl)}</span>
+                      <CopyButton text={c.trackingUrl} copyLabel={t.copyLink} copiedLabel={t.copied} />
+                    </div>
+                  </td>
                   <td>{c.clickCount}</td>
                   <td>{c.isActive ? <span className="adminTag adminTag--ok">{t.active}</span> : <span className="adminTag">{t.disabled}</span>}</td>
-                  <td>
+                  <td className="adminTable__actions">
                     <Button variant="secondary" icon={<Power size={14} />} disabled={busyId === c.id} onClick={() => handleToggle(c)}>
                       {c.isActive ? t.disable : t.enable}
                     </Button>
