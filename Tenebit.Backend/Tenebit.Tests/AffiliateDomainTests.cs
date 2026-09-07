@@ -78,7 +78,7 @@ public class AffiliateDomainTests
 
     [Theory]
     [InlineData("DAMIAN20")]
-    [InlineData("A-B-C")]
+    [InlineData("A-B-C-D")] // 7 chars, exactly at the minimum
     public void Valid_code_formats_are_normalized_and_accepted(string code)
     {
         Assert.Equal(code.ToUpperInvariant(), AffiliateCode.Normalize(code));
@@ -86,6 +86,7 @@ public class AffiliateDomainTests
 
     [Theory]
     [InlineData("ab")] // too short
+    [InlineData("DAMIAN")] // 6 chars, one under the 7-char minimum
     [InlineData("HAS SPACE")]
     [InlineData("<script>")]
     [InlineData("ADMIN2026")] // reserved word substring

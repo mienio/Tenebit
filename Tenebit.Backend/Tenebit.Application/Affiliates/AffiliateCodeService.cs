@@ -138,9 +138,12 @@ public sealed class AffiliateCodeService
         if (basePrefix.Length > 12) basePrefix = basePrefix[..12];
 
         const string alphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789"; // no 0/O/1/I - avoids misread codes
+        // 5, not 4: guarantees {prefix}-{suffix} clears AffiliateCode's 7-character minimum even for a
+        // 1-character basePrefix (a real last name can normalize to a single letter after stripping
+        // non-alphanumerics) - shortest possible result is "X-ABCDE" (7 chars).
         for (var attempt = 0; attempt < 20; attempt++)
         {
-            var suffix = string.Create(4, alphabet, (span, chars) =>
+            var suffix = string.Create(5, alphabet, (span, chars) =>
             {
                 for (var i = 0; i < span.Length; i++) span[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
             });

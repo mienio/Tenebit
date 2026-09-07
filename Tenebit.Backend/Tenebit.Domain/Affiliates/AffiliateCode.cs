@@ -14,7 +14,7 @@ namespace Tenebit.Domain.Affiliates;
 /// </summary>
 public sealed class AffiliateCode
 {
-    private static readonly Regex CodePattern = new("^[A-Z0-9][A-Z0-9-]{2,19}$", RegexOptions.Compiled);
+    private static readonly Regex CodePattern = new("^[A-Z0-9][A-Z0-9-]{6,19}$", RegexOptions.Compiled);
 
     private static readonly HashSet<string> ReservedWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -54,7 +54,7 @@ public sealed class AffiliateCode
         if (string.IsNullOrWhiteSpace(code)) throw new DomainException("Kod afiliacyjny nie może być pusty.");
         var normalized = code.Trim().ToUpperInvariant();
         if (!CodePattern.IsMatch(normalized))
-            throw new DomainException("Kod może zawierać 3-20 wielkich liter/cyfr/myślników, bez spacji i bez znaków specjalnych.");
+            throw new DomainException("Kod może zawierać 7-20 wielkich liter/cyfr/myślników, bez spacji i bez znaków specjalnych.");
         if (ReservedWords.Any(reserved => normalized.Contains(reserved, StringComparison.Ordinal)))
             throw new DomainException("Ten kod jest zastrzeżony. Wybierz inny.");
         return normalized;

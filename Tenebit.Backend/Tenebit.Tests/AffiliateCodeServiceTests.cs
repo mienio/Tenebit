@@ -88,4 +88,32 @@ public class AffiliateCodeServiceTests
         Assert.True(result.IsSuccess);
         Assert.StartsWith("KOWALSKI-", result.Value!.Code);
     }
+
+    [Fact]
+    public async Task An_explicit_code_under_the_seven_character_minimum_is_rejected()
+    {
+        var (fixture, affiliate) = CreateFixture();
+        var result = await fixture.Service.CreateAsync(affiliate.Id, "AB12CD", null, CancellationToken.None);
+        Assert.True(result.IsFailure);
+        Assert.Equal(400, result.Error!.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auto_generated_code_clears_the_seven_character_minimum_even_for_a_one_letter_last_name()
+    {
+        var affiliates = new InMemoryAffiliateRepository();
+        var codes = new InMemoryAffiliateCodeRepository();
+        var promoCodes = new InMemoryPromoCodeRepository();
+        var settings = new InMemoryAffiliateProgramSettingsRepository();
+        var clock = new FakeClock();
+        var service = new AffiliateCodeService(codes, affiliates, promoCodes, settings, new FakeAppLinkBuilder(), new FakeUnitOfWork(), clock);
+        var affiliate = new Affiliate("x@example.com", "hash", "X", "X", null, clock.UtcNow);
+        affiliate.OverrideMaxActiveCodes(10);
+        affiliates.Add(affiliate);
+
+        var result = await service.CreateAsync(affiliate.Id, null, null, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.Code.Length >= 7, $"expected at least 7 characters, got '{result.Value.Code}'");
+    }
 }
