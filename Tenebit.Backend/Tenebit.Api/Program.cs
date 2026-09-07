@@ -75,6 +75,7 @@ builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 // Singleton: the lockout counter must be shared across all admin sign-in attempts, not per request.
 builder.Services.AddSingleton<AdminLoginGuard>();
 builder.Services.AddScoped<AdminAlertSender>();
+builder.Services.AddScoped<AffiliateAlertSender>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
@@ -145,6 +146,17 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("public", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(60)));
     // Single account, highest-value target: far tighter than the tenant "auth-login" ceiling (200/min).
     options.AddPolicy("admin-login", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(10)));
+
+    // Affiliate program (spec §12.8) - a newer, less observed surface than tenant auth, so tighter
+    // ceilings than the tenant equivalents even though the account itself is lower-value than a
+    // platform-admin session.
+    options.AddPolicy("affiliate-register", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(30)));
+    options.AddPolicy("affiliate-login", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(10)));
+    options.AddPolicy("affiliate-recovery", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(10)));
+    options.AddPolicy("affiliate-code-check", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(60)));
+    // The redirect is the main bot target but also the one endpoint that must absorb a real traffic
+    // spike from a viral post, so it gets a higher ceiling than the other public policy.
+    options.AddPolicy("affiliate-redirect", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(120)));
 });
 
 builder.Services
@@ -172,6 +184,42 @@ builder.Services
                 // claim. TenebitEndpoints separately forbids this scope on every tenant route.
                 if (context.Principal?.FindFirst(PlatformAdminClaims.ScopeClaimType)?.Value == PlatformAdminClaims.ScopeValue)
                 {
+                    return;
+                }
+
+                // Affiliate tokens have their own security-state check against their own table/cache -
+                // deliberately not the OrganizationUser one below, so the two identity kinds never share
+                // a lookup path (spec §4.1/§12.1).
+                if (context.Principal?.FindFirst(AffiliateClaims.ScopeClaimType)?.Value == AffiliateClaims.ScopeValue)
+                {
+                    var affiliateSubject = context.Principal?.FindFirst("sub")?.Value;
+                    var affiliateStampClaim = context.Principal?.FindFirst("security_stamp")?.Value;
+                    if (!Guid.TryParse(affiliateSubject, out var affiliateId) || !Guid.TryParse(affiliateStampClaim, out var affiliateStamp))
+                    {
+                        context.Fail("Token nie zawiera aktualnego stanu sesji.");
+                        return;
+                    }
+
+                    var affiliateCache = context.HttpContext.RequestServices.GetRequiredService<IAffiliateSecurityStateCache>();
+                    if (!affiliateCache.TryGet(affiliateId, out var affiliateState))
+                    {
+                        var affiliates = context.HttpContext.RequestServices.GetRequiredService<IAffiliateRepository>();
+                        var loadedState = await affiliates.GetSecurityStateAsync(affiliateId, context.HttpContext.RequestAborted);
+                        if (loadedState is null)
+                        {
+                            context.Fail("Sesja została unieważniona.");
+                            return;
+                        }
+
+                        affiliateState = loadedState;
+                        affiliateCache.Set(affiliateId, affiliateState, TimeSpan.FromSeconds(30));
+                    }
+
+                    if (!affiliateState.IsActive || affiliateState.SecurityStamp != affiliateStamp)
+                    {
+                        context.Fail("Sesja została unieważniona.");
+                    }
+
                     return;
                 }
 
@@ -214,6 +262,7 @@ builder.Services
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("PlatformAdmin", policy => policy.RequireClaim(PlatformAdminClaims.ScopeClaimType, PlatformAdminClaims.ScopeValue));
+    options.AddPolicy("Affiliate", policy => policy.RequireClaim(AffiliateClaims.ScopeClaimType, AffiliateClaims.ScopeValue));
 });
 
 var app = builder.Build();
@@ -357,6 +406,8 @@ app.Use(async (context, next) =>
 
 app.MapTenebitApi();
 app.MapAdminEndpoints();
+app.MapPartnerEndpoints();
+app.MapRedirectEndpoints();
 
 var verifyEncryptedDataOnly = args.Any(arg => string.Equals(arg, "--verify-encrypted-data", StringComparison.OrdinalIgnoreCase));
 if (verifyEncryptedDataOnly)

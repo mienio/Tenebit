@@ -22,4 +22,5 @@ public static class FieldEncryptionPurposes
     public const string TotpSecret = "totp-secret-v1";
     public const string LicenseKey = "license-key-v1";
     public const string AssetSensitiveField = "asset-sensitive-field-v1";
+    public const string AffiliateRevolutTag = "affiliate-revolut-tag-v1";
 }

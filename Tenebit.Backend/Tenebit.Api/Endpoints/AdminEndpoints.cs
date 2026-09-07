@@ -42,6 +42,42 @@ public sealed record AdminCreatePromoCodeRequest(
 [ValidatedRequest]
 public sealed record AdminSetPromoCodeActiveRequest(bool Active);
 
+[ValidatedRequest]
+public sealed record AdminAffiliateCommissionRequest(
+    [property: Range(0, 100)] decimal? CommissionPercent,
+    [property: Range(1, int.MaxValue)] int? MaxActiveCodes,
+    [property: Required, StringLength(11, MinimumLength = 6)] string TotpCode);
+
+[ValidatedRequest]
+public sealed record AdminAffiliateMarkPaidRequest(
+    [property: Required, MinLength(1)] Guid[] PeriodIds,
+    [property: Range(0.01, 1_000_000)] decimal Amount,
+    [property: Required, StringLength(3, MinimumLength = 3)] string Currency,
+    [property: StringLength(200)] string? PaymentReference,
+    [property: StringLength(1000)] string? Note,
+    [property: Required, StringLength(11, MinimumLength = 6)] string TotpCode);
+
+[ValidatedRequest]
+public sealed record AdminAffiliateSettingsUpdateRequest(
+    [property: Range(0, 100)] decimal DefaultCommissionPercent,
+    [property: Required] Tenebit.Domain.Affiliates.AffiliateCommissionBase CommissionBase,
+    [property: Range(1, 1200)] int? DefaultCommissionWindowMonths,
+    [property: Range(1, 1000)] int DefaultMaxCodesPerAffiliate,
+    [property: Range(1, 28)] int PayoutDayOfMonth,
+    [property: Range(0, 28)] int PayoutGraceDays,
+    [property: Range(0, 1_000_000)] decimal? MinimumPayoutAmount,
+    bool CodeGrantsCustomerDiscountByDefault,
+    bool PublicLeaderboardEnabled);
+
+[ValidatedRequest]
+public sealed record AdminAffiliateCountryRuleRequest(
+    [property: Required, StringLength(2, MinimumLength = 2)] string CountryCode,
+    [property: Range(0.01, 100)] decimal DiscountPercent,
+    [property: Range(1, 1200)] int? DurationMonths);
+
+[ValidatedRequest]
+public sealed record AdminAffiliateMessageReplyRequest([property: Required, StringLength(5000, MinimumLength = 1)] string Body);
+
 // Fully isolated from /api: separate route group, separate JWT scope (token_scope=platform_admin),
 // no organization_id, no OrganizationUser row. TenebitEndpoints explicitly rejects this scope on every
 // tenant route, and this group requires it on every route but /login - the two are mutually exclusive
@@ -70,6 +106,7 @@ public static class AdminEndpoints
         MapReads(admin);
         MapModeration(admin);
         MapPromoCodes(admin);
+        MapAffiliates(admin);
         return admin;
     }
 
@@ -240,6 +277,110 @@ public static class AdminEndpoints
         admin.MapDelete("/promo-codes/{id:guid}", async (
                 Guid id, HttpContext http, PromoCodeAdminService service, CancellationToken cancellationToken) =>
             (await service.DeleteAsync(id, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult());
+    }
+
+    // Affiliate program admin surface (spec §9). Approve/block/reactivate/commission-override/mark-paid
+    // are access- or money-affecting, so they carry the same TOTP step-up as organization moderation
+    // above. Settings/country-rules/message-reply are configuration and communication, not a path to
+    // anyone's account or money - same reasoning MapPromoCodes already documents for why those need no
+    // step-up.
+    private static void MapAffiliates(RouteGroupBuilder admin)
+    {
+        admin.MapGet("/affiliates", async (
+                Tenebit.Domain.Affiliates.AffiliateStatus? status, Application.Admin.AffiliateAdminService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListAsync(status, cancellationToken)));
+
+        admin.MapGet("/affiliate-dashboard-summary", async (Application.Admin.AffiliateAdminService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetDashboardSummaryAsync(cancellationToken)));
+
+        admin.MapGet("/affiliates/{id:guid}", async (Guid id, Application.Admin.AffiliateAdminService service, CancellationToken cancellationToken) =>
+            (await service.GetDetailAsync(id, cancellationToken)).ToHttpResult());
+
+        admin.MapPost("/affiliates/{id:guid}/approve", async (
+                Guid id, AdminUserActionRequest request, HttpContext http, Application.Admin.AffiliateAdminService service, IConfiguration configuration, CancellationToken cancellationToken) =>
+            {
+                if (!RequireStepUp(configuration, request.TotpCode, out var denied)) return denied;
+                return (await service.ApproveAsync(id, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult();
+            });
+
+        admin.MapPost("/affiliates/{id:guid}/block", async (
+                Guid id, AdminSuspendRequest request, HttpContext http, Application.Admin.AffiliateAdminService service, IConfiguration configuration, CancellationToken cancellationToken) =>
+            {
+                if (!RequireStepUp(configuration, request.TotpCode, out var denied)) return denied;
+                return (await service.BlockAsync(id, request.Reason, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult();
+            });
+
+        admin.MapPost("/affiliates/{id:guid}/reactivate", async (
+                Guid id, AdminUserActionRequest request, HttpContext http, Application.Admin.AffiliateAdminService service, IConfiguration configuration, CancellationToken cancellationToken) =>
+            {
+                if (!RequireStepUp(configuration, request.TotpCode, out var denied)) return denied;
+                return (await service.ReactivateAsync(id, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult();
+            });
+
+        admin.MapPatch("/affiliates/{id:guid}/commission", async (
+                Guid id, AdminAffiliateCommissionRequest request, HttpContext http, Application.Admin.AffiliateAdminService service, IConfiguration configuration, CancellationToken cancellationToken) =>
+            {
+                if (!RequireStepUp(configuration, request.TotpCode, out var denied)) return denied;
+                return (await service.OverrideCommissionAsync(id, request.CommissionPercent, request.MaxActiveCodes, http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult();
+            });
+
+        admin.MapPost("/affiliates/{id:guid}/payouts/mark-paid", async (
+                Guid id, AdminAffiliateMarkPaidRequest request, HttpContext http, Application.Admin.AffiliateAdminService service, IConfiguration configuration, CancellationToken cancellationToken) =>
+            {
+                if (!RequireStepUp(configuration, request.TotpCode, out var denied)) return denied;
+                return (await service.MarkPayoutPaidAsync(
+                    id, request.PeriodIds, request.Amount, request.Currency, request.PaymentReference, request.Note,
+                    http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToNoContentResult();
+            });
+
+        admin.MapGet("/affiliate-settings", async (Application.Admin.AffiliateProgramSettingsAdminService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetAsync(cancellationToken)));
+
+        admin.MapPut("/affiliate-settings", async (
+                AdminAffiliateSettingsUpdateRequest request, HttpContext http, Application.Admin.AffiliateProgramSettingsAdminService service, CancellationToken cancellationToken) =>
+            (await service.UpdateAsync(
+                request.DefaultCommissionPercent, request.CommissionBase, request.DefaultCommissionWindowMonths,
+                request.DefaultMaxCodesPerAffiliate, request.PayoutDayOfMonth, request.PayoutGraceDays, request.MinimumPayoutAmount,
+                request.CodeGrantsCustomerDiscountByDefault, request.PublicLeaderboardEnabled,
+                http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToHttpResult());
+
+        admin.MapGet("/affiliate-settings/country-rules", async (Application.Admin.AffiliateProgramSettingsAdminService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListCountryRulesAsync(cancellationToken)));
+
+        admin.MapPut("/affiliate-settings/country-rules", async (AdminAffiliateCountryRuleRequest request, Application.Admin.AffiliateProgramSettingsAdminService service, CancellationToken cancellationToken) =>
+            (await service.UpsertCountryRuleAsync(request.CountryCode, request.DiscountPercent, request.DurationMonths, cancellationToken)).ToHttpResult());
+
+        admin.MapDelete("/affiliate-settings/country-rules/{id:guid}", async (Guid id, Application.Admin.AffiliateProgramSettingsAdminService service, CancellationToken cancellationToken) =>
+            (await service.RemoveCountryRuleAsync(id, cancellationToken)).ToNoContentResult());
+
+        admin.MapGet("/affiliate-messages", async (Application.Affiliates.AffiliateMessageService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListForAdminAsync(cancellationToken)));
+
+        admin.MapGet("/affiliate-messages/{id:guid}", async (Guid id, Application.Affiliates.AffiliateMessageService service, CancellationToken cancellationToken) =>
+            (await service.GetThreadForAdminAsync(id, cancellationToken)).ToHttpResult());
+
+        admin.MapPost("/affiliate-messages/{id:guid}/reply", async (
+                Guid id, AdminAffiliateMessageReplyRequest request, Application.Affiliates.AffiliateMessageService service,
+                Application.Abstractions.IAffiliateRepository affiliates, AffiliateAlertSender alerts, CancellationToken cancellationToken) =>
+            {
+                var result = await service.ReplyAsAdminAsync(id, request.Body, cancellationToken);
+                if (result.IsSuccess)
+                {
+                    var threadResult = await service.GetThreadForAdminAsync(id, cancellationToken);
+                    // Best-effort: the reply itself already succeeded and must not fail because a
+                    // notification lookup did.
+                    var affiliateId = (await service.ListForAdminAsync(cancellationToken)).FirstOrDefault(t => t.Id == id)?.AffiliateId;
+                    if (affiliateId.HasValue)
+                    {
+                        var affiliate = await affiliates.GetByIdAsync(affiliateId.Value, cancellationToken);
+                        if (affiliate is not null && threadResult.IsSuccess)
+                        {
+                            await alerts.ReplyPostedAsync(affiliate.Email, threadResult.Value!.Subject, cancellationToken);
+                        }
+                    }
+                }
+                return result.ToNoContentResult();
+            });
     }
 
     /// <summary>

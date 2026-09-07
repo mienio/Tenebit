@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Tenebit.Application.Abstractions;
+using Tenebit.Domain.Affiliates;
 using Tenebit.Domain.Alerts;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Assignments;
@@ -151,6 +152,20 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<OrganizationSubscription> Subscriptions => Set<OrganizationSubscription>();
     public DbSet<PromoCode> PromoCodes => Set<PromoCode>();
     public DbSet<ProcessedPaddleEvent> ProcessedPaddleEvents => Set<ProcessedPaddleEvent>();
+
+    public DbSet<Affiliate> Affiliates => Set<Affiliate>();
+    public DbSet<AffiliateCode> AffiliateCodes => Set<AffiliateCode>();
+    public DbSet<AffiliateClick> AffiliateClicks => Set<AffiliateClick>();
+    public DbSet<AffiliateConversion> AffiliateConversions => Set<AffiliateConversion>();
+    public DbSet<AffiliatePayoutPeriod> AffiliatePayoutPeriods => Set<AffiliatePayoutPeriod>();
+    public DbSet<AffiliatePayout> AffiliatePayouts => Set<AffiliatePayout>();
+    public DbSet<AffiliateMessageThread> AffiliateMessageThreads => Set<AffiliateMessageThread>();
+    public DbSet<AffiliateMessage> AffiliateMessages => Set<AffiliateMessage>();
+    public DbSet<AffiliateProgramSettings> AffiliateProgramSettings => Set<AffiliateProgramSettings>();
+    public DbSet<AffiliateCountryDiscountRule> AffiliateCountryDiscountRules => Set<AffiliateCountryDiscountRule>();
+    public DbSet<AffiliateRefreshToken> AffiliateRefreshTokens => Set<AffiliateRefreshToken>();
+    public DbSet<AffiliatePasswordResetToken> AffiliatePasswordResetTokens => Set<AffiliatePasswordResetToken>();
+    public DbSet<AffiliateEmailVerificationToken> AffiliateEmailVerificationTokens => Set<AffiliateEmailVerificationToken>();
     public DbSet<SentAlert> SentAlerts => Set<SentAlert>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
     public DbSet<AlertDigestSettings> AlertDigestSettings => Set<AlertDigestSettings>();
@@ -172,6 +187,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("tenebit");
+        ConfigureAffiliates(modelBuilder);
         ConfigureOrganizations(modelBuilder);
         ConfigureIdentity(modelBuilder);
         ConfigureAssets(modelBuilder);
@@ -1219,6 +1235,173 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Description).HasMaxLength(500);
             entity.HasIndex(x => x.Code).IsUnique();
             entity.HasIndex(x => x.PlanKey);
+        });
+    }
+
+    // Platform-wide (no OrganizationId, no tenant query filter) - mirrors PromoCode/ProcessedPaddleEvent
+    // above, not the tenant-scoped entities elsewhere in this file. See spec/AFFILIATE_PROGRAM_PLAN.md.
+    private void ConfigureAffiliates(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Affiliate>(entity =>
+        {
+            entity.ToTable("affiliates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.PasswordHash).HasMaxLength(400).IsRequired();
+            entity.Property(x => x.FirstName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.LastName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CountryCode).HasMaxLength(2);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(40);
+            entity.Property(x => x.CompanyName).HasMaxLength(200);
+            entity.Property(x => x.TaxId).HasMaxLength(40);
+            entity.Property(x => x.CommissionPercentOverride).HasColumnType("numeric(5,2)");
+            entity.Property(x => x.AcceptedTermsVersion).HasMaxLength(40);
+            entity.Property(x => x.BlockedReason).HasMaxLength(500);
+            entity.Property(x => x.SecurityStamp).IsRequired();
+            // Encrypted at rest (spec §12.6) - same value-converter pattern as OrganizationUser.TotpSecret.
+            entity.Property(x => x.RevolutTag)
+                .HasMaxLength(200)
+                .HasConversion(
+                    plain => plain == null ? null : _fieldEncryptor.Encrypt(FieldEncryptionPurposes.AffiliateRevolutTag, plain),
+                    stored => stored == null ? null : _fieldEncryptor.Decrypt(FieldEncryptionPurposes.AffiliateRevolutTag, stored));
+            entity.HasIndex(x => x.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<AffiliateCode>(entity =>
+        {
+            entity.ToTable("affiliate_codes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CountryCode).HasMaxLength(2);
+            // Global uniqueness across the whole platform (spec §3.2/§5.4) - not scoped to AffiliateId.
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.AffiliateId);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliateClick>(entity =>
+        {
+            entity.ToTable("affiliate_clicks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.IpHash).HasMaxLength(88).IsRequired();
+            entity.Property(x => x.UserAgentHash).HasMaxLength(88);
+            entity.HasIndex(x => new { x.AffiliateCodeId, x.IpHash, x.ClickedAt });
+            entity.HasOne<AffiliateCode>().WithMany().HasForeignKey(x => x.AffiliateCodeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliateConversion>(entity =>
+        {
+            entity.ToTable("affiliate_conversions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PaddleTransactionId).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.EventType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.GrossAmount).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.NetAmount).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.CommissionBase).HasConversion<string>().HasMaxLength(10).IsRequired();
+            entity.Property(x => x.CommissionPercent).HasColumnType("numeric(5,2)");
+            entity.Property(x => x.CommissionAmount).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.ReviewReason).HasMaxLength(500);
+            // Idempotency key - a retried Paddle webhook delivery must never double-record a conversion,
+            // exactly like ProcessedPaddleEvent.EventId above.
+            entity.HasIndex(x => x.PaddleTransactionId).IsUnique();
+            entity.HasIndex(x => x.AffiliateId);
+            entity.HasIndex(x => x.AffiliatePayoutPeriodId);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AffiliateCode>().WithMany().HasForeignKey(x => x.AffiliateCodeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliatePayoutPeriod>(entity =>
+        {
+            entity.ToTable("affiliate_payout_periods");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TotalCommission).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.AffiliateId, x.PeriodStart }).IsUnique();
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliatePayout>(entity =>
+        {
+            entity.ToTable("affiliate_payouts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.PaymentReference).HasMaxLength(200);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.Property(x => x.CoveredPeriodIds).HasColumnType("uuid[]");
+            entity.HasIndex(x => x.AffiliateId);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliateMessageThread>(entity =>
+        {
+            entity.ToTable("affiliate_message_threads");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Subject).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Category).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => x.AffiliateId);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliateMessage>(entity =>
+        {
+            entity.ToTable("affiliate_messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SenderType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(AffiliateMessage.MaxBodyLength).IsRequired();
+            entity.HasIndex(x => x.ThreadId);
+            entity.HasOne<AffiliateMessageThread>().WithMany().HasForeignKey(x => x.ThreadId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliateProgramSettings>(entity =>
+        {
+            entity.ToTable("affiliate_program_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DefaultCommissionPercent).HasColumnType("numeric(5,2)");
+            entity.Property(x => x.CommissionBase).HasConversion<string>().HasMaxLength(10).IsRequired();
+            entity.Property(x => x.MinimumPayoutAmount).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.TermsVersion).HasMaxLength(40).IsRequired();
+        });
+
+        modelBuilder.Entity<AffiliateCountryDiscountRule>(entity =>
+        {
+            entity.ToTable("affiliate_country_discount_rules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CountryCode).HasMaxLength(2).IsRequired();
+            entity.Property(x => x.DiscountPercent).HasColumnType("numeric(5,2)");
+            entity.HasIndex(x => x.CountryCode).IsUnique();
+        });
+
+        modelBuilder.Entity<AffiliateRefreshToken>(entity =>
+        {
+            entity.ToTable("affiliate_refresh_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RevocationReason).HasMaxLength(80);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.FamilyId);
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliatePasswordResetToken>(entity =>
+        {
+            entity.ToTable("affiliate_password_reset_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AffiliateEmailVerificationToken>(entity =>
+        {
+            entity.ToTable("affiliate_email_verification_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasOne<Affiliate>().WithMany().HasForeignKey(x => x.AffiliateId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

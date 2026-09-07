@@ -70,7 +70,24 @@ public class ArchitectureTests
         "IExternalLoginRepository",
         "IOAuthTransactionRepository",
         "IProcessedPaddleEventRepository",
-        "IPromoCodeRepository"
+        "IPromoCodeRepository",
+
+        // Affiliate program (spec/AFFILIATE_PROGRAM_PLAN.md): a third identity kind, platform-wide by
+        // design like the platform-admin/identity repositories above - an Affiliate never belongs to an
+        // Organization at all, so there is no organizationId to scope by.
+        "IAffiliateRepository",
+        "IAffiliateCodeRepository",
+        "IAffiliateClickRepository",
+        "IAffiliateConversionRepository",
+        "IAffiliatePayoutPeriodRepository",
+        "IAffiliatePayoutRepository",
+        "IAffiliateMessageThreadRepository",
+        "IAffiliateMessageRepository",
+        "IAffiliateProgramSettingsRepository",
+        "IAffiliateCountryDiscountRuleRepository",
+        "IAffiliateRefreshTokenRepository",
+        "IAffiliatePasswordResetTokenRepository",
+        "IAffiliateEmailVerificationTokenRepository"
     ];
 
     /// <summary>Pojedyncze metody bez organizationId w repozytoriach tenantowych - wyszukiwanie po haszu

@@ -24,4 +24,12 @@ public static class AdminActions
     public const string PromoCodeActivated = "promo_code.activated";
     public const string PromoCodeDeactivated = "promo_code.deactivated";
     public const string PromoCodeDeleted = "promo_code.deleted";
+
+    public const string AffiliateApproved = "affiliate.approved";
+    public const string AffiliateBlocked = "affiliate.blocked";
+    public const string AffiliateReactivated = "affiliate.reactivated";
+    public const string AffiliateCommissionOverridden = "affiliate.commission_overridden";
+    public const string AffiliatePayoutMarkedPaid = "affiliate.payout_marked_paid";
+    public const string AffiliateSettingsUpdated = "affiliate.settings_updated";
+    public const string AffiliateMessageReplied = "affiliate.message_replied";
 }

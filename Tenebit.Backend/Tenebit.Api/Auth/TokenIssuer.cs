@@ -66,4 +66,30 @@ public sealed class TokenIssuer
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    // Affiliate tokens are the third, fully isolated identity kind - no organization_id, no
+    // PlatformAdmin claim, own security_stamp check in Program.cs's OnTokenValidated (see the
+    // "affiliate" branch there) so a password change/block invalidates outstanding access tokens the
+    // same way it does for a tenant user.
+    public string IssueAffiliate(Guid affiliateId, string email, Guid securityStamp, int minutes)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, affiliateId.ToString()),
+            new(AffiliateClaims.ScopeClaimType, AffiliateClaims.ScopeValue),
+            new("email", email),
+            new("security_stamp", securityStamp.ToString("N"))
+        };
+
+        var signingKey = JwtSigningKey.GetActive(_configuration);
+        var credentials = new SigningCredentials(signingKey.Key, SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer: JwtIssuerOptions.GetIssuer(_configuration),
+            audience: JwtIssuerOptions.GetAudience(_configuration),
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(minutes),
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 }

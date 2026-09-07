@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Tenebit.Application.Admin;
+using Tenebit.Application.Affiliates;
 using Tenebit.Application.Alerts;
 using Tenebit.Application.Assets;
 using Tenebit.Application.Audit;
@@ -72,6 +73,14 @@ public static class DependencyInjection
         services.AddScoped<Protocols.ProtocolPdfService>();
         services.AddScoped<AssetAuditCampaignService>();
         services.AddScoped<ServiceTicketService>();
+        services.AddScoped<AffiliateAuthService>();
+        services.AddScoped<AffiliateCodeService>();
+        services.AddScoped<AffiliateTrackingService>();
+        services.AddScoped<AffiliateMessageService>();
+        services.AddScoped<AffiliateDashboardService>();
+        services.AddScoped<AffiliateConversionRecordingService>();
+        services.AddScoped<AffiliateAdminService>();
+        services.AddScoped<AffiliateProgramSettingsAdminService>();
         return services;
     }
 }

@@ -97,6 +97,21 @@ public static class DependencyInjection
         services.AddScoped<IAssetAuditItemRepository, AssetAuditItemRepository>();
         services.AddScoped<IEquipmentReservationRepository, EquipmentReservationRepository>();
         services.AddScoped<IServiceTicketRepository, ServiceTicketRepository>();
+        services.AddScoped<IAffiliateRepository, AffiliateRepository>();
+        services.AddScoped<IAffiliateCodeRepository, AffiliateCodeRepository>();
+        services.AddScoped<IAffiliateClickRepository, AffiliateClickRepository>();
+        services.AddScoped<IAffiliateConversionRepository, AffiliateConversionRepository>();
+        services.AddScoped<IAffiliatePayoutPeriodRepository, AffiliatePayoutPeriodRepository>();
+        services.AddScoped<IAffiliatePayoutRepository, AffiliatePayoutRepository>();
+        services.AddScoped<IAffiliateMessageThreadRepository, AffiliateMessageThreadRepository>();
+        services.AddScoped<IAffiliateMessageRepository, AffiliateMessageRepository>();
+        services.AddScoped<IAffiliateProgramSettingsRepository, AffiliateProgramSettingsRepository>();
+        services.AddScoped<IAffiliateCountryDiscountRuleRepository, AffiliateCountryDiscountRuleRepository>();
+        services.AddScoped<IAffiliateRefreshTokenRepository, AffiliateRefreshTokenRepository>();
+        services.AddScoped<IAffiliatePasswordResetTokenRepository, AffiliatePasswordResetTokenRepository>();
+        services.AddScoped<IAffiliateEmailVerificationTokenRepository, AffiliateEmailVerificationTokenRepository>();
+        services.AddSingleton<IAffiliateSecurityStateCache, AffiliateSecurityStateCache>();
+        services.AddSingleton<IAffiliateClickHasher, AffiliateClickHasher>();
         services.AddSingleton<IUserSecurityStateCache, UserSecurityStateCache>();
         services.AddScoped<IDatabaseHealthProbe, DatabaseHealthProbe>();
         services.AddSingleton<IClock, SystemClock>();
@@ -125,6 +140,7 @@ public static class DependencyInjection
         services.AddHostedService<PublicIpRetentionBackgroundService>();
         services.AddHostedService<SubscriptionReconciliationBackgroundService>();
         services.AddHostedService<EmailOutboxBackgroundService>();
+        services.AddHostedService<AffiliatePayoutPeriodCloseBackgroundService>();
         return services;
     }
 

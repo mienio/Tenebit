@@ -25,6 +25,14 @@ public static class TenebitEndpoints
                 return Results.Forbid();
             }
 
+            // Same reasoning as the platform-admin check above, for the affiliate scope introduced by
+            // the partner program: an affiliate token carries no organization_id either, and must only
+            // ever reach /api/partner/*.
+            if (context.HttpContext.User.HasClaim(AffiliateClaims.ScopeClaimType, AffiliateClaims.ScopeValue))
+            {
+                return Results.Forbid();
+            }
+
             return await next(context);
         });
 
