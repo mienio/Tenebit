@@ -63,6 +63,9 @@ public sealed class InMemoryAffiliateClickRepository : IAffiliateClickRepository
     public Task<int> CountRecentAsync(Guid affiliateCodeId, string ipHash, DateTimeOffset since, CancellationToken cancellationToken) =>
         Task.FromResult(Clicks.Count(x => x.AffiliateCodeId == affiliateCodeId && x.IpHash == ipHash && x.ClickedAt >= since));
 
+    public Task<Guid?> FindAffiliateCodeIdByAttributionTokenAsync(Guid attributionToken, CancellationToken cancellationToken) =>
+        Task.FromResult(Clicks.Where(x => x.AttributionToken == attributionToken).OrderByDescending(x => x.ClickedAt).Select(x => (Guid?)x.AffiliateCodeId).FirstOrDefault());
+
     public void Add(AffiliateClick click) => Clicks.Add(click);
 }
 

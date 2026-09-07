@@ -263,4 +263,146 @@ public class PaddlePaymentGatewayTests
 
         Assert.Throws<PaymentWebhookValidationException>(() => gateway.ParseWebhookEvent(payload + "tampered", header));
     }
+
+    private static PaddlePaymentGateway CreateWebhookOnlyGateway(string secret, out HttpClient http)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Paddle:ApiKey"] = "fake_api_key",
+            ["Paddle:ClientSideToken"] = "fake_client_token",
+            ["Paddle:WebhookSecret"] = secret
+        }).Build();
+        http = new HttpClient();
+        return new PaddlePaymentGateway(http, configuration, NullLogger<PaddlePaymentGateway>.Instance);
+    }
+
+    [Fact]
+    public void ParseWebhookEvent_TransactionCompleted_ReadsAffiliateCodeAndNetEarnings()
+    {
+        const string secret = "whsec_test_secret";
+        var gateway = CreateWebhookOnlyGateway(secret, out var http);
+        using var _ = http;
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_txn_1",
+            event_type = "transaction.completed",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "txn_abc",
+                customer_id = "ctm_1",
+                subscription_id = "sub_1",
+                currency_code = "eur",
+                origin = "web",
+                billed_at = now.ToString("O"),
+                custom_data = new { affiliate_code = "damian20" },
+                details = new { totals = new { grand_total = "1700", fee = "150", earnings = "1550" } }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        Assert.NotNull(parsed);
+        Assert.Equal("transaction.completed", parsed!.EventType);
+        Assert.Equal("txn_abc", parsed.TransactionId);
+        Assert.Equal("ctm_1", parsed.CustomerId);
+        Assert.Equal("sub_1", parsed.SubscriptionId);
+        // custom_data.affiliate_code arrives verbatim from Paddle.js customData - not re-normalized here
+        // (AffiliateCodeRepository.GetByCodeAsync/AffiliateConversionRecordingService.RecordConversionAsync
+        // does the case-insensitive lookup).
+        Assert.Equal("damian20", parsed.AffiliateCode);
+        Assert.Equal(17.00m, parsed.GrossAmount);
+        Assert.Equal(15.50m, parsed.NetAmount);
+        Assert.Equal("EUR", parsed.Currency);
+        Assert.False(parsed.IsRenewal);
+    }
+
+    [Fact]
+    public void ParseWebhookEvent_TransactionCompleted_NonWebOriginIsARenewal()
+    {
+        const string secret = "whsec_test_secret";
+        var gateway = CreateWebhookOnlyGateway(secret, out var http);
+        using var _ = http;
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_txn_2",
+            event_type = "transaction.completed",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "txn_renewal",
+                customer_id = "ctm_1",
+                subscription_id = "sub_1",
+                currency_code = "EUR",
+                origin = "subscription_recurring",
+                details = new { totals = new { grand_total = "1700", fee = "150", earnings = "1550" } }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        Assert.NotNull(parsed);
+        Assert.True(parsed!.IsRenewal);
+        Assert.Null(parsed.AffiliateCode);
+    }
+
+    [Fact]
+    public void ParseWebhookEvent_TransactionCompleted_FallsBackToGrandTotalMinusFeeWhenEarningsMissing()
+    {
+        const string secret = "whsec_test_secret";
+        var gateway = CreateWebhookOnlyGateway(secret, out var http);
+        using var _ = http;
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_txn_3",
+            event_type = "transaction.completed",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "txn_no_earnings",
+                customer_id = "ctm_1",
+                origin = "web",
+                details = new { totals = new { grand_total = "1000", fee = "100" } }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        Assert.NotNull(parsed);
+        Assert.Equal(10.00m, parsed!.GrossAmount);
+        Assert.Equal(9.00m, parsed.NetAmount);
+    }
+
+    [Fact]
+    public void ParseWebhookEvent_TransactionCompleted_DoesNotTouchSubscriptionEntitlementFields()
+    {
+        const string secret = "whsec_test_secret";
+        var gateway = CreateWebhookOnlyGateway(secret, out var http);
+        using var _ = http;
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_txn_4",
+            event_type = "transaction.completed",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "txn_no_status",
+                customer_id = "ctm_1",
+                origin = "web",
+                details = new { totals = new { grand_total = "1000" } }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        // Status/PlanKey are meaningless placeholders on a transaction event - SubscriptionService.HandleWebhookAsync
+        // must branch away on EventType before ever reading these, never treat Unknown as "quarantine entitlement".
+        Assert.NotNull(parsed);
+        Assert.Equal(SubscriptionStatus.Unknown, parsed!.Status);
+        Assert.Equal(SubscriptionPlan.Free.Key, parsed.PlanKey);
+    }
 }

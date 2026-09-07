@@ -10,8 +10,12 @@ public interface IPaymentGateway
 
     /// <summary>Resolves what the frontend needs to open a Paddle.js checkout for a brand-new subscription.
     /// Unlike Stripe Checkout Sessions there is no server-generated hosted redirect URL in Paddle Billing -
-    /// Paddle.js runs client-side and opens the checkout overlay itself from these parameters.</summary>
-    Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
+    /// Paddle.js runs client-side and opens the checkout overlay itself from these parameters.
+    /// <paramref name="affiliateCode"/> is resolved server-side from the <c>tnb_aff</c> attribution
+    /// cookie (spec §13.1) - the frontend never chooses or sees the code itself, only echoes back
+    /// whatever <see cref="PaddleCheckoutParams.AffiliateCode"/> comes back here as Paddle.js
+    /// <c>customData</c>.</summary>
+    Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null);
 
     /// <summary>Creates a one-time authenticated link into Paddle's customer portal (payment method,
     /// invoices, cancellation) - optionally scoped to a single subscription. Not cacheable; generate a new
@@ -80,7 +84,14 @@ public sealed class PaymentGatewayException : Exception
 public sealed record PaymentWebhookEvent(
     string EventId, string EventType, string CustomerId, string? SubscriptionId, string PlanKey,
     SubscriptionStatus Status, DateTimeOffset EventCreatedAt, DateTimeOffset CurrentPeriodStart,
-    DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId);
+    DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId,
+    // Populated only when EventType == "transaction.completed" (spec §13.3) - a shape wholly unrelated
+    // to subscription entitlement sync (Status/PlanKey/CurrentPeriod* above are meaningless for it and
+    // left at their defaults). Kept on this one record rather than a second type so the whole webhook
+    // still goes through a single ParseWebhookEvent/signature-verification path; callers must branch on
+    // EventType before touching the subscription-only fields.
+    string? TransactionId = null, string? AffiliateCode = null, decimal GrossAmount = 0m, decimal NetAmount = 0m,
+    string? Currency = null, bool IsRenewal = false);
 
 public sealed record PaymentSubscriptionState(
     string CustomerId, string SubscriptionId, string PlanKey, SubscriptionStatus Status,
@@ -91,7 +102,7 @@ public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value, Pr
 /// <summary>What Paddle.js needs to open a checkout overlay for a new subscription - no secrets, safe to
 /// return to the frontend (the same trust level as a Stripe Checkout Session's client_secret used to be,
 /// but here it's just the plan's Price ID plus the customer/discount to prefill).</summary>
-public sealed record PaddleCheckoutParams(string PriceId, string CustomerId, string? DiscountId);
+public sealed record PaddleCheckoutParams(string PriceId, string CustomerId, string? DiscountId, string? AffiliateCode = null);
 
 /// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
 /// immediately (an upgrade), or - when EffectiveAt is set - the date the new price takes effect for free

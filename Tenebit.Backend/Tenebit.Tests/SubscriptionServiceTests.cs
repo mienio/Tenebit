@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
 using Tenebit.Application.Subscriptions;
+using Tenebit.Domain.Affiliates;
 using Tenebit.Domain.Assets;
 using Tenebit.Domain.Identity;
 using Tenebit.Domain.Organizations;
@@ -128,6 +129,91 @@ public class SubscriptionServiceTests
         Assert.Equal("pri_business", result.Value!.PriceId);
         Assert.Equal("ctm_new", result.Value.CustomerId);
         Assert.Equal("ctm_new", subscriptions.Subscriptions.Single().PaddleCustomerId);
+    }
+
+    private static SubscriptionService CreateServiceWithAffiliateAttribution(
+        out FakePaymentGateway paymentGateway, out InMemoryAffiliateCodeRepository affiliateCodes, out InMemoryAffiliateClickRepository affiliateClicks)
+    {
+        paymentGateway = new FakePaymentGateway();
+        affiliateCodes = new InMemoryAffiliateCodeRepository();
+        affiliateClicks = new InMemoryAffiliateClickRepository();
+        return new SubscriptionService(
+            new InMemorySubscriptionRepository(), new InMemoryProcessedPaddleEventRepository(), new InMemoryAssetRepository(),
+            new InMemoryActivityLogRepository(), new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork(), paymentGateway,
+            new FakeAppLinkBuilder(), new InMemoryPromoCodeRepository(), new InMemoryOrganizationRepository(), new InMemoryOrganizationUserRepository(),
+            new FakeEmailSender(), NullLogger<SubscriptionService>.Instance, affiliateCodes: affiliateCodes, affiliateClicks: affiliateClicks);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_ResolvesAttributionCookieIntoAffiliateCodeAndForwardsToGateway()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out var affiliateCodes, out var affiliateClicks);
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", DateTimeOffset.UtcNow);
+        affiliate.Approve(DateTimeOffset.UtcNow);
+        var code = new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow);
+        affiliateCodes.Add(code);
+        var attributionToken = Guid.NewGuid();
+        affiliateClicks.Add(new AffiliateClick(code.Id, "iphash", null, attributionToken, DateTimeOffset.UtcNow));
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, null, attributionToken);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("DAMIAN20", result.Value!.AffiliateCode);
+        Assert.Equal("DAMIAN20", paymentGateway.LastAffiliateCode);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_IgnoresAnAttributionTokenForADeactivatedCode()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out var affiliateCodes, out var affiliateClicks);
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", DateTimeOffset.UtcNow);
+        affiliate.Approve(DateTimeOffset.UtcNow);
+        var code = new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow);
+        code.SetActive(false);
+        affiliateCodes.Add(code);
+        var attributionToken = Guid.NewGuid();
+        affiliateClicks.Add(new AffiliateClick(code.Id, "iphash", null, attributionToken, DateTimeOffset.UtcNow));
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, null, attributionToken);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value!.AffiliateCode);
+        Assert.Null(paymentGateway.LastAffiliateCode);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_IgnoresAnUnrecognizedAttributionToken()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out _, out _);
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, null, Guid.NewGuid());
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value!.AffiliateCode);
+        Assert.Null(paymentGateway.LastAffiliateCode);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_IgnoresTransactionCompletedEvents_LeavingEntitlementUntouched()
+    {
+        // Affiliate commission wiring reads transaction.completed independently
+        // (AffiliateConversionRecordingService.HandleWebhookAsync) - this method must never let it reach
+        // SyncFromPaddle, whose Status/PlanKey/CurrentPeriod* fields are meaningless placeholders on that
+        // event shape (see PaddlePaymentGatewayTests.ParseWebhookEvent_TransactionCompleted_DoesNotTouchSubscriptionEntitlementFields).
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        existing.AttachPaddleCustomer("ctm_123");
+        subscriptions.Add(existing);
+
+        paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "ntf_txn_1", "transaction.completed", "ctm_123", "sub_123", "", SubscriptionStatus.Unknown,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null,
+            "txn_1", "DAMIAN20", 100m, 90m, "EUR", false);
+
+        var result = await service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SubscriptionPlan.Business.Key, subscriptions.Subscriptions.Single().PlanKey);
     }
 
     [Fact]

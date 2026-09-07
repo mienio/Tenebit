@@ -27,7 +27,11 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
     {
         "subscription.created",
         "subscription.updated",
-        "subscription.canceled"
+        "subscription.canceled",
+        // Affiliate commission source (spec §13.3) - parsed into the same PaymentWebhookEvent record via
+        // a wholly separate branch in ParseWebhookEvent (see ParseTransactionCompleted), never touched by
+        // SubscriptionService's entitlement-sync logic.
+        "transaction.completed"
     };
 
     private readonly HttpClient _http;
@@ -86,13 +90,13 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         return RequiredString(json, "id");
     }
 
-    public async Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public async Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null)
     {
         if (!PlanPrices.TryGetValue(planKey, out var priceId))
             throw new PaymentGatewayException($"Paddle:Prices:{planKey} is not configured.");
 
         string? discountId = discount is null ? null : await EnsureDiscountAsync(discount, priceId, cancellationToken);
-        return new PaddleCheckoutParams(priceId, customerId, discountId);
+        return new PaddleCheckoutParams(priceId, customerId, discountId, affiliateCode);
     }
 
     /// <summary>
@@ -220,6 +224,9 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
 
             var occurredAt = RequiredDateTime(root, "occurred_at");
             var data = root.GetProperty("data");
+
+            if (type == "transaction.completed") return ParseTransactionCompleted(eventId, data, occurredAt);
+
             var customer = RequiredString(data, "customer_id");
             var subscriptionId = RequiredString(data, "id");
             var status = MapStatus(type, data.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() : null);
@@ -251,6 +258,64 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         {
             throw new PaymentWebhookValidationException("Malformed Paddle webhook payload.", ex);
         }
+    }
+
+    /// <summary>
+    /// A Paddle transaction, not a subscription - carries the actual money (spec §6.1/§13.3), which is
+    /// the one thing an affiliate commission can be computed from. <c>details.totals.earnings</c> is what
+    /// Tenebit actually receives after Paddle's own fee is deducted - the "net" basis §6.1 recommends -
+    /// falling back to <c>grand_total - fee</c> and finally to <c>grand_total</c> if a sandbox/edge-case
+    /// payload omits the field. <c>custom_data.affiliate_code</c> comes back only for a checkout that had
+    /// <see cref="GetCheckoutParamsAsync"/>'s <c>affiliateCode</c> set - most transactions have none, and
+    /// that is the normal case, not an error.
+    /// </summary>
+    private static PaymentWebhookEvent ParseTransactionCompleted(string eventId, JsonElement data, DateTimeOffset occurredAt)
+    {
+        var transactionId = RequiredString(data, "id");
+        var customer = RequiredString(data, "customer_id");
+        var subscriptionId = data.TryGetProperty("subscription_id", out var subIdProp) && subIdProp.ValueKind == JsonValueKind.String
+            ? subIdProp.GetString()
+            : null;
+        var currency = data.TryGetProperty("currency_code", out var currencyProp) && currencyProp.ValueKind == JsonValueKind.String
+            ? currencyProp.GetString()!.ToUpperInvariant()
+            : "EUR";
+        var billedAt = data.TryGetProperty("billed_at", out var billedAtProp) && billedAtProp.ValueKind == JsonValueKind.String
+            && DateTimeOffset.TryParse(billedAtProp.GetString(), out var billedAtValue)
+            ? billedAtValue
+            : occurredAt;
+
+        // "web" = a brand-new checkout initiated by the customer; anything else (subscription_recurring,
+        // subscription_update's immediate proration charge, web_subscription_upgrade_downgrade, api, ...)
+        // is treated as a renewal for commission-window purposes (spec §6.4 pkt 3) - only a genuinely new
+        // sale ever bypasses the window check.
+        var origin = data.TryGetProperty("origin", out var originProp) ? originProp.GetString() : null;
+        var isRenewal = !string.Equals(origin, "web", StringComparison.Ordinal);
+
+        string? affiliateCode = null;
+        if (data.TryGetProperty("custom_data", out var customData) && customData.ValueKind == JsonValueKind.Object
+            && customData.TryGetProperty("affiliate_code", out var codeProp) && codeProp.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(codeProp.GetString()))
+        {
+            affiliateCode = codeProp.GetString();
+        }
+
+        var grossAmount = 0m;
+        var netAmount = 0m;
+        if (data.TryGetProperty("details", out var details) && details.TryGetProperty("totals", out var totals))
+        {
+            grossAmount = ReadAmountMajorUnits(totals, "grand_total");
+            netAmount = ReadAmountMajorUnits(totals, "earnings");
+            if (netAmount == 0m)
+            {
+                var fee = ReadAmountMajorUnits(totals, "fee");
+                netAmount = fee > 0m ? grossAmount - fee : grossAmount;
+            }
+        }
+
+        return new PaymentWebhookEvent(
+            eventId, "transaction.completed", customer, subscriptionId, SubscriptionPlan.Free.Key,
+            SubscriptionStatus.Unknown, billedAt, billedAt, billedAt, null,
+            transactionId, affiliateCode, grossAmount, netAmount, currency, isRenewal);
     }
 
     public async Task<PaymentSubscriptionState?> GetSubscriptionAsync(string subscriptionId, CancellationToken cancellationToken)

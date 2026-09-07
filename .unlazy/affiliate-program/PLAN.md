@@ -73,16 +73,35 @@ Rozstrzygnięte wprost przez właściciela — nie są już otwartymi pytaniami 
 
 ## Decyzje odłożone (wymagają jawnej zgody właściciela przed wdrożeniem)
 
-- **C13 / leaf 2.2 — realne naliczanie prowizji z Paddle.** Dzisiejszy `PaddlePaymentGateway`
-  paruje tylko `subscription.created/updated/canceled` i nigdzie nie przechowuje kwoty
-  transakcji/opłaty Paddle (`PaymentWebhookEvent` nie ma pól kwotowych; `ListInvoicesAsync` pobiera
-  kwoty na żądanie, nie z webhooka). Podłączenie `AffiliateConversion` do realnych pieniędzy
-  wymaga: (a) rozszerzenia `IPaymentGateway`/webhook o `transaction.completed` z realnym payloadem
-  Paddle, (b) weryfikacji na koncie testowym Paddle jak dokładnie wygląda `data.custom_data` i
-  rozbicie kwoty netto/brutto — dokładnie to, przed czym ostrzega już §17 planu źródłowego. Model
-  danych (`AffiliateConversion` itd.) i UI po stronie admina/partnera budujemy teraz (leaf 2.1), ale
-  **bez** tego podłączenia — dopóki nie zostanie potwierdzone na koncie Paddle, ręczne dopisywanie
-  konwersji przez admina jest wyłączone (tylko webhook może je tworzyć, zgodnie z regułą domenową).
+- **C13 / leaf 2.1 — realne naliczanie prowizji z Paddle: WDROŻONE 2026-09-07, na podstawie
+  udokumentowanego schematu Paddle Billing API, nie zweryfikowane na realnym koncie testowym
+  Paddle (brak w tym środowisku dostępu do konta).** `PaddlePaymentGateway.ParseWebhookEvent`
+  teraz obsługuje też `transaction.completed` (osobna gałąź parsowania —
+  `ParseTransactionCompleted` — nigdy nie dotyka pól `Status`/`PlanKey`/`CurrentPeriod*`
+  używanych przez sync subskrypcji). Kwota netto = `details.totals.earnings` (co Tenebit faktycznie
+  dostaje po prowizji Paddle, zgodnie z rekomendacją §6.1), z fallbackiem na `grand_total - fee`,
+  a na końcu na `grand_total`. `custom_data.affiliate_code` jest teraz też realnie wstawiane przy
+  checkoucie: `GET /api/subscription/checkout-params` odczytuje cookie `tnb_aff`, zamienia
+  `AttributionToken` na `AffiliateCode.Code` przez nową
+  `IAffiliateClickRepository.FindAffiliateCodeIdByAttributionTokenAsync`, i zwraca je do frontendu
+  jako `CheckoutParams.affiliateCode` — frontend (`PricingPage.tsx`) przekazuje je bez zmian jako
+  `customData` do `Paddle.Checkout.open`, nigdy sam nie wybiera kodu. Webhook
+  (`POST /subscription/webhook`) teraz woła **dwa** niezależne handlery na tym samym payloadzie:
+  `SubscriptionService.HandleWebhookAsync` (bez zmian dla subskrypcji, jawny no-op na
+  `transaction.completed`) i nowy `AffiliateConversionRecordingService.HandleWebhookAsync`
+  (parsuje payload niezależnie, ignoruje wszystko poza `transaction.completed` z obecnym
+  `custom_data.affiliate_code`) — domeny Subscriptions/Affiliates pozostają odseparowane, żadna nie
+  zna drugiej poza wspólnym `ISubscriptionRepository`/`IOrganizationUserRepository` do odczytu.
+  Ręczne dopisywanie konwersji przez admina nadal wyłączone (tylko webhook tworzy
+  `AffiliateConversion`). **Pozostaje do zrobienia** (celowo poza zakresem tej sesji, patrz §17
+  planu źródłowego): (a) weryfikacja na realnym koncie testowym Paddle, że `custom_data` faktycznie
+  przechodzi przez cały cykl checkout→webhook i że `details.totals.earnings` ma dokładnie ten
+  kształt, jaki zakłada `ParseTransactionCompleted`; (b) `transaction.refunded`/`adjustment.created`
+  → `AffiliateConversion.CreateRefundCompensation` (domenowa metoda już istnieje od Fazy 1, ale
+  nigdy nie jest wołana — Paddle Billing API najprawdopodobniej wysyła to jako `adjustment.created`,
+  nie `transaction.refunded`, co wymaga własnej weryfikacji kształtu payloadu przed wdrożeniem).
+- **C14 / leaf 2.2 — kody per-kraj + rabat Paddle przy checkout (spec §5.3/§13.2) — nadal
+  odłożone**, poza zakresem tej sesji (Faza 4 planu źródłowego).
 - Stawka prowizji/okno prowizyjne/próg minimalny wypłaty/status prawny (B2B vs nagroda)/ranking
   publiczny — zostają **ustawieniami w adminie** (`AffiliateProgramSettings`) z sensownymi
   wartościami domyślnymi (prowizja 20%, podstawa netto, okno dożywotnie, brak progu minimalnego,
@@ -111,8 +130,10 @@ Rozstrzygnięte wprost przez właściciela — nie są już otwartymi pytaniami 
     - 1.6.1 Panel partnera (`/partner/*`) ...... gates/leaf-1.6.1.md
     - 1.6.2 Panel admina (afilianci + ustawienia) gates/leaf-1.6.2.md
   - 1.7 Testy jednostkowe (przekrojowe) ........ gates/leaf-1.7.md
-- 2 Faza 2+ (kolejna sesja) ................... (poza zakresem teraz)
-  - 2.1 Podłączenie realnych kwot z Paddle (transaction.completed) — WAITING, wymaga decyzji
+- 2 Faza 2+ ..................................... GATES.md (G9-G12)
+  - 2.1 Podłączenie realnych kwot z Paddle (transaction.completed) — VERIFIED (nie na realnym
+    koncie Paddle — patrz zastrzeżenie w "Decyzje odłożone" wyżej)
+  - 2.1b Refund/adjustment compensation — WAITING, kształt payloadu Paddle do zweryfikowania
   - 2.2 Kraje/rabaty per-kraj, ranking, heurystyki antyfraudowe — WAITING (Faza 4 planu źródłowego)
 
 ## Tabela dyspozycji leafów

@@ -599,6 +599,7 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastCheckoutCustomerId { get; private set; }
     public string? LastCheckoutPlanKey { get; private set; }
     public PromoCodeDiscount? LastDiscount { get; private set; }
+    public string? LastAffiliateCode { get; private set; }
     public int CheckoutCreateCalls { get; private set; }
 
     public bool IsPlanConfigured(string planKey) => AllPlansConfigured || ConfiguredPlanKeys.Contains(planKey);
@@ -609,13 +610,14 @@ public sealed class FakePaymentGateway : IPaymentGateway
         return Task.FromResult(NextCustomerId);
     }
 
-    public Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null)
     {
         LastCheckoutCustomerId = customerId;
         LastCheckoutPlanKey = planKey;
         LastDiscount = discount;
+        LastAffiliateCode = affiliateCode;
         CheckoutCreateCalls++;
-        return Task.FromResult(NextCheckoutParams);
+        return Task.FromResult(NextCheckoutParams with { AffiliateCode = affiliateCode });
     }
 
     public string? LastPortalCustomerId { get; private set; }

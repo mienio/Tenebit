@@ -32,6 +32,8 @@ public sealed class SubscriptionService
     private readonly IEmailSender _emailSender;
     private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly ILogger<SubscriptionService> _logger;
+    private readonly IAffiliateCodeRepository? _affiliateCodes;
+    private readonly IAffiliateClickRepository? _affiliateClicks;
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
@@ -48,8 +50,12 @@ public sealed class SubscriptionService
         IOrganizationUserRepository organizationUsers,
         IEmailSender emailSender,
         ILogger<SubscriptionService> logger,
-        IEmailOutboxWriter? emailOutbox = null)
+        IEmailOutboxWriter? emailOutbox = null,
+        IAffiliateCodeRepository? affiliateCodes = null,
+        IAffiliateClickRepository? affiliateClicks = null)
     {
+        _affiliateCodes = affiliateCodes;
+        _affiliateClicks = affiliateClicks;
         _subscriptions = subscriptions;
         _processedEvents = processedEvents;
         _assets = assets;
@@ -239,7 +245,7 @@ public sealed class SubscriptionService
     /// there is no server-generated hosted redirect URL in Paddle Billing (unlike the old Stripe Checkout
     /// Session), so this returns the Price ID / customer ID / discount ID for Paddle.js to use directly.
     /// </summary>
-    public async Task<Result<CheckoutParamsResponse>> GetCheckoutParamsAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null)
+    public async Task<Result<CheckoutParamsResponse>> GetCheckoutParamsAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null, Guid? attributionToken = null)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<CheckoutParamsResponse>.Failure(access.Error!);
@@ -286,8 +292,25 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, cancellationToken, discount);
-        return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId));
+        var affiliateCode = await ResolveAffiliateCodeAsync(attributionToken, cancellationToken);
+        var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, cancellationToken, discount, affiliateCode);
+        return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId, checkoutParams.AffiliateCode));
+    }
+
+    /// <summary>Turns the <c>tnb_aff</c> attribution cookie (opaque token, spec §6.2/§13.1) into the
+    /// affiliate code it was issued for - never trusting a code the frontend might claim directly. Silent
+    /// no-op (returns null) whenever the affiliate program isn't wired up, the token is unrecognized, or
+    /// the code has since been deactivated: attribution is a bonus commission source, never something
+    /// that can block or fail a checkout.</summary>
+    private async Task<string?> ResolveAffiliateCodeAsync(Guid? attributionToken, CancellationToken cancellationToken)
+    {
+        if (attributionToken is not { } token || _affiliateClicks is null || _affiliateCodes is null) return null;
+
+        var codeId = await _affiliateClicks.FindAffiliateCodeIdByAttributionTokenAsync(token, cancellationToken);
+        if (codeId is not { } id) return null;
+
+        var code = await _affiliateCodes.GetByIdAsync(id, cancellationToken);
+        return code is { IsActive: true } ? code.Code : null;
     }
 
     /// <summary>
@@ -539,6 +562,13 @@ public sealed class SubscriptionService
 
         if (webhookEvent is null) return Result.Success();
 
+        // transaction.completed carries the actual money, not a subscription entitlement change - it is
+        // meaningless to this method's SyncFromPaddle/MapStatus logic (Status/PlanKey/CurrentPeriod* are
+        // just placeholders on that shape, see PaymentWebhookEvent) and is handled entirely by
+        // AffiliateConversionRecordingService.HandleWebhookAsync instead (spec §13.3), invoked separately
+        // by the same /subscription/webhook endpoint from the same raw payload.
+        if (webhookEvent.EventType == "transaction.completed") return Result.Success();
+
         // Paddle retries webhook delivery on timeout/5xx - replaying the same notification_id must be a
         // no-op instead of reapplying (and re-logging) the same state change twice (audyt P0.6).
         if (await _processedEvents.ExistsAsync(webhookEvent.EventId, cancellationToken))
@@ -693,7 +723,7 @@ public sealed record PromoCodeValidationResponse(
     string DurationType, int? DurationInMonths, string? Description);
 
 /// <summary>What Paddle.js needs to open a checkout overlay - no secrets, safe to hand to the frontend.</summary>
-public sealed record CheckoutParamsResponse(string PriceId, string CustomerId, string? DiscountId);
+public sealed record CheckoutParamsResponse(string PriceId, string CustomerId, string? DiscountId, string? AffiliateCode = null);
 
 /// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
 /// immediately (an upgrade), or - when ChargesNow is false - the date the new price takes effect for free

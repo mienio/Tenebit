@@ -51,8 +51,13 @@ public static class SubscriptionEndpoints
                 (await service.UpgradeAsync(request.PlanKey, cancellationToken)).ToHttpResult())
             .WithTags("Subscription");
 
-        api.MapPost("/subscription/checkout-params", async (CheckoutParamsRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.GetCheckoutParamsAsync(request.PlanKey, cancellationToken, request.PromoCode)).ToHttpResult())
+        api.MapPost("/subscription/checkout-params", async (CheckoutParamsRequest request, HttpContext http, SubscriptionService service, CancellationToken cancellationToken) =>
+            {
+                var attributionToken = http.Request.Cookies.TryGetValue(RedirectEndpoints.AttributionCookieName, out var raw) && Guid.TryParse(raw, out var parsed)
+                    ? parsed
+                    : (Guid?)null;
+                return (await service.GetCheckoutParamsAsync(request.PlanKey, cancellationToken, request.PromoCode, attributionToken)).ToHttpResult();
+            })
             .WithTags("Subscription");
 
         api.MapPost("/subscription/change-plan", async (ChangePlanRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
@@ -84,12 +89,19 @@ public static class SubscriptionEndpoints
             .AllowAnonymous()
             .WithTags("Subscription");
 
-        api.MapPost("/subscription/webhook", async (HttpRequest httpRequest, SubscriptionService service, CancellationToken cancellationToken) =>
+        api.MapPost("/subscription/webhook", async (
+                HttpRequest httpRequest, SubscriptionService service, Tenebit.Application.Affiliates.AffiliateConversionRecordingService affiliateConversions, CancellationToken cancellationToken) =>
             {
                 using var reader = new StreamReader(httpRequest.Body);
                 var payload = await reader.ReadToEndAsync(cancellationToken);
                 var signature = httpRequest.Headers["Paddle-Signature"].ToString();
-                return (await service.HandleWebhookAsync(payload, signature, cancellationToken)).ToNoContentResult();
+                var result = await service.HandleWebhookAsync(payload, signature, cancellationToken);
+                // Paddle delivers every event type (subscription.* and transaction.completed alike) to this
+                // one configured URL - the affiliate commission side reads the same raw payload independently
+                // (see AffiliateConversionRecordingService.HandleWebhookAsync) rather than being threaded
+                // through SubscriptionService, so both run off a single POST regardless of which one applies.
+                if (result.IsSuccess) await affiliateConversions.HandleWebhookAsync(payload, signature, cancellationToken);
+                return result.ToNoContentResult();
             })
             .AllowAnonymous()
             .RequireRateLimiting("public")

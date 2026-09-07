@@ -81,3 +81,69 @@ kwot z Paddle) — leaves 1.1.1 do 1.7 z `.unlazy/affiliate-program/PLAN.md`.
 G1-G7 są uruchamialne i zweryfikowane. G8 jest manualny - właściwy przegląd prawny należy do
 właściciela produktu, nie do tego agenta.
 -->
+
+# Gates: Faza 2.1 — Podłączenie realnych kwot z Paddle (2026-09-07)
+
+OWNS (dodatkowo do listy wyżej): Tenebit.Backend/Tenebit.Application/Abstractions/IPaymentGateway.cs,
+Tenebit.Backend/Tenebit.Application/Subscriptions/SubscriptionService.cs,
+Tenebit.Backend/Tenebit.Infrastructure/Services/PaddlePaymentGateway.cs,
+Tenebit.Backend/Tenebit.Api/Endpoints/SubscriptionEndpoints.cs,
+Tenebit.Frontend/src/api/paddleClient.ts, Tenebit.Frontend/src/pages/PricingPage.tsx,
+Tenebit.Frontend/src/types/domain.ts
+
+Scope: `transaction.completed` parsowany przez `PaddlePaymentGateway` (netto = `details.totals.earnings`,
+fallback `grand_total - fee` → `grand_total`), atrybucja `tnb_aff` → `custom_data.affiliate_code` przy
+checkoucie, i `AffiliateConversionRecordingService.HandleWebhookAsync` wołany z tego samego
+`/subscription/webhook` niezależnie od `SubscriptionService.HandleWebhookAsync` (który jawnie no-opuje na
+`transaction.completed`, nigdy nie dotyka pól entitlementu dla tego typu zdarzenia).
+
+**Zastrzeżenie (patrz PLAN.md "Decyzje odłożone"): zbudowane na podstawie udokumentowanego schematu
+Paddle Billing API, NIE zweryfikowane na realnym koncie testowym Paddle** (brak dostępu w tym
+środowisku) — dokładnie ryzyko opisane w §17 planu źródłowego. Właściciel produktu powinien
+zweryfikować jeden prawdziwy `transaction.completed` webhook z sandboxa przed pierwszą realną wypłatą.
+
+- [x] G9: Backend kompiluje się bez błędów po rozszerzeniu o transaction.completed
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet build Tenebit.sln -v quiet'
+  EXPECT: Build succeeded.
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Build succeeded, 0 errors, warnings unchanged (8, all pre-existing/unrelated).
+
+- [x] G10: Parsowanie transaction.completed (kwoty netto/brutto, affiliate_code, renewal-detekcja,
+  brak wpływu na pola entitlementu subskrypcji)
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet test Tenebit.Tests --filter "FullyQualifiedName~ParseWebhookEvent_TransactionCompleted" -v quiet'
+  EXPECT: Passed!
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Passed, 4/4 (PaddlePaymentGatewayTests: affiliate_code+earnings, renewal-origin detection,
+    fee-fallback when earnings missing, Status/PlanKey left as meaningless placeholders).
+
+- [x] G11: Koniec do końca — checkout-params rozwiązuje atrybucję, webhook zapisuje AffiliateConversion,
+  SubscriptionService ignoruje transaction.completed
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet test Tenebit.Tests --filter "FullyQualifiedName~SubscriptionServiceTests|FullyQualifiedName~AffiliateConversionRecordingServiceTests" -v quiet'
+  EXPECT: Passed!
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Passed, 133/133 combined (SubscriptionServiceTests + AffiliateConversionRecordingServiceTests),
+    including 3 new attribution-resolution tests, 3 new HandleWebhookAsync tests, and the
+    entitlement-untouched regression test.
+
+- [x] G12: Pełna suita backendu bez regresji + frontend build/lint/test
+  CHECK: bash -lc 'export PATH="$PATH:/home/ubuntu/.dotnet/tools"; cd Tenebit.Backend && dotnet test Tenebit.Tests --filter "FullyQualifiedName!~Integration" -v quiet; cd ../Tenebit.Frontend && npm run build && npm run lint && npm test -- --run'
+  EXPECT: Passed! / built in / no lint errors / all vitest tests passed
+  CWD: /home/ubuntu/Tenebit
+  EVIDENCE: Backend 822/823 (jedyny fail to ten sam pre-existing ErrorMessageCoverageTests, niezwiązany).
+    Frontend: build OK, lint clean, vitest 48/48 (7 plików), bez regresji.
+
+<!--
+G9-G12 są uruchamialne i zweryfikowane. Nie ma tu gate'a manualnego odpowiadającego weryfikacji na
+realnym koncie Paddle - to zastrzeżenie jest udokumentowane wprost powyżej i w PLAN.md, bo agent nie ma
+dostępu do takiego konta w tym środowisku.
+-->
+
+# Poza zakresem tej sesji (Faza 2b+)
+
+- `transaction.refunded`/`adjustment.created` → `AffiliateConversion.CreateRefundCompensation` -
+  metoda domenowa istnieje od Fazy 1, ale nic jej nie woła. Paddle Billing API prawdopodobnie
+  wysyła to jako `adjustment.created`, nie `transaction.refunded` - inny kształt payloadu niż
+  `transaction.completed`, wymaga własnej weryfikacji przed wdrożeniem.
+- Weryfikacja na realnym koncie testowym Paddle (custom_data round-trip, dokładny kształt
+  `details.totals`).
+- Kody per-kraj + rabat Paddle przy checkout (spec §5.3/§13.2, Faza 4 planu źródłowego).

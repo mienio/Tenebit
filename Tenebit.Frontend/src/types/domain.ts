@@ -984,6 +984,9 @@ export interface CheckoutParams {
   priceId: string;
   customerId: string;
   discountId: string | null;
+  /** Resolved server-side from the `tnb_aff` attribution cookie - echoed back verbatim as Paddle.js
+   * `customData` so the webhook can credit the referring affiliate (never chosen by the frontend). */
+  affiliateCode: string | null;
 }
 
 export interface PaddleClientConfig {

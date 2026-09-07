@@ -146,6 +146,7 @@ export function PricingPage() {
           items: [{ priceId: params.priceId, quantity: 1 }],
           customer: { id: params.customerId },
           discountId: params.discountId,
+          customData: params.affiliateCode ? { affiliate_code: params.affiliateCode } : undefined,
           settings: { successUrl: `${window.location.origin}/dashboard?checkout=success`, allowQuantity: false }
         });
         setUpgrading(false);

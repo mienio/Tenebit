@@ -7,6 +7,9 @@ export interface PaddleCheckoutOpenOptions {
   items: { priceId: string; quantity: number }[];
   customer?: { id: string };
   discountId?: string | null;
+  /** Echoed back verbatim on the transaction.completed webhook - carries the affiliate attribution
+   * resolved server-side in GET /api/subscription/checkout-params (see CheckoutParams.affiliateCode). */
+  customData?: Record<string, string>;
   settings?: {
     successUrl?: string;
     displayMode?: 'overlay' | 'inline';

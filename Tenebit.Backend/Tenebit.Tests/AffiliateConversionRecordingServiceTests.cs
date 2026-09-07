@@ -1,5 +1,10 @@
+using Tenebit.Application.Abstractions;
 using Tenebit.Application.Affiliates;
+using Tenebit.Application.Common;
 using Tenebit.Domain.Affiliates;
+using Tenebit.Domain.Identity;
+using Tenebit.Domain.Organizations;
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Tests.Fakes;
 
 namespace Tenebit.Tests;
@@ -9,7 +14,8 @@ public class AffiliateConversionRecordingServiceTests
     private sealed record Fixture(
         AffiliateConversionRecordingService Service, InMemoryAffiliateCodeRepository Codes, InMemoryAffiliateRepository Affiliates,
         InMemoryAffiliateConversionRepository Conversions, InMemoryAffiliatePayoutPeriodRepository Periods,
-        InMemoryAffiliateProgramSettingsRepository Settings, FakeClock Clock);
+        InMemoryAffiliateProgramSettingsRepository Settings, FakeClock Clock, FakePaymentGateway PaymentGateway,
+        InMemorySubscriptionRepository Subscriptions, InMemoryOrganizationUserRepository OrganizationUsers);
 
     private static (Fixture Fixture, Affiliate Affiliate, AffiliateCode Code) CreateFixture()
     {
@@ -19,7 +25,11 @@ public class AffiliateConversionRecordingServiceTests
         var periods = new InMemoryAffiliatePayoutPeriodRepository();
         var settings = new InMemoryAffiliateProgramSettingsRepository();
         var clock = new FakeClock { UtcNow = new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero) };
-        var service = new AffiliateConversionRecordingService(codes, affiliates, conversions, periods, settings, new FakeUnitOfWork(), clock);
+        var paymentGateway = new FakePaymentGateway();
+        var subscriptions = new InMemorySubscriptionRepository();
+        var organizationUsers = new InMemoryOrganizationUserRepository();
+        var service = new AffiliateConversionRecordingService(
+            codes, affiliates, conversions, periods, settings, new FakeUnitOfWork(), clock, paymentGateway, subscriptions, organizationUsers);
 
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", clock.UtcNow);
         affiliate.Approve(clock.UtcNow);
@@ -27,7 +37,7 @@ public class AffiliateConversionRecordingServiceTests
         var code = new AffiliateCode(affiliate.Id, "DAMIAN20", null, clock.UtcNow);
         codes.Add(code);
 
-        return (new Fixture(service, codes, affiliates, conversions, periods, settings, clock), affiliate, code);
+        return (new Fixture(service, codes, affiliates, conversions, periods, settings, clock, paymentGateway, subscriptions, organizationUsers), affiliate, code);
     }
 
     [Fact]
@@ -99,5 +109,73 @@ public class AffiliateConversionRecordingServiceTests
         var renewal = fixture.Conversions.Conversions.Single(c => c.PaddleTransactionId == "txn_renewal");
         Assert.False(renewal.IsWithinCommissionWindow);
         Assert.Null(renewal.AffiliatePayoutPeriodId);
+    }
+
+    private static void SeedOrganizationWithOwner(Fixture fixture, Guid organizationId, string ownerEmail)
+    {
+        var owner = new OrganizationUser(organizationId, ownerEmail, "Owner", true);
+        owner.Update(ownerEmail, "Owner", true, [TenebitRoles.Owner]);
+        fixture.OrganizationUsers.Users.Add(owner);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_records_a_conversion_from_a_transaction_completed_event_with_affiliate_attribution()
+    {
+        var (fixture, _, code) = CreateFixture();
+        var organizationId = Guid.NewGuid();
+        var subscription = new OrganizationSubscription(organizationId, "starter");
+        subscription.AttachPaddleCustomer("ctm_1");
+        fixture.Subscriptions.Add(subscription);
+        SeedOrganizationWithOwner(fixture, organizationId, "buyer@other.test");
+
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_1", "transaction.completed", "ctm_1", "sub_1", "", SubscriptionStatus.Unknown,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow, null,
+            "txn_paddle_1", code.Code, 100m, 90m, "EUR", false);
+
+        var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var conversion = Assert.Single(fixture.Conversions.Conversions);
+        Assert.Equal("txn_paddle_1", conversion.PaddleTransactionId);
+        Assert.Equal(organizationId, conversion.OrganizationId);
+        Assert.Equal(AffiliateConversionEventType.InitialSale, conversion.EventType);
+        Assert.False(conversion.RequiresReview);
+        Assert.NotNull(conversion.AffiliatePayoutPeriodId);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_ignores_a_transaction_with_no_affiliate_attribution()
+    {
+        var (fixture, _, _) = CreateFixture();
+        var organizationId = Guid.NewGuid();
+        var subscription = new OrganizationSubscription(organizationId, "starter");
+        subscription.AttachPaddleCustomer("ctm_2");
+        fixture.Subscriptions.Add(subscription);
+
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_2", "transaction.completed", "ctm_2", "sub_2", "", SubscriptionStatus.Unknown,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow, null,
+            "txn_paddle_2", null, 100m, 90m, "EUR", false);
+
+        var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(fixture.Conversions.Conversions);
+    }
+
+    [Fact]
+    public async Task HandleWebhookAsync_ignores_subscription_lifecycle_events()
+    {
+        var (fixture, _, code) = CreateFixture();
+        fixture.PaymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
+            "evt_3", "subscription.created", "ctm_3", "sub_3", "starter", SubscriptionStatus.Active,
+            fixture.Clock.UtcNow, fixture.Clock.UtcNow, fixture.Clock.UtcNow.AddMonths(1), null,
+            AffiliateCode: code.Code);
+
+        var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(fixture.Conversions.Conversions);
     }
 }
