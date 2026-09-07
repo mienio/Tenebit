@@ -1,10 +1,9 @@
 import { ArrowLeft, Ban, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { LoadingState } from '../components/StateViews';
 import {
-  AdminApiError,
   getAdminOrganization,
   getAdminOrganizationPayments,
   restoreOrganization,
@@ -20,7 +19,6 @@ import { AdminTimeSeriesChart } from './AdminTimeSeriesChart';
 
 export function AdminOrganizationDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [range, setRange] = useState<DateRange>(() => defaultRange(30));
   const [detail, setDetail] = useState<AdminOrganizationDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +36,9 @@ export function AdminOrganizationDetailPage() {
       .catch(err => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Nie udało się pobrać danych organizacji.');
-        if (err instanceof AdminApiError && err.status === 401) navigate('/admin/login', { replace: true });
       });
     return () => { cancelled = true; };
-  }, [id, navigate, range, reloadKey]);
+  }, [id, range, reloadKey]);
 
   useEffect(() => {
     if (!id) return;
@@ -55,10 +52,9 @@ export function AdminOrganizationDetailPage() {
       .catch(err => {
         if (cancelled) return;
         setPaymentsError(err instanceof Error ? err.message : 'Nie udało się pobrać historii płatności z Paddle.');
-        if (err instanceof AdminApiError && err.status === 401) navigate('/admin/login', { replace: true });
       });
     return () => { cancelled = true; };
-  }, [id, navigate, reloadKey]);
+  }, [id, reloadKey]);
 
   if (error) {
     return <AdminShell><p className="formMessage formMessage--error">{error}</p></AdminShell>;

@@ -1,7 +1,7 @@
 import { Building2, ClipboardList, HandCoins, LayoutDashboard, LogOut, MessageSquare, ShieldCheck, Sliders, Tag, Users } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { adminLogout, getAdminToken } from './adminApi';
+import { adminLogout, getAdminToken, onAdminSessionExpired } from './adminApi';
 import './admin.css';
 
 const nav = [
@@ -27,6 +27,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!getAdminToken()) navigate('/admin/login', { replace: true });
   }, [navigate]);
+
+  useEffect(() => onAdminSessionExpired(() => {
+    navigate('/admin/login', { replace: true, state: { expired: true } });
+  }), [navigate]);
 
   function handleLogout() {
     adminLogout();

@@ -1,6 +1,6 @@
 import { ShieldCheck } from 'lucide-react';
 import { FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
 import { adminLogin } from './adminApi';
@@ -8,7 +8,10 @@ import './admin.css';
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  const [error, setError] = useState<string | null>(
+    (location.state as { expired?: boolean } | null)?.expired ? 'Sesja wygasła. Zaloguj się ponownie.' : null,
+  );
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

@@ -26,6 +26,20 @@ export function adminLogout() {
   setAdminToken(null);
 }
 
+// AdminShell listens for this to redirect to /admin/login. Without it, a token that expires mid-session
+// (e.g. while filling out a long form) just clears itself silently and every page keeps showing a raw
+// "Błąd (401)" with no indication the fix is to log back in.
+const SESSION_EXPIRED_EVENT = 'tenebit-admin-session-expired';
+
+function notifySessionExpired() {
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
+
+export function onAdminSessionExpired(listener: () => void): () => void {
+  window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+  return () => window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+}
+
 export class AdminApiError extends Error {
   status: number;
   code: string;
@@ -50,6 +64,7 @@ async function adminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     const code = body?.code ?? '';
     if (response.status === 401 || (response.status === 403 && code !== 'STEP_UP_REQUIRED')) {
       setAdminToken(null);
+      notifySessionExpired();
     }
     throw new AdminApiError(body?.message ?? `Błąd (${response.status})`, response.status, code);
   }
