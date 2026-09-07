@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './auth/AuthProvider';
+import { PartnerAuthProvider } from './partner/PartnerAuthProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CelebrationProvider } from './celebration/CelebrationProvider';
 import { I18nProvider } from './i18n/I18nProvider';
@@ -23,9 +24,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <I18nProvider>
         <ErrorBoundary>
           <AuthProvider>
-            <CelebrationProvider>
-              <App />
-            </CelebrationProvider>
+            <PartnerAuthProvider>
+              <CelebrationProvider>
+                <App />
+              </CelebrationProvider>
+            </PartnerAuthProvider>
           </AuthProvider>
         </ErrorBoundary>
       </I18nProvider>

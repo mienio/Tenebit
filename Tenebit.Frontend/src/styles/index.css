@@ -1,9 +1,13 @@
 :root {
-  font-family: Inter, "Inter Fallback", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* "Inter Variable"/"Fraunces Variable", not plain "Inter"/"Fraunces": that's the family name the
+     self-hosted @fontsource-variable packages (see main.tsx) actually register via @font-face. The
+     plain names were never loaded under any name the browser could match, so every heading and the
+     body text silently fell back past "*, Fallback" straight to Georgia/system-ui. */
+  font-family: "Inter Variable", "Inter Fallback", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #221d18;
   background: #f5efe2;
-  --font-sans: Inter, "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: Fraunces, "Fraunces Fallback", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter Variable", "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces Variable", "Fraunces Fallback", Georgia, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", "IBM Plex Mono Fallback", ui-monospace, "Cascadia Mono", monospace;
   --bg: #f5efe2;
   --surface: #ffffff;
@@ -46,7 +50,9 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .sidebar::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 .brand { display: flex; gap: 12px; align-items: center; }
 .brand__mark { width: 44px; height: 44px; flex: 0 0 auto; display: grid; place-items: center; }
-.brand strong { display: block; font-family: var(--font-serif); font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+/* Sans, bold - matches the plain <strong> wordmark on the landing page (inherits body's Inter +
+   the browser's default bold), not the serif used for headings elsewhere in the app shell. */
+.brand strong { display: block; font-family: var(--font-sans); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
 .brand small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.35; }
 .nav { display: grid; gap: 4px; }
 .navGroup { border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px; }
@@ -450,8 +456,12 @@ button.authIcon:hover { filter: brightness(0.94); }
 
 .landing__nav { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 8px 28px; margin: 0 -28px; transition: background .2s ease, box-shadow .2s ease; }
 .landing__nav--scrolled { background: rgba(245, 239, 226, .96); box-shadow: 0 1px 0 var(--border); backdrop-filter: blur(14px); }
-.landing__brand { display: flex; align-items: center; gap: 12px; font-size: 24px; letter-spacing: -0.03em; }
-.landing__brand .brand__mark { width: 52px; height: 52px; }
+.landing__brand { display: flex; align-items: center; gap: 10px; font-size: 24px; letter-spacing: -0.03em; }
+/* The mark's own viewBox is now cropped tight to the glyph (see BrandMark.tsx) instead of sitting
+   padded in a mostly-empty 128x128 canvas, so this box renders the logo much larger per pixel than
+   before - sized down from the old box's px count to land at a similar, deliberately-icon-sized
+   proportion next to the 24px wordmark rather than towering over it. */
+.landing__brand .brand__mark { width: 56px; height: 56px; }
 .landing__navLinks { display: flex; gap: 20px; color: var(--muted); font-size: 14px; font-weight: 560; }
 .landing__navLinks a:hover { color: var(--text); }
 .landing__navActions { display: flex; align-items: center; gap: 10px; }
@@ -625,11 +635,17 @@ button.authIcon:hover { filter: brightness(0.94); }
 
 @media (max-width: 620px) {
   .landing { gap: 62px; }
-  .landing__brand strong { display: none; }
-  .landing__brand .brand__mark { width: 44px; height: 44px; }
+  /* Wordmark stays visible - it used to be dropped here to make room for the language <select>'s
+     full-width option text ("Polski", "English", ...); now that the switcher below collapses to just
+     its icon on this breakpoint, there's room for both at once. */
+  .landing__brand strong { font-size: 18px; }
+  .landing__brand .brand__mark { width: 46px; height: 46px; }
   .landing__navActions { gap: 6px; }
-  .landing__navActions .languageSwitcher { padding: 7px 6px; }
-  .landing__navActions .languageSwitcher svg { display: none; }
+  /* Icon-only language switcher: the <select> is stretched invisibly over the icon (same trick as a
+     custom file-input overlay) so the native picker still opens exactly where the icon is, without the
+     selected language's full name eating nav width next to the wordmark. */
+  .landing__navActions .languageSwitcher { position: relative; width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .landing__navActions .languageSwitcher select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   .landing__loginButton { display: none; }
   .landing__registerFull { display: none; }
   .landing__registerShort { display: inline; }
@@ -841,7 +857,11 @@ button.authIcon:hover { filter: brightness(0.94); }
    cards rendered ~217px wide, unreadably cramped, regardless of how wide the monitor was. */
 .pricing-section { container-type: inline-size; }
 
-.pricing-legend { max-width: 800px; margin: 0 0 28px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; }
+/* Centered, not flush-left: .pricing-cards below is centered too (margin: 0 auto), and this box's own
+   max-width is well under the section's, so a left margin of 0 left it visibly off-center against the
+   centered card row on anything wider than ~800px - the app shell's sidebar-relative content area in
+   particular routinely is. */
+.pricing-legend { max-width: 800px; margin: 0 auto 28px; background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; }
 .pricing-legend__head { display: flex; gap: 12px; align-items: flex-start; }
 .pricing-legend__head svg { flex: 0 0 auto; margin-top: 2px; color: var(--accent); }
 .pricing-legend__title { font-size: 14px; font-weight: 700; }
@@ -854,25 +874,25 @@ button.authIcon:hover { filter: brightness(0.94); }
    rather than another concrete category. */
 .pricing-chip--more { border-style: dashed; color: var(--muted); background: transparent; }
 
-.pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
-.pricing-card { min-width: 0; padding: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 24px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
+.pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; max-width: 1400px; margin: 0 auto; }
+.pricing-card { min-width: 0; padding: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 18px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
 .pricing-card--featured { border-color: var(--brand); box-shadow: 8px 8px 0 rgba(34,29,24,.18); background: var(--brand-soft); transform: scale(1.045); z-index: 1; }
 /* MAX gets its own eye-catching treatment (colored border + badge) so it stands out from the plain
    middle-tier cards - but deliberately skips the scale/shadow/tint Growth uses, so it never competes
    with the actually-recommended plan for attention. */
 .pricing-card--max { border-color: var(--accent); }
-.pricing-card__badge { position: absolute; top: -12px; left: 24px; padding: 6px 12px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.pricing-card__badge { position: absolute; top: -12px; left: 20px; padding: 5px 10px; border-radius: var(--radius); font-family: var(--font-mono); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
 .pricing-card__badge--recommended { background: var(--brand); color: #fff; }
 .pricing-card__badge--free { background: var(--surface); color: var(--text); border: 1.5px solid var(--border-strong); }
 .pricing-card__badge--max { background: var(--accent); color: #fff; }
 .pricing-card:hover { transform: translateY(-4px); box-shadow: 6px 6px 0 rgba(34,29,24,.12); }
 .pricing-card--featured:hover { transform: scale(1.045) translateY(-4px); box-shadow: 8px 8px 0 rgba(34,29,24,.15); }
-.pricing-card h3 { margin: 0; font-size: 24px; font-weight: 700; }
-.pricing-price { font-size: 48px; font-weight: 780; letter-spacing: -0.04em; }
-.pricing-price small { font-size: 18px; color: var(--muted); font-weight: 500; }
-.pricing-hero-limit { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; text-align: center; }
+.pricing-card h3 { margin: 0; font-size: 20px; font-weight: 700; }
+.pricing-price { font-size: 36px; font-weight: 780; letter-spacing: -0.03em; }
+.pricing-price small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.pricing-hero-limit { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; text-align: center; }
 .pricing-card--featured .pricing-hero-limit, .pricing-card--max .pricing-hero-limit { background: var(--surface); }
-.pricing-hero-limit__num { font-family: var(--font-serif); font-weight: 700; font-size: 30px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.pricing-hero-limit__num { font-family: var(--font-serif); font-weight: 700; font-size: 24px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .pricing-card--featured .pricing-hero-limit__num, .pricing-card--max .pricing-hero-limit__num { color: var(--accent); }
 .pricing-hero-limit__cap { margin-top: 2px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .pricing-cta { width: 100%; min-height: 48px; }
@@ -897,13 +917,17 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-promoField .button { min-height: 34px; padding: 0 10px; font-size: 12px; }
 
 /* Container queries (against .pricing-section above), not viewport media queries: five plans only fit
-   side by side once there's actually ~1300px of container to give them, and that has to be measured
-   against the real container, not the browser window - see the comment on .pricing-section. */
-@container (max-width: 1300px) {
+   side by side once there's actually ~1010px of container to give them, and that has to be measured
+   against the real container, not the browser window - see the comment on .pricing-section. That's
+   comfortably below a normal laptop's content width (both the landing page's fixed 1180px column and
+   the app shell's sidebar-relative area on any screen ~1350px wide or more), so 5-across is the common
+   case on a computer - collapsing further is for phones/tablets or a narrow split-screen window, not
+   for shrinking on an ordinary desktop monitor. */
+@container (max-width: 1010px) {
   .pricing-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-@container (max-width: 1024px) {
+@container (max-width: 800px) {
   .pricing-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pricing-card--featured { transform: none; }
   .pricing-card--featured:hover { transform: translateY(-4px); }

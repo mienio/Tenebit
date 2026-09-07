@@ -1,0 +1,19 @@
+/* Reuses the admin panel's table/tag/dialog/page-header primitives (adminTable, adminTag,
+   adminDialog, adminPageHeader, adminMuted, ...) rather than duplicating ~100 lines of CSS under a
+   new prefix - same visual system, two completely separate auth/session models. */
+@import '../admin/admin.css';
+
+.partnerShell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; background: var(--background); }
+.partnerShell__side { background: var(--surface); border-right: 1px solid var(--border-strong); padding: 20px 14px; display: flex; flex-direction: column; gap: 6px; }
+.partnerShell__brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-weight: 700; letter-spacing: .02em; padding: 0 10px 16px; }
+.partnerShell__notice { margin: 0 0 12px; padding: 8px 10px; background: var(--accent-soft); color: var(--danger); border-radius: 8px; font-size: 12.5px; line-height: 1.4; }
+.partnerShell__nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.partnerShell__link { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; }
+.partnerShell__link:hover { background: var(--surface-soft); }
+.partnerShell__link--active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.partnerShell__logout { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 14px; }
+.partnerShell__logout:hover { background: var(--surface-soft); color: var(--text); }
+.partnerShell__main { padding: 28px 32px; max-width: 1100px; }
+
+.partnerAuthPage { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--background); }
+.partnerAuthPage__panel { width: 100%; max-width: 440px; }

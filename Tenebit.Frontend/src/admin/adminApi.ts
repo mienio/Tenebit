@@ -336,3 +336,216 @@ export function setPromoCodeActive(id: string, active: boolean): Promise<void> {
 export function deletePromoCode(id: string): Promise<void> {
   return adminFetch(`/api/admin/promo-codes/${id}`, { method: 'DELETE' });
 }
+
+// Affiliate program (spec/AFFILIATE_PROGRAM_PLAN.md §9). Mutating calls carry a fresh TOTP code -
+// same step-up pattern as organization/user moderation above.
+
+export type AffiliateStatus = 'PendingApproval' | 'Active' | 'Blocked';
+
+export interface AffiliateAdminListItem {
+  id: string;
+  fullName: string;
+  email: string;
+  status: AffiliateStatus;
+  activeCodeCount: number;
+  lifetimeConversionCount: number;
+  totalDueNow: number;
+  totalPaidLifetime: number;
+  createdAt: string;
+}
+
+export interface AffiliateAdminCodeItem {
+  id: string;
+  code: string;
+  countryCode: string | null;
+  isActive: boolean;
+  clickCount: number;
+  createdAt: string;
+}
+
+export interface AffiliateAdminConversionItem {
+  id: string;
+  occurredAt: string;
+  organizationId: string | null;
+  code: string;
+  eventType: 'InitialSale' | 'Renewal';
+  grossAmount: number;
+  netAmount: number;
+  commissionAmount: number;
+  currency: string;
+  requiresReview: boolean;
+  isWithinCommissionWindow: boolean;
+}
+
+export interface AffiliateAdminPayoutPeriodItem {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  totalCommission: number;
+  status: 'Open' | 'AwaitingPayout' | 'Paid';
+}
+
+export interface AffiliateAdminPayoutItem {
+  id: string;
+  amount: number;
+  currency: string;
+  markedPaidAt: string;
+  paymentReference: string | null;
+  note: string | null;
+  coveredPeriodIds: string[];
+}
+
+export interface AffiliateAdminDetail {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: AffiliateStatus;
+  countryCode: string | null;
+  phoneNumber: string | null;
+  companyName: string | null;
+  taxId: string | null;
+  revolutTag: string | null;
+  commissionPercentOverride: number | null;
+  maxActiveCodesOverride: number | null;
+  resolvedCommissionPercent: number;
+  resolvedMaxActiveCodes: number;
+  createdAt: string;
+  approvedAt: string | null;
+  blockedAt: string | null;
+  blockedReason: string | null;
+  codes: AffiliateAdminCodeItem[];
+  conversions: AffiliateAdminConversionItem[];
+  payoutPeriods: AffiliateAdminPayoutPeriodItem[];
+  payouts: AffiliateAdminPayoutItem[];
+}
+
+export interface AffiliateAdminDashboardSummary {
+  pendingApprovalCount: number;
+  awaitingPayoutAffiliateCount: number;
+  unreadMessageThreadCount: number;
+}
+
+export function listAffiliates(status?: AffiliateStatus): Promise<AffiliateAdminListItem[]> {
+  const params = status ? `?status=${status}` : '';
+  return adminFetch(`/api/admin/affiliates${params}`);
+}
+
+export function getAffiliateAdminSummary(): Promise<AffiliateAdminDashboardSummary> {
+  return adminFetch('/api/admin/affiliate-dashboard-summary');
+}
+
+export function getAffiliate(id: string): Promise<AffiliateAdminDetail> {
+  return adminFetch(`/api/admin/affiliates/${id}`);
+}
+
+export function approveAffiliate(id: string, totpCode: string): Promise<void> {
+  return adminFetch(`/api/admin/affiliates/${id}/approve`, { method: 'POST', body: JSON.stringify({ totpCode }) });
+}
+
+export function blockAffiliate(id: string, reason: string, totpCode: string): Promise<void> {
+  return adminFetch(`/api/admin/affiliates/${id}/block`, { method: 'POST', body: JSON.stringify({ reason, totpCode }) });
+}
+
+export function reactivateAffiliate(id: string, totpCode: string): Promise<void> {
+  return adminFetch(`/api/admin/affiliates/${id}/reactivate`, { method: 'POST', body: JSON.stringify({ totpCode }) });
+}
+
+export function overrideAffiliateCommission(
+  id: string, commissionPercent: number | null, maxActiveCodes: number | null, totpCode: string
+): Promise<void> {
+  return adminFetch(`/api/admin/affiliates/${id}/commission`, {
+    method: 'PATCH',
+    body: JSON.stringify({ commissionPercent, maxActiveCodes, totpCode }),
+  });
+}
+
+export function markAffiliatePayoutPaid(
+  id: string,
+  body: { periodIds: string[]; amount: number; currency: string; paymentReference?: string | null; note?: string | null; totpCode: string }
+): Promise<void> {
+  return adminFetch(`/api/admin/affiliates/${id}/payouts/mark-paid`, { method: 'POST', body: JSON.stringify(body) });
+}
+
+export interface AffiliateProgramSettings {
+  defaultCommissionPercent: number;
+  commissionBase: 'Gross' | 'Net';
+  defaultCommissionWindowMonths: number | null;
+  defaultMaxCodesPerAffiliate: number;
+  payoutDayOfMonth: number;
+  payoutGraceDays: number;
+  minimumPayoutAmount: number | null;
+  codeGrantsCustomerDiscountByDefault: boolean;
+  publicLeaderboardEnabled: boolean;
+  termsVersion: string;
+}
+
+export function getAffiliateSettings(): Promise<AffiliateProgramSettings> {
+  return adminFetch('/api/admin/affiliate-settings');
+}
+
+export function updateAffiliateSettings(settings: AffiliateProgramSettings): Promise<AffiliateProgramSettings> {
+  return adminFetch('/api/admin/affiliate-settings', { method: 'PUT', body: JSON.stringify(settings) });
+}
+
+export interface AffiliateCountryDiscountRule {
+  id: string;
+  countryCode: string;
+  discountPercent: number;
+  durationMonths: number | null;
+}
+
+export function listAffiliateCountryRules(): Promise<AffiliateCountryDiscountRule[]> {
+  return adminFetch('/api/admin/affiliate-settings/country-rules');
+}
+
+export function upsertAffiliateCountryRule(countryCode: string, discountPercent: number, durationMonths: number | null): Promise<AffiliateCountryDiscountRule> {
+  return adminFetch('/api/admin/affiliate-settings/country-rules', {
+    method: 'PUT',
+    body: JSON.stringify({ countryCode, discountPercent, durationMonths }),
+  });
+}
+
+export function removeAffiliateCountryRule(id: string): Promise<void> {
+  return adminFetch(`/api/admin/affiliate-settings/country-rules/${id}`, { method: 'DELETE' });
+}
+
+export interface AffiliateMessageThreadSummary {
+  id: string;
+  affiliateId: string;
+  subject: string;
+  category: 'General' | 'Complaint';
+  status: 'Open' | 'Closed';
+  lastMessageAt: string;
+  unreadByAdmin: boolean;
+}
+
+export interface AffiliateMessage {
+  id: string;
+  senderType: 'Affiliate' | 'Admin';
+  body: string;
+  sentAt: string;
+}
+
+export interface AffiliateMessageThread {
+  id: string;
+  subject: string;
+  category: 'General' | 'Complaint';
+  status: 'Open' | 'Closed';
+  lastMessageAt: string;
+  unreadByAdmin: boolean;
+  unreadByAffiliate: boolean;
+  messages: AffiliateMessage[];
+}
+
+export function listAffiliateMessageThreads(): Promise<AffiliateMessageThreadSummary[]> {
+  return adminFetch('/api/admin/affiliate-messages');
+}
+
+export function getAffiliateMessageThread(id: string): Promise<AffiliateMessageThread> {
+  return adminFetch(`/api/admin/affiliate-messages/${id}`);
+}
+
+export function replyToAffiliateMessageThread(id: string, body: string): Promise<void> {
+  return adminFetch(`/api/admin/affiliate-messages/${id}/reply`, { method: 'POST', body: JSON.stringify({ body }) });
+}

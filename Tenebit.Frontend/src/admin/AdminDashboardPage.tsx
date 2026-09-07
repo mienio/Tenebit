@@ -2,7 +2,7 @@ import { AlertTriangle, Building2, Boxes, Check, KeyRound, MapPin, ShieldCheck, 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { LoadingState } from '../components/StateViews';
-import { getAdminDashboard, type AdminDashboard } from './adminApi';
+import { getAdminDashboard, getAffiliateAdminSummary, type AdminDashboard, type AffiliateAdminDashboardSummary } from './adminApi';
 import { AdminDateRange, defaultRange, type DateRange } from './AdminDateRange';
 import { AdminPageHeader, AdminShell } from './AdminShell';
 import { AdminTimeSeriesChart } from './AdminTimeSeriesChart';
@@ -10,6 +10,7 @@ import { AdminTimeSeriesChart } from './AdminTimeSeriesChart';
 export function AdminDashboardPage() {
   const [range, setRange] = useState<DateRange>(() => defaultRange(30));
   const [data, setData] = useState<AdminDashboard | null>(null);
+  const [affiliateSummary, setAffiliateSummary] = useState<AffiliateAdminDashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,6 +22,12 @@ export function AdminDashboardPage() {
     return () => { cancelled = true; };
   }, [range]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getAffiliateAdminSummary().then(result => { if (!cancelled) setAffiliateSummary(result); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <AdminShell>
       <AdminPageHeader
@@ -30,6 +37,18 @@ export function AdminDashboardPage() {
       />
 
       {error ? <p className="formMessage formMessage--error">{error}</p> : null}
+
+      {affiliateSummary && (affiliateSummary.pendingApprovalCount > 0 || affiliateSummary.unreadMessageThreadCount > 0 || affiliateSummary.awaitingPayoutAffiliateCount > 0) ? (
+        <p className="adminNotice">
+          <Check size={16} />
+          Program partnerski:{' '}
+          {affiliateSummary.pendingApprovalCount > 0 ? <>{affiliateSummary.pendingApprovalCount} afiliantów czeka na zatwierdzenie · </> : null}
+          {affiliateSummary.awaitingPayoutAffiliateCount > 0 ? <>{affiliateSummary.awaitingPayoutAffiliateCount} czeka na wypłatę · </> : null}
+          {affiliateSummary.unreadMessageThreadCount > 0 ? <>{affiliateSummary.unreadMessageThreadCount} nieprzeczytanych wiadomości</> : null}
+          {' '}<Link to="/admin/affiliates">Przejdź do partnerów</Link>
+        </p>
+      ) : null}
+
       {!data ? <LoadingState /> : (
         <>
           <section className="adminStats">

@@ -40,6 +40,23 @@ const AdminUsersPage = lazy(() => import('./admin/AdminUsersPage').then(m => ({ 
 const AdminLoginsPage = lazy(() => import('./admin/AdminLoginsPage').then(m => ({ default: m.AdminLoginsPage })));
 const AdminAuditPage = lazy(() => import('./admin/AdminAuditPage').then(m => ({ default: m.AdminAuditPage })));
 const AdminPromoCodesPage = lazy(() => import('./admin/AdminPromoCodesPage').then(m => ({ default: m.AdminPromoCodesPage })));
+const AdminAffiliatesPage = lazy(() => import('./admin/AdminAffiliatesPage').then(m => ({ default: m.AdminAffiliatesPage })));
+const AdminAffiliateDetailPage = lazy(() => import('./admin/AdminAffiliateDetailPage').then(m => ({ default: m.AdminAffiliateDetailPage })));
+const AdminAffiliateSettingsPage = lazy(() => import('./admin/AdminAffiliateSettingsPage').then(m => ({ default: m.AdminAffiliateSettingsPage })));
+const AdminAffiliateMessagesPage = lazy(() => import('./admin/AdminAffiliateMessagesPage').then(m => ({ default: m.AdminAffiliateMessagesPage })));
+
+const PartnerLoginPage = lazy(() => import('./partner/PartnerLoginPage').then(m => ({ default: m.PartnerLoginPage })));
+const PartnerRegisterPage = lazy(() => import('./partner/PartnerRegisterPage').then(m => ({ default: m.PartnerRegisterPage })));
+const PartnerVerifyEmailPage = lazy(() => import('./partner/PartnerVerifyEmailPage').then(m => ({ default: m.PartnerVerifyEmailPage })));
+const PartnerForgotPasswordPage = lazy(() => import('./partner/PartnerForgotPasswordPage').then(m => ({ default: m.PartnerForgotPasswordPage })));
+const PartnerResetPasswordPage = lazy(() => import('./partner/PartnerResetPasswordPage').then(m => ({ default: m.PartnerResetPasswordPage })));
+const PartnerTermsPage = lazy(() => import('./partner/PartnerTermsPage').then(m => ({ default: m.PartnerTermsPage })));
+const PartnerDashboardPage = lazy(() => import('./partner/PartnerDashboardPage').then(m => ({ default: m.PartnerDashboardPage })));
+const PartnerCodesPage = lazy(() => import('./partner/PartnerCodesPage').then(m => ({ default: m.PartnerCodesPage })));
+const PartnerConversionsPage = lazy(() => import('./partner/PartnerConversionsPage').then(m => ({ default: m.PartnerConversionsPage })));
+const PartnerPayoutsPage = lazy(() => import('./partner/PartnerPayoutsPage').then(m => ({ default: m.PartnerPayoutsPage })));
+const PartnerMessagesPage = lazy(() => import('./partner/PartnerMessagesPage').then(m => ({ default: m.PartnerMessagesPage })));
+const PartnerProfilePage = lazy(() => import('./partner/PartnerProfilePage').then(m => ({ default: m.PartnerProfilePage })));
 
 function HomeRoute() {
   const auth = useAuth();
@@ -85,6 +102,25 @@ export function App() {
         <Route path="/admin/logins" element={<AdminLoginsPage />} />
         <Route path="/admin/audit" element={<AdminAuditPage />} />
         <Route path="/admin/promo-codes" element={<AdminPromoCodesPage />} />
+        <Route path="/admin/affiliates" element={<AdminAffiliatesPage />} />
+        <Route path="/admin/affiliates/:id" element={<AdminAffiliateDetailPage />} />
+        <Route path="/admin/affiliate-settings" element={<AdminAffiliateSettingsPage />} />
+        <Route path="/admin/affiliate-messages" element={<AdminAffiliateMessagesPage />} />
+
+        {/* Hidden partner portal (spec §2): not linked from any public nav, noindex on every page,
+            entirely separate auth/session from both the tenant app and the admin panel. */}
+        <Route path="/partner/login" element={<PartnerLoginPage />} />
+        <Route path="/partner/register" element={<PartnerRegisterPage />} />
+        <Route path="/partner/verify-email" element={<PartnerVerifyEmailPage />} />
+        <Route path="/partner/forgot-password" element={<PartnerForgotPasswordPage />} />
+        <Route path="/partner/reset-password" element={<PartnerResetPasswordPage />} />
+        <Route path="/partner/terms" element={<PartnerTermsPage />} />
+        <Route path="/partner/dashboard" element={<PartnerDashboardPage />} />
+        <Route path="/partner/codes" element={<PartnerCodesPage />} />
+        <Route path="/partner/conversions" element={<PartnerConversionsPage />} />
+        <Route path="/partner/payouts" element={<PartnerPayoutsPage />} />
+        <Route path="/partner/messages" element={<PartnerMessagesPage />} />
+        <Route path="/partner/profile" element={<PartnerProfilePage />} />
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="dashboard" element={<RequireRoles path="/dashboard"><DashboardPage /></RequireRoles>} />
           <Route path="my" element={<MyWorkspacePage />} />

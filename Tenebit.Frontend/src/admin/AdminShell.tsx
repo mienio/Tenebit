@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, LayoutDashboard, LogOut, ShieldCheck, Tag, Users } from 'lucide-react';
+import { Building2, ClipboardList, HandCoins, LayoutDashboard, LogOut, MessageSquare, ShieldCheck, Sliders, Tag, Users } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { adminLogout, getAdminToken } from './adminApi';
@@ -11,6 +11,9 @@ const nav = [
   { to: '/admin/logins', label: 'Logowania', icon: ShieldCheck, end: false },
   { to: '/admin/audit', label: 'Dziennik admina', icon: ClipboardList, end: false },
   { to: '/admin/promo-codes', label: 'Kody promocyjne', icon: Tag, end: false },
+  { to: '/admin/affiliates', label: 'Partnerzy', icon: HandCoins, end: false },
+  { to: '/admin/affiliate-messages', label: 'Wiadomości partnerów', icon: MessageSquare, end: false },
+  { to: '/admin/affiliate-settings', label: 'Ustawienia partnerów', icon: Sliders, end: false },
 ];
 
 /**
