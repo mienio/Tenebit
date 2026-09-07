@@ -50,7 +50,7 @@ public class AffiliateAuthServiceTests
         var affiliate = Assert.Single(fixture.Affiliates.Affiliates);
         Assert.NotNull(affiliate.AcceptedTermsAt);
         Assert.Equal("@damian", affiliate.RevolutTag);
-        Assert.Equal(AffiliateStatus.PendingApproval, affiliate.Status);
+        Assert.Equal(AffiliateStatus.Active, affiliate.Status);
         Assert.Single(fixture.EmailSender.Sent);
     }
 
@@ -95,7 +95,7 @@ public class AffiliateAuthServiceTests
     }
 
     [Fact]
-    public async Task Login_succeeds_for_a_pending_approval_affiliate_so_they_can_see_their_own_status()
+    public async Task Login_succeeds_for_a_newly_registered_affiliate_without_manual_approval()
     {
         var fixture = CreateFixture();
         var affiliate = new Affiliate("damian@example.com", PasswordHasher.Hash("password123"), "Damian", "Kowalski", null, fixture.Clock.UtcNow);
@@ -104,7 +104,23 @@ public class AffiliateAuthServiceTests
 
         var result = await fixture.Service.LoginAsync("damian@example.com", "password123", CancellationToken.None);
         Assert.True(result.IsSuccess);
-        Assert.Equal("PendingApproval", result.Value!.Affiliate.Status);
+        Assert.Equal("Active", result.Value!.Affiliate.Status);
+    }
+
+    [Fact]
+    public async Task Login_returns_the_affiliates_real_persisted_security_stamp()
+    {
+        // Regression guard: the login/refresh endpoints must embed the affiliate's actual
+        // SecurityStamp in the issued JWT, not an unrelated freshly-minted GUID - otherwise every
+        // authenticated request after login fails the live security-stamp check with a 401.
+        var fixture = CreateFixture();
+        var affiliate = new Affiliate("damian@example.com", PasswordHasher.Hash("password123"), "Damian", "Kowalski", null, fixture.Clock.UtcNow);
+        affiliate.MarkEmailVerified();
+        fixture.Affiliates.Add(affiliate);
+
+        var result = await fixture.Service.LoginAsync("damian@example.com", "password123", CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(affiliate.SecurityStamp, result.Value!.SecurityStamp);
     }
 
     [Fact]

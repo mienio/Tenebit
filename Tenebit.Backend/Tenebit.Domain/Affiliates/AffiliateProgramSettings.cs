@@ -20,7 +20,7 @@ public sealed class AffiliateProgramSettings
     private AffiliateProgramSettings(bool markerOnly)
     {
         Id = SingletonId;
-        DefaultCommissionPercent = 20m;
+        DefaultCommissionPercent = 10m;
         CommissionBase = AffiliateCommissionBase.Net;
         DefaultCommissionWindowMonths = null; // lifetime, per spec recommendation §6.1/§16.3
         DefaultMaxCodesPerAffiliate = Affiliate.DefaultMaxActiveCodes;

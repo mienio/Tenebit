@@ -40,7 +40,11 @@ public sealed class Affiliate
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
         CountryCode = NormalizeCountryCode(countryCode);
-        Status = AffiliateStatus.PendingApproval;
+        // Auto-approved on registration - manual admin approval turned out to be a chore nobody wants
+        // to keep up with, and login/tracking never actually gated on PendingApproval anyway. The
+        // status and the Approve()/Block() actions stay in place so admins can still block a bad actor
+        // or reintroduce a manual gate later.
+        Status = AffiliateStatus.Active;
         SecurityStamp = Guid.NewGuid();
         CreatedAt = now;
         UpdatedAt = now;

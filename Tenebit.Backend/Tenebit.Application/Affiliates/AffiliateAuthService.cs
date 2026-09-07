@@ -12,8 +12,8 @@ public sealed record AffiliateProfileResponse(
     string? PhoneNumber, string? CompanyName, string? TaxId, string? RevolutTag, bool IsEmailVerified,
     DateTimeOffset? AcceptedTermsAt, DateTimeOffset CreatedAt);
 
-public sealed record AffiliateLoginOutcome(AffiliateProfileResponse Affiliate);
-public sealed record AffiliateRefreshResult(AffiliateProfileResponse Affiliate, string RawRefreshToken);
+public sealed record AffiliateLoginOutcome(AffiliateProfileResponse Affiliate, Guid SecurityStamp);
+public sealed record AffiliateRefreshResult(AffiliateProfileResponse Affiliate, string RawRefreshToken, Guid SecurityStamp);
 
 /// <summary>
 /// Registration/login/session lifecycle for the affiliate identity - deliberately simpler than
@@ -157,7 +157,7 @@ public sealed class AffiliateAuthService
             return Result<AffiliateLoginOutcome>.Failure(Error.Validation("Potwierdź adres e-mail przed zalogowaniem."));
         }
 
-        return Result<AffiliateLoginOutcome>.Success(new AffiliateLoginOutcome(Map(affiliate)));
+        return Result<AffiliateLoginOutcome>.Success(new AffiliateLoginOutcome(Map(affiliate), affiliate.SecurityStamp));
     }
 
     public async Task<string> IssueRefreshTokenAsync(Guid affiliateId, CancellationToken cancellationToken)
@@ -213,7 +213,7 @@ public sealed class AffiliateAuthService
                 throw new ConcurrencyException("Refresh token został zużyty równolegle.");
             }
 
-            return Result<AffiliateRefreshResult>.Success(new AffiliateRefreshResult(Map(affiliate), newRawToken));
+            return Result<AffiliateRefreshResult>.Success(new AffiliateRefreshResult(Map(affiliate), newRawToken, affiliate.SecurityStamp));
         }, cancellationToken);
     }
 

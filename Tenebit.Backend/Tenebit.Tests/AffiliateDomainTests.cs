@@ -8,11 +8,16 @@ public class AffiliateDomainTests
     private static DateTimeOffset Now => new(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Register_then_approve_moves_to_active()
+    public void Registration_is_auto_active_with_no_manual_approval_step()
     {
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", Now);
-        Assert.Equal(AffiliateStatus.PendingApproval, affiliate.Status);
+        Assert.Equal(AffiliateStatus.Active, affiliate.Status);
+    }
 
+    [Fact]
+    public void Approve_still_works_for_a_manually_reactivated_account()
+    {
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", Now);
         affiliate.Approve(Now);
         Assert.Equal(AffiliateStatus.Active, affiliate.Status);
         Assert.NotNull(affiliate.ApprovedAt);
@@ -22,7 +27,6 @@ public class AffiliateDomainTests
     public void Cannot_approve_a_blocked_affiliate_without_explicit_reactivation()
     {
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", null, Now);
-        affiliate.Approve(Now);
         affiliate.Block("Spam links", Now);
 
         Assert.Throws<DomainException>(() => affiliate.Approve(Now));

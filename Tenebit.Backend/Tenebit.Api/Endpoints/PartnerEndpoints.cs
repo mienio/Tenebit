@@ -111,8 +111,7 @@ public static class PartnerEndpoints
                 // Access token carries the security stamp at issue time; Program.cs re-checks it live
                 // on every request, so a password change/block invalidates this token immediately, not
                 // just at its 15-minute natural expiry.
-                var securityStamp = Guid.NewGuid();
-                var token = tokens.IssueAffiliate(affiliate.Id, affiliate.Email, securityStamp, service.AccessTokenMinutesValue);
+                var token = tokens.IssueAffiliate(affiliate.Id, affiliate.Email, result.Value!.SecurityStamp, service.AccessTokenMinutesValue);
                 return Results.Ok(new { token, expiresInMinutes = service.AccessTokenMinutesValue, affiliate });
             })
             .AllowAnonymous()
@@ -137,7 +136,7 @@ public static class PartnerEndpoints
 
                 AffiliateRefreshTokenCookie.Append(response, result.Value!.RawRefreshToken, env.IsDevelopment());
                 var affiliate = result.Value!.Affiliate;
-                var token = tokens.IssueAffiliate(affiliate.Id, affiliate.Email, Guid.NewGuid(), service.AccessTokenMinutesValue);
+                var token = tokens.IssueAffiliate(affiliate.Id, affiliate.Email, result.Value!.SecurityStamp, service.AccessTokenMinutesValue);
                 return Results.Ok(new { token, expiresInMinutes = service.AccessTokenMinutesValue, affiliate });
             })
             .AllowAnonymous()

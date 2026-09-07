@@ -225,12 +225,12 @@ public class AffiliateConversionRecordingServiceTests
         var result = await fixture.Service.HandleWebhookAsync("{}", "sig", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(18m, original.CommissionAmount); // sanity: 90 * 20%
-        Assert.Equal(18m, julyPeriod.TotalCommission); // untouched - already paid
+        Assert.Equal(9m, original.CommissionAmount); // sanity: 90 * 10%
+        Assert.Equal(9m, julyPeriod.TotalCommission); // untouched - already paid
         var compensation = fixture.Conversions.Conversions.Single(c => c.PaddleTransactionId == "adj_2");
         var septemberPeriod = fixture.Periods.Periods.Single(p => p.Id != julyPeriod.Id);
         Assert.Equal(new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero), septemberPeriod.PeriodStart);
-        Assert.Equal(-18m, septemberPeriod.TotalCommission);
+        Assert.Equal(-9m, septemberPeriod.TotalCommission);
         Assert.Equal(septemberPeriod.Id, compensation.AffiliatePayoutPeriodId);
     }
 
