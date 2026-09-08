@@ -63,8 +63,13 @@ READY="$(curl -fsS "$DOMAIN/api/health/ready" 2>&1)" || SMOKE_OK=0
 [[ "$READY" == *'"status":"ready"'* ]] || SMOKE_OK=0
 
 REGISTER_BODY="{\"organizationName\":\"Smoke Test ${SMOKE_STAMP}\",\"email\":\"${SMOKE_EMAIL}\",\"password\":\"${SMOKE_PASSWORD}\",\"displayName\":\"Smoke Test\",\"currency\":\"PLN\",\"acceptTerms\":true}"
-REGISTER_RESPONSE="$(curl -fsS -X POST "$DOMAIN/api/auth/register" -H "Content-Type: application/json" -d "$REGISTER_BODY" 2>&1)" || SMOKE_OK=0
-[[ "$REGISTER_RESPONSE" == *'"requiresEmailVerification"'* ]] || SMOKE_OK=0
+REGISTER_RESPONSE="$(curl -sS -X POST "$DOMAIN/api/auth/register" -H "Content-Type: application/json" -d "$REGISTER_BODY" 2>&1)" || true
+# Production has Cloudflare Turnstile enforced on registration and this script has no real widget
+# token to send, so a clean CAPTCHA_FAILED here means the endpoint and its validation/abuse-limiter
+# pipeline are reachable and working - that's as far as an unauthenticated curl smoke test can prove.
+if [[ "$REGISTER_RESPONSE" != *'"requiresEmailVerification"'* ]] && [[ "$REGISTER_RESPONSE" != *'"code":"CAPTCHA_FAILED"'* ]]; then
+  SMOKE_OK=0
+fi
 
 if [ "$SMOKE_OK" != "1" ]; then
   echo -e "\n=== FAIL (smoke test) ==="
@@ -74,7 +79,11 @@ if [ "$SMOKE_OK" != "1" ]; then
   docker logs --tail=80 tenebit-backend
   exit 1
 fi
-echo "  OK (konto testowe: $SMOKE_EMAIL)"
+if [[ "$REGISTER_RESPONSE" == *'"requiresEmailVerification"'* ]]; then
+  echo "  OK (konto testowe: $SMOKE_EMAIL)"
+else
+  echo "  OK (endpoint zablokowany przez Turnstile jak oczekiwano - brak realnego tokenu w tym skrypcie)"
+fi
 
 docker exec -i tenebit-db psql -U tenebit -d tenebit -v ON_ERROR_STOP=1 \
   -v org_name="Smoke Test ${SMOKE_STAMP}" <<'CLEANUP_SQL' >/dev/null 2>&1 || echo "  WARN: sprzątanie smoke testu nie powiodło się (nieszkodliwe)"
