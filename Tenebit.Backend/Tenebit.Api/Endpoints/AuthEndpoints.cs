@@ -42,10 +42,12 @@ public static class AuthEndpoints
 {
     public static RouteGroupBuilder MapAuthEndpoints(this RouteGroupBuilder api)
     {
-        api.MapPost("/auth/register", async (RegisterRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, CancellationToken cancellationToken) =>
+        api.MapPost("/auth/register", async (RegisterRequest request, HttpContext http, AuthService service, IAuthenticationAbuseLimiter abuseLimiter, ITurnstileVerifier turnstile, CancellationToken cancellationToken) =>
             {
                 if (!await abuseLimiter.TryAcquireAsync("register", request.Email, http.Connection.RemoteIpAddress?.ToString(), 5, TimeSpan.FromMinutes(15), cancellationToken))
                     return Results.Json(new ErrorResponse(ResultExtensions.Localize("Zbyt wiele prób. Spróbuj ponownie później."), "RATE_LIMITED"), statusCode: 429);
+                var captchaFailure = await http.VerifyTurnstileAsync(turnstile, request.TurnstileToken, cancellationToken);
+                if (captchaFailure is not null) return captchaFailure;
                 var result = await service.RegisterAsync(request, cancellationToken);
                 if (result.IsFailure) return result.ToHttpResult();
 

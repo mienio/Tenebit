@@ -29,12 +29,12 @@ const content: Record<PartnerLocale, {
     heroTitle: 'Recommend Tenebit and we’ll share the profit',
     heroLead: 'Got a website, a channel, customers, or just friends who run companies? Grab your promo code and earn a commission on every person who starts using Tenebit through you. No limits, no exclusivity contracts.',
     haveAccount: 'I already have an account',
-    trust: ['10% commission to start', 'Payouts to Revolut', 'Buyer data always anonymous'],
+    trust: ['10% commission to start', 'Payouts to PayPal or Revolut', 'Buyer data always anonymous'],
     benefitsEyebrow: 'Why join',
     benefitsTitle: 'Earn by recommending a tool you actually believe in',
     benefits: [
       { icon: Banknote, title: '10% commission to start on every sale', text: 'For every person who buys a Tenebit plan with your promo code, you get a commission - renewing every month for as long as the customer stays with us.' },
-      { icon: Zap, title: 'Payouts to Revolut, no delay', text: 'You receive your earnings directly to your Revolut account. No invoices to fill out, no weeks of waiting.' },
+      { icon: Zap, title: 'Payouts to PayPal or Revolut, no delay', text: 'You receive your earnings directly to your PayPal or Revolut account - your choice. No invoices to fill out, no weeks of waiting.' },
       { icon: LineChart, title: 'A dashboard with live sales tracking', text: 'See the date, commission amount, and code used for every sale. No limit on the number of codes or earnings.' },
       { icon: ShieldCheck, title: 'Buyer data stays private', text: 'The sales list is fully anonymized - you see your results, never the customer’s personal data.' },
     ],
@@ -54,12 +54,12 @@ const content: Record<PartnerLocale, {
     heroTitle: 'Poleć Tenebit, a my podzielimy się zyskiem',
     heroLead: 'Masz stronę, kanał, klientów albo po prostu znajomych z firmami? Zgarnij swój kod promocyjny i zarabiaj prowizję od każdej osoby, która dzięki Tobie zacznie korzystać z Tenebit. Bez limitu, bez umów na wyłączność.',
     haveAccount: 'Mam już konto',
-    trust: ['10% prowizji na start', 'Wypłaty na Revolut', 'Dane kupujących zawsze anonimowe'],
+    trust: ['10% prowizji na start', 'Wypłaty na PayPal lub Revolut', 'Dane kupujących zawsze anonimowe'],
     benefitsEyebrow: 'Dlaczego warto',
     benefitsTitle: 'Zarabiaj, polecając narzędzie, w które sam wierzysz',
     benefits: [
       { icon: Banknote, title: 'Prowizja na start 10% od każdej sprzedaży', text: 'Za każdą osobę, która kupi plan Tenebit z Twoim kodem promocyjnym, dostajesz prowizję - odnawiającą się co miesiąc, dopóki klient zostaje z nami.' },
-      { icon: Zap, title: 'Wypłaty na Revolut, bez zwłoki', text: 'Zarobione środki odbierasz bezpośrednio na swoje konto Revolut. Żadnych faktur do wypełniania ani czekania tygodniami.' },
+      { icon: Zap, title: 'Wypłaty na PayPal lub Revolut, bez zwłoki', text: 'Zarobione środki odbierasz bezpośrednio na swoje konto PayPal lub Revolut - Ty wybierasz. Żadnych faktur do wypełniania ani czekania tygodniami.' },
       { icon: LineChart, title: 'Panel z podglądem sprzedaży na żywo', text: 'Widzisz datę, kwotę prowizji i użyty kod przy każdej sprzedaży. Bez limitu liczby kodów ani zarobków.' },
       { icon: ShieldCheck, title: 'Dane kupujących zostają prywatne', text: 'Lista sprzedaży jest w pełni zanonimizowana - Ty widzisz swój wynik, nigdy dane osobowe klienta.' },
     ],
@@ -154,7 +154,7 @@ export function PartnerLandingPage() {
           <Link to={path('register')} className="button button--primary">{t.ctaLabel} <Link2 size={16} /></Link>
         </section>
       </main>
-      <PublicFooter />
+      <PublicFooter language={locale} />
     </div>
   );
 }

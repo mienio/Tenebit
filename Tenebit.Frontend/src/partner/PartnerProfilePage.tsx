@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Button } from '../components/Button';
-import { Field, TextInput } from '../components/FormFields';
+import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { PartnerLayout, PartnerPageHeader } from './PartnerLayout';
 import { usePartnerAuth } from './PartnerAuthProvider';
 import { updateMyProfile } from './partnerApi';
@@ -9,25 +9,29 @@ import { usePartnerLocale, type PartnerLocale } from './i18n';
 const content: Record<PartnerLocale, {
   title: string; missingRevtag: string; saveError: string; saveSuccess: string;
   firstName: string; lastName: string; phone: string; country: string; company: string; taxId: string;
-  revtag: string; revtagInfo: string; revtagPlaceholder: string;
+  payoutMethod: string; revtagInfo: string; revtagPlaceholderRevolut: string; revtagPlaceholderPayPal: string;
   save: string; saving: string;
 }> = {
   en: {
     title: 'Your profile',
-    missingRevtag: 'Add your Revolut revtag below - without it we cannot pay out your commission.',
+    missingRevtag: 'Add your PayPal/Revolut account below - without it we cannot pay out your commission.',
     saveError: 'Could not save changes.', saveSuccess: 'Changes saved.',
     firstName: 'First name', lastName: 'Last name', phone: 'Phone (optional)',
     country: 'Country (ISO code, optional)', company: 'Company (optional)', taxId: 'Tax ID (optional)',
-    revtag: 'Revolut revtag', revtagInfo: 'Format @name - commission payouts go there.', revtagPlaceholder: '@your-name',
+    payoutMethod: 'PayPal / Revolut account',
+    revtagInfo: 'Revolut: format @name. PayPal: your account e-mail. Commission payouts go there.',
+    revtagPlaceholderRevolut: '@your-name', revtagPlaceholderPayPal: 'you@example.com',
     save: 'Save changes', saving: 'Saving…',
   },
   pl: {
     title: 'Twój profil',
-    missingRevtag: 'Uzupełnij revtag Revolut poniżej - bez niego nie możemy zrealizować wypłaty prowizji.',
+    missingRevtag: 'Uzupełnij konto PayPal/Revolut poniżej - bez niego nie możemy zrealizować wypłaty prowizji.',
     saveError: 'Nie udało się zapisać zmian.', saveSuccess: 'Zapisano zmiany.',
     firstName: 'Imię', lastName: 'Nazwisko', phone: 'Telefon (opcjonalnie)',
     country: 'Kraj (kod ISO, opcjonalnie)', company: 'Firma (opcjonalnie)', taxId: 'NIP (opcjonalnie)',
-    revtag: 'Revtag Revolut', revtagInfo: 'Format @nazwa - tam trafiają wypłaty prowizji.', revtagPlaceholder: '@twoja-nazwa',
+    payoutMethod: 'Konto PayPal / Revolut',
+    revtagInfo: 'Revolut: format @nazwa. PayPal: e-mail Twojego konta. Tam trafiają wypłaty prowizji.',
+    revtagPlaceholderRevolut: '@twoja-nazwa', revtagPlaceholderPayPal: 'ty@example.com',
     save: 'Zapisz zmiany', saving: 'Zapisywanie…',
   },
 };
@@ -42,7 +46,8 @@ export function PartnerProfilePage() {
   const [countryCode, setCountryCode] = useState(affiliate?.countryCode ?? '');
   const [companyName, setCompanyName] = useState(affiliate?.companyName ?? '');
   const [taxId, setTaxId] = useState(affiliate?.taxId ?? '');
-  const [revolutTag, setRevolutTag] = useState(affiliate?.revolutTag ?? '');
+  const [payoutMethod, setPayoutMethod] = useState<'Revolut' | 'PayPal'>(affiliate?.payoutMethod ?? 'Revolut');
+  const [payoutAccountTag, setPayoutAccountTag] = useState(affiliate?.payoutAccountTag ?? '');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -59,7 +64,8 @@ export function PartnerProfilePage() {
         countryCode: countryCode.trim() || null,
         companyName: companyName.trim() || null,
         taxId: taxId.trim() || null,
-        revolutTag: revolutTag.trim() || null,
+        payoutMethod,
+        payoutAccountTag: payoutAccountTag.trim() || null,
       });
       await refreshProfile();
       setSuccess(t.saveSuccess);
@@ -75,7 +81,7 @@ export function PartnerProfilePage() {
   return (
     <PartnerLayout>
       <PartnerPageHeader title={t.title} description={affiliate.email} />
-      {!affiliate.revolutTag ? (
+      {!affiliate.payoutAccountTag ? (
         <p className="formMessage formMessage--error">{t.missingRevtag}</p>
       ) : null}
       <div className="card">
@@ -98,8 +104,17 @@ export function PartnerProfilePage() {
           <Field label={t.taxId}>
             <TextInput value={taxId} onChange={e => setTaxId(e.target.value)} />
           </Field>
-          <Field label={t.revtag} info={t.revtagInfo}>
-            <TextInput value={revolutTag} onChange={e => setRevolutTag(e.target.value)} placeholder={t.revtagPlaceholder} />
+          <Field label={t.payoutMethod} info={t.revtagInfo}>
+            <SelectInput value={payoutMethod} onChange={e => setPayoutMethod(e.target.value as 'Revolut' | 'PayPal')}>
+              <option value="Revolut">Revolut</option>
+              <option value="PayPal">PayPal</option>
+            </SelectInput>
+            <TextInput
+              value={payoutAccountTag}
+              onChange={e => setPayoutAccountTag(e.target.value)}
+              placeholder={payoutMethod === 'PayPal' ? t.revtagPlaceholderPayPal : t.revtagPlaceholderRevolut}
+              style={{ marginTop: 8 }}
+            />
           </Field>
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
           {success ? <p className="formMessage formMessage--success">{success}</p> : null}

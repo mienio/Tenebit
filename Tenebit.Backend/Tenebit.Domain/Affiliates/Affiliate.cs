@@ -10,6 +10,12 @@ public enum AffiliateStatus
     Blocked
 }
 
+public enum PayoutMethod
+{
+    Revolut,
+    PayPal
+}
+
 /// <summary>
 /// Aggregate root for a partner in the affiliate program - a completely separate identity from
 /// <see cref="Tenebit.Domain.Identity.OrganizationUser"/> (a paying tenant) and the single platform
@@ -22,6 +28,7 @@ public sealed class Affiliate
     public const int DefaultMaxActiveCodes = 10;
 
     private static readonly Regex RevolutTagPattern = new("^@[A-Za-z0-9_.]{2,32}$", RegexOptions.Compiled);
+    private static readonly Regex PayPalEmailPattern = new("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", RegexOptions.Compiled);
 
     private Affiliate() { }
 
@@ -67,11 +74,16 @@ public sealed class Affiliate
     public string? CompanyName { get; private set; }
     public string? TaxId { get; private set; }
 
-    /// <summary>Revolut payment tag ("@handle") the owner transfers commission to by hand each payout
-    /// cycle - encrypted at rest via an EF Core value converter (see
-    /// FieldEncryptionPurposes.AffiliateRevolutTag), same pattern as the TOTP secret. Optional at
+    /// <summary>Which payout rail <see cref="PayoutAccountTag"/> should be read as - a PayPal e-mail or
+    /// a Revolut "@handle". Defaults to Revolut since that's the only rail the program launched with.</summary>
+    public PayoutMethod PayoutMethod { get; private set; } = PayoutMethod.Revolut;
+
+    /// <summary>The payout account identifier for <see cref="PayoutMethod"/> - a Revolut "@handle" or a
+    /// PayPal e-mail address - the owner transfers commission to by hand each payout cycle. Encrypted at
+    /// rest via an EF Core value converter (see FieldEncryptionPurposes.AffiliateRevolutTag - kept as-is
+    /// so already-encrypted rows still decrypt), same pattern as the TOTP secret. Optional at
     /// registration; the affiliate can add or change it later from their own profile.</summary>
-    public string? RevolutTag { get; private set; }
+    public string? PayoutAccountTag { get; private set; }
 
     /// <summary>Null = use <see cref="Tenebit.Domain.Affiliates.AffiliateProgramSettings.DefaultCommissionPercent"/>.</summary>
     public decimal? CommissionPercentOverride { get; private set; }
@@ -127,22 +139,32 @@ public sealed class Affiliate
         UpdatedAt = now;
     }
 
-    /// <summary>Revolut tags start with "@" (e.g. "@damian.kowalski") - validated so the admin never
-    /// stares at an unusable value when it's time to actually send the money. Passing null/empty
-    /// clears the field - the spec explicitly allows leaving it blank at registration.</summary>
-    public void SetRevolutTag(string? revolutTag, DateTimeOffset now)
+    /// <summary>Revolut tags start with "@" (e.g. "@damian.kowalski"); PayPal accounts are identified by
+    /// e-mail - both are validated so the admin never stares at an unusable value when it's time to
+    /// actually send the money. Passing null/empty clears the account tag but still records the chosen
+    /// method - the spec explicitly allows leaving it blank at registration.</summary>
+    public void SetPayoutAccount(PayoutMethod method, string? accountTag, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(revolutTag))
+        if (string.IsNullOrWhiteSpace(accountTag))
         {
-            RevolutTag = null;
+            PayoutAccountTag = null;
         }
         else
         {
-            var trimmed = revolutTag.Trim();
-            if (!RevolutTagPattern.IsMatch(trimmed))
-                throw new DomainException("Revtag Revolut musi mieć postać @nazwa (2-32 znaki: litery, cyfry, kropka, podkreślnik).");
-            RevolutTag = trimmed;
+            var trimmed = accountTag.Trim();
+            if (method == PayoutMethod.Revolut)
+            {
+                if (!RevolutTagPattern.IsMatch(trimmed))
+                    throw new DomainException("Revtag Revolut musi mieć postać @nazwa (2-32 znaki: litery, cyfry, kropka, podkreślnik).");
+            }
+            else
+            {
+                if (!PayPalEmailPattern.IsMatch(trimmed))
+                    throw new DomainException("Adres e-mail PayPal jest nieprawidłowy.");
+            }
+            PayoutAccountTag = trimmed;
         }
+        PayoutMethod = method;
         UpdatedAt = now;
     }
 

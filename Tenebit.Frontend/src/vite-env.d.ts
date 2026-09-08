@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_LEGAL_SUPPORT_EMAIL?: string;
   readonly VITE_LEGAL_EFFECTIVE_DATE?: string;
   readonly VITE_LEGAL_TERMS_VERSION?: string;
+  readonly VITE_TURNSTILE_SITE_KEY?: string;
 }
 
 interface ImportMeta {

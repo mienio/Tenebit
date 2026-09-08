@@ -25,7 +25,7 @@ public sealed record AffiliateAdminPayoutItem(Guid Id, decimal Amount, string Cu
 
 public sealed record AffiliateAdminDetail(
     Guid Id, string FirstName, string LastName, string Email, string Status, string? CountryCode, string? PhoneNumber,
-    string? CompanyName, string? TaxId, string? RevolutTag, decimal? CommissionPercentOverride, int? MaxActiveCodesOverride,
+    string? CompanyName, string? TaxId, string PayoutMethod, string? PayoutAccountTag, decimal? CommissionPercentOverride, int? MaxActiveCodesOverride,
     decimal ResolvedCommissionPercent, int ResolvedMaxActiveCodes, DateTimeOffset CreatedAt, DateTimeOffset? ApprovedAt,
     DateTimeOffset? BlockedAt, string? BlockedReason, IReadOnlyList<AffiliateAdminCodeItem> Codes,
     IReadOnlyList<AffiliateAdminConversionItem> Conversions, IReadOnlyList<AffiliateAdminPayoutPeriodItem> PayoutPeriods,
@@ -113,7 +113,8 @@ public sealed class AffiliateAdminService
 
         return Result<AffiliateAdminDetail>.Success(new AffiliateAdminDetail(
             affiliate.Id, affiliate.FirstName, affiliate.LastName, affiliate.Email, affiliate.Status.ToString(),
-            affiliate.CountryCode, affiliate.PhoneNumber, affiliate.CompanyName, affiliate.TaxId, affiliate.RevolutTag,
+            affiliate.CountryCode, affiliate.PhoneNumber, affiliate.CompanyName, affiliate.TaxId,
+            affiliate.PayoutMethod.ToString(), affiliate.PayoutAccountTag,
             affiliate.CommissionPercentOverride, affiliate.MaxActiveCodesOverride,
             affiliate.ResolveCommissionPercent(settings), affiliate.ResolveMaxActiveCodes(settings),
             affiliate.CreatedAt, affiliate.ApprovedAt, affiliate.BlockedAt, affiliate.BlockedReason,

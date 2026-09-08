@@ -9,7 +9,7 @@ namespace Tenebit.Application.Affiliates;
 
 public sealed record AffiliateProfileResponse(
     Guid Id, string Email, string FirstName, string LastName, string Status, string? CountryCode,
-    string? PhoneNumber, string? CompanyName, string? TaxId, string? RevolutTag, bool IsEmailVerified,
+    string? PhoneNumber, string? CompanyName, string? TaxId, string PayoutMethod, string? PayoutAccountTag, bool IsEmailVerified,
     DateTimeOffset? AcceptedTermsAt, DateTimeOffset CreatedAt);
 
 public sealed record AffiliateLoginOutcome(AffiliateProfileResponse Affiliate, Guid SecurityStamp);
@@ -62,7 +62,7 @@ public sealed class AffiliateAuthService
 
     public async Task<Result> RegisterAsync(
         string email, string password, string firstName, string lastName, string? countryCode,
-        string? revolutTag, bool acceptTerms, CancellationToken cancellationToken)
+        string? payoutMethod, string? payoutAccountTag, bool acceptTerms, CancellationToken cancellationToken)
     {
         if (!acceptTerms)
             return Result.Failure(Error.Validation("Akceptacja regulaminu programu partnerskiego jest wymagana."));
@@ -89,9 +89,9 @@ public sealed class AffiliateAuthService
             var settings = await _settings.GetAsync(cancellationToken);
             var affiliate = new Affiliate(email, PasswordHasher.Hash(password), firstName, lastName, countryCode, now);
             affiliate.AcceptTerms(settings.TermsVersion, now);
-            if (!string.IsNullOrWhiteSpace(revolutTag))
+            if (!string.IsNullOrWhiteSpace(payoutAccountTag))
             {
-                affiliate.SetRevolutTag(revolutTag, now);
+                affiliate.SetPayoutAccount(ParsePayoutMethod(payoutMethod), payoutAccountTag, now);
             }
 
             _affiliates.Add(affiliate);
@@ -115,7 +115,7 @@ public sealed class AffiliateAuthService
 
     public async Task<Result<AffiliateProfileResponse>> UpdateProfileAsync(
         Guid affiliateId, string firstName, string lastName, string? phoneNumber, string? countryCode,
-        string? companyName, string? taxId, string? revolutTag, CancellationToken cancellationToken)
+        string? companyName, string? taxId, string? payoutMethod, string? payoutAccountTag, CancellationToken cancellationToken)
     {
         var affiliate = await _affiliates.GetByIdAsync(affiliateId, cancellationToken);
         if (affiliate is null) return Result<AffiliateProfileResponse>.Failure(Error.NotFound("Konto partnerskie nie istnieje."));
@@ -125,7 +125,7 @@ public sealed class AffiliateAuthService
             var now = _clock.UtcNow;
             affiliate.UpdateContactDetails(firstName, lastName, phoneNumber, countryCode, now);
             affiliate.UpdateCompanyDetails(companyName, taxId, now);
-            affiliate.SetRevolutTag(revolutTag, now);
+            affiliate.SetPayoutAccount(ParsePayoutMethod(payoutMethod), payoutAccountTag, now);
         }
         catch (DomainException ex)
         {
@@ -340,6 +340,12 @@ public sealed class AffiliateAuthService
 
     public static AffiliateProfileResponse Map(Affiliate affiliate) => new(
         affiliate.Id, affiliate.Email, affiliate.FirstName, affiliate.LastName, affiliate.Status.ToString(),
-        affiliate.CountryCode, affiliate.PhoneNumber, affiliate.CompanyName, affiliate.TaxId, affiliate.RevolutTag,
+        affiliate.CountryCode, affiliate.PhoneNumber, affiliate.CompanyName, affiliate.TaxId,
+        affiliate.PayoutMethod.ToString(), affiliate.PayoutAccountTag,
         affiliate.IsEmailVerified, affiliate.AcceptedTermsAt, affiliate.CreatedAt);
+
+    /// <summary>Unknown/missing values fall back to Revolut - the only rail older clients (and the
+    /// program before the PayPal option existed) ever send.</summary>
+    private static PayoutMethod ParsePayoutMethod(string? payoutMethod) =>
+        Enum.TryParse<PayoutMethod>(payoutMethod, ignoreCase: true, out var parsed) ? parsed : PayoutMethod.Revolut;
 }

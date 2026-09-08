@@ -14,8 +14,10 @@ public sealed record AffiliateRegisterRequest(
     [property: Required, StringLength(120)] string FirstName,
     [property: Required, StringLength(120)] string LastName,
     [property: StringLength(2, MinimumLength = 2)] string? CountryCode,
-    [property: StringLength(34)] string? RevolutTag,
-    [property: Required] bool AcceptTerms);
+    [property: StringLength(10)] string? PayoutMethod,
+    [property: StringLength(200)] string? PayoutAccountTag,
+    [property: Required] bool AcceptTerms,
+    string? TurnstileToken = null);
 
 [ValidatedRequest]
 public sealed record AffiliateLoginRequest(
@@ -44,7 +46,8 @@ public sealed record AffiliateUpdateProfileRequest(
     [property: StringLength(2, MinimumLength = 2)] string? CountryCode,
     [property: StringLength(200)] string? CompanyName,
     [property: StringLength(40)] string? TaxId,
-    [property: StringLength(34)] string? RevolutTag);
+    [property: StringLength(10)] string? PayoutMethod,
+    [property: StringLength(200)] string? PayoutAccountTag);
 
 [ValidatedRequest]
 public sealed record AffiliateCreateCodeRequest(string? Code, [property: StringLength(2, MinimumLength = 2)] string? CountryCode);
@@ -86,11 +89,13 @@ public static class PartnerEndpoints
 
     private static void MapAuth(RouteGroupBuilder partner)
     {
-        partner.MapPost("/register", async (AffiliateRegisterRequest request, AffiliateAuthService service, CancellationToken cancellationToken) =>
+        partner.MapPost("/register", async (AffiliateRegisterRequest request, HttpContext http, AffiliateAuthService service, ITurnstileVerifier turnstile, CancellationToken cancellationToken) =>
             {
+                var captchaFailure = await http.VerifyTurnstileAsync(turnstile, request.TurnstileToken, cancellationToken);
+                if (captchaFailure is not null) return captchaFailure;
                 var result = await service.RegisterAsync(
                     request.Email, request.Password, request.FirstName, request.LastName, request.CountryCode,
-                    request.RevolutTag, request.AcceptTerms, cancellationToken);
+                    request.PayoutMethod, request.PayoutAccountTag, request.AcceptTerms, cancellationToken);
                 if (result.IsFailure) return result.ToHttpResultIfFailure()!;
                 return Results.Accepted(value: new { requiresEmailVerification = true });
             })
@@ -179,7 +184,7 @@ public static class PartnerEndpoints
         partner.MapPatch("/me", async (AffiliateUpdateProfileRequest request, HttpContext http, AffiliateAuthService service, CancellationToken cancellationToken) =>
             (await service.UpdateProfileAsync(
                 http.GetAffiliateId(), request.FirstName, request.LastName, request.PhoneNumber, request.CountryCode,
-                request.CompanyName, request.TaxId, request.RevolutTag, cancellationToken)).ToHttpResult());
+                request.CompanyName, request.TaxId, request.PayoutMethod, request.PayoutAccountTag, cancellationToken)).ToHttpResult());
     }
 
     private static void MapCodes(RouteGroupBuilder partner)

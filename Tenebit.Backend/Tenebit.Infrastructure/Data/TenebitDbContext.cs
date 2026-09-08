@@ -1259,8 +1259,12 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.AcceptedTermsVersion).HasMaxLength(40);
             entity.Property(x => x.BlockedReason).HasMaxLength(500);
             entity.Property(x => x.SecurityStamp).IsRequired();
+            entity.Property(x => x.PayoutMethod).HasConversion<string>().HasMaxLength(20).IsRequired();
             // Encrypted at rest (spec §12.6) - same value-converter pattern as OrganizationUser.TotpSecret.
-            entity.Property(x => x.RevolutTag)
+            // Column stays named "RevolutTag" (pre-dates the PayPal option) and the encryption purpose
+            // constant is left unchanged so already-encrypted rows keep decrypting.
+            entity.Property(x => x.PayoutAccountTag)
+                .HasColumnName("RevolutTag")
                 .HasMaxLength(200)
                 .HasConversion(
                     plain => plain == null ? null : _fieldEncryptor.Encrypt(FieldEncryptionPurposes.AffiliateRevolutTag, plain),

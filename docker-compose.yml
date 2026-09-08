@@ -37,6 +37,7 @@ x-backend-env: &backend-env
   Paddle__Prices__business__annual: ${TENEBIT_PADDLE_PRICE_BUSINESS_ANNUAL:-}
   Paddle__Prices__enterprise__monthly: ${TENEBIT_PADDLE_PRICE_ENTERPRISE_MONTHLY:-}
   Paddle__Prices__enterprise__annual: ${TENEBIT_PADDLE_PRICE_ENTERPRISE_ANNUAL:-}
+  Turnstile__SecretKey: ${TENEBIT_TURNSTILE_SECRET_KEY:-}
 services:
   db:
     image: postgres:17-alpine
@@ -80,7 +81,10 @@ services:
     depends_on: { migrator: { condition: service_completed_successfully } }
     networks: { internal: { ipv4_address: 172.30.0.40 } }
   frontend:
-    build: { context: ./Tenebit.Frontend }
+    build:
+      context: ./Tenebit.Frontend
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${TENEBIT_TURNSTILE_SITE_KEY:-}
     image: tenebit-frontend:${TENEBIT_IMAGE_TAG:-local}
     container_name: tenebit-frontend
     restart: unless-stopped

@@ -34,6 +34,7 @@ type LegalUi = {
   consentReject: string;
   manageConsent: string;
   footerRights: string;
+  affiliateProgram: string;
 };
 
 type LegalLanguageContent = {
@@ -70,7 +71,8 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
       consentAccept: 'Akceptuję',
       consentReject: 'Odrzucam',
       manageConsent: 'Zarządzaj zgodą na cookies',
-      footerRights: 'Wszelkie prawa zastrzeżone.'
+      footerRights: 'Wszelkie prawa zastrzeżone.',
+      affiliateProgram: 'Program partnerski'
     },
     documents: {
       privacy: {
@@ -272,7 +274,7 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   en: {
     ui: {
-      home: 'Home', privacy: 'Privacy policy', terms: 'Terms of service', cookies: 'Cookies and device storage', contact: 'Contact', contactPrompt: 'Business inquiries or something we can help fix?', operator: 'Service operator', address: 'Address', registration: 'Registration details', taxId: 'Tax / VAT ID', effectiveDate: 'Effective from', version: 'Version', missingOperator: 'Complete the operator details in VITE_LEGAL_OPERATOR_* before production release.', storageNotice: 'Tenebit uses technical storage needed for sign-in and security, and, with your consent, Google Analytics for visit statistics.', storageNoticeDetails: 'Technical storage always applies. Google Analytics only runs after you consent, and you can withdraw at any time. See the cookies notice for details.', consentAccept: 'Accept', consentReject: 'Reject', manageConsent: 'Manage cookie consent', footerRights: 'All rights reserved.'
+      home: 'Home', privacy: 'Privacy policy', terms: 'Terms of service', cookies: 'Cookies and device storage', contact: 'Contact', contactPrompt: "Have a business inquiry, feature request, or a quality-of-life improvement in mind? We'd love to hear from you:", operator: 'Service operator', address: 'Address', registration: 'Registration details', taxId: 'Tax / VAT ID', effectiveDate: 'Effective from', version: 'Version', missingOperator: 'Complete the operator details in VITE_LEGAL_OPERATOR_* before production release.', storageNotice: 'Tenebit uses technical storage needed for sign-in and security, and, with your consent, Google Analytics for visit statistics.', storageNoticeDetails: 'Technical storage always applies. Google Analytics only runs after you consent, and you can withdraw at any time. See the cookies notice for details.', consentAccept: 'Accept', consentReject: 'Reject', manageConsent: 'Manage cookie consent', footerRights: 'All rights reserved.', affiliateProgram: 'Affiliate Program'
     },
     documents: {
       privacy: {
@@ -314,7 +316,7 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   es: {
     ui: {
-      home: 'Inicio', privacy: 'Política de privacidad', terms: 'Términos del servicio', cookies: 'Cookies y almacenamiento del dispositivo', contact: 'Contacto', contactPrompt: '¿Consultas comerciales o algo que podamos ayudarte a resolver?', operator: 'Operador del servicio', address: 'Dirección', registration: 'Datos registrales', taxId: 'NIF / IVA', effectiveDate: 'Vigente desde', version: 'Versión', missingOperator: 'Completa los datos del operador en VITE_LEGAL_OPERATOR_* antes de publicar.', storageNotice: 'Tenebit utiliza almacenamiento técnico necesario para iniciar sesión y proteger la cuenta y, con tu consentimiento, Google Analytics para estadísticas de visitas.', storageNoticeDetails: 'El almacenamiento técnico siempre está activo. Google Analytics solo se activa con tu consentimiento y puedes retirarlo en cualquier momento. Consulta el aviso de cookies para más detalles.', consentAccept: 'Aceptar', consentReject: 'Rechazar', manageConsent: 'Gestionar el consentimiento de cookies', footerRights: 'Todos los derechos reservados.'
+      home: 'Inicio', privacy: 'Política de privacidad', terms: 'Términos del servicio', cookies: 'Cookies y almacenamiento del dispositivo', contact: 'Contacto', contactPrompt: '¿Consultas comerciales o algo que podamos ayudarte a resolver?', operator: 'Operador del servicio', address: 'Dirección', registration: 'Datos registrales', taxId: 'NIF / IVA', effectiveDate: 'Vigente desde', version: 'Versión', missingOperator: 'Completa los datos del operador en VITE_LEGAL_OPERATOR_* antes de publicar.', storageNotice: 'Tenebit utiliza almacenamiento técnico necesario para iniciar sesión y proteger la cuenta y, con tu consentimiento, Google Analytics para estadísticas de visitas.', storageNoticeDetails: 'El almacenamiento técnico siempre está activo. Google Analytics solo se activa con tu consentimiento y puedes retirarlo en cualquier momento. Consulta el aviso de cookies para más detalles.', consentAccept: 'Aceptar', consentReject: 'Rechazar', manageConsent: 'Gestionar el consentimiento de cookies', footerRights: 'Todos los derechos reservados.', affiliateProgram: 'Programa de afiliados'
     },
     documents: {
       privacy: {
@@ -356,7 +358,7 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   de: {
     ui: {
-      home: 'Startseite', privacy: 'Datenschutzerklärung', terms: 'Nutzungsbedingungen', cookies: 'Cookies und Gerätespeicher', contact: 'Kontakt', contactPrompt: 'Geschäftliche Anfragen oder ein Problem, bei dem wir helfen können?', operator: 'Diensteanbieter', address: 'Anschrift', registration: 'Registerangaben', taxId: 'Steuer / USt-ID', effectiveDate: 'Gültig ab', version: 'Version', missingOperator: 'Ergänze vor der Veröffentlichung die Betreiberangaben in VITE_LEGAL_OPERATOR_*.', storageNotice: 'Tenebit verwendet technischen Speicher für Anmeldung und Sicherheit sowie, mit Ihrer Einwilligung, Google Analytics für Besuchsstatistiken.', storageNoticeDetails: 'Technischer Speicher ist immer aktiv. Google Analytics läuft erst nach Ihrer Einwilligung und kann jederzeit widerrufen werden. Details stehen im Cookie-Hinweis.', consentAccept: 'Akzeptieren', consentReject: 'Ablehnen', manageConsent: 'Cookie-Einwilligung verwalten', footerRights: 'Alle Rechte vorbehalten.'
+      home: 'Startseite', privacy: 'Datenschutzerklärung', terms: 'Nutzungsbedingungen', cookies: 'Cookies und Gerätespeicher', contact: 'Kontakt', contactPrompt: 'Geschäftliche Anfragen oder ein Problem, bei dem wir helfen können?', operator: 'Diensteanbieter', address: 'Anschrift', registration: 'Registerangaben', taxId: 'Steuer / USt-ID', effectiveDate: 'Gültig ab', version: 'Version', missingOperator: 'Ergänze vor der Veröffentlichung die Betreiberangaben in VITE_LEGAL_OPERATOR_*.', storageNotice: 'Tenebit verwendet technischen Speicher für Anmeldung und Sicherheit sowie, mit Ihrer Einwilligung, Google Analytics für Besuchsstatistiken.', storageNoticeDetails: 'Technischer Speicher ist immer aktiv. Google Analytics läuft erst nach Ihrer Einwilligung und kann jederzeit widerrufen werden. Details stehen im Cookie-Hinweis.', consentAccept: 'Akzeptieren', consentReject: 'Ablehnen', manageConsent: 'Cookie-Einwilligung verwalten', footerRights: 'Alle Rechte vorbehalten.', affiliateProgram: 'Partnerprogramm'
     },
     documents: {
       privacy: {
@@ -398,7 +400,7 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   it: {
     ui: {
-      home: 'Home', privacy: 'Informativa sulla privacy', terms: 'Termini di servizio', cookies: 'Cookie e archiviazione sul dispositivo', contact: 'Contatti', contactPrompt: 'Richieste commerciali o un problema che possiamo aiutarti a risolvere?', operator: 'Gestore del servizio', address: 'Indirizzo', registration: 'Dati di registrazione', taxId: 'Partita IVA / Codice fiscale', effectiveDate: 'In vigore dal', version: 'Versione', missingOperator: 'Completa i dati del gestore in VITE_LEGAL_OPERATOR_* prima della pubblicazione in produzione.', storageNotice: "Tenebit utilizza l'archiviazione tecnica necessaria per l'accesso e la sicurezza e, con il tuo consenso, Google Analytics per le statistiche di visita.", storageNoticeDetails: "L'archiviazione tecnica è sempre attiva. Google Analytics si attiva solo dopo il tuo consenso e puoi revocarlo in qualsiasi momento. Consulta l'informativa sui cookie per i dettagli.", consentAccept: 'Accetto', consentReject: 'Rifiuto', manageConsent: 'Gestisci il consenso ai cookie', footerRights: 'Tutti i diritti riservati.'
+      home: 'Home', privacy: 'Informativa sulla privacy', terms: 'Termini di servizio', cookies: 'Cookie e archiviazione sul dispositivo', contact: 'Contatti', contactPrompt: 'Richieste commerciali o un problema che possiamo aiutarti a risolvere?', operator: 'Gestore del servizio', address: 'Indirizzo', registration: 'Dati di registrazione', taxId: 'Partita IVA / Codice fiscale', effectiveDate: 'In vigore dal', version: 'Versione', missingOperator: 'Completa i dati del gestore in VITE_LEGAL_OPERATOR_* prima della pubblicazione in produzione.', storageNotice: "Tenebit utilizza l'archiviazione tecnica necessaria per l'accesso e la sicurezza e, con il tuo consenso, Google Analytics per le statistiche di visita.", storageNoticeDetails: "L'archiviazione tecnica è sempre attiva. Google Analytics si attiva solo dopo il tuo consenso e puoi revocarlo in qualsiasi momento. Consulta l'informativa sui cookie per i dettagli.", consentAccept: 'Accetto', consentReject: 'Rifiuto', manageConsent: 'Gestisci il consenso ai cookie', footerRights: 'Tutti i diritti riservati.', affiliateProgram: 'Programma di affiliazione'
     },
       documents: {
       privacy: {
@@ -440,7 +442,7 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   fr: {
     ui: {
-      home: 'Accueil', privacy: 'Politique de confidentialité', terms: 'Conditions générales', cookies: "Cookies et stockage sur l'appareil", contact: 'Contact', contactPrompt: "Une demande commerciale ou un problème qu'on peut vous aider à résoudre ?", operator: 'Exploitant du service', address: 'Adresse', registration: "Données d'immatriculation", taxId: 'Numéro de TVA / SIRET', effectiveDate: 'En vigueur à partir du', version: 'Version', missingOperator: "Complétez les données de l'exploitant dans VITE_LEGAL_OPERATOR_* avant la mise en production.", storageNotice: "Tenebit utilise le stockage technique nécessaire à la connexion et à la sécurité et, avec votre consentement, Google Analytics pour des statistiques de visite.", storageNoticeDetails: "Le stockage technique est toujours actif. Google Analytics ne démarre qu'après votre consentement, que vous pouvez retirer à tout moment. Consultez la notice sur les cookies pour plus de détails.", consentAccept: 'Accepter', consentReject: 'Refuser', manageConsent: 'Gérer le consentement aux cookies', footerRights: 'Tous droits réservés.'
+      home: 'Accueil', privacy: 'Politique de confidentialité', terms: 'Conditions générales', cookies: "Cookies et stockage sur l'appareil", contact: 'Contact', contactPrompt: "Une demande commerciale ou un problème qu'on peut vous aider à résoudre ?", operator: 'Exploitant du service', address: 'Adresse', registration: "Données d'immatriculation", taxId: 'Numéro de TVA / SIRET', effectiveDate: 'En vigueur à partir du', version: 'Version', missingOperator: "Complétez les données de l'exploitant dans VITE_LEGAL_OPERATOR_* avant la mise en production.", storageNotice: "Tenebit utilise le stockage technique nécessaire à la connexion et à la sécurité et, avec votre consentement, Google Analytics pour des statistiques de visite.", storageNoticeDetails: "Le stockage technique est toujours actif. Google Analytics ne démarre qu'après votre consentement, que vous pouvez retirer à tout moment. Consultez la notice sur les cookies pour plus de détails.", consentAccept: 'Accepter', consentReject: 'Refuser', manageConsent: 'Gérer le consentement aux cookies', footerRights: 'Tous droits réservés.', affiliateProgram: "Programme d'affiliation"
     },
       documents: {
       privacy: {

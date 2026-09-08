@@ -8,6 +8,7 @@ import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
 import { PublicFooter } from '../components/PublicFooter';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
+import { TurnstileWidget } from '../components/TurnstileWidget';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import { legalContentFor } from '../legal/legalContent';
@@ -23,6 +24,7 @@ const currencies = [
 ];
 
 const FALLBACK_CURRENCY = 'EUR';
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
 // Same idea as the language auto-detection above: guess a sane default from the visitor's own browser
 // locale (its region subtag, e.g. "pl" in "pl-PL") instead of always defaulting to one currency. A
@@ -60,7 +62,9 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [currency] = useState(detectInitialCurrency);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  const captchaPending = Boolean(TURNSTILE_SITE_KEY) && !turnstileToken;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,7 +84,8 @@ export function RegisterPage() {
         password,
         String(form.get('currency') ?? FALLBACK_CURRENCY),
         language,
-        form.get('acceptTerms') === 'on'
+        form.get('acceptTerms') === 'on',
+        turnstileToken
       );
       const destination = result.requiresEmailVerification
         ? `/verify-email#email=${encodeURIComponent(email)}`
@@ -135,8 +140,9 @@ export function RegisterPage() {
             <input type="checkbox" name="acceptTerms" required />
             <span>{t('auth.acceptTermsPrefix')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.</span>
           </label>
+          {TURNSTILE_SITE_KEY ? <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onToken={setTurnstileToken} /> : null}
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}
-          <Button disabled={submitting || passwordsMismatch} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>
+          <Button disabled={submitting || passwordsMismatch || captchaPending} icon={<Rocket size={16} />}>{submitting ? t('auth.registerLoading') : t('auth.registerButton')}</Button>
         </form>
         <p className="authFooter">{t('auth.hasAccount')} <Link to="/login">{t('auth.loginLink')}</Link></p>
       </section>

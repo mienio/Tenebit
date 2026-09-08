@@ -12,7 +12,8 @@ public sealed record RegisterRequest(
     [property: Required, StringLength(160, MinimumLength = 1)] string DisplayName,
     [property: Required, StringLength(8, MinimumLength = 1)] string Currency,
     string? Language = null,
-    bool AcceptTerms = false);
+    bool AcceptTerms = false,
+    string? TurnstileToken = null);
 
 /// <summary>
 /// Transport details of the sign-in attempt, captured by the endpoint and recorded in the login history.

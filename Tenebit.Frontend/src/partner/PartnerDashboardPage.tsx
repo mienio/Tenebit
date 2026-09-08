@@ -34,7 +34,7 @@ const content: Record<PartnerLocale, {
     howItWorksText: (day, days, termsHref) => (
       <>
         A sale counts toward the calendar month in which it happened. The period closes at the end of
-        the month, and the payout reaches your Revolut account by the {ordinal(day)} of the following
+        the month, and the payout reaches your PayPal or Revolut account by the {ordinal(day)} of the following
         month (up to {days} days of slack) - per the <a href={termsHref} target="_blank" rel="noreferrer">program terms</a>.
       </>
     ),
@@ -51,7 +51,7 @@ const content: Record<PartnerLocale, {
     howItWorksText: (day, days, termsHref) => (
       <>
         Sprzedaż liczy się do okresu miesiąca kalendarzowego, w którym nastąpiła. Okres zamyka się z
-        końcem miesiąca, a wypłata trafia na Twoje konto Revolut docelowo {day}. dnia kolejnego miesiąca
+        końcem miesiąca, a wypłata trafia na Twoje konto PayPal lub Revolut docelowo {day}. dnia kolejnego miesiąca
         (maksymalnie {days} dni poślizgu) - zgodnie z <a href={termsHref} target="_blank" rel="noreferrer">regulaminem programu</a>.
       </>
     ),

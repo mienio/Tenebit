@@ -572,6 +572,10 @@ button.authIcon:hover { filter: brightness(0.94); }
 .publicFooter__contactPrompt a { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; transition: color .15s ease, text-decoration-color .15s ease; }
 .publicFooter__contactPrompt a:hover { color: var(--text); text-decoration-color: currentColor; }
 .publicFooter--compact { width: min(620px, 100%); margin: 0 auto; padding: 20px 0 0; border-top-color: var(--border); }
+.publicFooter__bottom { display: flex; justify-content: center; padding: 0 0 28px; }
+.publicFooter__bottom--compact { padding-bottom: 16px; }
+.publicFooter__affiliateLink { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); opacity: .45; font-size: 12px; text-decoration: none; transition: opacity .15s ease, color .15s ease; }
+.publicFooter__affiliateLink:hover, .publicFooter__affiliateLink:focus-visible { opacity: 1; color: var(--text); }
 
 .storageNotice { position: fixed; z-index: 140; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: min(560px, calc(100vw - 36px)); display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px; border: 1px solid var(--border-strong); background: var(--surface); box-shadow: 6px 6px 0 rgba(34, 29, 24, .18); }
 .storageNotice strong { display: block; margin-bottom: 4px; font-family: var(--font-serif); font-size: 16px; }

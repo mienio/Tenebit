@@ -70,7 +70,8 @@ function MarkPaidDialog({
           <h2>Oznacz wypłatę jako zapłaconą</h2>
         </div>
         <p className="adminDialog__text">
-          Zaznacz okresy, które obejmuje ten przelew na Revolucie{detail.revolutTag ? <> (revtag: <strong>{detail.revolutTag}</strong>)</> : null}.
+          Zaznacz okresy, które obejmuje ten przelew ({detail.payoutMethod === 'PayPal' ? 'PayPal' : 'Revolut'}
+          {detail.payoutAccountTag ? <>: <strong>{detail.payoutAccountTag}</strong></> : null}).
           Ta operacja jest nieodwracalna.
         </p>
         <form className="formGrid" onSubmit={handleSubmit}>
@@ -87,14 +88,14 @@ function MarkPaidDialog({
             <TextInput type="number" step="0.01" min="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
           </Field>
           <Field label="Referencja przelewu (opcjonalnie)">
-            <TextInput value={reference} onChange={e => setReference(e.target.value)} placeholder="np. numer transakcji Revolut" />
+            <TextInput value={reference} onChange={e => setReference(e.target.value)} placeholder="np. numer transakcji PayPal/Revolut" />
           </Field>
           <Field label="Notatka (opcjonalnie)">
             <TextArea value={note} onChange={e => setNote(e.target.value)} rows={2} />
           </Field>
           <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} style={{ marginTop: 3 }} />
-            <span>Potwierdzam, że przelew został wykonany na Revolucie na wskazany revtag.</span>
+            <span>Potwierdzam, że przelew został wykonany na wskazane konto {detail.payoutMethod === 'PayPal' ? 'PayPal' : 'Revolut'}.</span>
           </label>
           <Field label="Kod 2FA">
             <TextInput inputMode="numeric" maxLength={6} minLength={6} required value={totpCode} onChange={e => setTotpCode(e.target.value)} autoComplete="one-time-code" />
@@ -206,7 +207,8 @@ export function AdminAffiliateDetailPage() {
           Kraj: {detail.countryCode ?? '—'} · Telefon: {detail.phoneNumber ?? '—'} · Firma: {detail.companyName ?? '—'} · NIP: {detail.taxId ?? '—'}
         </div>
         <div style={{ marginTop: 8 }}>
-          Revtag Revolut: {detail.revolutTag ? <strong>{detail.revolutTag}</strong> : <span className="adminTag adminTag--danger">nie uzupełniono</span>}
+          Metoda wypłaty: <strong>{detail.payoutMethod === 'PayPal' ? 'PayPal' : 'Revolut'}</strong> ·{' '}
+          Konto: {detail.payoutAccountTag ? <strong>{detail.payoutAccountTag}</strong> : <span className="adminTag adminTag--danger">nie uzupełniono</span>}
         </div>
         {detail.blockedReason ? <p className="formMessage formMessage--error" style={{ marginTop: 12 }}>Powód blokady: {detail.blockedReason}</p> : null}
       </div>

@@ -34,7 +34,7 @@ public class AffiliateAuthServiceTests
     public async Task Registration_without_accepting_terms_is_rejected()
     {
         var fixture = CreateFixture();
-        var result = await fixture.Service.RegisterAsync("damian@example.com", "password123", "Damian", "Kowalski", "PL", null, acceptTerms: false, CancellationToken.None);
+        var result = await fixture.Service.RegisterAsync("damian@example.com", "password123", "Damian", "Kowalski", "PL", null, null, acceptTerms: false, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Empty(fixture.Affiliates.Affiliates);
@@ -44,12 +44,13 @@ public class AffiliateAuthServiceTests
     public async Task Registration_stamps_the_current_terms_version_and_sends_a_verification_code()
     {
         var fixture = CreateFixture();
-        var result = await fixture.Service.RegisterAsync("damian@example.com", "password123", "Damian", "Kowalski", "PL", "@damian", acceptTerms: true, CancellationToken.None);
+        var result = await fixture.Service.RegisterAsync("damian@example.com", "password123", "Damian", "Kowalski", "PL", "Revolut", "@damian", acceptTerms: true, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var affiliate = Assert.Single(fixture.Affiliates.Affiliates);
         Assert.NotNull(affiliate.AcceptedTermsAt);
-        Assert.Equal("@damian", affiliate.RevolutTag);
+        Assert.Equal("@damian", affiliate.PayoutAccountTag);
+        Assert.Equal(PayoutMethod.Revolut, affiliate.PayoutMethod);
         Assert.Equal(AffiliateStatus.Active, affiliate.Status);
         Assert.Single(fixture.EmailSender.Sent);
     }
@@ -58,10 +59,10 @@ public class AffiliateAuthServiceTests
     public async Task Registering_an_existing_email_does_not_disclose_whether_the_account_exists()
     {
         var fixture = CreateFixture();
-        await fixture.Service.RegisterAsync("damian@example.com", "password123", "Damian", "Kowalski", null, null, true, CancellationToken.None);
+        await fixture.Service.RegisterAsync("damian@example.com", "password123", "Damian", "Kowalski", null, null, null, true, CancellationToken.None);
         var countAfterFirst = fixture.Affiliates.Affiliates.Count;
 
-        var second = await fixture.Service.RegisterAsync("damian@example.com", "different-password", "Damian", "Kowalski", null, null, true, CancellationToken.None);
+        var second = await fixture.Service.RegisterAsync("damian@example.com", "different-password", "Damian", "Kowalski", null, null, null, true, CancellationToken.None);
 
         Assert.True(second.IsSuccess);
         Assert.Equal(countAfterFirst, fixture.Affiliates.Affiliates.Count); // no duplicate account created

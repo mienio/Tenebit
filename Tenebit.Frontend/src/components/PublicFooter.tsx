@@ -1,11 +1,14 @@
+import { Share2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { legalConfig } from '../config/legal';
 import { StorageNotice } from './StorageNotice';
 import { useI18n } from '../i18n/I18nProvider';
+import type { Language } from '../i18n/translations';
 import { legalContentFor } from '../legal/legalContent';
 
-export function PublicFooter({ compact = false }: { compact?: boolean }) {
-  const { language } = useI18n();
+export function PublicFooter({ compact = false, language: languageOverride }: { compact?: boolean; language?: Language }) {
+  const { language: siteLanguage } = useI18n();
+  const language = languageOverride ?? siteLanguage;
   const ui = legalContentFor(language).ui;
 
   return (
@@ -25,6 +28,9 @@ export function PublicFooter({ compact = false }: { compact?: boolean }) {
               </a>
             </span>
           ) : null}
+          <Link to="/partner" className="publicFooter__affiliateLink">
+            {ui.affiliateProgram} <Share2 size={12} strokeWidth={1.75} />
+          </Link>
         </div>
         <nav className="publicFooter__links" aria-label={ui.contact}>
           <Link to="/privacy">{ui.privacy}</Link>

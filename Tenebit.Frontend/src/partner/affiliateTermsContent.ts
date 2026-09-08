@@ -50,7 +50,7 @@ const en: AffiliateTermsSection[] = [
   {
     title: '5. Payouts',
     paragraphs: [
-      'Payouts are made exclusively to a Revolut account. During registration you can provide your Revolut identifier (the "revtag", in the format @name) - if you don’t provide it, you can add it later in your profile. A revtag is required before any payout can be made.',
+      'Payouts are made exclusively to a PayPal or Revolut account you choose. During registration you can provide your account identifier (a PayPal e-mail, or a Revolut "revtag" in the format @name) - if you don’t provide it, you can add it later in your profile. A payout account is required before any payout can be made.',
       'The target payout day for a closed settlement period is the 20th of the following month. Tenebit commits to making the payout no later than 5 days after that date.',
       'If a payout is not made on time in a given month, the amount due is not forfeited - it is added to the next upcoming payout.',
       'Tenebit may set a minimum payout amount - information about the current threshold (if one applies) is shown in the partner panel.',
@@ -145,7 +145,7 @@ const pl: AffiliateTermsSection[] = [
   {
     title: '5. Wypłaty',
     paragraphs: [
-      'Wypłaty realizowane są wyłącznie na konto Revolut. Podczas rejestracji możesz podać swój identyfikator Revolut (tzw. "revtag", w formacie @nazwa) - jeśli go nie podasz, będziesz mógł/mogła uzupełnić go później w profilu. Revtag jest wymagany, zanim jakakolwiek wypłata może zostać zrealizowana.',
+      'Wypłaty realizowane są wyłącznie na wybrane przez Ciebie konto PayPal lub Revolut. Podczas rejestracji możesz podać identyfikator konta (e-mail PayPal albo revtag Revolut w formacie @nazwa) - jeśli go nie podasz, będziesz mógł/mogła uzupełnić go później w profilu. Konto wypłaty jest wymagane, zanim jakakolwiek wypłata może zostać zrealizowana.',
       'Docelowym dniem wypłaty za zamknięty okres rozliczeniowy jest 20. dzień kolejnego miesiąca. Tenebit zobowiązuje się zrealizować wypłatę najpóźniej w ciągu 5 dni od tej daty.',
       'Jeżeli w danym miesiącu wypłata nie zostanie zrealizowana w terminie, należna kwota nie przepada - zostaje doliczona do najbliższej kolejnej wypłaty.',
       'Tenebit może ustalić minimalną kwotę wypłaty - informacja o aktualnym progu (jeśli obowiązuje) jest widoczna w panelu partnera.',

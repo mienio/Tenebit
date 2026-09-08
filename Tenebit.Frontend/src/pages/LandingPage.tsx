@@ -21,7 +21,7 @@ import {
   Users,
   Wrench
 } from 'lucide-react';
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { BrandMark } from '../components/BrandMark';
@@ -234,6 +234,14 @@ const features = [
 
 const steps = ['step1', 'step2', 'step3'];
 
+// Section ids (#dla-kogo, #funkcje, #cennik) are internal anchor names, not user-facing strings - kept
+// in Polish regardless of UI language. A plain href would push that Polish hash into the address bar even
+// on the English site, so this scrolls to the section manually and leaves the URL untouched.
+function scrollToSection(event: MouseEvent<HTMLAnchorElement>, id: string) {
+  event.preventDefault();
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 export function LandingPage() {
   const { t, language } = useI18n();
   const [scrolled, setScrolled] = useState(false);
@@ -343,10 +351,10 @@ export function LandingPage() {
           <strong>Tenebit</strong>
         </Link>
         <nav className="landing__navLinks">
-          <a href="#demo">{t('landing.navDemo')}</a>
-          <a href="#dla-kogo">{t('landing.navRoles')}</a>
-          <a href="#funkcje">{t('landing.navFeatures')}</a>
-          <a href="#cennik">{t('landing.navPricing')}</a>
+          <a href="#demo" onClick={event => scrollToSection(event, 'demo')}>{t('landing.navDemo')}</a>
+          <a href="#dla-kogo" onClick={event => scrollToSection(event, 'dla-kogo')}>{t('landing.navRoles')}</a>
+          <a href="#funkcje" onClick={event => scrollToSection(event, 'funkcje')}>{t('landing.navFeatures')}</a>
+          <a href="#cennik" onClick={event => scrollToSection(event, 'cennik')}>{t('landing.navPricing')}</a>
         </nav>
         <div className="landing__navActions">
           <LanguageSwitcher />

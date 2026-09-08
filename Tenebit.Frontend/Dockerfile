@@ -4,6 +4,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# VITE_* values are inlined into the JS bundle at build time, not read at container start - and
+# Tenebit.Frontend/.env is deliberately in .dockerignore (never bake a real .env file into an image
+# layer), so a build-time-only value like the Turnstile site key has to come in as a build ARG instead.
+ARG VITE_TURNSTILE_SITE_KEY=""
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
 RUN npm run lint -- --max-warnings 0 && npm test && npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime

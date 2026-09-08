@@ -86,7 +86,8 @@ export interface AffiliateProfile {
   phoneNumber: string | null;
   companyName: string | null;
   taxId: string | null;
-  revolutTag: string | null;
+  payoutMethod: 'Revolut' | 'PayPal';
+  payoutAccountTag: string | null;
   isEmailVerified: boolean;
   acceptedTermsAt: string | null;
   createdAt: string;
@@ -113,7 +114,8 @@ export async function partnerLogout(): Promise<void> {
 
 export function registerAffiliate(body: {
   email: string; password: string; firstName: string; lastName: string;
-  countryCode?: string | null; revolutTag?: string | null; acceptTerms: boolean;
+  countryCode?: string | null; payoutMethod?: 'Revolut' | 'PayPal' | null; payoutAccountTag?: string | null;
+  acceptTerms: boolean; turnstileToken?: string | null;
 }): Promise<{ requiresEmailVerification: boolean }> {
   return partnerFetch('/api/partner/register', { method: 'POST', body: JSON.stringify(body) });
 }
@@ -136,7 +138,7 @@ export function getMyProfile(): Promise<AffiliateProfile> {
 
 export function updateMyProfile(body: {
   firstName: string; lastName: string; phoneNumber?: string | null; countryCode?: string | null;
-  companyName?: string | null; taxId?: string | null; revolutTag?: string | null;
+  companyName?: string | null; taxId?: string | null; payoutMethod?: 'Revolut' | 'PayPal' | null; payoutAccountTag?: string | null;
 }): Promise<AffiliateProfile> {
   return partnerFetch('/api/partner/me', { method: 'PATCH', body: JSON.stringify(body) });
 }

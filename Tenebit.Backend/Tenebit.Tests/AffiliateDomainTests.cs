@@ -54,8 +54,9 @@ public class AffiliateDomainTests
     public void Valid_revolut_tags_are_accepted(string tag)
     {
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", null, Now);
-        affiliate.SetRevolutTag(tag, Now);
-        Assert.Equal(tag, affiliate.RevolutTag);
+        affiliate.SetPayoutAccount(PayoutMethod.Revolut, tag, Now);
+        Assert.Equal(tag, affiliate.PayoutAccountTag);
+        Assert.Equal(PayoutMethod.Revolut, affiliate.PayoutMethod);
     }
 
     [Theory]
@@ -65,15 +66,35 @@ public class AffiliateDomainTests
     public void Invalid_revolut_tags_are_rejected(string tag)
     {
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", null, Now);
-        Assert.Throws<DomainException>(() => affiliate.SetRevolutTag(tag, Now));
+        Assert.Throws<DomainException>(() => affiliate.SetPayoutAccount(PayoutMethod.Revolut, tag, Now));
+    }
+
+    [Theory]
+    [InlineData("damian@example.com")]
+    [InlineData("d.kowalski+payouts@example.co.uk")]
+    public void Valid_paypal_emails_are_accepted(string email)
+    {
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", null, Now);
+        affiliate.SetPayoutAccount(PayoutMethod.PayPal, email, Now);
+        Assert.Equal(email, affiliate.PayoutAccountTag);
+        Assert.Equal(PayoutMethod.PayPal, affiliate.PayoutMethod);
+    }
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("@damian.k")] // a Revolut tag, not an e-mail
+    public void Invalid_paypal_emails_are_rejected(string email)
+    {
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", null, Now);
+        Assert.Throws<DomainException>(() => affiliate.SetPayoutAccount(PayoutMethod.PayPal, email, Now));
     }
 
     [Fact]
-    public void Revolut_tag_can_be_left_blank_at_registration()
+    public void Payout_account_tag_can_be_left_blank_at_registration()
     {
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", null, Now);
-        affiliate.SetRevolutTag(null, Now);
-        Assert.Null(affiliate.RevolutTag);
+        affiliate.SetPayoutAccount(PayoutMethod.Revolut, null, Now);
+        Assert.Null(affiliate.PayoutAccountTag);
     }
 
     [Theory]

@@ -420,7 +420,8 @@ export interface AffiliateAdminDetail {
   phoneNumber: string | null;
   companyName: string | null;
   taxId: string | null;
-  revolutTag: string | null;
+  payoutMethod: 'Revolut' | 'PayPal';
+  payoutAccountTag: string | null;
   commissionPercentOverride: number | null;
   maxActiveCodesOverride: number | null;
   resolvedCommissionPercent: number;

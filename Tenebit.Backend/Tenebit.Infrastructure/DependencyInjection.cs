@@ -126,6 +126,7 @@ public static class DependencyInjection
         // BaseAddress is left unset here - PaddlePaymentGateway picks sandbox vs production based on
         // Paddle:Environment in its own constructor, since (unlike Stripe) the two are different hosts.
         services.AddHttpClient<IPaymentGateway, PaddlePaymentGateway>();
+        services.AddHttpClient<ITurnstileVerifier, TurnstileVerifier>();
         services.AddSingleton<IFieldEncryptor, FieldEncryptor>();
         services.AddSingleton<IPublicCapabilitySessionProtector, PublicCapabilitySessionProtector>();
         services.AddScoped<DefaultDataSeeder>();
