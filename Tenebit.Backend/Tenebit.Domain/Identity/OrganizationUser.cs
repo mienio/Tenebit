@@ -29,12 +29,30 @@ public sealed class OrganizationUser
     public Guid SecurityStamp { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public List<OrganizationUserRole> Roles { get; private set; } = [];
+    public byte[]? AvatarImage { get; private set; }
+    public string? AvatarContentType { get; private set; }
+    // Bumped on every upload/removal and carried in the JWT as avatar_version, so the browser knows to
+    // re-fetch and cache-bust the <img> URL without a full re-login.
+    public int AvatarVersion { get; private set; }
 
     public void SetPasswordHash(string passwordHash) => PasswordHash = passwordHash;
     public void RenameDisplayName(string displayName)
     {
         if (string.IsNullOrWhiteSpace(displayName)) throw new DomainException("Imię i nazwisko jest wymagane.");
         DisplayName = displayName.Trim();
+    }
+    public void SetAvatar(byte[] content, string contentType)
+    {
+        if (content.Length == 0) throw new DomainException("Plik awatara jest pusty.");
+        AvatarImage = content;
+        AvatarContentType = contentType;
+        AvatarVersion++;
+    }
+    public void ClearAvatar()
+    {
+        AvatarImage = null;
+        AvatarContentType = null;
+        AvatarVersion++;
     }
     public void LinkPerson(Guid? personId) => PersonId = personId;
     public void RotateSecurityStamp() => SecurityStamp = Guid.NewGuid();

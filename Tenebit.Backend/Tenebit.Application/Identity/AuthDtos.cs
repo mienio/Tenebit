@@ -26,7 +26,7 @@ public sealed record LoginRequest(
     [property: Required, EmailAddress, StringLength(240)] string Email,
     [property: Required] string Password);
 
-public sealed record AuthUserResponse(Guid Id, Guid OrganizationId, string OrganizationName, string Email, string DisplayName, IReadOnlyList<string> Roles, bool IsEmailVerified, bool IsTwoFactorEnabled, [property: JsonIgnore] Guid SecurityStamp, Guid? PersonId = null);
+public sealed record AuthUserResponse(Guid Id, Guid OrganizationId, string OrganizationName, string Email, string DisplayName, IReadOnlyList<string> Roles, bool IsEmailVerified, bool IsTwoFactorEnabled, [property: JsonIgnore] Guid SecurityStamp, Guid? PersonId = null, int AvatarVersion = 0);
 
 public sealed record ExternalUserInfo(string Provider, string ProviderUserId, string? Email, bool EmailVerified, string? DisplayName);
 

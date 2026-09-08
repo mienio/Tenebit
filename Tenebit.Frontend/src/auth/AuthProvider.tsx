@@ -11,6 +11,7 @@ type AuthUser = {
   roles: string[];
   isEmailVerified: boolean;
   isTwoFactorEnabled: boolean;
+  avatarVersion: number;
 };
 
 type LoginResponse = { token: string; user: AuthUser };
@@ -29,6 +30,7 @@ type AuthContextValue = {
   roles: string[];
   isEmailVerified: boolean;
   isTwoFactorEnabled: boolean;
+  avatarVersion: number;
   login: (email: string, password: string) => Promise<LoginOutcome>;
   completeTwoFactorLogin: (challengeToken: string, code: string, rememberDevice: boolean) => Promise<void>;
   register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string, acceptTerms: boolean, turnstileToken: string | null) => Promise<RegisterOutcome>;
@@ -36,6 +38,8 @@ type AuthContextValue = {
   completeExternalLogin: () => Promise<boolean>;
   logout: () => Promise<boolean>;
   updateDisplayName: (displayName: string) => Promise<void>;
+  uploadAvatar: (file: Blob) => Promise<void>;
+  removeAvatar: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -54,7 +58,8 @@ function userFromToken(token: string): AuthUser | null {
     displayName: payload.name,
     roles,
     isEmailVerified: payload.email_verified === 'true',
-    isTwoFactorEnabled: payload.two_factor_enabled === 'true'
+    isTwoFactorEnabled: payload.two_factor_enabled === 'true',
+    avatarVersion: payload.avatar_version ? Number(payload.avatar_version) : 0
   };
 }
 
@@ -156,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roles: user?.roles ?? [],
     isEmailVerified: user?.isEmailVerified ?? true,
     isTwoFactorEnabled: user?.isTwoFactorEnabled ?? false,
+    avatarVersion: user?.avatarVersion ?? 0,
     login: async (email, password) => {
       const response = await apiRequest<LoginStartResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
       if ('requiresTwoFactor' in response && response.requiresTwoFactor) {
@@ -184,6 +190,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     updateDisplayName: async (displayName: string) => {
       const response = await apiRequest<{ token: string }>('/api/auth/display-name', { method: 'PUT', body: JSON.stringify({ displayName }) });
+      const fromToken = userFromToken(response.token);
+      if (fromToken) {
+        setStoredToken(response.token);
+        setUser(fromToken);
+      }
+    },
+    uploadAvatar: async (file: Blob) => {
+      const form = new FormData();
+      form.append('file', file, 'avatar.jpg');
+      const response = await apiRequest<{ token: string }>('/api/auth/avatar', { method: 'POST', body: form });
+      const fromToken = userFromToken(response.token);
+      if (fromToken) {
+        setStoredToken(response.token);
+        setUser(fromToken);
+      }
+    },
+    removeAvatar: async () => {
+      const response = await apiRequest<{ token: string }>('/api/auth/avatar', { method: 'DELETE' });
       const fromToken = userFromToken(response.token);
       if (fromToken) {
         setStoredToken(response.token);

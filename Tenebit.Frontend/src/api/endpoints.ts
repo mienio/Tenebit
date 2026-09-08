@@ -232,6 +232,7 @@ export const api = {
   completeServiceTicket: (id: string, body: CompleteServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/complete`, { method: 'POST', body: JSON.stringify(body) }),
   cancelServiceTicket: (id: string, body: CancelServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
   evidenceBlob: (id: string) => apiBlob(`/api/evidence/${id}`),
+  avatarBlob: () => apiBlob('/api/auth/avatar'),
   publicAssetScan: (organizationId: string, assetId: string) => apiRequest<{ organizationName: string }>(`/api/public/assets/${organizationId}/${assetId}`),
   publicAssetScanByCode: (scanCode: string) => apiRequest<{ organizationName: string }>(`/api/public/scan/${encodeURIComponent(scanCode)}`),
   reportAssetIssueByCode: (scanCode: string, message: string) => apiRequest<void>(`/api/public/scan/${encodeURIComponent(scanCode)}/report`, { method: 'POST', body: JSON.stringify({ message }) }),

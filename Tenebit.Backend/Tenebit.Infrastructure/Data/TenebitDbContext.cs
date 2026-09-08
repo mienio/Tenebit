@@ -584,6 +584,8 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.DisplayName).HasMaxLength(160).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(400);
             entity.Property(x => x.SecurityStamp).IsRequired();
+            entity.Property(x => x.AvatarContentType).HasMaxLength(60);
+            entity.Property(x => x.AvatarVersion).IsRequired().HasDefaultValue(0);
             entity.HasIndex(x => new { x.OrganizationId, x.PersonId })
                 .IsUnique()
                 .HasFilter("\"PersonId\" IS NOT NULL");

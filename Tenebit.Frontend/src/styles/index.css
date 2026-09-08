@@ -1135,6 +1135,16 @@ button.authIcon:hover { filter: brightness(0.94); }
 .evidenceThumb__remove { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; cursor: pointer; }
 .evidenceThumb__remove:hover { background: rgba(0, 0, 0, .75); }
 
+.avatarPicker { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.avatarPicker__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.avatarCrop { display: grid; gap: 16px; justify-items: center; }
+.avatarCrop__viewport { position: relative; overflow: hidden; border-radius: var(--radius); background: #1a1a1a; touch-action: none; cursor: grab; }
+.avatarCrop__viewport:active { cursor: grabbing; }
+.avatarCrop__image { position: absolute; top: 50%; left: 50%; max-width: none; pointer-events: none; }
+.avatarCrop__mask { position: absolute; inset: 0; pointer-events: none; border-radius: 50%; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .6); border: 2px solid rgba(255, 255, 255, .85); }
+.avatarCrop__zoom { width: 100%; max-width: 280px; }
+
 .alertRule { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: grid; gap: 12px; }
 .alertRule__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .alertRule__head h3 { margin: 0; font-size: 15px; }

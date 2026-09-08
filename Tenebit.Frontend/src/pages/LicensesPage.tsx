@@ -1,6 +1,7 @@
 import { Eye, EyeOff, KeyRound, Lock, Pencil, Plus, Trash2, UserMinus, UserPlus } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api/endpoints';
+import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -226,7 +227,10 @@ export function LicensesPage() {
               <div className="listRows">
                 {selected.seats.map(seat => (
                   <div className="listRow" key={seat.personId}>
-                    <div><strong>{seat.personName}</strong></div>
+                    <span className="personChip">
+                      <Avatar name={seat.personName} size={28} />
+                      <strong>{seat.personName}</strong>
+                    </span>
                     <button type="button" className="iconButton" aria-label={t('licenses.unassignSeatAria', { name: seat.personName })} onClick={() => unassignSeat(seat.personId)}><UserMinus size={16} /></button>
                   </div>
                 ))}

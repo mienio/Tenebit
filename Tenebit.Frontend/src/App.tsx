@@ -1,5 +1,5 @@
-import { Suspense, lazy, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Suspense, lazy, useEffect, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { Layout, canSee, nav } from './components/Layout';
@@ -93,9 +93,21 @@ function RequireRoles({ path, roles, children }: { path: string; roles?: string[
   return <>{children}</>;
 }
 
+// The dashboard's own Layout already does this for logged-in routes; public pages (landing, legal,
+// the partner site) render outside Layout, so without this a link like the footer's Affiliate Program
+// one lands on the new page still scrolled to wherever the click happened on the old one.
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export function App() {
   return (
     <Suspense fallback={<LoadingState />}>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/login" element={<LoginPage />} />

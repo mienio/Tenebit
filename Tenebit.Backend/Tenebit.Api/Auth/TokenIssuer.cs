@@ -28,6 +28,10 @@ public sealed class TokenIssuer
         {
             claims.Add(new Claim("person_id", personId.ToString()));
         }
+        if (user.AvatarVersion > 0)
+        {
+            claims.Add(new Claim("avatar_version", user.AvatarVersion.ToString()));
+        }
         claims.AddRange(user.Roles.Select(role => new Claim("roles", role)));
 
         var signingKey = JwtSigningKey.GetActive(_configuration);

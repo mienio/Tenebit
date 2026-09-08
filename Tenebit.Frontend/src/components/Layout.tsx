@@ -10,6 +10,7 @@ import { api } from '../api/endpoints';
 import { useAuth } from '../auth/AuthProvider';
 import { SearchPalette, openSearchPalette } from './SearchPalette';
 import { useAsyncData } from '../hooks/useAsyncData';
+import { useOwnAvatarUrl } from '../hooks/useOwnAvatarUrl';
 import { useI18n } from '../i18n/I18nProvider';
 
 export const navGroups = [
@@ -41,6 +42,7 @@ export function canSee(requiredRoles: string[], userRoles: string[]) {
 
 export function Layout() {
   const auth = useAuth();
+  const avatarUrl = useOwnAvatarUrl();
   const { t } = useI18n();
   const location = useLocation();
   const subscription = useAsyncData(api.subscription, []);
@@ -131,7 +133,7 @@ export function Layout() {
         </nav>
         <div className="sidebarFooter">
           <NavLink to="/settings" className="sidebarProfile" onClick={() => setMobileOpen(false)}>
-            <Avatar name={auth.userName || auth.userEmail} size={32} />
+            <Avatar name={auth.userName || auth.userEmail} size={32} photoUrl={avatarUrl} />
             <span className="sidebarProfile__name">{auth.userName || auth.userEmail}</span>
           </NavLink>
           {subscription.data && (

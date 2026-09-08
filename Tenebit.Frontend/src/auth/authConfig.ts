@@ -35,6 +35,7 @@ export type TokenPayload = {
   email_verified?: string;
   two_factor_enabled?: string;
   roles?: string | string[];
+  avatar_version?: string;
   exp: number;
 };
 

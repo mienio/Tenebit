@@ -13,6 +13,8 @@ namespace Tenebit.Application.Identity;
 
 public sealed class AuthService
 {
+    public const int MaxAvatarBytes = 1024 * 1024;
+
     private readonly IOrganizationRepository _organizations;
     private readonly IOrganizationUserRepository _users;
     private readonly IAssetCategoryRepository _categories;
@@ -353,6 +355,59 @@ public sealed class AuthService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<AuthUserResponse>.Success(Map(user, organization));
+    }
+
+    public async Task<Result<AuthUserResponse>> UploadAvatarAsync(Guid userId, byte[] content, string contentType, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.NotFound("Nie znaleziono konta."));
+        }
+
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
+        }
+
+        try
+        {
+            user.SetAvatar(content, contentType);
+        }
+        catch (DomainException ex)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation(ex.Message));
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<AuthUserResponse>.Success(Map(user, organization));
+    }
+
+    public async Task<Result<AuthUserResponse>> RemoveAvatarAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.NotFound("Nie znaleziono konta."));
+        }
+
+        var organization = await _organizations.GetAsync(user.OrganizationId, cancellationToken);
+        if (organization is null)
+        {
+            return Result<AuthUserResponse>.Failure(Error.Validation("Nie znaleziono organizacji powiązanej z kontem."));
+        }
+
+        user.ClearAvatar();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<AuthUserResponse>.Success(Map(user, organization));
+    }
+
+    public async Task<(byte[] Content, string ContentType)?> GetAvatarAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _users.GetByIdAsync(userId, cancellationToken);
+        if (user?.AvatarImage is null) return null;
+        return (user.AvatarImage, user.AvatarContentType ?? "image/png");
     }
 
     public async Task<Result<TwoFactorSetupResponse>> SetupTwoFactorAsync(Guid userId, CancellationToken cancellationToken)
@@ -923,5 +978,5 @@ public sealed class AuthService
     }
 
     private static AuthUserResponse Map(OrganizationUser user, Organization organization) =>
-        new(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, user.Roles.Select(x => x.Role).ToArray(), user.IsEmailVerified, user.IsTwoFactorEnabled, user.SecurityStamp, user.PersonId);
+        new(user.Id, organization.Id, organization.Name, user.Email, user.DisplayName, user.Roles.Select(x => x.Role).ToArray(), user.IsEmailVerified, user.IsTwoFactorEnabled, user.SecurityStamp, user.PersonId, user.AvatarVersion);
 }

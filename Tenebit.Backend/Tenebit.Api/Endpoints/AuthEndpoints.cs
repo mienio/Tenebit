@@ -201,6 +201,69 @@ public static class AuthEndpoints
             })
             .WithTags("Auth");
 
+        api.MapPost("/auth/avatar", async (HttpRequest httpRequest, ICurrentUser currentUser, AuthService service, TokenIssuer tokens, CancellationToken cancellationToken) =>
+            {
+                if (!Guid.TryParse(currentUser.Subject, out var userId))
+                {
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
+                }
+
+                if (!httpRequest.HasFormContentType)
+                {
+                    return Results.BadRequest(new { message = ResultExtensions.Localize("Wyślij plik jako multipart/form-data."), code = "VALIDATION_ERROR" });
+                }
+
+                MultipartRequestHelpers.LimitRequestBody(httpRequest, AuthService.MaxAvatarBytes + 4096);
+                var form = await httpRequest.ReadFormAsync(cancellationToken);
+                var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+                if (file is null || file.Length == 0)
+                {
+                    return Results.BadRequest(new { message = ResultExtensions.Localize("Wybierz plik awatara."), code = "VALIDATION_ERROR" });
+                }
+
+                if (file.Length > AuthService.MaxAvatarBytes)
+                {
+                    return Results.BadRequest(new { message = ResultExtensions.Localize("Awatar może mieć maksymalnie 1 MB."), code = "VALIDATION_ERROR" });
+                }
+
+                var content = await MultipartRequestHelpers.ReadFileAsync(file, AuthService.MaxAvatarBytes, cancellationToken);
+                var result = await service.UploadAvatarAsync(userId, content, string.IsNullOrWhiteSpace(file.ContentType) ? "image/png" : file.ContentType, cancellationToken);
+                if (result.IsFailure) return result.ToHttpResult();
+
+                var user = result.Value!;
+                return Results.Ok(new { token = tokens.Issue(user), user });
+            })
+            .WithTags("Auth");
+
+        api.MapDelete("/auth/avatar", async (ICurrentUser currentUser, AuthService service, TokenIssuer tokens, CancellationToken cancellationToken) =>
+            {
+                if (!Guid.TryParse(currentUser.Subject, out var userId))
+                {
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
+                }
+
+                var result = await service.RemoveAvatarAsync(userId, cancellationToken);
+                if (result.IsFailure) return result.ToHttpResult();
+
+                var user = result.Value!;
+                return Results.Ok(new { token = tokens.Issue(user), user });
+            })
+            .WithTags("Auth");
+
+        api.MapGet("/auth/avatar", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
+            {
+                if (!Guid.TryParse(currentUser.Subject, out var userId))
+                {
+                    return Results.Json(new ErrorResponse(ResultExtensions.Localize("Nieprawidłowa sesja."), "UNAUTHORIZED"), statusCode: 401);
+                }
+
+                var avatar = await service.GetAvatarAsync(userId, cancellationToken);
+                if (avatar is null) return Results.NotFound();
+
+                return Results.File(avatar.Value.Content, avatar.Value.ContentType);
+            })
+            .WithTags("Auth");
+
         api.MapPost("/auth/2fa/setup", async (ICurrentUser currentUser, AuthService service, CancellationToken cancellationToken) =>
             {
                 if (!Guid.TryParse(currentUser.Subject, out var userId))
