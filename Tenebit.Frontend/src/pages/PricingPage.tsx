@@ -157,7 +157,11 @@ export function PricingPage() {
           customer: { id: params.customerId },
           discountId: params.discountId,
           customData: params.affiliateCode ? { affiliate_code: params.affiliateCode } : undefined,
-          settings: { successUrl: `${window.location.origin}/dashboard?checkout=success`, allowQuantity: false }
+          // allowQuantity: false used to be sent here too, but Paddle's sandbox checkout-service rejects it
+          // outright (verified live: transaction-checkout 400s with "validation.no_validation_set" at
+          // /data/settings/allow_quantity - a real Paddle.js/API quirk, not something wrong on our end).
+          // Omitting the setting entirely still gets us the single-item, quantity-1 checkout we want.
+          settings: { successUrl: `${window.location.origin}/dashboard?checkout=success` }
         });
         setUpgrading(false);
       }
