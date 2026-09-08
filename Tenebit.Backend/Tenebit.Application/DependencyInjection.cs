@@ -29,6 +29,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<Common.ManagerScopeService>();
+        services.AddScoped<Common.IPermissionService, Common.PermissionService>();
         services.AddScoped<GlobalSearchService>();
         services.AddScoped<AdminOverviewService>();
         services.AddScoped<AdminModerationService>();

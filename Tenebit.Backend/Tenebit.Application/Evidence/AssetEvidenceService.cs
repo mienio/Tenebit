@@ -20,8 +20,9 @@ public sealed class AssetEvidenceService
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly Tenebit.Application.Assets.AssetAuthorizationService _assetAuthorization;
+    private readonly IPermissionService _permissions;
 
-    public AssetEvidenceService(IAssetEvidenceRepository evidence, IAssetRepository assets, IAssignmentRepository assignments, IImageSanitizer sanitizer, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, Tenebit.Application.Assets.AssetAuthorizationService assetAuthorization)
+    public AssetEvidenceService(IAssetEvidenceRepository evidence, IAssetRepository assets, IAssignmentRepository assignments, IImageSanitizer sanitizer, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, Tenebit.Application.Assets.AssetAuthorizationService assetAuthorization, IPermissionService permissions)
     {
         _evidence = evidence;
         _assets = assets;
@@ -32,11 +33,12 @@ public sealed class AssetEvidenceService
         _clock = clock;
         _unitOfWork = unitOfWork;
         _assetAuthorization = assetAuthorization;
+        _permissions = permissions;
     }
 
     public async Task<Result<IReadOnlyList<AssetEvidenceResponse>>> ListByAssetAsync(Guid assetId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<AssetEvidenceResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -49,7 +51,7 @@ public sealed class AssetEvidenceService
 
     public async Task<Result<AssetEvidence>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssetEvidence>.Failure(access.Error!);
 
         var item = await _evidence.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
@@ -76,7 +78,7 @@ public sealed class AssetEvidenceService
 
     public async Task<Result<AssetEvidenceResponse>> UploadAsync(Guid assetId, UploadAssetEvidenceRequest request, string fileName, string? declaredContentType, byte[] content, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetEvidenceResponse>.Failure(access.Error!);
 
         var requestError = RequestObjectValidator.Validate(request);
@@ -311,7 +313,7 @@ public sealed class AssetEvidenceService
 
     public async Task<Result<AssetEvidenceResponse>> LockAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetEvidenceResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -330,7 +332,7 @@ public sealed class AssetEvidenceService
 
     public async Task<Result<AssetEvidenceResponse>> SetLegalHoldAsync(Guid id, bool enabled, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetEvidenceResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -350,7 +352,7 @@ public sealed class AssetEvidenceService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
 
         var organizationId = _currentUser.OrganizationId;

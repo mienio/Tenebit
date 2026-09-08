@@ -27,10 +27,10 @@ public class AssetAuditCampaignServiceTests
         var linkBuilder = new FakeAppLinkBuilder();
         var evidence = new InMemoryAssetEvidenceRepository();
         var assignments = new InMemoryAssignmentRepository();
-        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork, TestAuthorization.Asset(assets, currentUser));
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, new FakeClock(), unitOfWork, TestAuthorization.Asset(assets, currentUser), TestAuthorization.Permissions(currentUser));
 
         var service = new AssetAuditCampaignService(campaigns, participants, items, people, assets, evidence, evidenceService, activity, currentUser,
-            new FakeClock(), unitOfWork, organizations, emailSender, linkBuilder);
+            new FakeClock(), unitOfWork, organizations, emailSender, linkBuilder, TestAuthorization.Permissions(currentUser));
 
         return (service, currentUser, campaigns, participants, items, people, assets, activity, emailSender);
     }

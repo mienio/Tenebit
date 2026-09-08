@@ -10,25 +10,26 @@ namespace Tenebit.Application.Procedures;
 public sealed class ProcedureService
 {
     private static readonly string[] OrgWideReadRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor, TenebitRoles.ProcedureManager];
-    private static readonly string[] ProcedureEditors = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager];
 
     private readonly IProcedureRepository _procedures;
     private readonly IAssignmentRepository _assignments;
     private readonly IPersonRepository _people;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
     private readonly ISubscriptionRepository _subscriptions;
 
-    public ProcedureService(IProcedureRepository procedures, IAssignmentRepository assignments, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
+    public ProcedureService(IProcedureRepository procedures, IAssignmentRepository assignments, IPersonRepository people, IActivityLogRepository activity, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
     {
         _procedures = procedures;
         _assignments = assignments;
         _people = people;
         _activity = activity;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
@@ -37,7 +38,7 @@ public sealed class ProcedureService
 
     public async Task<Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>> GetAcceptanceStatusAsync(Guid procedureId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.ProcedureManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<ProcedureAcceptanceStatusResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -84,7 +85,7 @@ public sealed class ProcedureService
 
     public async Task<Result<IReadOnlyList<ProcedureResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<ProcedureResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -106,7 +107,7 @@ public sealed class ProcedureService
 
     public async Task<Result<PagedResult<ProcedureResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<ProcedureResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -129,7 +130,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.ProcedureViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -146,7 +147,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> CreateAsync(CreateProcedureRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
         try
         {
@@ -194,7 +195,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> UpdateAsync(Guid id, UpdateProcedureRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -218,7 +219,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> AttachDocumentAsync(Guid id, string fileName, string contentType, byte[] content, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -246,8 +247,12 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureDocument>> GetDocumentAsync(Guid procedureId, Guid documentId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.Manager, TenebitRoles.Employee, TenebitRoles.AssetOperator, TenebitRoles.Auditor, TenebitRoles.ProcedureManager);
-        if (access.IsFailure) return Result<ProcedureDocument>.Failure(access.Error!);
+        var hasView = await _permissions.HasAsync(PermissionModules.Procedures, PermissionActions.View, cancellationToken);
+        if (!hasView && !_currentUser.HasAnyRole(TenebitRoles.Employee))
+        {
+            SecurityTelemetry.AuthorizationDenied();
+            return Result<ProcedureDocument>.Failure(Error.Forbidden());
+        }
 
         var organizationId = _currentUser.OrganizationId;
         if (!_currentUser.HasAnyRole(OrgWideReadRoles))
@@ -272,7 +277,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> PublishAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -297,7 +302,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> ArchiveAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -314,7 +319,7 @@ public sealed class ProcedureService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
 
         var organizationId = _currentUser.OrganizationId;
@@ -342,7 +347,7 @@ public sealed class ProcedureService
 
     public async Task<Result<ProcedureResponse>> RemoveDocumentAsync(Guid id, Guid documentId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, ProcedureEditors);
+        var access = await _permissions.EnsureAsync(PermissionModules.Procedures, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ProcedureResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

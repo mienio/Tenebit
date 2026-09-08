@@ -25,19 +25,19 @@ public class OffboardingReservationCancellationTests
         var clock = new FakeClock();
         var reservations = new InMemoryEquipmentReservationRepository();
 
-        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser));
+        var inspectionService = new AssetInspectionService(inspections, assets, activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser), TestAuthorization.Permissions(currentUser));
         var disposition = new AssetReturnDispositionService(inspections);
         var organizations = new InMemoryOrganizationRepository();
         var emailSender = new FakeEmailSender();
         var linkBuilder = new FakeAppLinkBuilder();
         var evidence = new InMemoryAssetEvidenceRepository();
-        var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser));
+        var evidenceService = new Tenebit.Application.Evidence.AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser), TestAuthorization.Permissions(currentUser));
         var responseBuilder = new OffboardingResponseBuilder(cases, items, people, organizations, assets, evidence, reservations, clock);
 
         var service = new OffboardingService(cases, items, people, assets, categories, assignments, licenses, activity, currentUser, clock, unitOfWork,
             new OffboardingScheduledActionsService(cases, items, licenses, activity, new FakeUnitOfWork()), disposition, inspectionService, inspections,
             organizations, emailSender, linkBuilder, evidenceService, reservations,
-            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository(), responseBuilder);
+            new InMemoryAssetAuditCampaignRepository(), new InMemoryAssetAuditItemRepository(), responseBuilder, TestAuthorization.Permissions(currentUser));
 
         return (service, currentUser, reservations, people, clock);
     }

@@ -16,7 +16,7 @@ public class ActivityLogServiceTests
             users.Add(user);
         }
 
-        var service = new ActivityLogService(new InMemoryActivityLogRepository(), users, currentUser);
+        var service = new ActivityLogService(new InMemoryActivityLogRepository(), users, currentUser, TestAuthorization.Permissions(currentUser));
         return (service, currentUser.OrganizationId);
     }
 

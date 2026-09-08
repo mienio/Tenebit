@@ -16,8 +16,9 @@ public sealed class TeamService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPermissionService _permissions;
 
-    public TeamService(ITeamRepository teams, IPersonRepository people, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public TeamService(ITeamRepository teams, IPersonRepository people, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPermissionService permissions)
     {
         _teams = teams;
         _people = people;
@@ -26,6 +27,7 @@ public sealed class TeamService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _permissions = permissions;
     }
 
     public async Task<IReadOnlyList<TeamResponse>> ListAsync(CancellationToken cancellationToken)
@@ -36,7 +38,7 @@ public sealed class TeamService
 
     public async Task<Result<TeamResponse>> CreateAsync(CreateTeamRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<TeamResponse>.Failure(access.Error!);
         try
         {
@@ -86,7 +88,7 @@ public sealed class TeamService
 
     public async Task<Result<TeamResponse>> UpdateAsync(Guid id, UpdateTeamRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<TeamResponse>.Failure(access.Error!);
         try
         {
@@ -108,7 +110,7 @@ public sealed class TeamService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
         var organizationId = _currentUser.OrganizationId;
         var team = await _teams.GetAsync(organizationId, id, cancellationToken);

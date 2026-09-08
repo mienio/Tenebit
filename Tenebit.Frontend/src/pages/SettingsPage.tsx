@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { GripVertical, Plus, Save, Search, Trash2 } from 'lucide-react';
+import { Check, GripVertical, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -38,14 +38,25 @@ const organizationOnlyTabs: Tab[] = ['company', 'locations', 'customFields', 'qr
 export function SettingsPage() {
   const { t } = useI18n();
   const auth = useAuth();
-  // Account security (2FA, linked logins, language) is every user's own - only the
-  // organization-wide tabs below need owner/admin, so this page stays reachable for everyone.
-  const canManageOrganization = auth.roles.includes('owner') || auth.roles.includes('admin');
+  // Account security (2FA, linked logins, language) is every user's own; every other tab now maps
+  // to its own permission-matrix module instead of one blanket owner/admin check. "permissions"
+  // stays hardcoded owner/admin - managing the matrix itself is never delegable through the matrix.
+  const canManageTab: Record<Tab, boolean> = {
+    account: true,
+    company: auth.can('settings', 'manage'),
+    locations: auth.can('locations', 'manage'),
+    customFields: auth.can('customFields', 'manage'),
+    qrLabel: auth.can('settings', 'manage'),
+    profiles: auth.can('jobProfiles', 'manage'),
+    users: auth.can('organizationUsers', 'manage'),
+    permissions: auth.roles.includes('owner') || auth.roles.includes('admin'),
+    alerts: auth.can('alerts', 'manage')
+  };
   const categoryTypeLabels: Record<AssetCategoryType, string> = Object.fromEntries(categoryTypeValues.map(value => [value, t(`categoryType.${value}`)])) as Record<AssetCategoryType, string>;
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') as Tab | null;
-  const initialTabAllowed = initialTab && validTabs.includes(initialTab) && (canManageOrganization || !organizationOnlyTabs.includes(initialTab));
-  const [tab, setTab] = useState<Tab>(initialTabAllowed ? initialTab! : canManageOrganization ? 'company' : 'account');
+  const initialTabAllowed = initialTab && validTabs.includes(initialTab) && (canManageTab[initialTab] || !organizationOnlyTabs.includes(initialTab));
+  const [tab, setTab] = useState<Tab>(initialTabAllowed ? initialTab! : canManageTab.company ? 'company' : 'account');
   // Each tab loads only its own data (the organization gates the whole page, so it stays eager).
   const categoriesNeeded = tab === 'customFields' || tab === 'profiles';
   const statusesNeeded = tab === 'customFields';
@@ -67,6 +78,9 @@ export function SettingsPage() {
   const rolePermissions = useAsyncData(() => (permissionsNeeded ? api.rolePermissions() : Promise.resolve(null)), [permissionsNeeded]);
   const [selectedRoleKey, setSelectedRoleKey] = useState<string>('owner');
   const [permissionSaving, setPermissionSaving] = useState<string | null>(null);
+  const [editingRoleLabel, setEditingRoleLabel] = useState(false);
+  const [roleLabelDraft, setRoleLabelDraft] = useState('');
+  const [roleLabelSaving, setRoleLabelSaving] = useState(false);
   const [modal, setModal] = useState<'profile' | 'user' | null>(null);
   const [editingProfile, setEditingProfile] = useState<JobProfile | null>(null);
   const [editingUser, setEditingUser] = useState<OrganizationUser | null>(null);
@@ -143,19 +157,17 @@ export function SettingsPage() {
   const pagedProfiles = useMemo(() => paginate(filteredProfiles, page, pageSize), [filteredProfiles, page]);
   const pagedUsers = useMemo(() => paginate(filteredUsers, page, pageSize), [filteredUsers, page]);
 
-  const tabButtons: [Tab, string][] = [
+  const tabButtons: [Tab, string][] = ([
     ['account', t('settings.account')],
-    ...(canManageOrganization ? [
-      ['company', t('settings.company')],
-      ['locations', t('settings.locations')],
-      ['customFields', t('settings.customFields')],
-      ['qrLabel', t('settings.qrLabel')],
-      ['profiles', t('settings.profiles')],
-      ['users', t('settings.users')],
-      ['permissions', t('settings.rolePermissions')],
-      ['alerts', t('settings.alerts')]
-    ] as [Tab, string][] : [])
-  ];
+    ['company', t('settings.company')],
+    ['locations', t('settings.locations')],
+    ['customFields', t('settings.customFields')],
+    ['qrLabel', t('settings.qrLabel')],
+    ['profiles', t('settings.profiles')],
+    ['users', t('settings.users')],
+    ['permissions', t('settings.rolePermissions')],
+    ['alerts', t('settings.alerts')]
+  ] as [Tab, string][]).filter(([key]) => canManageTab[key]);
 
   function success(text: string) { setMessage({ type: 'success', text }); }
   function failure(error: unknown, fallback: string) { setMessage({ type: 'error', text: error instanceof Error ? error.message : fallback }); }
@@ -393,6 +405,22 @@ export function SettingsPage() {
     }
   }
 
+  async function saveRoleLabel(roleKey: string) {
+    const label = roleLabelDraft.trim();
+    if (!label) return;
+    setRoleLabelSaving(true);
+    try {
+      await api.setRoleLabel(roleKey, label);
+      success(t('settings.roleLabelSaved'));
+      setEditingRoleLabel(false);
+      await roles.reload();
+    } catch (error) {
+      failure(error, t('settings.roleLabelSaveFailed'));
+    } finally {
+      setRoleLabelSaving(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
     try {
@@ -440,7 +468,7 @@ export function SettingsPage() {
         <AccountLinksCard />
       </div> : null}
 
-      {tab === 'company' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-company" aria-labelledby="settings-tab-company"><Card>
+      {tab === 'company' && canManageTab.company ? <div role="tabpanel" id="settings-tabpanel-company" aria-labelledby="settings-tab-company"><Card>
         <div className="sectionTitle"><div><h2>{t('settings.company')}</h2></div></div>
         <form className="formGrid" onSubmit={updateOrganization}>
           <Field label={t('settings.nameLabel')}><TextInput name="name" defaultValue={organization.data.name} required /></Field>
@@ -452,9 +480,9 @@ export function SettingsPage() {
         </form>
       </Card></div> : null}
 
-      {tab === 'locations' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-locations" aria-labelledby="settings-tab-locations"><LocationsManager /></div> : null}
+      {tab === 'locations' && canManageTab.locations ? <div role="tabpanel" id="settings-tabpanel-locations" aria-labelledby="settings-tab-locations"><LocationsManager /></div> : null}
 
-      {tab === 'customFields' && canManageOrganization ? (
+      {tab === 'customFields' && canManageTab.customFields ? (
         <div role="tabpanel" id="settings-tabpanel-customFields" aria-labelledby="settings-tab-customFields">
           <Card>
             <div className="sectionTitle"><div><h2>{t('settings.assetCategories')}</h2><p>{t('settings.customFieldsCategoriesHint')}</p></div></div>
@@ -601,7 +629,7 @@ export function SettingsPage() {
         </div>
       ) : null}
 
-      {tab === 'qrLabel' && canManageOrganization ? (
+      {tab === 'qrLabel' && canManageTab.qrLabel ? (
         <div role="tabpanel" id="settings-tabpanel-qrLabel" aria-labelledby="settings-tab-qrLabel">
           <Card>
             <div className="sectionTitle"><div><h2>{t('settings.qrLabel')}</h2><p>{t('settings.qrLabelHint')}</p></div></div>
@@ -619,7 +647,7 @@ export function SettingsPage() {
         </div>
       ) : null}
 
-      {tab === 'profiles' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-profiles" aria-labelledby="settings-tab-profiles"><Card>
+      {tab === 'profiles' && canManageTab.profiles ? <div role="tabpanel" id="settings-tabpanel-profiles" aria-labelledby="settings-tab-profiles"><Card>
         <div className="sectionTitle"><div><h2>{t('settings.jobProfiles')}</h2></div><Button icon={<Plus size={16} />} onClick={() => { setEditingProfile(null); setModal('profile'); }}>{t('settings.addProfile')}</Button></div>
         <SettingsSearch value={settingsSearch} onChange={value => { setSettingsSearch(value); setPage(1); }} total={filteredProfiles.length} />
         {profiles.isLoading ? <p className="muted">{t('settings.loadingProfiles')}</p> : profiles.error ? <ErrorState message={profiles.error} onRetry={profiles.reload} /> : !filteredProfiles.length ? <EmptyState title={t('settings.emptyProfilesTitle')} description={t('settings.emptyProfilesDesc')} /> : (
@@ -632,7 +660,7 @@ export function SettingsPage() {
         )}
       </Card></div> : null}
 
-      {tab === 'users' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-users" aria-labelledby="settings-tab-users"><Card>
+      {tab === 'users' && canManageTab.users ? <div role="tabpanel" id="settings-tabpanel-users" aria-labelledby="settings-tab-users"><Card>
         <div className="sectionTitle"><div><h2>{t('settings.logins')}</h2></div><Button icon={<Plus size={16} />} onClick={() => { setEditingUser(null); setUserCreateDefaults({ email: '', displayName: '' }); setModal('user'); }}>{t('settings.addLogin')}</Button></div>
         <SettingsSearch value={settingsSearch} onChange={value => { setSettingsSearch(value); setPage(1); }} total={filteredUsers.length} />
         {users.isLoading ? <p className="muted">{t('settings.loadingLogins')}</p> : users.error ? <ErrorState message={users.error} onRetry={users.reload} /> : !filteredUsers.length ? <EmptyState title={t('settings.emptyLoginsTitle')} description={t('settings.emptyLoginsDesc')} /> : (
@@ -645,9 +673,9 @@ export function SettingsPage() {
         )}
       </Card></div> : null}
 
-      {tab === 'alerts' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-alerts" aria-labelledby="settings-tab-alerts"><AlertsSettings /></div> : null}
+      {tab === 'alerts' && canManageTab.alerts ? <div role="tabpanel" id="settings-tabpanel-alerts" aria-labelledby="settings-tab-alerts"><AlertsSettings /></div> : null}
 
-      {tab === 'permissions' && canManageOrganization ? <div role="tabpanel" id="settings-tabpanel-permissions" aria-labelledby="settings-tab-permissions"><Card>
+      {tab === 'permissions' && canManageTab.permissions ? <div role="tabpanel" id="settings-tabpanel-permissions" aria-labelledby="settings-tab-permissions"><Card>
         <div className="sectionTitle"><div><h2>{t('settings.rolePermissions')}</h2></div></div>
         {roles.isLoading || rolePermissions.isLoading ? <p className="muted">{t('settings.rolePermissionsLoading')}</p> : rolePermissions.error ? <ErrorState message={rolePermissions.error} onRetry={rolePermissions.reload} /> : (
           <div className="roleSplit">
@@ -657,7 +685,7 @@ export function SettingsPage() {
                   key={role.key}
                   type="button"
                   className={role.key === selectedRoleKey ? 'roleRail__item--active' : ''}
-                  onClick={() => setSelectedRoleKey(role.key)}
+                  onClick={() => { setSelectedRoleKey(role.key); setEditingRoleLabel(false); }}
                   title={role.description}
                 >
                   {role.label}
@@ -665,7 +693,25 @@ export function SettingsPage() {
               ))}
             </nav>
             <div className="permissionPanel">
-              <h3 className="permissionPanel__heading">{roles.data?.find(r => r.key === selectedRoleKey)?.label}</h3>
+              {editingRoleLabel ? (
+                <form className="roleLabelEdit" onSubmit={event => { event.preventDefault(); saveRoleLabel(selectedRoleKey); }}>
+                  <TextInput value={roleLabelDraft} onChange={event => setRoleLabelDraft(event.target.value)} maxLength={80} autoFocus required />
+                  <Button type="submit" variant="ghost" iconOnly icon={<Check size={16} />} disabled={roleLabelSaving} aria-label={t('common.save')} />
+                  <Button type="button" variant="ghost" iconOnly icon={<X size={16} />} onClick={() => setEditingRoleLabel(false)} disabled={roleLabelSaving} aria-label={t('common.cancel')} />
+                </form>
+              ) : (
+                <h3 className="permissionPanel__heading">
+                  {roles.data?.find(r => r.key === selectedRoleKey)?.label}
+                  <button
+                    type="button"
+                    className="iconButton"
+                    aria-label={t('settings.roleLabelEditAria', { name: roles.data?.find(r => r.key === selectedRoleKey)?.label ?? '' })}
+                    onClick={() => { setRoleLabelDraft(roles.data?.find(r => r.key === selectedRoleKey)?.label ?? ''); setEditingRoleLabel(true); }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </h3>
+              )}
               <p className="permissionPanel__hint">{roles.data?.find(r => r.key === selectedRoleKey)?.description ?? t('settings.rolePermissionsHint')}</p>
               {(rolePermissions.data ?? []).filter(p => p.roleKey === selectedRoleKey).map(permission => (
                 <div className="permissionRow" key={permission.permissionKey}>

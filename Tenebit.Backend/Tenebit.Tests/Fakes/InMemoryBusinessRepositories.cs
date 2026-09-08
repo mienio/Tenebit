@@ -483,6 +483,19 @@ public sealed class InMemoryRolePermissionRepository : IRolePermissionRepository
     public void Remove(RolePermission permission) => Permissions.Remove(permission);
 }
 
+public sealed class InMemoryRoleLabelRepository : IRoleLabelRepository
+{
+    public List<RoleLabel> Labels { get; } = [];
+
+    public Task<IReadOnlyList<RoleLabel>> ListAsync(Guid organizationId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<RoleLabel>>(Labels.Where(x => x.OrganizationId == organizationId).ToList());
+
+    public Task<RoleLabel?> FindAsync(Guid organizationId, string roleKey, CancellationToken cancellationToken) =>
+        Task.FromResult(Labels.FirstOrDefault(x => x.OrganizationId == organizationId && x.RoleKey == roleKey));
+
+    public void Add(RoleLabel label) => Labels.Add(label);
+}
+
 public sealed class InMemoryOffboardingCaseRepository : IOffboardingCaseRepository
 {
     private static readonly OffboardingCaseStatus[] ClosedStatuses = [OffboardingCaseStatus.Completed, OffboardingCaseStatus.Cancelled];

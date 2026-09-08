@@ -13,14 +13,16 @@ public sealed class PersonRelationTypeService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPermissionService _permissions;
 
-    public PersonRelationTypeService(IPersonRelationTypeRepository relationTypes, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public PersonRelationTypeService(IPersonRelationTypeRepository relationTypes, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPermissionService permissions)
     {
         _relationTypes = relationTypes;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _permissions = permissions;
     }
 
     public async Task<IReadOnlyList<PersonRelationTypeResponse>> ListAsync(CancellationToken cancellationToken)
@@ -31,7 +33,7 @@ public sealed class PersonRelationTypeService
 
     public async Task<Result<PersonRelationTypeResponse>> CreateAsync(CreatePersonRelationTypeRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<PersonRelationTypeResponse>.Failure(access.Error!);
         try
         {
@@ -53,7 +55,7 @@ public sealed class PersonRelationTypeService
 
     public async Task<Result<PersonRelationTypeResponse>> UpdateAsync(Guid id, UpdatePersonRelationTypeRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<PersonRelationTypeResponse>.Failure(access.Error!);
         try
         {
@@ -74,7 +76,7 @@ public sealed class PersonRelationTypeService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
         var organizationId = _currentUser.OrganizationId;
         var relationType = await _relationTypes.GetAsync(organizationId, id, cancellationToken);

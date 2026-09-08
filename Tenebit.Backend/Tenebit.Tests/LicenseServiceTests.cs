@@ -14,7 +14,7 @@ public class LicenseServiceTests
         var licenses = new InMemoryLicenseRepository();
         var people = new InMemoryPersonRepository();
         var subscriptions = new InMemorySubscriptionRepository();
-        var service = new LicenseService(licenses, people, new InMemoryRolePermissionRepository(), new InMemoryActivityLogRepository(), user, new FakeClock(), new FakeUnitOfWork(), subscriptions);
+        var service = new LicenseService(licenses, people, new InMemoryRolePermissionRepository(), TestAuthorization.Permissions(user), new InMemoryActivityLogRepository(), user, new FakeClock(), new FakeUnitOfWork(), subscriptions);
         return (service, user, licenses, subscriptions);
     }
 

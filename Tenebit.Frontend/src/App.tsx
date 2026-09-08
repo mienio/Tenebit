@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
-import { Layout, canSee, nav } from './components/Layout';
+import { Layout, canSee, canSeeModule, nav } from './components/Layout';
 import { LoadingState } from './components/StateViews';
 import { ForbiddenPage, NotFoundPage } from './pages/ErrorPages';
 import { PartnerLocaleProvider, type PartnerLocale } from './partner/i18n';
@@ -80,17 +80,23 @@ function HomeRoute() {
   const auth = useAuth();
   if (!auth.isAuthenticated) return <LandingPage />;
   const dashboard = nav.find(entry => entry.to === '/dashboard');
-  return <Navigate to={dashboard && canSee(dashboard.roles, auth.roles) ? '/dashboard' : '/my'} replace />;
+  return <Navigate to={dashboard && canSeeModule(dashboard.module, auth.can) ? '/dashboard' : '/my'} replace />;
 }
 
-// Role bierzemy z `nav`, bo menu i dostep do trasy musza sie zgadzac. Trasy spoza menu (np. /pricing)
-// podaja liste jawnie przez `roles`. Brak jednego i drugiego jest traktowany jak brak dostepu: wczesniej
-// literowka w `path` cicho przepuszczala kazdego, bo `nav.find` zwracalo undefined.
+// Modul (permission matrix) bierzemy z `nav`, bo menu i dostep do trasy musza sie zgadzac. Trasy spoza
+// menu bez modulu (np. /pricing) podaja liste rol jawnie przez `roles` - ten jeden przypadek zostaje
+// poza edytowalna macierza uprawnien (subskrypcje sa celowo wlasciciel-only, patrz SubscriptionService).
+// Brak jednego i drugiego jest traktowany jak brak dostepu: wczesniej literowka w `path` cicho
+// przepuszczala kazdego, bo `nav.find` zwracalo undefined.
 function RequireRoles({ path, roles, children }: { path: string; roles?: string[]; children: ReactNode }) {
   const auth = useAuth();
-  const required = roles ?? nav.find(entry => entry.to === path)?.roles;
-  if (!required || !canSee(required, auth.roles)) return <ForbiddenPage />;
-  return <>{children}</>;
+  if (roles) {
+    return canSee(roles, auth.roles) ? <>{children}</> : <ForbiddenPage />;
+  }
+
+  const entry = nav.find(item => item.to === path);
+  if (!entry) return <ForbiddenPage />;
+  return canSeeModule(entry.module, auth.can) ? <>{children}</> : <ForbiddenPage />;
 }
 
 // The dashboard's own Layout already does this for logged-in routes; public pages (landing, legal,

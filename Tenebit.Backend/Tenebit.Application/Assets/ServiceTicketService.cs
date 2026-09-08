@@ -16,13 +16,15 @@ public sealed class ServiceTicketService
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AssetAuthorizationService _assetAuthorization;
+    private readonly IPermissionService _permissions;
 
-    public ServiceTicketService(IServiceTicketRepository tickets, IAssetRepository assets, IAssetInspectionRepository inspections, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssetAuthorizationService assetAuthorization)
+    public ServiceTicketService(IServiceTicketRepository tickets, IAssetRepository assets, IAssetInspectionRepository inspections, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssetAuthorizationService assetAuthorization, IPermissionService permissions)
     {
         _tickets = tickets;
         _assets = assets;
         _inspections = inspections;
         _activity = activity;
+        _permissions = permissions;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
@@ -31,7 +33,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<IReadOnlyList<ServiceTicketResponse>>> ListByAssetAsync(Guid assetId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<ServiceTicketResponse>>.Failure(access.Error!);
 
         var assetAccess = await _assetAuthorization.EnsureCanViewAsync(assetId, cancellationToken);
@@ -42,7 +44,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<ServiceTicketListResponse>> ListPagedAsync(ServiceTicketStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<ServiceTicketListResponse>.Failure(access.Error!);
 
         var scope = await _assetAuthorization.ResolveListScopeAsync(cancellationToken);
@@ -54,7 +56,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<ServiceTicketResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<ServiceTicketResponse>.Failure(access.Error!);
 
         var ticket = await _tickets.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
@@ -66,7 +68,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<ServiceTicketResponse>> OpenAsync(OpenServiceTicketRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ServiceTicketResponse>.Failure(access.Error!);
 
         try
@@ -102,7 +104,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<ServiceTicketResponse>> UpdateAsync(Guid id, UpdateServiceTicketRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ServiceTicketResponse>.Failure(access.Error!);
 
         try
@@ -123,7 +125,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<ServiceTicketResponse>> CompleteAsync(Guid id, CompleteServiceTicketRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ServiceTicketResponse>.Failure(access.Error!);
 
         try
@@ -155,7 +157,7 @@ public sealed class ServiceTicketService
 
     public async Task<Result<ServiceTicketResponse>> CancelAsync(Guid id, CancelServiceTicketRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<ServiceTicketResponse>.Failure(access.Error!);
 
         try

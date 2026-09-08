@@ -45,13 +45,13 @@ public class AssignmentWithEvidenceTests
         var evidence = new InMemoryAssetEvidenceRepository();
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
-        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser));
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser), TestAuthorization.Permissions(currentUser));
         var disposition = new AssetReturnDispositionService(inspections);
         var responseBuilder = new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations);
 
         var service = new AssignmentService(
             assignments, assets, categories, inspections, people, procedures, teams, organizations,
-            activity, currentUser, clock, unitOfWork, new FakeEmailSender(),
+            activity, currentUser, TestAuthorization.Permissions(currentUser), clock, unitOfWork, new FakeEmailSender(),
             new FakeAppLinkBuilder(), reservations, evidence, evidenceService, disposition, responseBuilder,
             new ManagerScopeService(people, teams));
 
@@ -237,7 +237,7 @@ public class AssignmentWithEvidenceTests
         var item = new AssetEvidence(orgId, Guid.NewGuid(), assignmentA.Id, EvidencePhase.Issue, "a.jpg", "image/jpeg", JpegBytes(), Sha("a"), null, "tester", EvidenceUploadSource.AuthenticatedUser, DateTimeOffset.UtcNow);
         evidence.Add(item);
 
-        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork(), TestAuthorization.Asset(assets, new FakeCurrentUser()));
+        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork(), TestAuthorization.Asset(assets, new FakeCurrentUser()), TestAuthorization.Permissions(new FakeCurrentUser()));
 
         Assert.True((await service.GetPublicAssignmentEvidenceAsync(orgId, assignmentA.Id, item.Id, CancellationToken.None)).IsSuccess);
 
@@ -265,7 +265,7 @@ public class AssignmentWithEvidenceTests
         var returnItem = new AssetEvidence(orgId, Guid.NewGuid(), assignment.Id, EvidencePhase.Return, "return.jpg", "image/jpeg", JpegBytes(), Sha("r"), null, "tester", EvidenceUploadSource.AuthenticatedUser, DateTimeOffset.UtcNow);
         evidence.Add(returnItem);
 
-        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork(), TestAuthorization.Asset(assets, new FakeCurrentUser()));
+        var service = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork(), TestAuthorization.Asset(assets, new FakeCurrentUser()), TestAuthorization.Permissions(new FakeCurrentUser()));
 
         var result = await service.GetPublicAssignmentEvidenceAsync(orgId, assignment.Id, returnItem.Id, CancellationToken.None);
 

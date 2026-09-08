@@ -4,6 +4,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Identity;
+using Tenebit.Domain.Settings;
 
 namespace Tenebit.Application.Identity;
 
@@ -12,6 +13,7 @@ public sealed class UserAccessService
     private readonly IOrganizationUserRepository _users;
     private readonly IPersonRepository _people;
     private readonly IOrganizationRepository _organizations;
+    private readonly IRoleLabelRepository _roleLabels;
     private readonly IActivityLogRepository _activity;
     private readonly IPasswordResetTokenRepository _passwordResetTokens;
     private readonly IRefreshTokenRepository _refreshTokens;
@@ -20,6 +22,7 @@ public sealed class UserAccessService
     private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<UserAccessService> _logger;
@@ -29,6 +32,7 @@ public sealed class UserAccessService
         IOrganizationUserRepository users,
         IPersonRepository people,
         IOrganizationRepository organizations,
+        IRoleLabelRepository roleLabels,
         IActivityLogRepository activity,
         IPasswordResetTokenRepository passwordResetTokens,
         IRefreshTokenRepository refreshTokens,
@@ -36,6 +40,7 @@ public sealed class UserAccessService
         IEmailSender emailSender,
         IAppLinkBuilder appLinkBuilder,
         ICurrentUser currentUser,
+        IPermissionService permissions,
         IClock clock,
         IUnitOfWork unitOfWork,
         ILogger<UserAccessService> logger,
@@ -45,6 +50,7 @@ public sealed class UserAccessService
         _users = users;
         _people = people;
         _organizations = organizations;
+        _roleLabels = roleLabels;
         _activity = activity;
         _passwordResetTokens = passwordResetTokens;
         _refreshTokens = refreshTokens;
@@ -53,17 +59,52 @@ public sealed class UserAccessService
         _emailOutbox = emailOutbox;
         _appLinkBuilder = appLinkBuilder;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _logger = logger;
         _securityStateCache = securityStateCache;
     }
 
-    public IReadOnlyList<RoleResponse> Roles() => TenebitRoles.All.Select(x => new RoleResponse(x.Key, x.Label, x.Description)).ToArray();
+    public async Task<IReadOnlyList<RoleResponse>> RolesAsync(CancellationToken cancellationToken)
+    {
+        var overrides = await _roleLabels.ListAsync(_currentUser.OrganizationId, cancellationToken);
+        return TenebitRoles.All
+            .Select(x =>
+            {
+                var label = overrides.FirstOrDefault(o => o.RoleKey == x.Key)?.Label ?? x.Label;
+                return new RoleResponse(x.Key, label, x.Description);
+            })
+            .ToArray();
+    }
+
+    public async Task<Result> SetRoleLabelAsync(string roleKey, SetRoleLabelRequest request, CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        if (access.IsFailure) return access;
+
+        if (TenebitRoles.All.All(x => x.Key != roleKey)) return Result.Failure(Error.Validation($"Nieznana rola: {roleKey}."));
+
+        var organizationId = _currentUser.OrganizationId;
+        var label = request.Label.Trim();
+        var existing = await _roleLabels.FindAsync(organizationId, roleKey, cancellationToken);
+        if (existing is null)
+        {
+            _roleLabels.Add(new RoleLabel(organizationId, roleKey, label));
+        }
+        else
+        {
+            existing.SetLabel(label);
+        }
+
+        _activity.Add(new ActivityLog(organizationId, "role.label_updated", "role_label", Guid.NewGuid(), _currentUser.Subject, $"{roleKey}: {label}", _clock.UtcNow));
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
 
     public async Task<Result<IReadOnlyList<OrganizationUserResponse>>> ListAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.OrganizationUsers, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<OrganizationUserResponse>>.Failure(access.Error!);
 
         var users = await _users.ListAsync(_currentUser.OrganizationId, cancellationToken);
@@ -72,7 +113,7 @@ public sealed class UserAccessService
 
     public async Task<Result<OrganizationUserResponse>> CreateAsync(SaveOrganizationUserRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.OrganizationUsers, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OrganizationUserResponse>.Failure(access.Error!);
         try
         {
@@ -105,7 +146,7 @@ public sealed class UserAccessService
 
     public async Task<Result<OrganizationUserResponse>> UpdateAsync(Guid id, SaveOrganizationUserRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.OrganizationUsers, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OrganizationUserResponse>.Failure(access.Error!);
 
         try

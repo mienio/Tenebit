@@ -19,7 +19,8 @@ public class AssetCategoryServiceTests
             activity,
             currentUser,
             new FakeClock(),
-            new FakeUnitOfWork());
+            new FakeUnitOfWork(),
+            TestAuthorization.Permissions(currentUser));
 
         return (service, currentUser, categories, activity);
     }

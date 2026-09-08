@@ -59,7 +59,7 @@ export function AssetsPage() {
   const { t, tPlural } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const { celebrate } = useCelebration();
-  const { userEmail } = useAuth();
+  const { userEmail, can } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = window.localStorage.getItem(assetsViewStorageKey(userEmail));
     return stored === 'location' || stored === 'person' || stored === 'status' || stored === 'category' ? stored : 'list';
@@ -716,6 +716,7 @@ export function AssetsPage() {
 
       <AssetsToolbar
         selectedCount={selectedIds.size}
+        canManage={can('assets', 'manage')}
         batchQrLoading={batchQrLoading}
         onBulkStatus={() => setBulkModal('status')}
         onBulkLocation={() => setBulkModal('location')}

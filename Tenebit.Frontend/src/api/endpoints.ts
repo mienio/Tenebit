@@ -54,6 +54,7 @@ import type {
   PublicAssignment,
   PublicOffboarding,
   PublicOffboardingAnswer,
+  MyPermissions,
   RoleInfo,
   RolePermission,
   SaveAlertDigestSettingsRequest,
@@ -163,8 +164,10 @@ export const api = {
   createUser: (body: { email: string; displayName: string; isActive: boolean; roles: string[]; personId?: string | null }) => apiRequest<OrganizationUser>('/api/organization-users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: string, body: { email: string; displayName: string; isActive: boolean; roles: string[]; personId?: string | null }) => apiRequest<OrganizationUser>(`/api/organization-users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   roles: () => apiRequest<RoleInfo[]>('/api/roles'),
+  setRoleLabel: (roleKey: string, label: string) => apiRequest<void>(`/api/roles/${roleKey}/label`, { method: 'PUT', body: JSON.stringify({ label }) }),
   rolePermissions: () => apiRequest<RolePermission[]>('/api/role-permissions'),
   setRolePermission: (body: { roleKey: string; permissionKey: string; allowed: boolean }) => apiRequest<void>('/api/role-permissions', { method: 'PUT', body: JSON.stringify(body) }),
+  myPermissions: () => apiRequest<MyPermissions>('/api/my-permissions'),
 
   alertRules: () => apiRequest<AlertRule[]>('/api/settings/alerts'),
   saveAlertRule: (type: AlertType, body: SaveAlertRuleRequest) => apiRequest<AlertRule>(`/api/settings/alerts/${type}`, { method: 'PUT', body: JSON.stringify(body) }),

@@ -15,18 +15,20 @@ public sealed class SettingsService
     private readonly IOrganizationRepository _organizations;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IQrCodeGenerator _qrCodeGenerator;
     private readonly IImageSanitizer _imageSanitizer;
     private readonly IAppLinkBuilder _linkBuilder;
 
-    public SettingsService(IAssetStatusSettingRepository statusSettings, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IImageSanitizer imageSanitizer, IAppLinkBuilder linkBuilder)
+    public SettingsService(IAssetStatusSettingRepository statusSettings, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IImageSanitizer imageSanitizer, IAppLinkBuilder linkBuilder)
     {
         _statusSettings = statusSettings;
         _organizations = organizations;
         _activity = activity;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _qrCodeGenerator = qrCodeGenerator;
@@ -34,20 +36,23 @@ public sealed class SettingsService
         _linkBuilder = linkBuilder;
     }
 
-    public async Task<IReadOnlyList<AssetStatusSettingResponse>> ListAssetStatusesAsync(CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<AssetStatusSettingResponse>>> ListAssetStatusesAsync(CancellationToken cancellationToken)
     {
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.View, cancellationToken);
+        if (access.IsFailure) return Result<IReadOnlyList<AssetStatusSettingResponse>>.Failure(access.Error!);
+
         var saved = await _statusSettings.ListAsync(_currentUser.OrganizationId, cancellationToken);
         if (saved.Count == 0)
         {
-            return BuiltInStatusSettings(_currentUser.Language);
+            return Result<IReadOnlyList<AssetStatusSettingResponse>>.Success(BuiltInStatusSettings(_currentUser.Language));
         }
 
-        return saved.OrderBy(x => x.SortOrder).Select(x => new AssetStatusSettingResponse(x.StatusKey, x.Label.Trim(), x.Color, x.BackgroundColor, x.SortOrder, x.IsEnabled)).ToList();
+        return Result<IReadOnlyList<AssetStatusSettingResponse>>.Success(saved.OrderBy(x => x.SortOrder).Select(x => new AssetStatusSettingResponse(x.StatusKey, x.Label.Trim(), x.Color, x.BackgroundColor, x.SortOrder, x.IsEnabled)).ToList());
     }
 
     public async Task<Result<IReadOnlyList<AssetStatusSettingResponse>>> SaveAssetStatusesAsync(IReadOnlyList<SaveAssetStatusSettingRequest> request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<AssetStatusSettingResponse>>.Failure(access.Error!);
         try
         {
@@ -70,13 +75,16 @@ public sealed class SettingsService
             _activity.Add(new ActivityLog(organizationId, "settings.asset_statuses.updated", "settings", organizationId, _currentUser.Subject, null, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             var statuses = await ListAssetStatusesAsync(cancellationToken);
-            return Result<IReadOnlyList<AssetStatusSettingResponse>>.Success(statuses);
+            return statuses;
         }
         catch (DomainException ex) { return Result<IReadOnlyList<AssetStatusSettingResponse>>.Failure(Error.Validation(ex.Message)); }
     }
 
     public async Task<Result<EvidencePrivacySettingsResponse>> GetEvidencePrivacyAsync(CancellationToken cancellationToken)
     {
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.View, cancellationToken);
+        if (access.IsFailure) return Result<EvidencePrivacySettingsResponse>.Failure(access.Error!);
+
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
         if (organization is null) return Result<EvidencePrivacySettingsResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
         return Result<EvidencePrivacySettingsResponse>.Success(MapPrivacySettings(organization));
@@ -84,7 +92,7 @@ public sealed class SettingsService
 
     public async Task<Result<EvidencePrivacySettingsResponse>> SaveEvidencePrivacyAsync(SaveEvidencePrivacySettingsRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<EvidencePrivacySettingsResponse>.Failure(access.Error!);
 
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
@@ -108,6 +116,9 @@ public sealed class SettingsService
 
     public async Task<Result<QrLabelSettingsResponse>> GetQrLabelSettingsAsync(CancellationToken cancellationToken)
     {
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.View, cancellationToken);
+        if (access.IsFailure) return Result<QrLabelSettingsResponse>.Failure(access.Error!);
+
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
         if (organization is null) return Result<QrLabelSettingsResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
         return Result<QrLabelSettingsResponse>.Success(ToQrLabelResponse(organization));
@@ -115,7 +126,7 @@ public sealed class SettingsService
 
     public async Task<Result<QrLabelSettingsResponse>> SaveQrLabelSettingsAsync(SaveQrLabelSettingsRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<QrLabelSettingsResponse>.Failure(access.Error!);
 
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
@@ -140,7 +151,7 @@ public sealed class SettingsService
 
     public async Task<Result<QrLabelSettingsResponse>> UploadQrLabelLogoAsync(string? contentType, byte[] content, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<QrLabelSettingsResponse>.Failure(access.Error!);
 
         if (!ImageSignature.IsAllowedContentType(contentType))
@@ -174,7 +185,7 @@ public sealed class SettingsService
 
     public async Task<Result<QrLabelSettingsResponse>> RemoveQrLabelLogoAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<QrLabelSettingsResponse>.Failure(access.Error!);
 
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
@@ -193,7 +204,7 @@ public sealed class SettingsService
     /// </summary>
     public async Task<Result<QrLabelPreviewResponse>> PreviewQrLabelAsync(SaveQrLabelSettingsRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<QrLabelPreviewResponse>.Failure(access.Error!);
 
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);

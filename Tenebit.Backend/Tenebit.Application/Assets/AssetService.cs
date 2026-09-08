@@ -37,12 +37,13 @@ public sealed class AssetService
     private readonly IFieldEncryptor _fieldEncryptor;
     private readonly ManagerScopeService _managerScope;
     private readonly LocationReferenceResolver _locationResolver;
+    private readonly IPermissionService _permissions;
 
     // Roles in TenebitRoles.AssetViewers that see the whole organization; Manager alone is scoped to
     // its own team's assigned assets by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician, TenebitRoles.Hr, TenebitRoles.LicenseManager, TenebitRoles.Finance, TenebitRoles.Auditor];
 
-    public AssetService(IAssetRepository assets, IPublicReportThrottleRepository throttle, IMaintenanceScheduleRepository maintenance, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IEmailOutboxWriter? emailOutbox = null)
+    public AssetService(IAssetRepository assets, IPublicReportThrottleRepository throttle, IMaintenanceScheduleRepository maintenance, IAssetCategoryRepository categories, IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ISubscriptionRepository subscriptions, IOrganizationRepository organizations, IOrganizationUserRepository organizationUsers, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IQrCodeGenerator qrCodeGenerator, IAppLinkBuilder linkBuilder, IEmailSender emailSender, ILogger<AssetService> logger, IFieldEncryptor fieldEncryptor, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, IPermissionService permissions, IEmailOutboxWriter? emailOutbox = null)
     {
         _assets = assets;
         _throttle = throttle;
@@ -65,11 +66,12 @@ public sealed class AssetService
         _fieldEncryptor = fieldEncryptor;
         _managerScope = managerScope;
         _locationResolver = locationResolver;
+        _permissions = permissions;
     }
 
     public async Task<Result<IReadOnlyList<AssetResponse>>> ListAsync(string? search, AssetStatus? status, string? location, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<AssetResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -89,7 +91,7 @@ public sealed class AssetService
 
     public async Task<Result<PagedResult<AssetResponse>>> ListPagedAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<AssetResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -118,7 +120,7 @@ public sealed class AssetService
 
     public async Task<Result<AssetGroupCountsResponse>> GetGroupCountsAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssetGroupCountsResponse>.Failure(access.Error!);
 
         var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
@@ -130,7 +132,7 @@ public sealed class AssetService
 
     public async Task<Result<AssetResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssetResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -157,7 +159,7 @@ public sealed class AssetService
 
     public async Task<Result<AssetResponse>> CreateAsync(CreateAssetRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetResponse>.Failure(access.Error!);
 
         try
@@ -242,7 +244,7 @@ public sealed class AssetService
     /// </summary>
     public async Task<Result<CreateAssetBatchResponse>> CreateBatchAsync(CreateAssetBatchRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<CreateAssetBatchResponse>.Failure(access.Error!);
 
         try
@@ -391,7 +393,7 @@ public sealed class AssetService
     /// </summary>
     public async Task<Result<Guid>> ResolveScanCodeAsync(string scanCode, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<Guid>.Failure(access.Error!);
 
         var asset = AssetScanCode.IsWellFormed(scanCode) ? await _assets.FindByScanCodeAsync(scanCode, cancellationToken) : null;
@@ -427,7 +429,7 @@ public sealed class AssetService
 
     public async Task<Result<AssetResponse>> UpdateAsync(Guid id, UpdateAssetRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetResponse>.Failure(access.Error!);
 
         try
@@ -473,8 +475,16 @@ public sealed class AssetService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
+
+        // Deleting is irreversible and narrower than the rest of "manage" (create/edit): asset_operator
+        // gets manage by default but not delete, matching the pre-rework hard-coded Owner/Admin-only check.
+        if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin))
+        {
+            SecurityTelemetry.AuthorizationDenied();
+            return Result.Failure(Error.Forbidden());
+        }
 
         var organizationId = _currentUser.OrganizationId;
         var asset = await _assets.GetAsync(organizationId, id, cancellationToken);
@@ -765,7 +775,7 @@ public sealed class AssetService
 
     public async Task<Result<string>> ExportJsonAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var (assets, categories, people, teams) = await LoadForExportAsync(search, status, location, teamId, categoryId, unassignedOnly, warrantyExpiring, sortKey, sortDesc, cancellationToken);
@@ -783,7 +793,7 @@ public sealed class AssetService
     /// </summary>
     public async Task<Result<FleetValueResponse>> GetFleetValueAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<FleetValueResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -860,7 +870,7 @@ public sealed class AssetService
 
     public async Task<Result<string>> ExportCsvAsync(string? search, AssetStatus? status, string? location, Guid? teamId, Guid? categoryId, bool unassignedOnly, bool warrantyExpiring, string? sortKey, bool sortDesc, string? columns, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var (assets, categories, people, teams) = await LoadForExportAsync(search, status, location, teamId, categoryId, unassignedOnly, warrantyExpiring, sortKey, sortDesc, cancellationToken);

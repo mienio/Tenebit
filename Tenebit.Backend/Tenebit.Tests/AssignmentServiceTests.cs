@@ -39,7 +39,7 @@ public class AssignmentServiceTests
         var evidence = new InMemoryAssetEvidenceRepository();
         var clock = new FakeClock();
         var unitOfWork = new FakeUnitOfWork();
-        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser));
+        var evidenceService = new AssetEvidenceService(evidence, assets, assignments, new FakeImageSanitizer(), activity, currentUser, clock, unitOfWork, TestAuthorization.Asset(assets, currentUser), TestAuthorization.Permissions(currentUser));
         var disposition = new AssetReturnDispositionService(inspections);
         var responseBuilder = new AssignmentResponseBuilder(assignments, people, assets, procedures, evidence, organizations);
 
@@ -54,6 +54,7 @@ public class AssignmentServiceTests
             organizations,
             activity,
             currentUser,
+            TestAuthorization.Permissions(currentUser),
             clock,
             unitOfWork,
             new FakeEmailSender(),

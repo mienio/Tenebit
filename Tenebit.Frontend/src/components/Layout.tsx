@@ -20,24 +20,30 @@ export const navGroups = [
 ];
 
 export const nav = [
-  { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['owner', 'admin', 'asset_operator', 'finance', 'auditor'] },
+  { to: '/dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['owner', 'admin', 'asset_operator', 'finance', 'auditor'], module: 'dashboard' },
   { to: '/my', labelKey: 'nav.my', icon: User, roles: [] },
-  { to: '/assets', labelKey: 'nav.assets', icon: Boxes, roles: ['owner', 'admin', 'asset_operator', 'technician', 'manager', 'hr', 'license_manager', 'finance', 'auditor'], group: 'assets' },
-  { to: '/licenses', labelKey: 'nav.licenses', icon: KeyRound, roles: ['owner', 'admin', 'license_manager', 'finance', 'auditor'], group: 'assets' },
-  { to: '/assignments', labelKey: 'nav.assignments', icon: PackageCheck, roles: ['owner', 'admin', 'asset_operator', 'hr', 'manager'], group: 'assets' },
-  { to: '/asset-audits', labelKey: 'nav.assetAudits', icon: ClipboardList, roles: ['owner', 'admin', 'asset_operator', 'auditor'], group: 'assets' },
-  { to: '/people', labelKey: 'nav.people', icon: Users, roles: ['owner', 'admin', 'manager', 'hr', 'asset_operator', 'auditor'], group: 'employment' },
-  { to: '/onboarding', labelKey: 'nav.onboarding', icon: FileText, roles: ['owner', 'admin', 'hr', 'asset_operator'], group: 'employment' },
-  { to: '/offboarding', labelKey: 'nav.offboarding', icon: UserRoundX, roles: ['owner', 'admin', 'hr', 'asset_operator'], group: 'employment' },
-  { to: '/procedures', labelKey: 'nav.procedures', icon: ClipboardCheck, roles: ['owner', 'admin', 'hr', 'manager', 'asset_operator', 'auditor', 'procedure_manager'], group: 'employment' },
-  { to: '/reports', labelKey: 'nav.reports', icon: BarChart3, roles: ['owner', 'admin', 'manager', 'finance', 'auditor', 'asset_operator'], group: 'reports' },
-  { to: '/activity-log', labelKey: 'nav.audit', icon: History, roles: ['owner', 'admin', 'auditor'], group: 'reports' },
+  { to: '/assets', labelKey: 'nav.assets', icon: Boxes, roles: ['owner', 'admin', 'asset_operator', 'technician', 'manager', 'hr', 'license_manager', 'finance', 'auditor'], group: 'assets', module: 'assets' },
+  { to: '/licenses', labelKey: 'nav.licenses', icon: KeyRound, roles: ['owner', 'admin', 'license_manager', 'finance', 'auditor'], group: 'assets', module: 'licenses' },
+  { to: '/assignments', labelKey: 'nav.assignments', icon: PackageCheck, roles: ['owner', 'admin', 'asset_operator', 'hr', 'manager'], group: 'assets', module: 'assignments' },
+  { to: '/asset-audits', labelKey: 'nav.assetAudits', icon: ClipboardList, roles: ['owner', 'admin', 'asset_operator', 'auditor'], group: 'assets', module: 'assetAudits' },
+  { to: '/people', labelKey: 'nav.people', icon: Users, roles: ['owner', 'admin', 'manager', 'hr', 'asset_operator', 'auditor'], group: 'employment', module: 'people' },
+  { to: '/onboarding', labelKey: 'nav.onboarding', icon: FileText, roles: ['owner', 'admin', 'hr', 'asset_operator'], group: 'employment', module: 'onboarding' },
+  { to: '/offboarding', labelKey: 'nav.offboarding', icon: UserRoundX, roles: ['owner', 'admin', 'hr', 'asset_operator'], group: 'employment', module: 'offboarding' },
+  { to: '/procedures', labelKey: 'nav.procedures', icon: ClipboardCheck, roles: ['owner', 'admin', 'hr', 'manager', 'asset_operator', 'auditor', 'procedure_manager'], group: 'employment', module: 'procedures' },
+  { to: '/reports', labelKey: 'nav.reports', icon: BarChart3, roles: ['owner', 'admin', 'manager', 'finance', 'auditor', 'asset_operator'], group: 'reports', module: 'reports' },
+  { to: '/activity-log', labelKey: 'nav.audit', icon: History, roles: ['owner', 'admin', 'auditor'], group: 'reports', module: 'activityLog' },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: [] },
 ];
 
 export function canSee(requiredRoles: string[], userRoles: string[]) {
   if (!requiredRoles.length) return true;
   return requiredRoles.some(role => userRoles.includes(role));
+}
+
+/** Real gate for sidebar visibility and route access: a nav entry with no `module` (My Workspace,
+ * Settings) is open to any authenticated user; everything else needs `{module}.view`. */
+export function canSeeModule(module: string | undefined, can: (module: string, action?: 'view' | 'manage') => boolean) {
+  return !module || can(module, 'view');
 }
 
 export function Layout() {
@@ -49,7 +55,7 @@ export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
-  const visibleNav = nav.filter(item => canSee(item.roles, auth.roles));
+  const visibleNav = nav.filter(item => canSeeModule(item.module, auth.can));
   const standaloneNav = visibleNav.filter(item => !item.group);
   const groupedNav = navGroups.map(group => ({ group, items: visibleNav.filter(item => item.group === group.key) })).filter(({ items }) => items.length > 0);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ employment: false, reports: false });

@@ -8,17 +8,19 @@ public sealed class ActivityLogService
     private readonly IActivityLogRepository _activity;
     private readonly IOrganizationUserRepository _users;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
 
-    public ActivityLogService(IActivityLogRepository activity, IOrganizationUserRepository users, ICurrentUser currentUser)
+    public ActivityLogService(IActivityLogRepository activity, IOrganizationUserRepository users, ICurrentUser currentUser, IPermissionService permissions)
     {
         _activity = activity;
         _users = users;
         _currentUser = currentUser;
+        _permissions = permissions;
     }
 
     public async Task<Result<PagedActivityLogResponse>> ListAsync(int page, int pageSize, string? entityType, Guid? entityId, string? search, DateOnly? dateFrom, DateOnly? dateTo, string? actor, string? action, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Auditor, TenebitRoles.AssetOperator, TenebitRoles.Manager, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.ActivityLog, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedActivityLogResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

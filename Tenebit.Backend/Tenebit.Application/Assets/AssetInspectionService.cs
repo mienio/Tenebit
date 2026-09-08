@@ -15,21 +15,23 @@ public sealed class AssetInspectionService
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AssetAuthorizationService _assetAuthorization;
+    private readonly IPermissionService _permissions;
 
-    public AssetInspectionService(IAssetInspectionRepository inspections, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssetAuthorizationService assetAuthorization)
+    public AssetInspectionService(IAssetInspectionRepository inspections, IAssetRepository assets, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssetAuthorizationService assetAuthorization, IPermissionService permissions)
     {
         _inspections = inspections;
         _assets = assets;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
+        _permissions = permissions;
         _unitOfWork = unitOfWork;
         _assetAuthorization = assetAuthorization;
     }
 
     public async Task<Result<AssetInspectionResponse>> GetPendingForAssetAsync(Guid assetId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssetInspectionResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -42,7 +44,7 @@ public sealed class AssetInspectionService
 
     public async Task<Result<AssetInspectionResponse>> CompleteAsync(Guid id, CompleteAssetInspectionRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetInspectionResponse>.Failure(access.Error!);
 
         try

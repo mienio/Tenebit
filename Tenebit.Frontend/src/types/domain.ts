@@ -915,6 +915,16 @@ export interface RoleInfo {
   description: string;
 }
 
+export interface ModulePermission {
+  view: boolean;
+  manage: boolean;
+}
+
+export interface MyPermissions {
+  modules: Record<string, ModulePermission>;
+  roles: string[];
+}
+
 export interface ActivityLogEntry {
   id: string;
   action: string;

@@ -173,6 +173,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
     public DbSet<DashboardSnapshot> DashboardSnapshots => Set<DashboardSnapshot>();
     public DbSet<License> Licenses => Set<License>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<RoleLabel> RoleLabels => Set<RoleLabel>();
     public DbSet<AssetEvidence> AssetEvidence => Set<AssetEvidence>();
     public DbSet<MaintenanceSchedule> MaintenanceSchedules => Set<MaintenanceSchedule>();
     public DbSet<PublicReportThrottle> PublicReportThrottles => Set<PublicReportThrottle>();
@@ -1082,6 +1083,15 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.RoleKey).HasMaxLength(60).IsRequired();
             entity.Property(x => x.PermissionKey).HasMaxLength(80).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.RoleKey, x.PermissionKey }).IsUnique();
+        });
+
+        modelBuilder.Entity<RoleLabel>(entity =>
+        {
+            entity.ToTable("role_labels");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RoleKey).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Label).HasMaxLength(80).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.RoleKey }).IsUnique();
         });
     }
 

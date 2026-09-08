@@ -23,6 +23,7 @@ public sealed class OnboardingService
     private readonly IJobProfileRepository _jobProfiles;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AssignmentService _assignmentService;
@@ -31,7 +32,7 @@ public sealed class OnboardingService
     private readonly LocationReferenceResolver _locationResolver;
     private readonly ISubscriptionRepository _subscriptions;
 
-    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
+    public OnboardingService(ITeamRepository teams, IPersonRepository people, IAssetCategoryRepository categories, IAssetRepository assets, IProcedureRepository procedures, IAssignmentRepository assignments, IJobProfileRepository jobProfiles, IActivityLogRepository activity, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork, AssignmentService assignmentService, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
     {
         _teams = teams;
         _people = people;
@@ -42,6 +43,7 @@ public sealed class OnboardingService
         _jobProfiles = jobProfiles;
         _activity = activity;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _assignmentService = assignmentService;
@@ -52,7 +54,7 @@ public sealed class OnboardingService
 
     public async Task<Result<OnboardingStatusResponse>> GetStatusAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Onboarding, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<OnboardingStatusResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -79,7 +81,7 @@ public sealed class OnboardingService
 
     public async Task<Result<StarterPackageResponse>> CreateStarterPackageAsync(CreateStarterPackageRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Onboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<StarterPackageResponse>.Failure(access.Error!);
 
         try
@@ -197,7 +199,7 @@ public sealed class OnboardingService
     // exact same tamper-evident issuing path.
     public async Task<Result<EmployeePackageResponse>> CreateEmployeePackageAsync(CreateEmployeePackageRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Onboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<EmployeePackageResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -263,7 +265,7 @@ public sealed class OnboardingService
         IReadOnlyList<EvidenceFileInput> files,
         CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Onboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<EmployeePackageResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -326,15 +328,19 @@ public sealed class OnboardingService
     // per-item completion status - this is what makes onboarding a tracked flow instead of a one-off email.
     public async Task<Result<OnboardingChecklistResponse>> GetChecklistAsync(Guid personId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Manager, TenebitRoles.Employee);
-        if (access.IsFailure) return Result<OnboardingChecklistResponse>.Failure(access.Error!);
+        var hasView = await _permissions.HasAsync(PermissionModules.Onboarding, PermissionActions.View, cancellationToken);
+        if (!hasView && !_currentUser.HasAnyRole(TenebitRoles.Manager, TenebitRoles.Employee))
+        {
+            SecurityTelemetry.AuthorizationDenied();
+            return Result<OnboardingChecklistResponse>.Failure(Error.Forbidden());
+        }
 
         var organizationId = _currentUser.OrganizationId;
 
         // Employee only sees its own checklist; Manager only its managed team's - the module gate above
-        // only proves the actor holds one of these roles, not that personId belongs to their scope
-        // (audyt AUD3-006: Employee/Manager mogli podać dowolny personId w tej samej organizacji).
-        if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator))
+        // only proves the actor holds onboarding.view or one of these roles, not that personId belongs
+        // to their scope (audyt AUD3-006: Employee/Manager mogli podać dowolny personId w tej samej organizacji).
+        if (!hasView)
         {
             if (_currentUser.HasAnyRole(TenebitRoles.Manager))
             {

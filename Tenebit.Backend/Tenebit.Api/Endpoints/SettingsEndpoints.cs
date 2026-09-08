@@ -14,6 +14,7 @@ using Tenebit.Application.Assignments;
 using Tenebit.Application.Audit;
 using Tenebit.Domain.Alerts;
 using Tenebit.Application.Audits;
+using Tenebit.Application.Common;
 using Tenebit.Domain.Audits;
 using Tenebit.Application.Dashboard;
 using Tenebit.Application.Evidence;
@@ -42,7 +43,7 @@ public static class SettingsEndpoints
     public static RouteGroupBuilder MapSettingsEndpoints(this RouteGroupBuilder api)
     {
         static async Task<IResult> ListAssetStatuses(SettingsService service, CancellationToken cancellationToken) =>
-            Results.Ok(await service.ListAssetStatusesAsync(cancellationToken));
+            (await service.ListAssetStatusesAsync(cancellationToken)).ToHttpResult();
 
         static async Task<IResult> SaveAssetStatuses(IReadOnlyList<SaveAssetStatusSettingRequest> request, SettingsService service, CancellationToken cancellationToken) =>
             (await service.SaveAssetStatusesAsync(request, cancellationToken)).ToHttpResult();
@@ -171,12 +172,17 @@ public static class SettingsEndpoints
                 (await service.UpdateAsync(id, request, cancellationToken)).ToHttpResult())
             .WithTags("Users");
 
-        static IResult ListRoles(UserAccessService service) => Results.Ok(service.Roles());
+        static async Task<IResult> ListRoles(UserAccessService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.RolesAsync(cancellationToken));
 
         api.MapGet("/roles", ListRoles)
             .WithTags("Users");
 
         api.MapGet("/settings/roles", ListRoles)
+            .WithTags("Users");
+
+        api.MapPut("/roles/{roleKey}/label", async (string roleKey, SetRoleLabelRequest request, UserAccessService service, CancellationToken cancellationToken) =>
+                (await service.SetRoleLabelAsync(roleKey, request, cancellationToken)).ToNoContentResult())
             .WithTags("Users");
 
         api.MapGet("/role-permissions", async (RolePermissionService service, CancellationToken cancellationToken) =>
@@ -185,6 +191,13 @@ public static class SettingsEndpoints
 
         api.MapPut("/role-permissions", async (SetRolePermissionRequest request, RolePermissionService service, CancellationToken cancellationToken) =>
                 (await service.SetAsync(request, cancellationToken)).ToNoContentResult())
+            .WithTags("Users");
+
+        api.MapGet("/my-permissions", async (IPermissionService permissions, ICurrentUser currentUser, CancellationToken cancellationToken) =>
+            {
+                var modules = await permissions.GetEffectivePermissionsAsync(cancellationToken);
+                return Results.Ok(new MyPermissionsResponse(modules, currentUser.Roles.ToArray()));
+            })
             .WithTags("Users");
 
         return api;

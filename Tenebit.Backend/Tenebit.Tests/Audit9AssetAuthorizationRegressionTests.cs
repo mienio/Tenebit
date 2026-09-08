@@ -42,7 +42,7 @@ public sealed class Audit9AssetAuthorizationRegressionTests
         foreign.AssignTo(foreignPerson.Id);
         assets.Add(foreign);
 
-        var authorization = new AssetAuthorizationService(assets, new ManagerScopeService(people, teams), user);
+        var authorization = new AssetAuthorizationService(assets, new ManagerScopeService(people, teams), user, TestAuthorization.Permissions(user));
         return new Fixture(user, assets, people, teams, authorization, allowed, foreign);
     }
 
@@ -55,7 +55,7 @@ public sealed class Audit9AssetAuthorizationRegressionTests
         var item = new AssetEvidence(f.User.OrganizationId, f.ForeignAsset.Id, null, EvidencePhase.Issue,
             "photo.jpg", "image/jpeg", [1], new string('a', 64), null, "test", EvidenceUploadSource.AuthenticatedUser, DateTimeOffset.UtcNow);
         evidence.Add(item);
-        var service = new AssetEvidenceService(evidence, f.Assets, assignments, new FakeImageSanitizer(), new InMemoryActivityLogRepository(), f.User, new FakeClock(), new FakeUnitOfWork(), f.Authorization);
+        var service = new AssetEvidenceService(evidence, f.Assets, assignments, new FakeImageSanitizer(), new InMemoryActivityLogRepository(), f.User, new FakeClock(), new FakeUnitOfWork(), f.Authorization, TestAuthorization.Permissions(f.User));
 
         var list = await service.ListByAssetAsync(f.ForeignAsset.Id, CancellationToken.None);
         var single = await service.GetAsync(item.Id, CancellationToken.None);
@@ -72,7 +72,7 @@ public sealed class Audit9AssetAuthorizationRegressionTests
         var f = CreateManagerFixture();
         var inspections = new InMemoryAssetInspectionRepository();
         inspections.Add(new AssetInspection(f.User.OrganizationId, f.ForeignAsset.Id, null, DateTimeOffset.UtcNow, "test"));
-        var service = new AssetInspectionService(inspections, f.Assets, new InMemoryActivityLogRepository(), f.User, new FakeClock(), new FakeUnitOfWork(), f.Authorization);
+        var service = new AssetInspectionService(inspections, f.Assets, new InMemoryActivityLogRepository(), f.User, new FakeClock(), new FakeUnitOfWork(), f.Authorization, TestAuthorization.Permissions(f.User));
 
         var result = await service.GetPendingForAssetAsync(f.ForeignAsset.Id, CancellationToken.None);
 
@@ -91,7 +91,7 @@ public sealed class Audit9AssetAuthorizationRegressionTests
         tickets.Add(own);
         tickets.Add(foreign);
         tickets.AllowedScopedAssetIds.Add(f.AllowedAsset.Id);
-        var service = new ServiceTicketService(tickets, f.Assets, inspections, new InMemoryActivityLogRepository(), f.User, new FakeClock(), new FakeUnitOfWork(), f.Authorization);
+        var service = new ServiceTicketService(tickets, f.Assets, inspections, new InMemoryActivityLogRepository(), f.User, new FakeClock(), new FakeUnitOfWork(), f.Authorization, TestAuthorization.Permissions(f.User));
 
         var byForeignAsset = await service.ListByAssetAsync(f.ForeignAsset.Id, CancellationToken.None);
         var foreignById = await service.GetAsync(foreign.Id, CancellationToken.None);
@@ -118,7 +118,7 @@ public sealed class Audit9AssetAuthorizationRegressionTests
         inspections.Add(inspectionB);
         var tickets = new InMemoryServiceTicketRepository();
         var auth = TestAuthorization.Asset(assets, user);
-        var service = new ServiceTicketService(tickets, assets, inspections, new InMemoryActivityLogRepository(), user, new FakeClock(), new FakeUnitOfWork(), auth);
+        var service = new ServiceTicketService(tickets, assets, inspections, new InMemoryActivityLogRepository(), user, new FakeClock(), new FakeUnitOfWork(), auth, TestAuthorization.Permissions(user));
 
         var result = await service.OpenAsync(new OpenServiceTicketRequest(assetA.Id, inspectionB.Id, "Vendor", "desc", null, null, null), CancellationToken.None);
 

@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiRequest, refreshAccessToken, setAccessTokenProvider } from '../api/apiClient';
+import { api } from '../api/endpoints';
+import type { ModulePermission } from '../types/domain';
 import { clearStoredToken, decodeToken, getStoredToken, isTokenExpired, setStoredToken } from './authConfig';
 
 type AuthUser = {
@@ -28,6 +30,9 @@ type AuthContextValue = {
   userEmail: string;
   organizationName: string;
   roles: string[];
+  permissions: Record<string, ModulePermission>;
+  permissionsLoading: boolean;
+  can: (module: string, action?: 'view' | 'manage') => boolean;
   isEmailVerified: boolean;
   isTwoFactorEnabled: boolean;
   avatarVersion: number;
@@ -75,6 +80,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(initialUser === null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const bootstrapRefresh = useRef<Promise<void> | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, ModulePermission>>({});
+  const [permissionsLoading, setPermissionsLoading] = useState(initialUser !== null);
+
+  useEffect(() => {
+    if (!user) {
+      setPermissions({});
+      setPermissionsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPermissionsLoading(true);
+    api.myPermissions()
+      .then(response => {
+        if (!cancelled) setPermissions(response.modules);
+      })
+      .catch(() => {
+        if (!cancelled) setPermissions({});
+      })
+      .finally(() => {
+        if (!cancelled) setPermissionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const onSessionExpired = () => {
@@ -159,6 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userEmail: user?.email ?? '',
     organizationName: user?.organizationName ?? '',
     roles: user?.roles ?? [],
+    permissions,
+    permissionsLoading,
+    can: (module: string, action: 'view' | 'manage' = 'view') => permissions[module]?.[action] ?? false,
     isEmailVerified: user?.isEmailVerified ?? true,
     isTwoFactorEnabled: user?.isTwoFactorEnabled ?? false,
     avatarVersion: user?.avatarVersion ?? 0,
@@ -216,7 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     completeExternalLogin,
     logout
-  }), [applySession, completeExternalLogin, isLoading, logout, sessionExpired, user]);
+  }), [applySession, completeExternalLogin, isLoading, logout, permissions, permissionsLoading, sessionExpired, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

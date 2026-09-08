@@ -11,5 +11,8 @@ internal static class TestAuthorization
         ICurrentUser currentUser,
         InMemoryPersonRepository? people = null,
         InMemoryTeamRepository? teams = null) =>
-        new(assets, new ManagerScopeService(people ?? new InMemoryPersonRepository(), teams ?? new InMemoryTeamRepository()), currentUser);
+        new(assets, new ManagerScopeService(people ?? new InMemoryPersonRepository(), teams ?? new InMemoryTeamRepository()), currentUser, Permissions(currentUser));
+
+    public static IPermissionService Permissions(ICurrentUser currentUser, IRolePermissionRepository? overrides = null) =>
+        new PermissionService(currentUser, overrides ?? new InMemoryRolePermissionRepository());
 }

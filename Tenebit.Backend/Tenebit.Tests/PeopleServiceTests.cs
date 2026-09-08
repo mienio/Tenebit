@@ -17,7 +17,7 @@ public class PeopleServiceTests
         var assets = new InMemoryAssetRepository();
         var activity = new InMemoryActivityLogRepository();
         var subscriptions = new InMemorySubscriptionRepository();
-        var service = new PeopleService(people, teams, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()), subscriptions);
+        var service = new PeopleService(people, teams, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()), subscriptions, TestAuthorization.Permissions(currentUser));
         return (service, currentUser, people, assets, activity, subscriptions);
     }
 
@@ -26,7 +26,7 @@ public class PeopleServiceTests
         var currentUser = new FakeCurrentUser();
         var people = new InMemoryPersonRepository();
         var teams = new InMemoryTeamRepository();
-        var service = new PeopleService(people, teams, new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()), new InMemorySubscriptionRepository());
+        var service = new PeopleService(people, teams, new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), new ManagerScopeService(people, teams), new Tenebit.Application.Assets.LocationReferenceResolver(new InMemoryLocationRepository()), new InMemorySubscriptionRepository(), TestAuthorization.Permissions(currentUser));
         return (service, currentUser, people, teams);
     }
 

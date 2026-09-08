@@ -21,6 +21,7 @@ public class JobProfileServiceTests
             new InMemorySubscriptionRepository(),
             new InMemoryActivityLogRepository(),
             currentUser,
+            TestAuthorization.Permissions(currentUser),
             new FakeClock(),
             new FakeUnitOfWork());
         return (service, currentUser, people, profiles);

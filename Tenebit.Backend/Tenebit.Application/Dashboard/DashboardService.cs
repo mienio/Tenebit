@@ -13,16 +13,18 @@ public sealed class DashboardService
     private readonly IDashboardLayoutRepository _layouts;
     private readonly IDashboardSnapshotRepository _snapshots;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public DashboardService(IDashboardReadRepository dashboardRead, IActivityLogRepository activity, IDashboardLayoutRepository layouts, IDashboardSnapshotRepository snapshots, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public DashboardService(IDashboardReadRepository dashboardRead, IActivityLogRepository activity, IDashboardLayoutRepository layouts, IDashboardSnapshotRepository snapshots, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork)
     {
         _dashboardRead = dashboardRead;
         _activity = activity;
         _layouts = layouts;
         _snapshots = snapshots;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
     }
@@ -54,7 +56,7 @@ public sealed class DashboardService
 
     public async Task<Result<DashboardSummaryResponse>> GetSummaryAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.DashboardViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Dashboard, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<DashboardSummaryResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -89,7 +91,7 @@ public sealed class DashboardService
 
     public async Task<Result<DashboardComparisonResponse>> GetComparisonAsync(int daysAgo, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.DashboardViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Dashboard, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<DashboardComparisonResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

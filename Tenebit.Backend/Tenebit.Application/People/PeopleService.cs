@@ -20,12 +20,13 @@ public sealed class PeopleService
     private readonly ManagerScopeService _managerScope;
     private readonly LocationReferenceResolver _locationResolver;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly IPermissionService _permissions;
 
     // Roles in TenebitRoles.PeopleViewers that see the whole organization; Manager alone is scoped
     // to its own team by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator, TenebitRoles.Auditor];
 
-    public PeopleService(IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions)
+    public PeopleService(IPersonRepository people, ITeamRepository teams, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ManagerScopeService managerScope, LocationReferenceResolver locationResolver, ISubscriptionRepository subscriptions, IPermissionService permissions)
     {
         _people = people;
         _teams = teams;
@@ -36,11 +37,12 @@ public sealed class PeopleService
         _managerScope = managerScope;
         _locationResolver = locationResolver;
         _subscriptions = subscriptions;
+        _permissions = permissions;
     }
 
     public async Task<Result<IReadOnlyList<PersonResponse>>> ListAsync(string? search, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<PersonResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -54,7 +56,7 @@ public sealed class PeopleService
 
     public async Task<Result<PagedResult<PersonResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<PersonResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -68,7 +70,7 @@ public sealed class PeopleService
 
     public async Task<Result<PersonResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.PeopleViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PersonResponse>.Failure(access.Error!);
 
         var person = await _people.GetAsync(_currentUser.OrganizationId, id, cancellationToken);
@@ -86,7 +88,7 @@ public sealed class PeopleService
 
     public async Task<Result<PersonResponse>> CreateAsync(CreatePersonRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<PersonResponse>.Failure(access.Error!);
 
         try
@@ -147,7 +149,7 @@ public sealed class PeopleService
 
     public async Task<Result<PersonResponse>> UpdateAsync(Guid id, UpdatePersonRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<PersonResponse>.Failure(access.Error!);
 
         try
@@ -191,7 +193,7 @@ public sealed class PeopleService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

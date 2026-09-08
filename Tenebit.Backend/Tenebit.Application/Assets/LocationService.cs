@@ -9,7 +9,6 @@ namespace Tenebit.Application.Assets;
 
 public sealed class LocationService
 {
-    private static readonly string[] LocationManagers = [TenebitRoles.Owner, TenebitRoles.Admin];
     private static readonly string[] OrgWideInventoryRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Auditor];
 
     private readonly ILocationRepository _locations;
@@ -20,8 +19,9 @@ public sealed class LocationService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ManagerScopeService _managerScope;
     private readonly ISubscriptionRepository _subscriptions;
+    private readonly IPermissionService _permissions;
 
-    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, IAssetCategoryRepository categories, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions)
+    public LocationService(ILocationRepository locations, IAssetRepository assets, IPersonRepository people, IAssetCategoryRepository categories, ICurrentUser currentUser, IUnitOfWork unitOfWork, ManagerScopeService managerScope, ISubscriptionRepository subscriptions, IPermissionService permissions)
     {
         _locations = locations;
         _assets = assets;
@@ -31,11 +31,12 @@ public sealed class LocationService
         _unitOfWork = unitOfWork;
         _managerScope = managerScope;
         _subscriptions = subscriptions;
+        _permissions = permissions;
     }
 
     public async Task<Result<IReadOnlyList<LocationResponse>>> ListAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.LocationInventoryViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Locations, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<LocationResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -57,7 +58,7 @@ public sealed class LocationService
 
     public async Task<Result<LocationResponse>> CreateAsync(CreateLocationRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, LocationManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Locations, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<LocationResponse>.Failure(access.Error!);
 
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -122,7 +123,7 @@ public sealed class LocationService
 
     public async Task<Result<LocationResponse>> UpdateAsync(Guid id, UpdateLocationRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, LocationManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Locations, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<LocationResponse>.Failure(access.Error!);
 
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -189,7 +190,7 @@ public sealed class LocationService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, LocationManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Locations, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
 
         var organizationId = _currentUser.OrganizationId;
@@ -219,7 +220,7 @@ public sealed class LocationService
 
     public async Task<Result<LocationInventoryResponse>> GetInventoryAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.LocationInventoryViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Locations, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<LocationInventoryResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

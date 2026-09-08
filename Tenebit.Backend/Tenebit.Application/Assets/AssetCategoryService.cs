@@ -20,8 +20,9 @@ public sealed class AssetCategoryService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPermissionService _permissions;
 
-    public AssetCategoryService(IAssetCategoryRepository categories, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public AssetCategoryService(IAssetCategoryRepository categories, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IPermissionService permissions)
     {
         _categories = categories;
         _subscriptions = subscriptions;
@@ -29,6 +30,7 @@ public sealed class AssetCategoryService
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _permissions = permissions;
     }
 
     public async Task<IReadOnlyList<AssetCategoryResponse>> ListAsync(CancellationToken cancellationToken)
@@ -39,7 +41,7 @@ public sealed class AssetCategoryService
 
     public async Task<Result<AssetCategoryResponse>> CreateAsync(CreateAssetCategoryRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetCategoryResponse>.Failure(access.Error!);
         try
         {
@@ -87,7 +89,7 @@ public sealed class AssetCategoryService
 
     public async Task<Result<AssetCategoryResponse>> UpdateAsync(Guid id, UpdateAssetCategoryRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetCategoryResponse>.Failure(access.Error!);
         try
         {
@@ -106,7 +108,7 @@ public sealed class AssetCategoryService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
         var organizationId = _currentUser.OrganizationId;
         var category = await _categories.GetAsync(organizationId, id, cancellationToken);
@@ -120,7 +122,7 @@ public sealed class AssetCategoryService
 
     public async Task<Result<AssetCategoryResponse>> UpdateReturnPolicyAsync(Guid id, UpdateAssetCategoryReturnPolicyRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetCategoryResponse>.Failure(access.Error!);
         try
         {
@@ -137,7 +139,7 @@ public sealed class AssetCategoryService
 
     public async Task<Result<IReadOnlyList<AssetFieldDefinitionResponse>>> SaveFieldDefinitionsAsync(Guid categoryId, IReadOnlyList<SaveAssetFieldDefinitionRequest> request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.CustomFields, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<AssetFieldDefinitionResponse>>.Failure(access.Error!);
 
         try

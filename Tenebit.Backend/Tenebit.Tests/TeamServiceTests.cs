@@ -12,7 +12,7 @@ public class TeamServiceTests
         var currentUser = new FakeCurrentUser();
         var teams = new InMemoryTeamRepository();
         var people = new InMemoryPersonRepository();
-        var service = new TeamService(teams, people, new InMemorySubscriptionRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork());
+        var service = new TeamService(teams, people, new InMemorySubscriptionRepository(), new InMemoryActivityLogRepository(), currentUser, new FakeClock(), new FakeUnitOfWork(), TestAuthorization.Permissions(currentUser));
         return (service, currentUser, teams, people);
     }
 

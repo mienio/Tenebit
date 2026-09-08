@@ -24,6 +24,7 @@ public sealed class ProcedureServiceAuthorizationTests
             people,
             new InMemoryActivityLogRepository(),
             user,
+            TestAuthorization.Permissions(user),
             new FakeClock(),
             new FakeUnitOfWork(),
             new ManagerScopeService(people, teams),

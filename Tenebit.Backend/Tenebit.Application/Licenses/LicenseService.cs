@@ -12,17 +12,19 @@ public sealed class LicenseService
     private readonly ILicenseRepository _licenses;
     private readonly IPersonRepository _people;
     private readonly IRolePermissionRepository _rolePermissions;
+    private readonly IPermissionService _permissions;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISubscriptionRepository _subscriptions;
 
-    public LicenseService(ILicenseRepository licenses, IPersonRepository people, IRolePermissionRepository rolePermissions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ISubscriptionRepository subscriptions)
+    public LicenseService(ILicenseRepository licenses, IPersonRepository people, IRolePermissionRepository rolePermissions, IPermissionService permissions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, ISubscriptionRepository subscriptions)
     {
         _licenses = licenses;
         _people = people;
         _rolePermissions = rolePermissions;
+        _permissions = permissions;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
@@ -32,7 +34,7 @@ public sealed class LicenseService
 
     public async Task<Result<IReadOnlyList<LicenseResponse>>> ListAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.LicenseViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Licenses, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<LicenseResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -44,7 +46,7 @@ public sealed class LicenseService
 
     public async Task<Result<LicenseResponse>> CreateAsync(CreateLicenseRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.LicenseManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.Licenses, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<LicenseResponse>.Failure(access.Error!);
         try
         {
@@ -89,7 +91,7 @@ public sealed class LicenseService
 
     public async Task<Result<LicenseResponse>> UpdateAsync(Guid id, UpdateLicenseRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.LicenseManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.Licenses, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<LicenseResponse>.Failure(access.Error!);
         try
         {
@@ -107,7 +109,7 @@ public sealed class LicenseService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.LicenseManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.Licenses, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
         var organizationId = _currentUser.OrganizationId;
         var license = await _licenses.GetAsync(organizationId, id, cancellationToken);
@@ -120,7 +122,7 @@ public sealed class LicenseService
 
     public async Task<Result<LicenseResponse>> AssignSeatAsync(Guid id, AssignLicenseSeatRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.LicenseManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.Licenses, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<LicenseResponse>.Failure(access.Error!);
         try
         {
@@ -140,7 +142,7 @@ public sealed class LicenseService
 
     public async Task<Result<LicenseResponse>> UnassignSeatAsync(Guid id, Guid personId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.LicenseManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.Licenses, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<LicenseResponse>.Failure(access.Error!);
         var organizationId = _currentUser.OrganizationId;
         var license = await _licenses.GetAsync(organizationId, id, cancellationToken);

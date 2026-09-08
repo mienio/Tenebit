@@ -49,7 +49,8 @@ public class AssetBatchCreateTests
             NullLogger<AssetService>.Instance,
             new FakeFieldEncryptor(),
             new ManagerScopeService(people, teams),
-            new LocationReferenceResolver(new InMemoryLocationRepository()));
+            new LocationReferenceResolver(new InMemoryLocationRepository()),
+            TestAuthorization.Permissions(currentUser));
 
         return (service, currentUser, assets, categories, subscriptions);
     }

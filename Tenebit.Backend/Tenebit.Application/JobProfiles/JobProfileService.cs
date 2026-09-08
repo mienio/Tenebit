@@ -16,10 +16,11 @@ public sealed class JobProfileService
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public JobProfileService(IJobProfileRepository profiles, IAssetCategoryRepository categories, IProcedureRepository procedures, IPersonRepository people, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public JobProfileService(IJobProfileRepository profiles, IAssetCategoryRepository categories, IProcedureRepository procedures, IPersonRepository people, ISubscriptionRepository subscriptions, IActivityLogRepository activity, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork)
     {
         _profiles = profiles;
         _categories = categories;
@@ -28,6 +29,7 @@ public sealed class JobProfileService
         _subscriptions = subscriptions;
         _activity = activity;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
     }
@@ -40,7 +42,7 @@ public sealed class JobProfileService
 
     public async Task<Result<JobProfileResponse>> CreateAsync(SaveJobProfileRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.JobProfiles, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<JobProfileResponse>.Failure(access.Error!);
         try
         {
@@ -90,7 +92,7 @@ public sealed class JobProfileService
 
     public async Task<Result<JobProfileResponse>> UpdateAsync(Guid id, SaveJobProfileRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.ProcedureManager);
+        var access = await _permissions.EnsureAsync(PermissionModules.JobProfiles, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<JobProfileResponse>.Failure(access.Error!);
         try
         {
@@ -112,7 +114,7 @@ public sealed class JobProfileService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.JobProfiles, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return access;
         var organizationId = _currentUser.OrganizationId;
         var profile = await _profiles.GetAsync(organizationId, id, cancellationToken);

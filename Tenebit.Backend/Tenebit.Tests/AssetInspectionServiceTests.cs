@@ -19,7 +19,8 @@ public class AssetInspectionServiceTests
             currentUser,
             new FakeClock(),
             new FakeUnitOfWork(),
-            TestAuthorization.Asset(assets, currentUser));
+            TestAuthorization.Asset(assets, currentUser),
+            TestAuthorization.Permissions(currentUser));
 
         return (service, currentUser, inspections, assets);
     }

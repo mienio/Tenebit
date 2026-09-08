@@ -1112,7 +1112,10 @@ button.authIcon:hover { filter: brightness(0.94); }
 .roleRail button:hover { background: rgba(255,255,255,.08); color: #fff; }
 .roleRail button.roleRail__item--active { background: var(--surface); color: var(--text); }
 .permissionPanel { padding: 24px; background: var(--surface); }
-.permissionPanel__heading { margin: 0 0 4px; }
+.permissionPanel__heading { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.permissionPanel__heading .iconButton { color: var(--muted); }
+.roleLabelEdit { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; max-width: 320px; }
+.roleLabelEdit .input { flex: 1; }
 .permissionPanel__hint { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
 .permissionRow { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .permissionRow:last-child { border-bottom: none; }

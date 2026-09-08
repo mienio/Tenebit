@@ -13,6 +13,7 @@ public sealed class AlertSettingsService
     private readonly IEmailSender _emailSender;
     private readonly IClock _clock;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IUnitOfWork _unitOfWork;
 
     public AlertSettingsService(
@@ -22,6 +23,7 @@ public sealed class AlertSettingsService
         IEmailSender emailSender,
         IClock clock,
         ICurrentUser currentUser,
+        IPermissionService permissions,
         IUnitOfWork unitOfWork)
     {
         _rules = rules;
@@ -30,12 +32,13 @@ public sealed class AlertSettingsService
         _emailSender = emailSender;
         _clock = clock;
         _currentUser = currentUser;
+        _permissions = permissions;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<Result<IReadOnlyList<AlertRuleResponse>>> ListAlertRulesAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<AlertRuleResponse>>.Failure(access.Error!);
 
         var rules = await _rules.ListByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
@@ -54,7 +57,7 @@ public sealed class AlertSettingsService
 
     public async Task<Result<AlertRuleResponse>> GetAlertRuleAsync(AlertType type, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AlertRuleResponse>.Failure(access.Error!);
 
         var rule = await _rules.GetAsync(_currentUser.OrganizationId, type, cancellationToken);
@@ -68,7 +71,7 @@ public sealed class AlertSettingsService
 
     public async Task<Result<AlertRuleResponse>> UpsertAlertRuleAsync(AlertType type, SaveAlertRuleRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AlertRuleResponse>.Failure(access.Error!);
 
         if (request.ThresholdDays.Count > AlertRule.MaxThresholdCount)
@@ -116,7 +119,7 @@ public sealed class AlertSettingsService
 
     public async Task<Result<AlertDigestSettingsResponse>> GetAlertDigestAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AlertDigestSettingsResponse>.Failure(access.Error!);
 
         var settings = await _digestSettings.GetAsync(_currentUser.OrganizationId, cancellationToken);
@@ -127,7 +130,7 @@ public sealed class AlertSettingsService
 
     public async Task<Result<AlertDigestSettingsResponse>> UpsertAlertDigestAsync(SaveAlertDigestSettingsRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AlertDigestSettingsResponse>.Failure(access.Error!);
 
         if (request.Frequency == AlertDigestFrequency.Weekly && request.DayOfWeek is null)
@@ -166,7 +169,7 @@ public sealed class AlertSettingsService
 
     public async Task<Result> SendTestAlertAsync(AlertTestRequest? request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result.Failure(access.Error!);
 
         if (string.IsNullOrWhiteSpace(_currentUser.Email))
@@ -182,7 +185,7 @@ public sealed class AlertSettingsService
 
     public async Task<Result<PagedResult<SentAlertHistoryItemResponse>>> ListSentAlertHistoryAsync(int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Auditor);
+        var access = await _permissions.EnsureAsync(PermissionModules.Alerts, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<SentAlertHistoryItemResponse>>.Failure(access.Error!);
 
         var (items, total) = await _sentAlerts.ListPagedAsync(_currentUser.OrganizationId, page, pageSize, cancellationToken);

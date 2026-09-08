@@ -14,7 +14,7 @@ public class SettingsServiceEvidencePrivacyTests
         var organizations = new InMemoryOrganizationRepository();
         var activity = new InMemoryActivityLogRepository();
         var currentUser = new FakeCurrentUser();
-        var service = new SettingsService(statusSettings, organizations, activity, currentUser, new FakeClock(), new FakeUnitOfWork(), new FakeQrCodeGenerator(), new FakeImageSanitizer(), new FakeAppLinkBuilder());
+        var service = new SettingsService(statusSettings, organizations, activity, currentUser, TestAuthorization.Permissions(currentUser), new FakeClock(), new FakeUnitOfWork(), new FakeQrCodeGenerator(), new FakeImageSanitizer(), new FakeAppLinkBuilder());
         return (service, currentUser, organizations, activity);
     }
 

@@ -42,6 +42,7 @@ public sealed class UserAccessServiceTests
             users,
             people,
             organizations,
+            new InMemoryRoleLabelRepository(),
             new InMemoryActivityLogRepository(),
             new InMemoryPasswordResetTokenRepository(),
             refreshTokens,
@@ -49,6 +50,7 @@ public sealed class UserAccessServiceTests
             new FakeEmailSender(),
             new FakeAppLinkBuilder(),
             currentUser,
+            TestAuthorization.Permissions(currentUser),
             clock,
             new FakeUnitOfWork(),
             NullLogger<UserAccessService>.Instance);

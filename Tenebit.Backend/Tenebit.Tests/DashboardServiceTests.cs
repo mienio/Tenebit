@@ -19,6 +19,7 @@ public class DashboardServiceTests
             new InMemoryDashboardLayoutRepository(),
             snapshots,
             currentUser,
+            TestAuthorization.Permissions(currentUser),
             clock,
             new FakeUnitOfWork());
         return (service, assets, snapshots, clock, currentUser);

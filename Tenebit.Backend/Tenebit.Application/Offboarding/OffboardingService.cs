@@ -47,6 +47,7 @@ public sealed class OffboardingService
     private readonly IAssetAuditCampaignRepository _auditCampaigns;
     private readonly IAssetAuditItemRepository _auditItems;
     private readonly OffboardingResponseBuilder _responseBuilder;
+    private readonly IPermissionService _permissions;
 
     public OffboardingService(IOffboardingCaseRepository cases, IOffboardingItemRepository items, IPersonRepository people,
         IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, ILicenseRepository licenses,
@@ -55,7 +56,7 @@ public sealed class OffboardingService
         IAssetInspectionRepository inspections, IOrganizationRepository organizations, IEmailSender emailSender, IAppLinkBuilder linkBuilder,
         AssetEvidenceService evidenceService, IEquipmentReservationRepository reservations,
         IAssetAuditCampaignRepository auditCampaigns, IAssetAuditItemRepository auditItems,
-        OffboardingResponseBuilder responseBuilder, IEmailOutboxWriter? emailOutbox = null)
+        OffboardingResponseBuilder responseBuilder, IPermissionService permissions, IEmailOutboxWriter? emailOutbox = null)
     {
         _cases = cases;
         _items = items;
@@ -81,12 +82,13 @@ public sealed class OffboardingService
         _auditCampaigns = auditCampaigns;
         _auditItems = auditItems;
         _responseBuilder = responseBuilder;
+        _permissions = permissions;
     }
 
 
     public async Task<Result<PagedResult<OffboardingCaseResponse>>> ListPagedAsync(OffboardingCaseStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<OffboardingCaseResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -98,7 +100,7 @@ public sealed class OffboardingService
 
     public async Task<Result<OffboardingCaseDetailsResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         return await _responseBuilder.BuildDetailsAsync(_currentUser.OrganizationId, id, cancellationToken);
@@ -107,7 +109,7 @@ public sealed class OffboardingService
     /// <summary>Podsumowanie przed uruchomieniem sprawy (spec 4.5 krok 2) - wyłącznie odczyt, bez efektów ubocznych.</summary>
     public async Task<Result<OffboardingPreviewResponse>> GetPreviewAsync(Guid personId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<OffboardingPreviewResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -152,7 +154,7 @@ public sealed class OffboardingService
     /// z przyszłym końcem (te same kryteria, których używa StartAsync przy anulowaniu - spec 4.5/8.12).</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> CreateAsync(CreateOffboardingCaseRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -194,7 +196,7 @@ public sealed class OffboardingService
 
     public async Task<Result<OffboardingCaseDetailsResponse>> UpdateAsync(Guid id, UpdateOffboardingCaseRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -221,7 +223,7 @@ public sealed class OffboardingService
 
     public async Task<Result<OffboardingCaseDetailsResponse>> StartAsync(Guid id, StartOffboardingCaseRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -345,7 +347,7 @@ public sealed class OffboardingService
     /// ponowienie po naprawieniu przyczyny wcześniejszego błędu zwolnienia licencji.</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> ExecuteScheduledActionsAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -365,7 +367,7 @@ public sealed class OffboardingService
     /// aktywa - pełny przepływ przekazania do zewnętrznego odbiorcy to osobny, przyszły temat (YAGNI na razie).</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> ConfirmItemReturnAsync(Guid id, Guid itemId, ConfirmOffboardingItemReturnRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -419,7 +421,7 @@ public sealed class OffboardingService
     /// (nie duplikuje logiki zmiany statusu aktywa), a następnie rozlicza pozycję offboardingu wg wyniku kontroli.</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> CompleteItemInspectionAsync(Guid id, Guid itemId, CompleteAssetInspectionRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -472,7 +474,7 @@ public sealed class OffboardingService
     /// administrator chce wyprzedzić automatykę AtEmploymentEnd.</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> ReleaseItemLicenseAsync(Guid id, Guid itemId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -514,7 +516,7 @@ public sealed class OffboardingService
     /// zatwierdza status aktywa; sama odpowiedź pracownika (spec 2.3) tego nie robi automatycznie.</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> ResolveItemAsync(Guid id, Guid itemId, ResolveOffboardingItemRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -566,7 +568,7 @@ public sealed class OffboardingService
 
     public async Task<Result<OffboardingCaseDetailsResponse>> WaiveItemAsync(Guid id, Guid itemId, WaiveOffboardingItemRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -596,7 +598,7 @@ public sealed class OffboardingService
 
     public async Task<Result<OffboardingCaseDetailsResponse>> CompleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -630,7 +632,7 @@ public sealed class OffboardingService
     /// dla tej samej osoby (spec 4.4). Rezerwacje nie są odtwarzane (moduł nie istnieje jeszcze).</summary>
     public async Task<Result<OffboardingCaseDetailsResponse>> CancelAsync(Guid id, CancelOffboardingCaseRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -670,7 +672,7 @@ public sealed class OffboardingService
 
     public async Task<Result<OffboardingCaseDetailsResponse>> RestoreEmploymentAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OffboardingCaseDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -737,7 +739,7 @@ public sealed class OffboardingService
 
     public async Task<Result<bool>> ResendLinkAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<bool>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -776,7 +778,7 @@ public sealed class OffboardingService
 
     public async Task<Result<string>> RegenerateLinkAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.OffboardingManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Offboarding, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

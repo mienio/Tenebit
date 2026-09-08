@@ -44,6 +44,7 @@ public sealed class MaintenanceService
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPermissionService _permissions;
 
     public MaintenanceService(
         IMaintenanceScheduleRepository schedules,
@@ -51,19 +52,21 @@ public sealed class MaintenanceService
         IActivityLogRepository activity,
         ICurrentUser currentUser,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IPermissionService permissions)
     {
         _schedules = schedules;
         _assets = assets;
         _activity = activity;
         _currentUser = currentUser;
         _clock = clock;
+        _permissions = permissions;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<Result<IReadOnlyList<MaintenanceScheduleResponse>>> ListAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<MaintenanceScheduleResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -74,7 +77,7 @@ public sealed class MaintenanceService
     /// <summary>Everything due within <paramref name="withinDays"/>, plus anything already overdue.</summary>
     public async Task<Result<IReadOnlyList<MaintenanceScheduleResponse>>> ListDueAsync(int withinDays, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<MaintenanceScheduleResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -85,7 +88,7 @@ public sealed class MaintenanceService
 
     public async Task<Result<MaintenanceScheduleResponse>> CreateAsync(SaveMaintenanceScheduleRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<MaintenanceScheduleResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -108,7 +111,7 @@ public sealed class MaintenanceService
 
     public async Task<Result<MaintenanceScheduleResponse>> CompleteAsync(Guid id, CompleteMaintenanceRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<MaintenanceScheduleResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -127,7 +130,7 @@ public sealed class MaintenanceService
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

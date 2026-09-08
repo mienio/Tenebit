@@ -13,6 +13,7 @@ public sealed class MyWorkspaceService
     private readonly IAssignmentRepository _assignments;
     private readonly IProcedureRepository _procedures;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly ManagerScopeService _managerScope;
 
     // Roles allowed to open GetForPersonAsync that see the whole organization; Manager alone is
@@ -20,7 +21,7 @@ public sealed class MyWorkspaceService
     // personId w organizacji, bez sprawdzenia zarządzanego zespołu).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Hr, TenebitRoles.AssetOperator];
 
-    public MyWorkspaceService(IPersonRepository people, IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, IProcedureRepository procedures, ICurrentUser currentUser, ManagerScopeService managerScope)
+    public MyWorkspaceService(IPersonRepository people, IAssetRepository assets, IAssetCategoryRepository categories, IAssignmentRepository assignments, IProcedureRepository procedures, ICurrentUser currentUser, IPermissionService permissions, ManagerScopeService managerScope)
     {
         _people = people;
         _assets = assets;
@@ -28,6 +29,7 @@ public sealed class MyWorkspaceService
         _assignments = assignments;
         _procedures = procedures;
         _currentUser = currentUser;
+        _permissions = permissions;
         _managerScope = managerScope;
     }
 
@@ -46,7 +48,7 @@ public sealed class MyWorkspaceService
 
     public async Task<Result<MyWorkspaceResponse>> GetForPersonAsync(Guid personId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.Manager, TenebitRoles.Hr, TenebitRoles.AssetOperator);
+        var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<MyWorkspaceResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

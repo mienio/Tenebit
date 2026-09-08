@@ -15,7 +15,7 @@ public class AlertSettingsServiceTests
         var emailSender = new FakeEmailSender();
         var user = new FakeCurrentUser();
         var clock = new FakeClock();
-        var service = new AlertSettingsService(rules, digest, sentAlerts, emailSender, clock, user, new FakeUnitOfWork());
+        var service = new AlertSettingsService(rules, digest, sentAlerts, emailSender, clock, user, TestAuthorization.Permissions(user), new FakeUnitOfWork());
         return (service, user, rules, digest, sentAlerts, emailSender);
     }
 

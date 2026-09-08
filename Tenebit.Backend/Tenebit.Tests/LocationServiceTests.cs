@@ -18,7 +18,7 @@ public sealed class LocationServiceTests
         var teams = new InMemoryTeamRepository();
         var categories = new InMemoryAssetCategoryRepository();
         var subscriptions = new InMemorySubscriptionRepository();
-        return (new LocationService(locations, assets, people, categories, user, new FakeUnitOfWork(), new ManagerScopeService(people, teams), subscriptions), user, locations, assets, people, categories, subscriptions);
+        return (new LocationService(locations, assets, people, categories, user, new FakeUnitOfWork(), new ManagerScopeService(people, teams), subscriptions, TestAuthorization.Permissions(user)), user, locations, assets, people, categories, subscriptions);
     }
 
     [Fact]

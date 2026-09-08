@@ -33,12 +33,13 @@ public sealed class AssetAuditCampaignService
     private readonly IEmailSender _emailSender;
     private readonly IEmailOutboxWriter? _emailOutbox;
     private readonly IAppLinkBuilder _linkBuilder;
+    private readonly IPermissionService _permissions;
 
     public AssetAuditCampaignService(IAssetAuditCampaignRepository campaigns, IAssetAuditParticipantRepository participants,
         IAssetAuditItemRepository items, IPersonRepository people, IAssetRepository assets, IAssetEvidenceRepository evidence,
         AssetEvidenceService evidenceService, IActivityLogRepository activity,
         ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IOrganizationRepository organizations,
-        IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEmailOutboxWriter? emailOutbox = null)
+        IEmailSender emailSender, IAppLinkBuilder linkBuilder, IPermissionService permissions, IEmailOutboxWriter? emailOutbox = null)
     {
         _campaigns = campaigns;
         _participants = participants;
@@ -55,11 +56,12 @@ public sealed class AssetAuditCampaignService
         _emailSender = emailSender;
         _emailOutbox = emailOutbox;
         _linkBuilder = linkBuilder;
+        _permissions = permissions;
     }
 
     public async Task<Result<PagedResult<AssetAuditCampaignResponse>>> ListPagedAsync(AssetAuditCampaignStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<AssetAuditCampaignResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -69,7 +71,7 @@ public sealed class AssetAuditCampaignService
 
     public async Task<Result<AssetAuditCampaignDetailsResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssetAuditCampaignDetailsResponse>.Failure(access.Error!);
 
         return await BuildDetailsAsync(id, cancellationToken);
@@ -110,7 +112,7 @@ public sealed class AssetAuditCampaignService
 
     public async Task<Result<AssetAuditCampaignDetailsResponse>> CreateAsync(CreateAssetAuditCampaignRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetAuditCampaignDetailsResponse>.Failure(access.Error!);
 
         try
@@ -134,7 +136,7 @@ public sealed class AssetAuditCampaignService
     /// <summary>Edycja dozwolona wyłącznie w Draft - po starcie zakres jest zablokowany (spec 5.4).</summary>
     public async Task<Result<AssetAuditCampaignDetailsResponse>> UpdateAsync(Guid id, UpdateAssetAuditCampaignRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetAuditCampaignDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -163,7 +165,7 @@ public sealed class AssetAuditCampaignService
     /// <summary>Wylicza zakres bez zapisu - do ostrzeżenia administratora przed uruchomieniem (spec 5.4 krok 3).</summary>
     public async Task<Result<AssetAuditCampaignPreviewResponse>> PreviewAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssetAuditCampaignPreviewResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -183,7 +185,7 @@ public sealed class AssetAuditCampaignService
     /// <summary>Draft -> Active. Tworzy migawkę uczestników/pozycji na podstawie zakresu i wysyła linki (spec 5.4 krok 4-5).</summary>
     public async Task<Result<AssetAuditCampaignDetailsResponse>> StartAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssetAuditCampaignDetailsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -461,7 +463,7 @@ public sealed class AssetAuditCampaignService
     /// żeby nie zaspamować dziennika przy dużych kampaniach.</summary>
     public async Task<Result<RemindParticipantsResponse>> RemindParticipantsAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<RemindParticipantsResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -537,11 +539,11 @@ public sealed class AssetAuditCampaignService
         return Result<RemindParticipantsResponse>.Success(new RemindParticipantsResponse(remindedCount));
     }
 
-    /// <summary>Ponowne otwarcie odpowiedzi jest świadomą decyzją administracyjną (spec 5.5) - celowo węższe
-    /// uprawnienia niż reszta zarządzania kampanią (tylko Owner/Admin, bez AssetOperator).</summary>
+    /// <summary>Ponowne otwarcie odpowiedzi jest świadomą decyzją administracyjną (spec 5.5) - jak reszta
+    /// zarządzania kampanią, gated by AssetAudits.Manage.</summary>
     public async Task<Result<bool>> ReopenParticipantAsync(Guid id, Guid participantId, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<bool>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -568,7 +570,7 @@ public sealed class AssetAuditCampaignService
     /// efekt na aktywie (spec 5.7). Auditor nie ma dostępu do tej operacji (tylko odczyt/eksport).</summary>
     public async Task<Result<bool>> ResolveItemAsync(Guid id, Guid itemId, ResolveAssetAuditItemRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<bool>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -629,7 +631,7 @@ public sealed class AssetAuditCampaignService
     /// jawnie zakończyć kampanię z nieudzielonymi odpowiedziami (spec 5.7).</summary>
     public async Task<Result<bool>> CompleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<bool>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -665,7 +667,7 @@ public sealed class AssetAuditCampaignService
 
     public async Task<Result<bool>> CancelAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditManagers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<bool>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -701,7 +703,7 @@ public sealed class AssetAuditCampaignService
 
     public async Task<Result<string>> ExportCsvAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssetAuditViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.AssetAudits, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<string>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;

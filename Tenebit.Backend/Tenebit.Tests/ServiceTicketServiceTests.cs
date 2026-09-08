@@ -21,7 +21,8 @@ public class ServiceTicketServiceTests
             currentUser,
             new FakeClock(),
             new FakeUnitOfWork(),
-            TestAuthorization.Asset(assets, currentUser));
+            TestAuthorization.Asset(assets, currentUser),
+            TestAuthorization.Permissions(currentUser));
 
         return (service, currentUser, tickets, assets, inspections);
     }

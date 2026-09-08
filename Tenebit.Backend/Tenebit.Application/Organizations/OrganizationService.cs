@@ -10,20 +10,25 @@ public sealed class OrganizationService
     private readonly IOrganizationRepository _organizations;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
-    public OrganizationService(IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork)
+    public OrganizationService(IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork)
     {
         _organizations = organizations;
         _activity = activity;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<Result<OrganizationResponse>> GetCurrentAsync(CancellationToken cancellationToken)
     {
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.View, cancellationToken);
+        if (access.IsFailure) return Result<OrganizationResponse>.Failure(access.Error!);
+
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
         return organization is null
             ? Result<OrganizationResponse>.Failure(Error.NotFound("Organizacja nie istnieje."))
@@ -32,7 +37,7 @@ public sealed class OrganizationService
 
     public async Task<Result<OrganizationResponse>> UpdateCurrentAsync(UpdateOrganizationRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin);
+        var access = await _permissions.EnsureAsync(PermissionModules.Settings, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<OrganizationResponse>.Failure(access.Error!);
 
         try

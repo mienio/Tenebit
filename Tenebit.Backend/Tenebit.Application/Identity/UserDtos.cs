@@ -12,3 +12,5 @@ public sealed record SaveOrganizationUserRequest(
     IReadOnlyList<string> Roles,
     Guid? PersonId = null);
 public sealed record RoleResponse(string Key, string Label, string Description);
+[ValidatedRequest]
+public sealed record SetRoleLabelRequest([property: Required, StringLength(80, MinimumLength = 1)] string Label);

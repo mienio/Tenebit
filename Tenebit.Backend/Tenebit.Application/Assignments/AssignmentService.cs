@@ -24,6 +24,7 @@ public sealed class AssignmentService
     private readonly IOrganizationRepository _organizations;
     private readonly IActivityLogRepository _activity;
     private readonly ICurrentUser _currentUser;
+    private readonly IPermissionService _permissions;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailSender _emailSender;
@@ -40,7 +41,7 @@ public sealed class AssignmentService
     // scoped to its own team's assignments by ManagerScopeService (audyt AUD3-006).
     private static readonly string[] OrgWideRoles = [TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr];
 
-    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IClock clock, IUnitOfWork unitOfWork, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations, IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, Assets.AssetReturnDispositionService disposition, AssignmentResponseBuilder responseBuilder, ManagerScopeService managerScope, IEmailOutboxWriter? emailOutbox = null)
+    public AssignmentService(IAssignmentRepository assignments, IAssetRepository assets, IAssetCategoryRepository categories, IAssetInspectionRepository inspections, IPersonRepository people, IProcedureRepository procedures, ITeamRepository teams, IOrganizationRepository organizations, IActivityLogRepository activity, ICurrentUser currentUser, IPermissionService permissions, IClock clock, IUnitOfWork unitOfWork, IEmailSender emailSender, IAppLinkBuilder linkBuilder, IEquipmentReservationRepository reservations, IAssetEvidenceRepository evidence, AssetEvidenceService evidenceService, Assets.AssetReturnDispositionService disposition, AssignmentResponseBuilder responseBuilder, ManagerScopeService managerScope, IEmailOutboxWriter? emailOutbox = null)
     {
         _assignments = assignments;
         _assets = assets;
@@ -52,6 +53,7 @@ public sealed class AssignmentService
         _organizations = organizations;
         _activity = activity;
         _currentUser = currentUser;
+        _permissions = permissions;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _emailSender = emailSender;
@@ -67,7 +69,7 @@ public sealed class AssignmentService
 
     public async Task<Result<IReadOnlyList<AssignmentResponse>>> ListAsync(CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<IReadOnlyList<AssignmentResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -88,7 +90,7 @@ public sealed class AssignmentService
 
     public async Task<Result<PagedResult<AssignmentResponse>>> ListPagedAsync(string? search, AssignmentStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<AssignmentResponse>>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -110,7 +112,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> GetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.AssignmentViewers);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -129,7 +131,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> CreateAsync(CreateAssignmentRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         try
@@ -176,7 +178,7 @@ public sealed class AssignmentService
         IReadOnlyList<EvidenceFileInput> files,
         CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         var requestError = RequestObjectValidator.Validate(request);
@@ -296,7 +298,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentAcceptanceLinkResponse>> RegenerateAcceptanceLinkAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssignmentAcceptanceLinkResponse>.Failure(access.Error!);
 
         var organizationId = _currentUser.OrganizationId;
@@ -341,8 +343,12 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> AcceptAsync(Guid id, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Employee);
-        if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
+        var hasManage = await _permissions.HasAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
+        if (!hasManage && !_currentUser.HasAnyRole(TenebitRoles.Employee))
+        {
+            SecurityTelemetry.AuthorizationDenied();
+            return Result<AssignmentResponse>.Failure(Error.Forbidden());
+        }
 
         try
         {
@@ -351,9 +357,9 @@ public sealed class AssignmentService
             if (assignment is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Wydanie nie istnieje."));
 
             // Employee has no elevated visibility here - it may only accept its own assignment.
-            // Privileged roles (Owner/Admin/AssetOperator/Hr) may accept on behalf of someone else
-            // (audyt AUD3-004: employee could accept another employee's assignment given only its GUID).
-            if (!_currentUser.HasAnyRole(TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr))
+            // Roles with assignments.manage may accept on behalf of someone else (audyt AUD3-004:
+            // employee could accept another employee's assignment given only its GUID).
+            if (!hasManage)
             {
                 if (_currentUser.PersonId is not { } personId || assignment.PersonId != personId)
                 {
@@ -389,7 +395,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> ReturnAsync(Guid id, ReturnAssignmentRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         try
@@ -426,7 +432,7 @@ public sealed class AssignmentService
 
     public async Task<Result<AssignmentResponse>> ReturnAssetAsync(Guid assignmentId, Guid assetId, ReturnAssignmentAssetItemRequest request, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         try
@@ -465,7 +471,7 @@ public sealed class AssignmentService
     // zdjęcia pozostawia aktywo jako niezwrócone.
     public async Task<Result<AssignmentResponse>> ReturnAssetWithEvidenceAsync(Guid assignmentId, Guid assetId, ReturnAssignmentAssetItemRequest request, IReadOnlyList<EvidenceFileInput> files, CancellationToken cancellationToken)
     {
-        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner, TenebitRoles.Admin, TenebitRoles.AssetOperator, TenebitRoles.Hr, TenebitRoles.Technician);
+        var access = await _permissions.EnsureAsync(PermissionModules.Assignments, PermissionActions.Manage, cancellationToken);
         if (access.IsFailure) return Result<AssignmentResponse>.Failure(access.Error!);
 
         var requestError = RequestObjectValidator.Validate(request);
