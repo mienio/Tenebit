@@ -447,7 +447,14 @@ button.authIcon:hover { filter: brightness(0.94); }
    ma rozmiar minimalny równy min-content najszerszego dziecka, więc jedna nieściśliwa sekcja rozpycha
    cały layout ponad `max-width` i robi poziomy scroll na całej stronie głównej. `minmax(0, ...)`
    pozwala dzieciom się zwęzić i zamyka tę klasę błędu raz na zawsze. */
-.landing { max-width: 1180px; margin: 0 auto; padding: 24px 28px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 64px; }
+/* 1180 -> 1360: at 1180 the pricing cards row (5 columns, inside .pricing-cards below) was the actual
+   bottleneck for the annual price line ("989.50 €/year", the widest one) - it needs ~1279px of row width
+   to stay on one line, more than .landing itself was giving it, so widening .pricing-cards' own max-width
+   alone (see below) did nothing: the parent was the real ceiling. Everything else in here (hero, section
+   intros, persona cards, ...) has its own independent, narrower max-width, so this mostly just gives the
+   full-width sections (pricing, features grid) more room - it doesn't make paragraphs stretch uncomfortably
+   wide. */
+.landing { max-width: 1360px; margin: 0 auto; padding: 24px 28px 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 64px; }
 /* Landmark <main> dla czytnikow ekranu. `display: contents` sprawia, ze element nie tworzy wlasnego
    pudelka, wiec sekcje pozostaja bezposrednimi elementami siatki `.landing` i uklad sie nie zmienia. */
 .landing__main { display: contents; }
@@ -895,7 +902,11 @@ button.authIcon:hover { filter: brightness(0.94); }
    rather than another concrete category. */
 .pricing-chip--more { border-style: dashed; color: var(--muted); background: transparent; }
 
-.pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; max-width: 1400px; margin: 0 auto; }
+/* 1400 -> 1540: headroom for the annual price line ("989.50 €/year", the widest one) to stay on one line
+   across all 5 columns. On its own this wasn't enough on the landing page - .landing's own max-width was
+   the tighter ceiling there and had to grow too (see .landing above) - but it's still worth raising here:
+   this is what the in-app /pricing page (no .landing wrapper, just the app shell) was actually bound by. */
+.pricing-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; max-width: 1540px; margin: 0 auto; }
 .pricing-card { min-width: 0; padding: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); display: grid; gap: 18px; transition: all .24s ease; position: relative; align-content: start; overflow: visible; }
 .pricing-card--featured { border-color: var(--brand); box-shadow: 8px 8px 0 rgba(34,29,24,.18); background: var(--brand-soft); transform: scale(1.045); z-index: 1; }
 /* MAX gets its own eye-catching treatment (colored border + badge) so it stands out from the plain
