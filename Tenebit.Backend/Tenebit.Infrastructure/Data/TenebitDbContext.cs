@@ -1363,6 +1363,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.DefaultCommissionPercent).HasColumnType("numeric(5,2)");
             entity.Property(x => x.CommissionBase).HasConversion<string>().HasMaxLength(10).IsRequired();
             entity.Property(x => x.MinimumPayoutAmount).HasColumnType("numeric(10,2)");
+            entity.Property(x => x.DefaultCustomerDiscountPercent).HasColumnType("numeric(5,2)");
             entity.Property(x => x.TermsVersion).HasMaxLength(40).IsRequired();
         });
 

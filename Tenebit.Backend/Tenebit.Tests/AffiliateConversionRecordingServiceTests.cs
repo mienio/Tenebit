@@ -96,7 +96,7 @@ public class AffiliateConversionRecordingServiceTests
         var (fixture, affiliate, code) = CreateFixture();
         var organizationId = Guid.NewGuid();
 
-        fixture.Settings.Settings.Update(20m, AffiliateCommissionBase.Net, 3, 10, 20, 5, null, false, false);
+        fixture.Settings.Settings.Update(20m, AffiliateCommissionBase.Net, 3, 10, 20, 5, null, false, null, null, false);
 
         // First sale six months ago establishes the window anchor.
         var firstSaleDate = fixture.Clock.UtcNow.AddMonths(-6);

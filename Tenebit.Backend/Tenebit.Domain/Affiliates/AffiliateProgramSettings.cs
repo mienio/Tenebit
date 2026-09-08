@@ -27,7 +27,9 @@ public sealed class AffiliateProgramSettings
         PayoutDayOfMonth = 20;
         PayoutGraceDays = 5;
         MinimumPayoutAmount = null;
-        CodeGrantsCustomerDiscountByDefault = false;
+        CodeGrantsCustomerDiscountByDefault = true;
+        DefaultCustomerDiscountPercent = 20m;
+        DefaultCustomerDiscountDurationMonths = 3;
         PublicLeaderboardEnabled = false;
         TermsVersion = "2026-09-06";
     }
@@ -63,8 +65,21 @@ public sealed class AffiliateProgramSettings
 
     /// <summary>Whether an affiliate code discounts the customer's price by default (independent
     /// toggle from earning commission - spec §5.3/§16.7). Per-country rules can still apply a discount
-    /// even when this default is off.</summary>
+    /// even when this default is off. This is what makes a manually-typed affiliate code (not just a
+    /// click-through link) actually count at checkout: SubscriptionService checks the "promo code" box
+    /// against AffiliateCode whenever it doesn't match a PromoCode, and - when this is true - applies
+    /// <see cref="DefaultCustomerDiscountPercent"/>/<see cref="DefaultCustomerDiscountDurationMonths"/>
+    /// as a real Paddle discount, while still crediting the affiliate's commission. The customer is never
+    /// told the code is an affiliate's; the discount just looks like any other promo code.</summary>
     public bool CodeGrantsCustomerDiscountByDefault { get; private set; }
+
+    /// <summary>Percentage off applied when <see cref="CodeGrantsCustomerDiscountByDefault"/> is true and
+    /// no more specific <see cref="AffiliateCountryDiscountRule"/> applies. Null while the feature is off.</summary>
+    public decimal? DefaultCustomerDiscountPercent { get; private set; }
+
+    /// <summary>How many billing cycles <see cref="DefaultCustomerDiscountPercent"/> lasts (Paddle
+    /// <c>PromoDurationType.Repeating</c>). Null = applies for the customer's whole subscription lifetime.</summary>
+    public int? DefaultCustomerDiscountDurationMonths { get; private set; }
 
     /// <summary>Whether affiliates can see a ranking of other affiliates (spec §16.6 recommends
     /// keeping this off - each affiliate only ever sees their own numbers regardless).</summary>
@@ -77,7 +92,8 @@ public sealed class AffiliateProgramSettings
     public void Update(
         decimal defaultCommissionPercent, AffiliateCommissionBase commissionBase, int? defaultCommissionWindowMonths,
         int defaultMaxCodesPerAffiliate, int payoutDayOfMonth, int payoutGraceDays, decimal? minimumPayoutAmount,
-        bool codeGrantsCustomerDiscountByDefault, bool publicLeaderboardEnabled)
+        bool codeGrantsCustomerDiscountByDefault, decimal? defaultCustomerDiscountPercent, int? defaultCustomerDiscountDurationMonths,
+        bool publicLeaderboardEnabled)
     {
         if (defaultCommissionPercent is < 0 or > 100) throw new DomainException("Prowizja musi być w zakresie 0-100%.");
         if (defaultCommissionWindowMonths is <= 0) throw new DomainException("Okno prowizyjne w miesiącach musi być większe od zera.");
@@ -85,6 +101,10 @@ public sealed class AffiliateProgramSettings
         if (payoutDayOfMonth is < 1 or > 28) throw new DomainException("Dzień wypłaty musi być w zakresie 1-28 (żeby istniał w każdym miesiącu).");
         if (payoutGraceDays is < 0 or > 28) throw new DomainException("Liczba dni poślizgu musi być w zakresie 0-28.");
         if (minimumPayoutAmount is < 0) throw new DomainException("Minimalna kwota wypłaty nie może być ujemna.");
+        if (codeGrantsCustomerDiscountByDefault && defaultCustomerDiscountPercent is not (> 0 and <= 100))
+            throw new DomainException("Domyślna zniżka dla klienta musi być w zakresie 1-100%, jeśli kod ma dawać zniżkę.");
+        if (defaultCustomerDiscountDurationMonths is <= 0)
+            throw new DomainException("Liczba miesięcy domyślnej zniżki dla klienta musi być większa od zera, jeśli podana.");
 
         DefaultCommissionPercent = defaultCommissionPercent;
         CommissionBase = commissionBase;
@@ -94,6 +114,8 @@ public sealed class AffiliateProgramSettings
         PayoutGraceDays = payoutGraceDays;
         MinimumPayoutAmount = minimumPayoutAmount;
         CodeGrantsCustomerDiscountByDefault = codeGrantsCustomerDiscountByDefault;
+        DefaultCustomerDiscountPercent = codeGrantsCustomerDiscountByDefault ? defaultCustomerDiscountPercent : null;
+        DefaultCustomerDiscountDurationMonths = codeGrantsCustomerDiscountByDefault ? defaultCustomerDiscountDurationMonths : null;
         PublicLeaderboardEnabled = publicLeaderboardEnabled;
     }
 

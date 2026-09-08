@@ -491,6 +491,8 @@ export interface AffiliateProgramSettings {
   payoutGraceDays: number;
   minimumPayoutAmount: number | null;
   codeGrantsCustomerDiscountByDefault: boolean;
+  defaultCustomerDiscountPercent: number | null;
+  defaultCustomerDiscountDurationMonths: number | null;
   publicLeaderboardEnabled: boolean;
   termsVersion: string;
 }

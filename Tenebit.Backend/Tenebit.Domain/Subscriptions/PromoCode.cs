@@ -86,11 +86,16 @@ public sealed class PromoCode
 
     public void SetActive(bool active) => IsActive = active;
 
-    public decimal ApplyTo(decimal price)
+    public decimal ApplyTo(decimal price) => ComputeDiscountedPrice(price, DiscountType, DiscountValue);
+
+    /// <summary>Shared with the affiliate-code discount path (SubscriptionService) - a percentage/fixed
+    /// discount is computed the same way regardless of whether it came from an admin-managed PromoCode
+    /// entity or an affiliate code's configured default discount.</summary>
+    public static decimal ComputeDiscountedPrice(decimal price, PromoDiscountType discountType, decimal discountValue)
     {
-        var discounted = DiscountType == PromoDiscountType.Percentage
-            ? price - price * (DiscountValue / 100m)
-            : price - DiscountValue;
+        var discounted = discountType == PromoDiscountType.Percentage
+            ? price - price * (discountValue / 100m)
+            : price - discountValue;
         return Math.Max(0m, Math.Round(discounted, 2));
     }
 }

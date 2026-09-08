@@ -117,9 +117,25 @@ export function AdminAffiliateSettingsPage() {
           </Field>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="checkbox" checked={settings.codeGrantsCustomerDiscountByDefault}
-              onChange={e => setSettings({ ...settings, codeGrantsCustomerDiscountByDefault: e.target.checked })} />
+              onChange={e => setSettings({
+                ...settings, codeGrantsCustomerDiscountByDefault: e.target.checked,
+                defaultCustomerDiscountPercent: e.target.checked ? (settings.defaultCustomerDiscountPercent ?? 20) : null,
+                defaultCustomerDiscountDurationMonths: e.target.checked ? (settings.defaultCustomerDiscountDurationMonths ?? 3) : null,
+              })} />
             <span>Kod afiliacyjny domyślnie daje zniżkę klientowi</span>
           </label>
+          {settings.codeGrantsCustomerDiscountByDefault ? (
+            <>
+              <Field label="Zniżka dla klienta (%)" info="Stosowana też, gdy klient ręcznie wpisze kod afiliacyjny w polu 'kod promocyjny' przy checkout - klient nigdy nie widzi, że to kod afiliacyjny.">
+                <TextInput type="number" min="1" max="100" step="0.1" value={settings.defaultCustomerDiscountPercent ?? ''}
+                  onChange={e => setSettings({ ...settings, defaultCustomerDiscountPercent: e.target.value.trim() ? Number(e.target.value) : null })} required />
+              </Field>
+              <Field label="Czas trwania zniżki (miesiące, puste = dożywotnio)">
+                <TextInput type="number" min="1" value={settings.defaultCustomerDiscountDurationMonths ?? ''}
+                  onChange={e => setSettings({ ...settings, defaultCustomerDiscountDurationMonths: e.target.value.trim() ? Number(e.target.value) : null })} />
+              </Field>
+            </>
+          ) : null}
           <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="checkbox" checked={settings.publicLeaderboardEnabled}
               onChange={e => setSettings({ ...settings, publicLeaderboardEnabled: e.target.checked })} />

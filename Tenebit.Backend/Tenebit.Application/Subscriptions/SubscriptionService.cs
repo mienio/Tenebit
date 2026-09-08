@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Tenebit.Application.Abstractions;
 using Tenebit.Application.Common;
+using Tenebit.Domain.Affiliates;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Subscriptions;
@@ -34,6 +35,7 @@ public sealed class SubscriptionService
     private readonly ILogger<SubscriptionService> _logger;
     private readonly IAffiliateCodeRepository? _affiliateCodes;
     private readonly IAffiliateClickRepository? _affiliateClicks;
+    private readonly IAffiliateProgramSettingsRepository? _affiliateSettings;
 
     public SubscriptionService(
         ISubscriptionRepository subscriptions,
@@ -52,10 +54,12 @@ public sealed class SubscriptionService
         ILogger<SubscriptionService> logger,
         IEmailOutboxWriter? emailOutbox = null,
         IAffiliateCodeRepository? affiliateCodes = null,
-        IAffiliateClickRepository? affiliateClicks = null)
+        IAffiliateClickRepository? affiliateClicks = null,
+        IAffiliateProgramSettingsRepository? affiliateSettings = null)
     {
         _affiliateCodes = affiliateCodes;
         _affiliateClicks = affiliateClicks;
+        _affiliateSettings = affiliateSettings;
         _subscriptions = subscriptions;
         _processedEvents = processedEvents;
         _assets = assets;
@@ -207,37 +211,83 @@ public sealed class SubscriptionService
         if (plan is null || plan.Key == SubscriptionPlan.Free.Key)
             return Result<PromoCodeValidationResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
-        var promo = string.IsNullOrWhiteSpace(code) ? null : await _promoCodes.GetByCodeAsync(code, cancellationToken);
-        if (promo is null || promo.PlanKey != plan.Key || !promo.IsUsable(_clock.UtcNow))
+        var resolved = await ResolveCodeAsync(plan, code, redeem: false, cancellationToken);
+        if (resolved.IsFailure) return Result<PromoCodeValidationResponse>.Failure(resolved.Error!);
+        if (resolved.Value!.Discount is not { } discount)
             return Result<PromoCodeValidationResponse>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
 
-        var discountedPrice = promo.ApplyTo(plan.MonthlyPrice);
-        if (discountedPrice < MinimumChargeableAmount)
-            return Result<PromoCodeValidationResponse>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
-
+        var discountedPrice = PromoCode.ComputeDiscountedPrice(plan.MonthlyPrice, discount.Type, discount.Value);
         return Result<PromoCodeValidationResponse>.Success(new PromoCodeValidationResponse(
-            promo.Code, promo.DiscountType.ToString(), promo.DiscountValue, plan.MonthlyPrice, discountedPrice, plan.Currency,
-            promo.DurationType.ToString(), promo.DurationInMonths, promo.Description));
+            code.Trim().ToUpperInvariant(), discount.Type.ToString(), discount.Value, plan.MonthlyPrice, discountedPrice, plan.Currency,
+            discount.DurationType.ToString(), discount.DurationInMonths, resolved.Value.Description));
     }
 
-    /// <summary>Looks up, validates and redeems a promo code for the given target plan, shared by both the
-    /// first-time checkout and a live upgrade - a null/blank code is a no-op success with no discount.
-    /// Redemption (incrementing TimesRedeemed) happens here, before the Paddle call, so a code can't be
-    /// spent twice by two concurrent requests racing past a validate-only check.</summary>
-    private async Task<Result<PromoCodeDiscount?>> RedeemPromoCodeAsync(SubscriptionPlan targetPlan, string? promoCode, CancellationToken cancellationToken)
+    /// <summary>What a resolved "promo code" checkout field actually turned out to be - never both at
+    /// once, since a code is unique across the two namespaces (AffiliateCode.Normalize's uniqueness
+    /// cross-check against PromoCode). <see cref="AffiliateCode"/> is set only when the string matched an
+    /// affiliate's code and should therefore also drive commission attribution.</summary>
+    private sealed record ResolvedCode(PromoCodeDiscount? Discount, string? AffiliateCode, string? Description);
+
+    /// <summary>Unifies the checkout "promo code" box across two independent namespaces: admin-managed
+    /// PromoCode entities (unchanged behavior), and AffiliateCode - manually typing a partner's own code
+    /// now counts exactly like following their /r/ link, without ever telling the customer it's someone's
+    /// affiliate code (same generic "invalid or expired" message either way, same response shape, no
+    /// "affiliate" wording surfaced). A promo-code match always wins if a string somehow matched both
+    /// (structurally prevented by the uniqueness cross-check above, but promo takes precedence regardless).
+    /// Redemption (incrementing PromoCode.TimesRedeemed) happens here, before the Paddle call, so a code
+    /// can't be spent twice by two concurrent requests racing past a validate-only check; an affiliate
+    /// code has no equivalent counter to increment - its "redemption" is the conversion recorded later,
+    /// off the same Paddle transaction, by AffiliateConversionRecordingService.</summary>
+    private async Task<Result<ResolvedCode>> ResolveCodeAsync(SubscriptionPlan plan, string? code, bool redeem, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(promoCode)) return Result<PromoCodeDiscount?>.Success(null);
+        if (string.IsNullOrWhiteSpace(code)) return Result<ResolvedCode>.Success(new ResolvedCode(null, null, null));
 
-        var promo = await _promoCodes.GetByCodeAsync(promoCode, cancellationToken);
-        if (promo is null || promo.PlanKey != targetPlan.Key || !promo.IsUsable(_clock.UtcNow))
-            return Result<PromoCodeDiscount?>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
+        var promo = await _promoCodes.GetByCodeAsync(code, cancellationToken);
+        if (promo is not null && promo.PlanKey == plan.Key && promo.IsUsable(_clock.UtcNow))
+        {
+            if (promo.ApplyTo(plan.MonthlyPrice) < MinimumChargeableAmount)
+                return Result<ResolvedCode>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
 
-        if (promo.ApplyTo(targetPlan.MonthlyPrice) < MinimumChargeableAmount)
-            return Result<PromoCodeDiscount?>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
+            if (redeem)
+            {
+                promo.Redeem();
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
 
-        promo.Redeem();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<PromoCodeDiscount?>.Success(new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue, promo.DurationType, promo.DurationInMonths));
+            var discount = new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue, promo.DurationType, promo.DurationInMonths);
+            return Result<ResolvedCode>.Success(new ResolvedCode(discount, null, promo.Description));
+        }
+
+        if (_affiliateCodes is not null)
+        {
+            var affiliateCode = await _affiliateCodes.GetByCodeAsync(code, cancellationToken);
+            if (affiliateCode is { IsActive: true })
+            {
+                var affiliateDiscount = await BuildAffiliateCustomerDiscountAsync(cancellationToken);
+                if (affiliateDiscount is not null
+                    && PromoCode.ComputeDiscountedPrice(plan.MonthlyPrice, affiliateDiscount.Type, affiliateDiscount.Value) < MinimumChargeableAmount)
+                {
+                    return Result<ResolvedCode>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
+                }
+
+                return Result<ResolvedCode>.Success(new ResolvedCode(affiliateDiscount, affiliateCode.Code, null));
+            }
+        }
+
+        return Result<ResolvedCode>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
+    }
+
+    /// <summary>The discount a customer gets for typing a valid affiliate code, per the global
+    /// AffiliateProgramSettings toggle - null (no discount, attribution only) whenever the affiliate
+    /// program isn't wired up or the toggle is off.</summary>
+    private async Task<PromoCodeDiscount?> BuildAffiliateCustomerDiscountAsync(CancellationToken cancellationToken)
+    {
+        if (_affiliateSettings is null) return null;
+        var settings = await _affiliateSettings.GetAsync(cancellationToken);
+        if (!settings.CodeGrantsCustomerDiscountByDefault || settings.DefaultCustomerDiscountPercent is not { } percent) return null;
+
+        var months = settings.DefaultCustomerDiscountDurationMonths;
+        return new PromoCodeDiscount(PromoDiscountType.Percentage, percent, months is > 0 ? PromoDurationType.Repeating : PromoDurationType.Forever, months);
     }
 
     /// <summary>
@@ -257,9 +307,9 @@ public sealed class SubscriptionService
         if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key))
             return Result<CheckoutParamsResponse>.Failure(Error.Validation("Płatności Paddle nie są jeszcze skonfigurowane dla tego planu."));
 
-        var promoResult = await RedeemPromoCodeAsync(targetPlan, promoCode, cancellationToken);
-        if (promoResult.IsFailure) return Result<CheckoutParamsResponse>.Failure(promoResult.Error!);
-        var discount = promoResult.Value;
+        var resolvedResult = await ResolveCodeAsync(targetPlan, promoCode, redeem: true, cancellationToken);
+        if (resolvedResult.IsFailure) return Result<CheckoutParamsResponse>.Failure(resolvedResult.Error!);
+        var discount = resolvedResult.Value!.Discount;
 
         var organizationId = _currentUser.OrganizationId;
         var subscription = await _subscriptions.GetByOrganizationAsync(organizationId, cancellationToken);
@@ -292,7 +342,10 @@ public sealed class SubscriptionService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        var affiliateCode = await ResolveAffiliateCodeAsync(attributionToken, cancellationToken);
+        // A manually-typed code that resolved to an affiliate's own (see ResolveCodeAsync) wins over the
+        // click-through cookie - it's an explicit, just-validated action by the customer, whereas the
+        // cookie could be stale or from a different affiliate's link clicked earlier in the same browser.
+        var affiliateCode = resolvedResult.Value!.AffiliateCode ?? await ResolveAffiliateCodeAsync(attributionToken, cancellationToken);
         var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, cancellationToken, discount, affiliateCode);
         return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId, checkoutParams.AffiliateCode));
     }
@@ -379,11 +432,11 @@ public sealed class SubscriptionService
         else
         {
             var timing = newPlan.MonthlyPrice < currentPlan.MonthlyPrice ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
-            var promoResult = timing == PlanChangeTiming.Immediately
-                ? await RedeemPromoCodeAsync(newPlan, promoCode, cancellationToken)
-                : Result<PromoCodeDiscount?>.Success(null); // A deferred downgrade charges nothing today - nothing for a promo code to discount.
-            if (promoResult.IsFailure) return Result<SubscriptionResponse>.Failure(promoResult.Error!);
-            var discount = promoResult.Value;
+            var codeResult = timing == PlanChangeTiming.Immediately
+                ? await ResolveCodeAsync(newPlan, promoCode, redeem: true, cancellationToken)
+                : Result<ResolvedCode>.Success(new ResolvedCode(null, null, null)); // A deferred downgrade charges nothing today - nothing for a code to discount.
+            if (codeResult.IsFailure) return Result<SubscriptionResponse>.Failure(codeResult.Error!);
+            var discount = codeResult.Value!.Discount;
 
             // Salt the idempotency key with the discount shape: a retry that adds/changes the code must not
             // be dropped as a duplicate of an earlier attempt that had no discount.

@@ -67,6 +67,8 @@ public sealed record AdminAffiliateSettingsUpdateRequest(
     [property: Range(0, 28)] int PayoutGraceDays,
     [property: Range(0, 1_000_000)] decimal? MinimumPayoutAmount,
     bool CodeGrantsCustomerDiscountByDefault,
+    [property: Range(0, 100)] decimal? DefaultCustomerDiscountPercent,
+    [property: Range(1, 1200)] int? DefaultCustomerDiscountDurationMonths,
     bool PublicLeaderboardEnabled);
 
 [ValidatedRequest]
@@ -341,7 +343,8 @@ public static class AdminEndpoints
             (await service.UpdateAsync(
                 request.DefaultCommissionPercent, request.CommissionBase, request.DefaultCommissionWindowMonths,
                 request.DefaultMaxCodesPerAffiliate, request.PayoutDayOfMonth, request.PayoutGraceDays, request.MinimumPayoutAmount,
-                request.CodeGrantsCustomerDiscountByDefault, request.PublicLeaderboardEnabled,
+                request.CodeGrantsCustomerDiscountByDefault, request.DefaultCustomerDiscountPercent, request.DefaultCustomerDiscountDurationMonths,
+                request.PublicLeaderboardEnabled,
                 http.Connection.RemoteIpAddress?.ToString(), cancellationToken)).ToHttpResult());
 
         admin.MapGet("/affiliate-settings/country-rules", async (Application.Admin.AffiliateProgramSettingsAdminService service, CancellationToken cancellationToken) =>

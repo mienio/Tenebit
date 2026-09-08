@@ -8,7 +8,8 @@ namespace Tenebit.Application.Admin;
 public sealed record AffiliateProgramSettingsResponse(
     decimal DefaultCommissionPercent, string CommissionBase, int? DefaultCommissionWindowMonths,
     int DefaultMaxCodesPerAffiliate, int PayoutDayOfMonth, int PayoutGraceDays, decimal? MinimumPayoutAmount,
-    bool CodeGrantsCustomerDiscountByDefault, bool PublicLeaderboardEnabled, string TermsVersion);
+    bool CodeGrantsCustomerDiscountByDefault, decimal? DefaultCustomerDiscountPercent, int? DefaultCustomerDiscountDurationMonths,
+    bool PublicLeaderboardEnabled, string TermsVersion);
 
 public sealed record AffiliateCountryDiscountRuleResponse(Guid Id, string CountryCode, decimal DiscountPercent, int? DurationMonths);
 
@@ -40,14 +41,16 @@ public sealed class AffiliateProgramSettingsAdminService
     public async Task<Result<AffiliateProgramSettingsResponse>> UpdateAsync(
         decimal defaultCommissionPercent, AffiliateCommissionBase commissionBase, int? defaultCommissionWindowMonths,
         int defaultMaxCodesPerAffiliate, int payoutDayOfMonth, int payoutGraceDays, decimal? minimumPayoutAmount,
-        bool codeGrantsCustomerDiscountByDefault, bool publicLeaderboardEnabled, string? actorIp, CancellationToken cancellationToken)
+        bool codeGrantsCustomerDiscountByDefault, decimal? defaultCustomerDiscountPercent, int? defaultCustomerDiscountDurationMonths,
+        bool publicLeaderboardEnabled, string? actorIp, CancellationToken cancellationToken)
     {
         var settings = await _settings.GetAsync(cancellationToken);
         try
         {
             settings.Update(
                 defaultCommissionPercent, commissionBase, defaultCommissionWindowMonths, defaultMaxCodesPerAffiliate,
-                payoutDayOfMonth, payoutGraceDays, minimumPayoutAmount, codeGrantsCustomerDiscountByDefault, publicLeaderboardEnabled);
+                payoutDayOfMonth, payoutGraceDays, minimumPayoutAmount, codeGrantsCustomerDiscountByDefault,
+                defaultCustomerDiscountPercent, defaultCustomerDiscountDurationMonths, publicLeaderboardEnabled);
         }
         catch (Domain.Common.DomainException ex)
         {
@@ -98,6 +101,7 @@ public sealed class AffiliateProgramSettingsAdminService
     private static AffiliateProgramSettingsResponse ToResponse(AffiliateProgramSettings s) => new(
         s.DefaultCommissionPercent, s.CommissionBase.ToString(), s.DefaultCommissionWindowMonths, s.DefaultMaxCodesPerAffiliate,
         s.PayoutDayOfMonth, s.PayoutGraceDays, s.MinimumPayoutAmount, s.CodeGrantsCustomerDiscountByDefault,
+        s.DefaultCustomerDiscountPercent, s.DefaultCustomerDiscountDurationMonths,
         s.PublicLeaderboardEnabled, s.TermsVersion);
 
     private static AffiliateCountryDiscountRuleResponse ToRuleResponse(AffiliateCountryDiscountRule r) => new(r.Id, r.CountryCode, r.DiscountPercent, r.DurationMonths);

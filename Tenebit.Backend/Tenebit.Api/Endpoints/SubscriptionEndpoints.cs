@@ -58,10 +58,12 @@ public static class SubscriptionEndpoints
                     : (Guid?)null;
                 return (await service.GetCheckoutParamsAsync(request.PlanKey, cancellationToken, request.PromoCode, attributionToken)).ToHttpResult();
             })
+            .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
         api.MapPost("/subscription/change-plan", async (ChangePlanRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.ChangePlanAsync(request.PlanKey, cancellationToken, request.PromoCode)).ToHttpResult())
+            .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
         api.MapPost("/subscription/change-plan/preview", async (ChangePlanRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
@@ -74,6 +76,7 @@ public static class SubscriptionEndpoints
 
         api.MapPost("/subscription/promo-code/validate", async (PromoCodeValidateRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.ValidatePromoCodeAsync(request.PlanKey, request.Code, cancellationToken)).ToHttpResult())
+            .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
         api.MapPost("/subscription/billing-portal", async (SubscriptionService service, CancellationToken cancellationToken) =>

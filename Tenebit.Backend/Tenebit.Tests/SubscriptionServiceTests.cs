@@ -132,16 +132,23 @@ public class SubscriptionServiceTests
     }
 
     private static SubscriptionService CreateServiceWithAffiliateAttribution(
-        out FakePaymentGateway paymentGateway, out InMemoryAffiliateCodeRepository affiliateCodes, out InMemoryAffiliateClickRepository affiliateClicks)
+        out FakePaymentGateway paymentGateway, out InMemoryAffiliateCodeRepository affiliateCodes, out InMemoryAffiliateClickRepository affiliateClicks) =>
+        CreateServiceWithAffiliateAttribution(out paymentGateway, out affiliateCodes, out affiliateClicks, out _);
+
+    private static SubscriptionService CreateServiceWithAffiliateAttribution(
+        out FakePaymentGateway paymentGateway, out InMemoryAffiliateCodeRepository affiliateCodes, out InMemoryAffiliateClickRepository affiliateClicks,
+        out InMemoryAffiliateProgramSettingsRepository affiliateSettings)
     {
         paymentGateway = new FakePaymentGateway();
         affiliateCodes = new InMemoryAffiliateCodeRepository();
         affiliateClicks = new InMemoryAffiliateClickRepository();
+        affiliateSettings = new InMemoryAffiliateProgramSettingsRepository();
         return new SubscriptionService(
             new InMemorySubscriptionRepository(), new InMemoryProcessedPaddleEventRepository(), new InMemoryAssetRepository(),
             new InMemoryActivityLogRepository(), new FakeCurrentUser(), new FakeClock(), new FakeUnitOfWork(), paymentGateway,
             new FakeAppLinkBuilder(), new InMemoryPromoCodeRepository(), new InMemoryOrganizationRepository(), new InMemoryOrganizationUserRepository(),
-            new FakeEmailSender(), NullLogger<SubscriptionService>.Instance, affiliateCodes: affiliateCodes, affiliateClicks: affiliateClicks);
+            new FakeEmailSender(), NullLogger<SubscriptionService>.Instance, affiliateCodes: affiliateCodes, affiliateClicks: affiliateClicks,
+            affiliateSettings: affiliateSettings);
     }
 
     [Fact]
@@ -179,6 +186,101 @@ public class SubscriptionServiceTests
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value!.AffiliateCode);
         Assert.Null(paymentGateway.LastAffiliateCode);
+    }
+
+    [Fact]
+    public async Task ValidatePromoCodeAsync_GrantsTheConfiguredDiscountForAManuallyTypedAffiliateCode()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out _, out var affiliateCodes, out _, out var settings);
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", DateTimeOffset.UtcNow);
+        affiliateCodes.Add(new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow));
+        settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, true, 20m, 3, false);
+
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "damian20", CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("DAMIAN20", result.Value!.Code);
+        Assert.Equal("Percentage", result.Value.DiscountType);
+        Assert.Equal(20m, result.Value.DiscountValue);
+        Assert.Equal("Repeating", result.Value.DurationType);
+        Assert.Equal(3, result.Value.DurationInMonths);
+        Assert.Equal(Math.Round(SubscriptionPlan.Business.MonthlyPrice * 0.8m, 2), result.Value.DiscountedPrice);
+        // Never reveals to the customer that this is someone's affiliate code.
+        Assert.Null(result.Value.Description);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_ManuallyTypedAffiliateCodeGrantsDiscountAndAttributionWithNoCookie()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out var affiliateCodes, out _, out var settings);
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", DateTimeOffset.UtcNow);
+        affiliateCodes.Add(new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow));
+        settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, true, 20m, 3, false);
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "DAMIAN20", attributionToken: null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("DAMIAN20", result.Value!.AffiliateCode);
+        Assert.Equal("DAMIAN20", paymentGateway.LastAffiliateCode);
+        Assert.NotNull(paymentGateway.LastDiscount);
+        Assert.Equal(PromoDiscountType.Percentage, paymentGateway.LastDiscount!.Type);
+        Assert.Equal(20m, paymentGateway.LastDiscount.Value);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_ManuallyTypedAffiliateCodeTakesPrecedenceOverAStaleAttributionCookie()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out var affiliateCodes, out var affiliateClicks, out var settings);
+        settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, false, null, null, false);
+
+        var typedAffiliate = new Affiliate("typed@example.com", "hash", "Typed", "Person", "PL", DateTimeOffset.UtcNow);
+        var typedCode = new AffiliateCode(typedAffiliate.Id, "TYPEDCODE", null, DateTimeOffset.UtcNow);
+        affiliateCodes.Add(typedCode);
+
+        var cookieAffiliate = new Affiliate("cookie@example.com", "hash", "Cookie", "Person", "PL", DateTimeOffset.UtcNow);
+        var cookieCode = new AffiliateCode(cookieAffiliate.Id, "COOKIECODE", null, DateTimeOffset.UtcNow);
+        affiliateCodes.Add(cookieCode);
+        var attributionToken = Guid.NewGuid();
+        affiliateClicks.Add(new AffiliateClick(cookieCode.Id, "iphash", null, attributionToken, DateTimeOffset.UtcNow));
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "TYPEDCODE", attributionToken);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("TYPEDCODE", result.Value!.AffiliateCode);
+        Assert.Equal("TYPEDCODE", paymentGateway.LastAffiliateCode);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_AttributesToAnAffiliateCodeWithNoDiscountWhenTheToggleIsOff()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out var affiliateCodes, out _, out var settings);
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", DateTimeOffset.UtcNow);
+        affiliateCodes.Add(new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow));
+        settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, false, null, null, false);
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "DAMIAN20", attributionToken: null);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("DAMIAN20", result.Value!.AffiliateCode);
+        Assert.Null(paymentGateway.LastDiscount);
+    }
+
+    [Fact]
+    public async Task ValidatePromoCodeAsync_RejectsADeactivatedAffiliateCodeWithTheSameGenericMessageAsAnUnknownCode()
+    {
+        var service = CreateServiceWithAffiliateAttribution(out _, out var affiliateCodes, out _, out var settings);
+        var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", DateTimeOffset.UtcNow);
+        var code = new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow);
+        code.SetActive(false);
+        affiliateCodes.Add(code);
+        settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, true, 20m, 3, false);
+
+        var deactivated = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "DAMIAN20", CancellationToken.None);
+        var unknown = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "NOSUCHCODE", CancellationToken.None);
+
+        Assert.True(deactivated.IsFailure);
+        Assert.True(unknown.IsFailure);
+        Assert.Equal(unknown.Error!.Message, deactivated.Error!.Message);
     }
 
     [Fact]
