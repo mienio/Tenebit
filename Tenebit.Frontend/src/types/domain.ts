@@ -946,14 +946,19 @@ export interface Subscription {
   planName: string;
   assetLimit: number;
   monthlyPrice: number;
+  annualPrice: number;
   currency: string;
   currentAssetCount: number;
   status: string;
   currentPeriodEnd: string;
   usage: ResourceUsage[];
+  /** 'Monthly' | 'Annual' (PascalCase - a C# enum's ToString() as sent by the backend). */
+  billingInterval: string;
   pendingPlanKey: string | null;
   pendingPlanName: string | null;
   pendingPlanEffectiveAt: string | null;
+  /** Set only alongside pendingPlanKey - the interval the scheduled change will land on. */
+  pendingBillingInterval: string | null;
   /** Set only on the response to a just-applied change-plan call - the exact amount Paddle charged for
    * it (can legitimately be 0). Null on a plain subscription fetch. */
   lastChargeAmount: number | null;

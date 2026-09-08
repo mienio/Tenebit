@@ -85,6 +85,7 @@ public sealed class SubscriptionReconciliationService
 
             subscription.ReconcileFromPaddle(
                 canonical!.PlanKey,
+                canonical.BillingInterval,
                 canonical.Status,
                 canonical.CurrentPeriodStart,
                 canonical.CurrentPeriodEnd,
@@ -155,7 +156,7 @@ public sealed class SubscriptionReconciliationService
             }
 
             subscription.ReconcileFromPaddle(
-                canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd,
+                canonical.PlanKey, canonical.BillingInterval, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd,
                 canonical.SubscriptionId, canonical.CustomerId);
 
             _activity.Add(new ActivityLog(

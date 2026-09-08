@@ -97,7 +97,7 @@ public class SubscriptionServiceTests
     {
         var (service, user, _, subscriptions, _, _, _) = CreateService();
         var subscription = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
-        subscription.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "ctm_123", DateTimeOffset.UtcNow);
+        subscription.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "ctm_123", DateTimeOffset.UtcNow);
         subscriptions.Add(subscription);
 
         var result = await service.UpgradeAsync("free", CancellationToken.None);
@@ -111,7 +111,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, paymentGateway, _, _) = CreateService();
         paymentGateway.IsConfigured = false;
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -123,7 +123,7 @@ public class SubscriptionServiceTests
         paymentGateway.NextCustomerId = "ctm_new";
         paymentGateway.NextCheckoutParams = new PaddleCheckoutParams("pri_business", "ctm_new", null);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("pri_business", result.Value!.PriceId);
@@ -162,7 +162,7 @@ public class SubscriptionServiceTests
         var attributionToken = Guid.NewGuid();
         affiliateClicks.Add(new AffiliateClick(code.Id, "iphash", null, attributionToken, DateTimeOffset.UtcNow));
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, null, attributionToken);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, null, attributionToken);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("DAMIAN20", result.Value!.AffiliateCode);
@@ -181,7 +181,7 @@ public class SubscriptionServiceTests
         var attributionToken = Guid.NewGuid();
         affiliateClicks.Add(new AffiliateClick(code.Id, "iphash", null, attributionToken, DateTimeOffset.UtcNow));
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, null, attributionToken);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, null, attributionToken);
 
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value!.AffiliateCode);
@@ -196,7 +196,7 @@ public class SubscriptionServiceTests
         affiliateCodes.Add(new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow));
         settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, true, 20m, 3, false);
 
-        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "damian20", CancellationToken.None);
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, "damian20", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("DAMIAN20", result.Value!.Code);
@@ -217,7 +217,7 @@ public class SubscriptionServiceTests
         affiliateCodes.Add(new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow));
         settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, true, 20m, 3, false);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "DAMIAN20", attributionToken: null);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, "DAMIAN20", attributionToken: null);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("DAMIAN20", result.Value!.AffiliateCode);
@@ -243,7 +243,7 @@ public class SubscriptionServiceTests
         var attributionToken = Guid.NewGuid();
         affiliateClicks.Add(new AffiliateClick(cookieCode.Id, "iphash", null, attributionToken, DateTimeOffset.UtcNow));
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "TYPEDCODE", attributionToken);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, "TYPEDCODE", attributionToken);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("TYPEDCODE", result.Value!.AffiliateCode);
@@ -258,7 +258,7 @@ public class SubscriptionServiceTests
         affiliateCodes.Add(new AffiliateCode(affiliate.Id, "DAMIAN20", null, DateTimeOffset.UtcNow));
         settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, false, null, null, false);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "DAMIAN20", attributionToken: null);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, "DAMIAN20", attributionToken: null);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("DAMIAN20", result.Value!.AffiliateCode);
@@ -275,8 +275,8 @@ public class SubscriptionServiceTests
         affiliateCodes.Add(code);
         settings.Settings.Update(10m, AffiliateCommissionBase.Net, null, 10, 20, 5, null, true, 20m, 3, false);
 
-        var deactivated = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "DAMIAN20", CancellationToken.None);
-        var unknown = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "NOSUCHCODE", CancellationToken.None);
+        var deactivated = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, "DAMIAN20", CancellationToken.None);
+        var unknown = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, "NOSUCHCODE", CancellationToken.None);
 
         Assert.True(deactivated.IsFailure);
         Assert.True(unknown.IsFailure);
@@ -288,7 +288,7 @@ public class SubscriptionServiceTests
     {
         var service = CreateServiceWithAffiliateAttribution(out var paymentGateway, out _, out _);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, null, Guid.NewGuid());
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, null, Guid.NewGuid());
 
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value!.AffiliateCode);
@@ -344,7 +344,7 @@ public class SubscriptionServiceTests
     {
         var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
-        existing.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "ctm_123", DateTimeOffset.UtcNow.AddMinutes(-10));
+        existing.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, SubscriptionStatus.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMonths(1), "sub_123", "ctm_123", DateTimeOffset.UtcNow.AddMinutes(-10));
         subscriptions.Add(existing);
 
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
@@ -504,12 +504,12 @@ public class SubscriptionServiceTests
         var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
-        existing.SyncFromPaddle(SubscriptionPlan.Business.Key, status, now, now.AddMonths(1), "sub_live", "ctm_live", now);
+        existing.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, status, now, now.AddMonths(1), "sub_live", "ctm_live", now);
         subscriptions.Add(existing);
         paymentGateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "ctm_live", "sub_live", SubscriptionPlan.Free.Key, status, now, now.AddMonths(1), user.OrganizationId);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
@@ -521,12 +521,12 @@ public class SubscriptionServiceTests
         var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Free.Key);
-        existing.SyncFromPaddle(SubscriptionPlan.Free.Key, SubscriptionStatus.Cancelled, now, now, "sub_old", "ctm_existing", now);
+        existing.SyncFromPaddle(SubscriptionPlan.Free.Key, BillingInterval.Monthly, SubscriptionStatus.Cancelled, now, now, "sub_old", "ctm_existing", now);
         subscriptions.Add(existing);
         paymentGateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "ctm_existing", "sub_old", SubscriptionPlan.Free.Key, SubscriptionStatus.Cancelled, now, now, user.OrganizationId);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None);
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, paymentGateway.CheckoutCreateCalls);
@@ -537,8 +537,8 @@ public class SubscriptionServiceTests
     {
         var (service, _, _, subscriptions, paymentGateway, _, _) = CreateService();
 
-        var first = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None);
-        var second = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None);
+        var first = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
+        var second = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);
@@ -552,7 +552,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, _, _, promoCodes) = CreateService();
         promoCodes.Add(new PromoCode("SUMMER10", SubscriptionPlan.Business.Key, PromoDiscountType.Percentage, 10m, null, null, PromoDurationType.Once, null, null, DateTimeOffset.UtcNow));
 
-        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "summer10", CancellationToken.None);
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, "summer10", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("SUMMER10", result.Value!.Code);
@@ -565,7 +565,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, _, _, promoCodes) = CreateService();
         promoCodes.Add(new PromoCode("GROWTHONLY", SubscriptionPlan.Growth.Key, PromoDiscountType.Percentage, 10m, null, null, PromoDurationType.Once, null, null, DateTimeOffset.UtcNow));
 
-        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "GROWTHONLY", CancellationToken.None);
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, "GROWTHONLY", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -576,7 +576,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, _, _, promoCodes) = CreateService();
         promoCodes.Add(new PromoCode("OLDCODE", SubscriptionPlan.Business.Key, PromoDiscountType.FixedAmount, 5m, null, DateTimeOffset.UtcNow.AddDays(-1), PromoDurationType.Once, null, null, DateTimeOffset.UtcNow.AddDays(-10)));
 
-        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, "OLDCODE", CancellationToken.None);
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, "OLDCODE", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -590,7 +590,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, _, _, promoCodes) = CreateService();
         promoCodes.Add(new PromoCode("TOOSTEEP", SubscriptionPlan.Starter.Key, PromoDiscountType.Percentage, 99m, null, null, PromoDurationType.Once, null, null, DateTimeOffset.UtcNow));
 
-        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Starter.Key, "TOOSTEEP", CancellationToken.None);
+        var result = await service.ValidatePromoCodeAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, "TOOSTEEP", CancellationToken.None);
 
         Assert.True(result.IsFailure);
     }
@@ -601,7 +601,7 @@ public class SubscriptionServiceTests
         var (service, _, _, _, paymentGateway, _, promoCodes) = CreateService();
         promoCodes.Add(new PromoCode("TOOSTEEP", SubscriptionPlan.Starter.Key, PromoDiscountType.Percentage, 99m, null, null, PromoDurationType.Once, null, null, DateTimeOffset.UtcNow));
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Starter.Key, CancellationToken.None, "TOOSTEEP");
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None, "TOOSTEEP");
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
@@ -614,7 +614,7 @@ public class SubscriptionServiceTests
         var promo = new PromoCode("LAUNCH20", SubscriptionPlan.Business.Key, PromoDiscountType.Percentage, 20m, 5, null, PromoDurationType.Once, null, null, DateTimeOffset.UtcNow);
         promoCodes.Add(promo);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "launch20");
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, "launch20");
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, promo.TimesRedeemed);
@@ -631,7 +631,7 @@ public class SubscriptionServiceTests
         promo.Redeem();
         promoCodes.Add(promo);
 
-        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, CancellationToken.None, "ONEUSE");
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None, "ONEUSE");
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.CheckoutCreateCalls);
@@ -644,12 +644,12 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(SubscriptionPlan.Growth.Key, result.Value!.PlanKey);
@@ -661,17 +661,175 @@ public class SubscriptionServiceTests
     }
 
     [Fact]
+    public async Task ChangePlanAsync_MonthlyToAnnual_SameTier_IsImmediateNotDeferred()
+    {
+        // The core correctness guarantee behind annual billing: switching an already-paid monthly plan to
+        // annual must charge the prorated *difference* right now (PlanChangeTiming.Immediately, so Paddle's
+        // prorated_immediately credits the unused monthly time against the annual price) - never treated as
+        // a "downgrade" and deferred, and never a no-op just because the plan tier didn't change.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddYears(1), user.OrganizationId, BillingInterval.Annual);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Annual, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, paymentGateway.PlanChangeCalls);
+        Assert.Equal(PlanChangeTiming.Immediately, paymentGateway.LastPlanChangeTiming);
+        Assert.Equal(BillingInterval.Annual, paymentGateway.LastPlanChangeInterval);
+        Assert.Equal(BillingInterval.Annual, local.BillingInterval);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_AnnualToMonthly_SameTier_IsDeferredToNextBillingPeriod()
+    {
+        // Symmetric to a tier downgrade: switching from annual to monthly of the same tier is cheaper per
+        // charge, so it must not take effect (or credit anything) until the paid-for annual period ends.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddMonths(6);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Annual, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId, BillingInterval.Annual);
+        paymentGateway.NextPendingEffectiveAt = periodEnd;
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(PlanChangeTiming.NextBillingPeriod, paymentGateway.LastPlanChangeTiming);
+        Assert.Equal(SubscriptionPlan.Growth.Key, local.PendingPlanKey);
+        Assert.Equal(periodEnd, local.PendingPlanEffectiveAt);
+        // Entitlement/interval stay on the paid-for annual plan until the scheduled switch actually lands.
+        Assert.Equal(BillingInterval.Annual, local.BillingInterval);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_SamePlanAndInterval_IsATrueNoOp()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_SamePlanDifferentInterval_IsNotANoOp()
+    {
+        // Same tier, different billing interval must still hit the gateway - this is exactly the
+        // monthly<->annual switch, not "nothing to do".
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddYears(1), user.OrganizationId, BillingInterval.Annual);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Annual, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, paymentGateway.PlanChangeCalls);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_AnnualCheckout_ConvertsARepeatingDiscountToAOneTimeReduction()
+    {
+        // "20% for 3 months" on an annual subscription cannot literally mean "3 Paddle billing cycles" -
+        // that would be 3 *years* on an annual subscription. ResolveCodeAsync must convert it to a one-time
+        // 5% (20% * 3/12) discount on the first annual charge instead.
+        var (service, user, _, _, paymentGateway, _, promoCodes) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var promo = new PromoCode("QUARTER20", SubscriptionPlan.Growth.Key, PromoDiscountType.Percentage, 20m, 5, null, PromoDurationType.Repeating, 3, null, now);
+        promoCodes.Add(promo);
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Growth.Key, BillingInterval.Annual, CancellationToken.None, "QUARTER20");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(paymentGateway.LastDiscount);
+        Assert.Equal(PromoDurationType.Once, paymentGateway.LastDiscount!.DurationType);
+        Assert.Null(paymentGateway.LastDiscount.DurationInMonths);
+        Assert.Equal(5m, paymentGateway.LastDiscount.Value);
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_MonthlyCheckout_KeepsARepeatingDiscountUnconverted()
+    {
+        var (service, user, _, _, paymentGateway, _, promoCodes) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var promo = new PromoCode("QUARTER20", SubscriptionPlan.Growth.Key, PromoDiscountType.Percentage, 20m, 5, null, PromoDurationType.Repeating, 3, null, now);
+        promoCodes.Add(promo);
+
+        var result = await service.GetCheckoutParamsAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None, "QUARTER20");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(paymentGateway.LastDiscount);
+        Assert.Equal(PromoDurationType.Repeating, paymentGateway.LastDiscount!.DurationType);
+        Assert.Equal(3, paymentGateway.LastDiscount.DurationInMonths);
+        Assert.Equal(20m, paymentGateway.LastDiscount.Value);
+    }
+
+    [Theory]
+    [InlineData(PromoDurationType.Once)]
+    [InlineData(PromoDurationType.Forever)]
+    public void PromoCodeDiscount_AdjustForBillingInterval_LeavesOnceAndForeverUnchangedRegardlessOfInterval(PromoDurationType durationType)
+    {
+        var discount = new PromoCodeDiscount(PromoDiscountType.Percentage, 20m, durationType, null);
+
+        var adjusted = discount.AdjustForBillingInterval(BillingInterval.Annual);
+
+        Assert.Equal(discount, adjusted);
+    }
+
+    [Fact]
+    public void PromoCodeDiscount_AdjustForBillingInterval_ConvertsRepeatingFixedAmountToOneTimeSum()
+    {
+        var discount = new PromoCodeDiscount(PromoDiscountType.FixedAmount, 5m, PromoDurationType.Repeating, 3);
+
+        var adjusted = discount.AdjustForBillingInterval(BillingInterval.Annual);
+
+        Assert.Equal(PromoDurationType.Once, adjusted.DurationType);
+        Assert.Null(adjusted.DurationInMonths);
+        Assert.Equal(15m, adjusted.Value);
+    }
+
+    [Fact]
+    public void PromoCodeDiscount_AdjustForBillingInterval_LeavesRepeatingUnchangedForMonthly()
+    {
+        var discount = new PromoCodeDiscount(PromoDiscountType.Percentage, 20m, PromoDurationType.Repeating, 3);
+
+        var adjusted = discount.AdjustForBillingInterval(BillingInterval.Monthly);
+
+        Assert.Equal(discount, adjusted);
+    }
+
+    [Fact]
     public async Task PreviewPlanChangeAsync_ReturnsPaddlesExactProrationAmount_ForAnUpgrade()
     {
         var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextPlanChangePreview = new PlanChangePreview(20.88m, "EUR", null);
 
-        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.True(result.Value!.ChargesNow);
@@ -689,11 +847,11 @@ public class SubscriptionServiceTests
         var periodEnd = now.AddDays(12);
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextPlanChangePreview = new PlanChangePreview(0m, "EUR", periodEnd);
 
-        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.False(result.Value!.ChargesNow);
@@ -709,14 +867,14 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
         paymentGateway.NextChargedAmount = 20.88m;
         paymentGateway.NextChargedCurrency = "EUR";
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(20.88m, result.Value!.LastChargeAmount);
@@ -730,14 +888,14 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
         var promo = new PromoCode("UPGRADE20", SubscriptionPlan.Growth.Key, PromoDiscountType.Percentage, 20m, 5, null, PromoDurationType.Once, null, null, now);
         promoCodes.Add(promo);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None, "upgrade20");
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None, "upgrade20");
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, promo.TimesRedeemed);
@@ -753,13 +911,13 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         var promo = new PromoCode("SPENT", SubscriptionPlan.Growth.Key, PromoDiscountType.FixedAmount, 5m, 1, null, PromoDurationType.Once, null, null, now);
         promo.Redeem();
         promoCodes.Add(promo);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None, "SPENT");
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None, "SPENT");
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.PlanChangeCalls);
@@ -776,7 +934,7 @@ public class SubscriptionServiceTests
         var periodEnd = now.AddMonths(1);
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
@@ -784,7 +942,7 @@ public class SubscriptionServiceTests
         var promo = new PromoCode("IGNORED", SubscriptionPlan.Starter.Key, PromoDiscountType.Percentage, 20m, 5, null, PromoDurationType.Once, null, null, now);
         promoCodes.Add(promo);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None, "IGNORED");
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None, "IGNORED");
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0, promo.TimesRedeemed);
@@ -802,11 +960,11 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.ThrowOnPlanChange = new PaymentGatewayException("Paddle did not apply the plan change (payment likely failed).", 402);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(SubscriptionPlan.Starter.Key, local.PlanKey);
@@ -820,10 +978,10 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0, paymentGateway.PlanChangeCalls);
@@ -834,7 +992,7 @@ public class SubscriptionServiceTests
     {
         var (service, _, _, _, paymentGateway, _, _) = CreateService();
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.PlanChangeCalls);
@@ -847,10 +1005,10 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Free.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Free.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(0, paymentGateway.PlanChangeCalls);
@@ -867,13 +1025,13 @@ public class SubscriptionServiceTests
         var periodEnd = now.AddMonths(1);
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
         paymentGateway.NextPendingEffectiveAt = periodEnd;
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, paymentGateway.PlanChangeCalls);
@@ -897,14 +1055,14 @@ public class SubscriptionServiceTests
         var periodEnd = now.AddMonths(1);
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
-        local.ScheduleDowngrade(SubscriptionPlan.Growth.Key, periodEnd);
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        local.ScheduleDowngrade(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, periodEnd);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
         paymentGateway.NextPendingEffectiveAt = periodEnd;
 
-        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(SubscriptionPlan.Starter.Key, local.PendingPlanKey);
@@ -917,8 +1075,8 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
-        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, now.AddMonths(1));
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, now.AddMonths(1));
         subscriptions.Add(local);
 
         var result = await service.CancelScheduledPlanChangeAsync(CancellationToken.None);
@@ -938,12 +1096,12 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Starter.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), user.OrganizationId);
 
-        await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, CancellationToken.None);
+        await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         var sent = Assert.Single(emailSender.Sent);
         Assert.Equal(user.Email, sent.To);
@@ -958,13 +1116,13 @@ public class SubscriptionServiceTests
         var periodEnd = now.AddMonths(1);
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
         paymentGateway.NextPendingEffectiveAt = periodEnd;
 
-        await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, CancellationToken.None);
+        await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
         var sent = Assert.Single(emailSender.Sent);
         Assert.Equal(user.Email, sent.To);
@@ -1011,8 +1169,8 @@ public class SubscriptionServiceTests
 
         var now = DateTimeOffset.UtcNow;
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
-        existing.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now.AddMonths(-1), now, "sub_123", "ctm_123", now.AddMonths(-1));
-        existing.ScheduleDowngrade(SubscriptionPlan.Starter.Key, now);
+        existing.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now.AddMonths(-1), now, "sub_123", "ctm_123", now.AddMonths(-1));
+        existing.ScheduleDowngrade(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, now);
         subscriptions.Add(existing);
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
             "ntf_phase_1", "subscription.updated", "ctm_123", "sub_123", SubscriptionPlan.Starter.Key, SubscriptionStatus.Active, now, now, now.AddMonths(1), null);
@@ -1040,7 +1198,7 @@ public class SubscriptionServiceTests
 
         var now = DateTimeOffset.UtcNow;
         var existing = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
-        existing.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now.AddMonths(-1), now, "sub_123", "ctm_123", now.AddMonths(-1));
+        existing.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now.AddMonths(-1), now, "sub_123", "ctm_123", now.AddMonths(-1));
         subscriptions.Add(existing);
         paymentGateway.NextWebhookEvent = new PaymentWebhookEvent(
             "ntf_renewed_1", "subscription.updated", "ctm_123", "sub_123", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, now, now.AddMonths(1), null);
@@ -1058,7 +1216,7 @@ public class SubscriptionServiceTests
         var now = DateTimeOffset.UtcNow;
         var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
         local.AttachPaddleCustomer("ctm_1");
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, now.AddMonths(1), "sub_1", "ctm_1", now);
         subscriptions.Add(local);
 
         var result = await service.CancelScheduledPlanChangeAsync(CancellationToken.None);

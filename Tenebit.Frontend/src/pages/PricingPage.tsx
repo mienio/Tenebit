@@ -5,17 +5,22 @@ import { ensurePaddleReady, openPaddleCheckout } from '../api/paddleClient';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TextInput } from '../components/FormFields';
-import { PLANS, PricingCards, type PlanDef } from '../components/PricingCards';
+import { PLANS, PricingCards, type BillingInterval, type PlanDef } from '../components/PricingCards';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 import type { PlanChangePreview, PromoCodeValidation } from '../types/domain';
 import { formatDate } from '../utils/format';
+
+function planPrice(plan: PlanDef, interval: BillingInterval): number {
+  return interval === 'annual' ? plan.annualPrice : plan.price;
+}
 
 export function PricingPage() {
   const { t, language } = useI18n();
   const subscription = useAsyncData(api.subscription, []);
   const [upgrading, setUpgrading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanDef | null>(null);
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>('monthly');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoInput, setPromoInput] = useState('');
@@ -29,14 +34,18 @@ export function PricingPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewRequestRef = useRef(0);
   const currentPlanKey = subscription.data?.planKey.toLowerCase() ?? null;
+  const currentInterval = (subscription.data?.billingInterval.toLowerCase() ?? 'monthly') as BillingInterval;
   // A live paid Paddle subscription already exists - switching plans must reuse it (Paddle proration)
   // instead of a fresh checkout, which only ever creates a first subscription.
   const hasLivePaidSubscription = !!subscription.data && subscription.data.planKey !== 'free' && subscription.data.status !== 'Cancelled';
   const currentPlan = currentPlanKey ? PLANS.find(p => p.key === currentPlanKey) ?? null : null;
-  // A plan change to a cheaper plan is scheduled for the end of the paid period, not charged now (see
-  // SubscriptionService.ChangePlanAsync) - a promo code has nothing to discount there, so only offer it
-  // for a real upgrade (equal-or-higher price), which bills immediately.
-  const isDowngrade = hasLivePaidSubscription && !!selectedPlan && !!currentPlan && selectedPlan.price < currentPlan.price;
+  // A plan change to a cheaper (plan, interval) combination is scheduled for the end of the paid period,
+  // not charged now (see SubscriptionService.ChangePlanAsync's price comparison, which now compares the
+  // actual price of the requested interval, not always MonthlyPrice) - a promo code has nothing to
+  // discount there, so only offer it for a real upgrade (equal-or-higher price now), which bills
+  // immediately.
+  const isDowngrade = hasLivePaidSubscription && !!selectedPlan && !!currentPlan
+    && planPrice(selectedPlan, selectedInterval) < planPrice(currentPlan, currentInterval);
 
   // Paddle's overlay checkout never navigates the browser on its own after a successful payment (unlike a
   // classic hosted-redirect flow) - without this, the app keeps showing whatever plan/asset-limit state it
@@ -63,13 +72,14 @@ export function PricingPage() {
     return () => window.clearTimeout(timeout);
   }, [message]);
 
-  function openCheckout(plan: PlanDef) {
+  function openCheckout(plan: PlanDef, interval: BillingInterval) {
     setPromoOpen(false);
     setPromoInput('');
     setPromoStatus('idle');
     setPromoError(null);
     setAppliedPromo(null);
     setSelectedPlan(plan);
+    setSelectedInterval(interval);
     setPreview(null);
     setPreviewError(null);
     if (!hasLivePaidSubscription) return;
@@ -81,7 +91,7 @@ export function PricingPage() {
     // happened").
     const requestId = ++previewRequestRef.current;
     setPreviewLoading(true);
-    api.previewPlanChange(plan.key)
+    api.previewPlanChange(plan.key, interval)
       .then(result => { if (previewRequestRef.current === requestId) setPreview(result); })
       .catch(error => { if (previewRequestRef.current === requestId) setPreviewError(error instanceof Error ? error.message : String(error)); })
       .finally(() => { if (previewRequestRef.current === requestId) setPreviewLoading(false); });
@@ -96,7 +106,7 @@ export function PricingPage() {
     setPromoStatus('checking');
     setPromoError(null);
     try {
-      const validation = await api.validatePromoCode(selectedPlan.key, promoInput.trim());
+      const validation = await api.validatePromoCode(selectedPlan.key, selectedInterval, promoInput.trim());
       setAppliedPromo(validation);
       setPromoStatus('applied');
     } catch (error) {
@@ -128,7 +138,7 @@ export function PricingPage() {
     setUpgrading(true);
     try {
       if (isPlanChange) {
-        const result = await api.changeSubscriptionPlan(plan.key, promoCode);
+        const result = await api.changeSubscriptionPlan(plan.key, selectedInterval, promoCode);
         await subscription.reload();
         const successText = result.lastChargeAmount != null
           ? t('pricing.changePlanChargedSuccess', { plan: plan.name, amount: result.lastChargeAmount.toFixed(2), currency: result.lastChargeCurrency ?? 'EUR' })
@@ -141,7 +151,7 @@ export function PricingPage() {
         const config = await api.paddleConfig();
         if (!config.clientToken) throw new Error('Paddle is not configured yet.');
         const paddle = await ensurePaddleReady(config.clientToken, config.environment, handlePaddleCheckoutCompleted);
-        const params = await api.checkoutParams(plan.key, promoCode);
+        const params = await api.checkoutParams(plan.key, selectedInterval, promoCode);
         openPaddleCheckout(paddle, {
           items: [{ priceId: params.priceId, quantity: 1 }],
           customer: { id: params.customerId },
@@ -181,7 +191,8 @@ export function PricingPage() {
     }
   }
 
-  const totalPrice = appliedPromo ? appliedPromo.discountedPrice : selectedPlan?.price ?? 0;
+  const totalPrice = appliedPromo ? appliedPromo.discountedPrice : selectedPlan ? planPrice(selectedPlan, selectedInterval) : 0;
+  const periodSuffix = selectedInterval === 'annual' ? t('pricing.billing.perYear') : t('landing.perMonth');
 
   return (
     <div className="pageStack">
@@ -206,8 +217,8 @@ export function PricingPage() {
       )}
 
       <PricingCards
-        renderCta={(plan) => {
-          const isCurrent = currentPlanKey === plan.key;
+        renderCta={(plan, interval) => {
+          const isCurrent = currentPlanKey === plan.key && currentInterval === interval;
           const showCta = !isCurrent && plan.key !== 'free';
           if (isCurrent) {
             return (
@@ -219,7 +230,7 @@ export function PricingPage() {
           if (showCta) {
             return (
               <Button
-                onClick={() => openCheckout(plan)}
+                onClick={() => openCheckout(plan, interval)}
                 disabled={upgrading || subscription.isLoading}
                 icon={<Zap size={18} />}
                 className="pricing-cta"
@@ -244,7 +255,7 @@ export function PricingPage() {
         open={selectedPlan !== null}
         variant="positive"
         title={t(hasLivePaidSubscription ? 'pricing.confirmChangePlanTitle' : 'pricing.confirmUpgradeTitle')}
-        description={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.confirmChangePlan' : 'pricing.confirmUpgrade', { plan: selectedPlan.name, price: totalPrice.toFixed(2) }) : ''}
+        description={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.confirmChangePlan' : 'pricing.confirmUpgrade', { plan: selectedPlan.name, price: totalPrice.toFixed(2), period: periodSuffix }) : ''}
         confirmLabel={selectedPlan ? t(hasLivePaidSubscription ? 'pricing.changePlan' : 'pricing.upgrade', { plan: selectedPlan.name }) : ''}
         confirmDisabled={hasLivePaidSubscription && (previewLoading || !!previewError || !preview)}
         onConfirm={confirmUpgrade}
@@ -277,7 +288,7 @@ export function PricingPage() {
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 14 }}>
                   <span>{t('pricing.checkout.subtotal')}</span>
-                  <span>{selectedPlan.price.toFixed(2)} €{t('landing.perMonth')}</span>
+                  <span>{planPrice(selectedPlan, selectedInterval).toFixed(2)} €{periodSuffix}</span>
                 </div>
                 {appliedPromo && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 6, color: 'var(--success, #047857)' }}>
@@ -287,7 +298,7 @@ export function PricingPage() {
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                   <span>{t('pricing.checkout.total')}</span>
-                  <span>{totalPrice.toFixed(2)} €{t('landing.perMonth')}</span>
+                  <span>{totalPrice.toFixed(2)} €{periodSuffix}</span>
                 </div>
               </>
             )}

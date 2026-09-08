@@ -598,11 +598,12 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastCustomerIdempotencyKey { get; private set; }
     public string? LastCheckoutCustomerId { get; private set; }
     public string? LastCheckoutPlanKey { get; private set; }
+    public BillingInterval? LastCheckoutInterval { get; private set; }
     public PromoCodeDiscount? LastDiscount { get; private set; }
     public string? LastAffiliateCode { get; private set; }
     public int CheckoutCreateCalls { get; private set; }
 
-    public bool IsPlanConfigured(string planKey) => AllPlansConfigured || ConfiguredPlanKeys.Contains(planKey);
+    public bool IsPlanConfigured(string planKey, BillingInterval interval) => AllPlansConfigured || ConfiguredPlanKeys.Contains(planKey);
 
     public Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken)
     {
@@ -610,10 +611,11 @@ public sealed class FakePaymentGateway : IPaymentGateway
         return Task.FromResult(NextCustomerId);
     }
 
-    public Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null)
+    public Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, BillingInterval interval, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null)
     {
         LastCheckoutCustomerId = customerId;
         LastCheckoutPlanKey = planKey;
+        LastCheckoutInterval = interval;
         LastDiscount = discount;
         LastAffiliateCode = affiliateCode;
         CheckoutCreateCalls++;
@@ -656,6 +658,7 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastPlanChangeIdempotencyKey { get; private set; }
     public string? LastPlanChangeSubscriptionId { get; private set; }
     public string? LastPlanChangeNewPlanKey { get; private set; }
+    public BillingInterval? LastPlanChangeInterval { get; private set; }
     public PlanChangeTiming? LastPlanChangeTiming { get; private set; }
     public PromoCodeDiscount? LastPlanChangeDiscount { get; private set; }
     public int PlanChangeCalls { get; private set; }
@@ -664,10 +667,11 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string NextChargedCurrency { get; set; } = "EUR";
     public DateTimeOffset? NextPendingEffectiveAt { get; set; }
 
-    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         LastPlanChangeSubscriptionId = subscriptionId;
         LastPlanChangeNewPlanKey = newPlanKey;
+        LastPlanChangeInterval = newInterval;
         LastPlanChangeTiming = timing;
         LastPlanChangeIdempotencyKey = idempotencyKey;
         LastPlanChangeDiscount = discount;
@@ -679,10 +683,12 @@ public sealed class FakePaymentGateway : IPaymentGateway
 
     public PlanChangePreview? NextPlanChangePreview { get; set; }
     public PlanChangeTiming? LastPreviewTiming { get; private set; }
+    public BillingInterval? LastPreviewInterval { get; private set; }
 
-    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, CancellationToken cancellationToken)
+    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, CancellationToken cancellationToken)
     {
         LastPreviewTiming = timing;
+        LastPreviewInterval = newInterval;
         return Task.FromResult(NextPlanChangePreview ?? throw new InvalidOperationException("NextPlanChangePreview not set"));
     }
 

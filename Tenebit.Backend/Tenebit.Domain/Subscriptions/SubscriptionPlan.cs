@@ -23,6 +23,11 @@ public sealed class SubscriptionPlan
         Name = name;
         AssetLimit = assetLimit;
         MonthlyPrice = monthlyPrice;
+        // The annual price is always exactly 10x the monthly one ("2 months free", a 16.67% discount
+        // baked directly into the price - no separate Paddle Discount object needed for it, see
+        // SubscriptionService.ResolveCodeAsync/PromoCode.AdjustForBillingInterval for how a promo code
+        // stacks on top of this already-discounted price).
+        AnnualPrice = Math.Round(monthlyPrice * 10m, 2);
         Currency = currency;
         DisplayLimitLabel = displayLimitLabel;
     }
@@ -31,7 +36,10 @@ public sealed class SubscriptionPlan
     public string Name { get; }
     public int AssetLimit { get; }
     public decimal MonthlyPrice { get; }
+    public decimal AnnualPrice { get; }
     public string Currency { get; }
+
+    public decimal GetPrice(BillingInterval interval) => interval == BillingInterval.Annual ? AnnualPrice : MonthlyPrice;
 
     /// <summary>Marketing label for the limit (e.g. "1000+" for the top tier) - may differ from the real
     /// enforced <see cref="AssetLimit"/>.</summary>

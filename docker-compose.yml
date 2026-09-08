@@ -29,10 +29,14 @@ x-backend-env: &backend-env
   Paddle__ApiKey: ${TENEBIT_PADDLE_API_KEY:-}
   Paddle__ClientSideToken: ${TENEBIT_PADDLE_CLIENT_TOKEN:-}
   Paddle__WebhookSecret: ${TENEBIT_PADDLE_WEBHOOK_SECRET:-}
-  Paddle__Prices__starter: ${TENEBIT_PADDLE_PRICE_STARTER:-}
-  Paddle__Prices__growth: ${TENEBIT_PADDLE_PRICE_GROWTH:-}
-  Paddle__Prices__business: ${TENEBIT_PADDLE_PRICE_BUSINESS:-}
-  Paddle__Prices__enterprise: ${TENEBIT_PADDLE_PRICE_ENTERPRISE:-}
+  Paddle__Prices__starter__monthly: ${TENEBIT_PADDLE_PRICE_STARTER_MONTHLY:-}
+  Paddle__Prices__starter__annual: ${TENEBIT_PADDLE_PRICE_STARTER_ANNUAL:-}
+  Paddle__Prices__growth__monthly: ${TENEBIT_PADDLE_PRICE_GROWTH_MONTHLY:-}
+  Paddle__Prices__growth__annual: ${TENEBIT_PADDLE_PRICE_GROWTH_ANNUAL:-}
+  Paddle__Prices__business__monthly: ${TENEBIT_PADDLE_PRICE_BUSINESS_MONTHLY:-}
+  Paddle__Prices__business__annual: ${TENEBIT_PADDLE_PRICE_BUSINESS_ANNUAL:-}
+  Paddle__Prices__enterprise__monthly: ${TENEBIT_PADDLE_PRICE_ENTERPRISE_MONTHLY:-}
+  Paddle__Prices__enterprise__annual: ${TENEBIT_PADDLE_PRICE_ENTERPRISE_ANNUAL:-}
 services:
   db:
     image: postgres:17-alpine

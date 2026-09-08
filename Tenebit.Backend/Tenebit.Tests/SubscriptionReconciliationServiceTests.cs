@@ -16,7 +16,7 @@ public sealed class SubscriptionReconciliationServiceTests
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Business.Key);
         var webhookAt = clock.UtcNow.AddHours(-1);
-        local.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, webhookAt, webhookAt.AddMonths(1), "sub_1", "ctm_1", webhookAt);
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, SubscriptionStatus.Active, webhookAt, webhookAt.AddMonths(1), "sub_1", "ctm_1", webhookAt);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "ctm_1",
@@ -45,7 +45,7 @@ public sealed class SubscriptionReconciliationServiceTests
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Business.Key);
-        local.SyncFromPaddle(SubscriptionPlan.Business.Key, SubscriptionStatus.Active, clock.UtcNow, clock.UtcNow.AddMonths(1), "sub_1", "ctm_1", clock.UtcNow);
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Monthly, SubscriptionStatus.Active, clock.UtcNow, clock.UtcNow.AddMonths(1), "sub_1", "ctm_1", clock.UtcNow);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "ctm_other",
@@ -121,8 +121,8 @@ public sealed class SubscriptionReconciliationServiceTests
         var gateway = new FakePaymentGateway();
         var clock = new FakeClock { UtcNow = DateTimeOffset.UtcNow };
         var local = new OrganizationSubscription(Guid.NewGuid(), SubscriptionPlan.Growth.Key);
-        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, clock.UtcNow.AddMonths(-1), clock.UtcNow, "sub_1", "ctm_1", clock.UtcNow.AddMonths(-1));
-        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, clock.UtcNow);
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, clock.UtcNow.AddMonths(-1), clock.UtcNow, "sub_1", "ctm_1", clock.UtcNow.AddMonths(-1));
+        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, clock.UtcNow);
         subscriptions.Add(local);
         gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Starter.Key, SubscriptionStatus.Active,

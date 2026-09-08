@@ -5,7 +5,7 @@ namespace Tenebit.Application.Abstractions;
 public interface IPaymentGateway
 {
     bool IsConfigured { get; }
-    bool IsPlanConfigured(string planKey);
+    bool IsPlanConfigured(string planKey, BillingInterval interval);
     Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken);
 
     /// <summary>Resolves what the frontend needs to open a Paddle.js checkout for a brand-new subscription.
@@ -15,7 +15,7 @@ public interface IPaymentGateway
     /// cookie (spec §13.1) - the frontend never chooses or sees the code itself, only echoes back
     /// whatever <see cref="PaddleCheckoutParams.AffiliateCode"/> comes back here as Paddle.js
     /// <c>customData</c>.</summary>
-    Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null);
+    Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, BillingInterval interval, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null);
 
     /// <summary>Creates a one-time authenticated link into Paddle's customer portal (payment method,
     /// invoices, cancellation) - optionally scoped to a single subscription. Not cacheable; generate a new
@@ -33,13 +33,13 @@ public interface IPaymentGateway
     /// the subscription on its current plan and tracks the pending switch on the subscription itself, no
     /// separate schedule object needed, unlike Stripe subscription schedules).
     /// </summary>
-    Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
+    Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null);
 
     /// <summary>Previews - without applying anything - what ChangeSubscriptionPlanAsync would actually do
     /// for the same switch: the exact amount charged now for an immediate upgrade, or the deferred effective
     /// date for a downgrade - so the confirmation dialog can show a real number/date before the customer
     /// commits, instead of the new plan's flat list price (wrong for a mid-cycle switch).</summary>
-    Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, CancellationToken cancellationToken);
+    Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, CancellationToken cancellationToken);
 
     /// <summary>Cancels a pending scheduled plan change (set via <see cref="ChangeSubscriptionPlanAsync"/>
     /// with <see cref="PlanChangeTiming.NextBillingPeriod"/>), leaving the subscription on its current plan
@@ -96,13 +96,16 @@ public sealed record PaymentWebhookEvent(
     // compensating an earlier transaction.completed). TransactionId above is the adjustment's own id
     // (used as the compensation AffiliateConversion's idempotency key); this is the id of the original
     // transaction it refunds, used to look up which AffiliateConversion to compensate.
-    string? OriginalTransactionId = null);
+    string? OriginalTransactionId = null,
+    // Meaningless for the transaction.completed/adjustment.created shapes above, same as PlanKey/Status/
+    // CurrentPeriod* - defaults to Monthly there, never read. Appended last (rather than next to PlanKey)
+    // so every existing positional constructor call above keeps binding by position unchanged.
+    BillingInterval BillingInterval = BillingInterval.Monthly);
 
 public sealed record PaymentSubscriptionState(
     string CustomerId, string SubscriptionId, string PlanKey, SubscriptionStatus Status,
-    DateTimeOffset CurrentPeriodStart, DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId);
-
-public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value, PromoDurationType DurationType, int? DurationInMonths);
+    DateTimeOffset CurrentPeriodStart, DateTimeOffset CurrentPeriodEnd, Guid? OrganizationId,
+    BillingInterval BillingInterval = BillingInterval.Monthly);
 
 /// <summary>What Paddle.js needs to open a checkout overlay for a new subscription - no secrets, safe to
 /// return to the frontend (the same trust level as a Stripe Checkout Session's client_secret used to be,

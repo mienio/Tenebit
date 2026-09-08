@@ -35,12 +35,23 @@ using Tenebit.Domain.Assets;
 using Tenebit.Domain.Evidence;
 using Tenebit.Domain.Offboarding;
 using Tenebit.Domain.Reservations;
+using Tenebit.Domain.Subscriptions;
 using Tenebit.Infrastructure.Data;
 
 namespace Tenebit.Api.Endpoints;
 
 public static class SubscriptionEndpoints
 {
+    private static bool TryParseInterval(string? value, out BillingInterval interval)
+    {
+        switch (value?.Trim().ToLowerInvariant())
+        {
+            case "monthly": interval = BillingInterval.Monthly; return true;
+            case "annual": interval = BillingInterval.Annual; return true;
+            default: interval = BillingInterval.Monthly; return false;
+        }
+    }
+
     public static RouteGroupBuilder MapSubscriptionEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/subscription", async (SubscriptionService service, CancellationToken cancellationToken) =>
@@ -53,21 +64,31 @@ public static class SubscriptionEndpoints
 
         api.MapPost("/subscription/checkout-params", async (CheckoutParamsRequest request, HttpContext http, SubscriptionService service, CancellationToken cancellationToken) =>
             {
+                if (!TryParseInterval(request.BillingInterval, out var interval))
+                    return Result<CheckoutParamsResponse>.Failure(Error.Validation($"Unknown billing interval: {request.BillingInterval}")).ToHttpResult();
                 var attributionToken = http.Request.Cookies.TryGetValue(RedirectEndpoints.AttributionCookieName, out var raw) && Guid.TryParse(raw, out var parsed)
                     ? parsed
                     : (Guid?)null;
-                return (await service.GetCheckoutParamsAsync(request.PlanKey, cancellationToken, request.PromoCode, attributionToken)).ToHttpResult();
+                return (await service.GetCheckoutParamsAsync(request.PlanKey, interval, cancellationToken, request.PromoCode, attributionToken)).ToHttpResult();
             })
             .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
         api.MapPost("/subscription/change-plan", async (ChangePlanRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.ChangePlanAsync(request.PlanKey, cancellationToken, request.PromoCode)).ToHttpResult())
+            {
+                if (!TryParseInterval(request.BillingInterval, out var interval))
+                    return Result<SubscriptionResponse>.Failure(Error.Validation($"Unknown billing interval: {request.BillingInterval}")).ToHttpResult();
+                return (await service.ChangePlanAsync(request.PlanKey, interval, cancellationToken, request.PromoCode)).ToHttpResult();
+            })
             .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
         api.MapPost("/subscription/change-plan/preview", async (ChangePlanRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.PreviewPlanChangeAsync(request.PlanKey, cancellationToken)).ToHttpResult())
+            {
+                if (!TryParseInterval(request.BillingInterval, out var interval))
+                    return Result<PlanChangePreviewResponse>.Failure(Error.Validation($"Unknown billing interval: {request.BillingInterval}")).ToHttpResult();
+                return (await service.PreviewPlanChangeAsync(request.PlanKey, interval, cancellationToken)).ToHttpResult();
+            })
             .WithTags("Subscription");
 
         api.MapPost("/subscription/cancel-scheduled-change", async (SubscriptionService service, CancellationToken cancellationToken) =>
@@ -75,7 +96,11 @@ public static class SubscriptionEndpoints
             .WithTags("Subscription");
 
         api.MapPost("/subscription/promo-code/validate", async (PromoCodeValidateRequest request, SubscriptionService service, CancellationToken cancellationToken) =>
-                (await service.ValidatePromoCodeAsync(request.PlanKey, request.Code, cancellationToken)).ToHttpResult())
+            {
+                if (!TryParseInterval(request.BillingInterval, out var interval))
+                    return Result<PromoCodeValidationResponse>.Failure(Error.Validation($"Unknown billing interval: {request.BillingInterval}")).ToHttpResult();
+                return (await service.ValidatePromoCodeAsync(request.PlanKey, interval, request.Code, cancellationToken)).ToHttpResult();
+            })
             .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
@@ -116,11 +141,11 @@ public static class SubscriptionEndpoints
     [ValidatedRequest]
     private sealed record UpgradeRequest(string PlanKey);
     [ValidatedRequest]
-    private sealed record CheckoutParamsRequest(string PlanKey, string? PromoCode);
+    private sealed record CheckoutParamsRequest(string PlanKey, string? PromoCode, string BillingInterval = "monthly");
     [ValidatedRequest]
-    private sealed record ChangePlanRequest(string PlanKey, string? PromoCode);
+    private sealed record ChangePlanRequest(string PlanKey, string? PromoCode, string BillingInterval = "monthly");
     [ValidatedRequest]
-    private sealed record PromoCodeValidateRequest(string PlanKey, string Code);
+    private sealed record PromoCodeValidateRequest(string PlanKey, string Code, string BillingInterval = "monthly");
 
     private sealed record PaddleClientConfig(string ClientToken, string Environment);
 }

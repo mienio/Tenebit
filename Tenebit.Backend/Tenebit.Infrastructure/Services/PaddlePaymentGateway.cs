@@ -62,12 +62,29 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
     private string? ClientSideToken => _configuration["Paddle:ClientSideToken"];
     private string? WebhookSecret => _configuration["Paddle:WebhookSecret"];
 
-    // One Paddle Price per paid plan, configured under Paddle:Prices:<planKey> (e.g. Paddle:Prices:business).
-    // The Free plan never has a price - it's never looked up here.
-    private IReadOnlyDictionary<string, string> PlanPrices => _configuration.GetSection("Paddle:Prices")
+    // One Paddle Price per (plan, billing interval) pair, configured under
+    // Paddle:Prices:<planKey>:monthly / Paddle:Prices:<planKey>:annual. The Free plan never has a price -
+    // it's never looked up here.
+    private IReadOnlyDictionary<(string PlanKey, BillingInterval Interval), string> PlanPrices => _configuration.GetSection("Paddle:Prices")
         .GetChildren()
-        .Where(x => !string.IsNullOrWhiteSpace(x.Value))
-        .ToDictionary(x => x.Key, x => x.Value!, StringComparer.Ordinal);
+        .SelectMany(plan => plan.GetChildren()
+            .Where(x => !string.IsNullOrWhiteSpace(x.Value) && TryParseInterval(x.Key, out _))
+            .Select(x => (Plan: plan.Key, Interval: ParseInterval(x.Key), PriceId: x.Value!)))
+        .ToDictionary(x => (x.Plan, x.Interval), x => x.PriceId);
+
+    private static bool TryParseInterval(string key, out BillingInterval interval)
+    {
+        switch (key.ToLowerInvariant())
+        {
+            case "monthly": interval = BillingInterval.Monthly; return true;
+            case "annual": interval = BillingInterval.Annual; return true;
+            default: interval = BillingInterval.Monthly; return false;
+        }
+    }
+
+    private static BillingInterval ParseInterval(string key) => TryParseInterval(key, out var interval)
+        ? interval
+        : throw new InvalidOperationException($"Unknown Paddle billing interval key: {key}");
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ApiKey) &&
@@ -75,7 +92,7 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         !string.IsNullOrWhiteSpace(WebhookSecret) &&
         PlanPrices.Count > 0;
 
-    public bool IsPlanConfigured(string planKey) => PlanPrices.ContainsKey(planKey);
+    public bool IsPlanConfigured(string planKey, BillingInterval interval) => PlanPrices.ContainsKey((planKey, interval));
 
     public async Task<string> CreateCustomerAsync(string email, Guid organizationId, string idempotencyKey, CancellationToken cancellationToken)
     {
@@ -95,10 +112,10 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         return RequiredString(json, "id");
     }
 
-    public async Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null)
+    public async Task<PaddleCheckoutParams> GetCheckoutParamsAsync(string customerId, string planKey, BillingInterval interval, CancellationToken cancellationToken, PromoCodeDiscount? discount = null, string? affiliateCode = null)
     {
-        if (!PlanPrices.TryGetValue(planKey, out var priceId))
-            throw new PaymentGatewayException($"Paddle:Prices:{planKey} is not configured.");
+        if (!PlanPrices.TryGetValue((planKey, interval), out var priceId))
+            throw new PaymentGatewayException($"Paddle:Prices:{planKey}:{interval} is not configured.");
 
         string? discountId = discount is null ? null : await EnsureDiscountAsync(discount, priceId, cancellationToken);
         return new PaddleCheckoutParams(priceId, customerId, discountId, affiliateCode);
@@ -236,8 +253,8 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             var customer = RequiredString(data, "customer_id");
             var subscriptionId = RequiredString(data, "id");
             var status = MapStatus(type, data.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() : null);
-            var matchedPlanKey = MatchConfiguredPlan(data);
-            if (status != SubscriptionStatus.Cancelled && matchedPlanKey is null) status = SubscriptionStatus.Unknown;
+            var matched = MatchConfiguredPlanAndInterval(data);
+            if (status != SubscriptionStatus.Cancelled && matched is null) status = SubscriptionStatus.Unknown;
 
             var (periodStart, periodEnd) = ReadBillingPeriod(data, occurredAt);
 
@@ -246,7 +263,7 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
                 type,
                 customer,
                 subscriptionId,
-                matchedPlanKey ?? SubscriptionPlan.Free.Key,
+                matched?.PlanKey ?? SubscriptionPlan.Free.Key,
                 status,
                 occurredAt,
                 periodStart,
@@ -254,7 +271,8 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
                 // Paddle never needs an organizationId shortcut the way Stripe's checkout metadata did -
                 // there's no separate "trust this field" step at all, routing is purely by PaddleCustomerId,
                 // which SubscriptionService already treats as the fallback/authoritative path.
-                null);
+                null,
+                BillingInterval: matched?.Interval ?? BillingInterval.Monthly);
         }
         catch (PaymentWebhookValidationException)
         {
@@ -389,10 +407,10 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         return MapSubscriptionState(json[0]);
     }
 
-    public async Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public async Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
-        if (!PlanPrices.TryGetValue(newPlanKey, out var newPriceId))
-            throw new PaymentGatewayException($"Paddle:Prices:{newPlanKey} is not configured.");
+        if (!PlanPrices.TryGetValue((newPlanKey, newInterval), out var newPriceId))
+            throw new PaymentGatewayException($"Paddle:Prices:{newPlanKey}:{newInterval} is not configured.");
 
         var body = await BuildChangeBodyAsync(newPriceId, timing, discount, cancellationToken);
         var updated = await PatchJsonAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}", body, cancellationToken);
@@ -405,7 +423,9 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         // TODO(paddle-sandbox): confirm against a real declined card whether Paddle actually returns a
         // non-2xx here (in which case SendJsonAsync's own PaymentGatewayException already covers it) or a
         // 200 with the update effectively reverted.
-        if (timing == PlanChangeTiming.Immediately && MatchConfiguredPlan(updated) != newPlanKey)
+        var appliedMatch = MatchConfiguredPlanAndInterval(updated);
+        if (timing == PlanChangeTiming.Immediately
+            && (appliedMatch is null || appliedMatch.Value.PlanKey != newPlanKey || appliedMatch.Value.Interval != newInterval))
             throw new PaymentGatewayException("Paddle did not apply the plan change (payment likely failed).", 402);
 
         var amountCharged = 0m;
@@ -424,10 +444,10 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         return new PlanChangeResult(MapSubscriptionState(updated), amountCharged, currency, pendingEffectiveAt);
     }
 
-    public async Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, PlanChangeTiming timing, CancellationToken cancellationToken)
+    public async Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, CancellationToken cancellationToken)
     {
-        if (!PlanPrices.TryGetValue(newPlanKey, out var newPriceId))
-            throw new PaymentGatewayException($"Paddle:Prices:{newPlanKey} is not configured.");
+        if (!PlanPrices.TryGetValue((newPlanKey, newInterval), out var newPriceId))
+            throw new PaymentGatewayException($"Paddle:Prices:{newPlanKey}:{newInterval} is not configured.");
 
         var body = await BuildChangeBodyAsync(newPriceId, timing, null, cancellationToken);
         var preview = await PatchJsonAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}/preview", body, cancellationToken);
@@ -499,26 +519,27 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
     {
         var customer = RequiredString(obj, "customer_id");
         var status = MapStatus(string.Empty, obj.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() : null);
-        var matchedPlanKey = MatchConfiguredPlan(obj);
-        if (status != SubscriptionStatus.Cancelled && matchedPlanKey is null) status = SubscriptionStatus.Unknown;
+        var matched = MatchConfiguredPlanAndInterval(obj);
+        if (status != SubscriptionStatus.Cancelled && matched is null) status = SubscriptionStatus.Unknown;
 
         var (periodStart, periodEnd) = ReadBillingPeriod(obj, DateTimeOffset.UtcNow);
 
         return new PaymentSubscriptionState(
             customer,
             RequiredString(obj, "id"),
-            matchedPlanKey ?? SubscriptionPlan.Free.Key,
+            matched?.PlanKey ?? SubscriptionPlan.Free.Key,
             status,
             periodStart,
             periodEnd,
-            null);
+            null,
+            matched?.Interval ?? BillingInterval.Monthly);
     }
 
-    /// <summary>Finds the configured plan whose Paddle Price ID matches one of this subscription's line
-    /// items. Returns null when no configured price matches - callers must treat that as "unknown plan",
-    /// never fall back to trusting whatever Paddle sent (audyt: entitlement must never be inferred from
-    /// unrecognized price data).</summary>
-    private string? MatchConfiguredPlan(JsonElement obj)
+    /// <summary>Finds the configured (plan, interval) pair whose Paddle Price ID matches one of this
+    /// subscription's line items. Returns null when no configured price matches - callers must treat that
+    /// as "unknown plan", never fall back to trusting whatever Paddle sent (audyt: entitlement must never
+    /// be inferred from unrecognized price data).</summary>
+    private (string PlanKey, BillingInterval Interval)? MatchConfiguredPlanAndInterval(JsonElement obj)
     {
         if (!obj.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return null;
 
@@ -527,8 +548,12 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             .Where(x => x is not null)
             .ToHashSet(StringComparer.Ordinal);
 
-        var plans = PlanPrices;
-        return plans.FirstOrDefault(kvp => itemPriceIds.Contains(kvp.Value)).Key;
+        foreach (var (key, priceId) in PlanPrices)
+        {
+            if (itemPriceIds.Contains(priceId)) return key;
+        }
+
+        return null;
     }
 
     private static string? ReadItemPriceId(JsonElement item)

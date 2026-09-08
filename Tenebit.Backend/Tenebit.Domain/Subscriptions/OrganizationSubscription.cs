@@ -11,6 +11,7 @@ public sealed class OrganizationSubscription
         Id = Guid.NewGuid();
         OrganizationId = organizationId;
         PlanKey = planKey;
+        BillingInterval = BillingInterval.Monthly;
         Status = SubscriptionStatus.Active;
         CurrentPeriodStart = DateTimeOffset.UtcNow;
         CurrentPeriodEnd = CurrentPeriodStart.AddMonths(1);
@@ -21,6 +22,7 @@ public sealed class OrganizationSubscription
     public Guid Id { get; private set; }
     public Guid OrganizationId { get; private set; }
     public string PlanKey { get; private set; } = string.Empty;
+    public BillingInterval BillingInterval { get; private set; } = BillingInterval.Monthly;
     public SubscriptionStatus Status { get; private set; }
     public DateTimeOffset CurrentPeriodStart { get; private set; }
     public DateTimeOffset CurrentPeriodEnd { get; private set; }
@@ -35,6 +37,7 @@ public sealed class OrganizationSubscription
     /// itself (proration_billing_mode=full_next_billing_period on the subscription, no separate schedule
     /// object needed) at that date, no local cron needed.</summary>
     public string? PendingPlanKey { get; private set; }
+    public BillingInterval? PendingBillingInterval { get; private set; }
     public DateTimeOffset? PendingPlanEffectiveAt { get; private set; }
 
     /// <summary>Timestamp (Paddle webhook `occurred_at`) of the last webhook event actually applied to this
@@ -69,6 +72,7 @@ public sealed class OrganizationSubscription
         }
 
         PlanKey = newPlanKey;
+        BillingInterval = BillingInterval.Monthly;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
@@ -105,9 +109,10 @@ public sealed class OrganizationSubscription
     /// <summary>Records a downgrade scheduled on Paddle's side to take effect at <paramref name="effectiveAt"/>
     /// (the current period end) - entitlements are untouched until then; see <see cref="SyncFromPaddle"/>
     /// for how the pending state clears once Paddle actually applies it.</summary>
-    public void ScheduleDowngrade(string planKey, DateTimeOffset effectiveAt)
+    public void ScheduleDowngrade(string planKey, BillingInterval interval, DateTimeOffset effectiveAt)
     {
         PendingPlanKey = planKey;
+        PendingBillingInterval = interval;
         PendingPlanEffectiveAt = effectiveAt;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
@@ -115,6 +120,7 @@ public sealed class OrganizationSubscription
     public void ClearPendingPlanChange()
     {
         PendingPlanKey = null;
+        PendingBillingInterval = null;
         PendingPlanEffectiveAt = null;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
@@ -124,14 +130,15 @@ public sealed class OrganizationSubscription
     /// A Cancelled status always reverts the organization to the Free plan, regardless of what plan the
     /// caller passed in - an org can never keep paid-plan benefits once Paddle says the subscription is gone.
     /// </summary>
-    public void SyncFromPaddle(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? paddleSubscriptionId, string paddleCustomerId, DateTimeOffset webhookEventCreatedAt)
+    public void SyncFromPaddle(string planKey, BillingInterval interval, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? paddleSubscriptionId, string paddleCustomerId, DateTimeOffset webhookEventCreatedAt)
     {
-        // A pending downgrade resolves itself once Paddle actually applies the new price (the canonical
-        // planKey catches up to what we scheduled) or the subscription is gone - no local cron needed,
-        // this just needs to notice either has happened.
-        if (PendingPlanKey is not null && (status == SubscriptionStatus.Cancelled || planKey == PendingPlanKey))
+        // A pending plan/interval change resolves itself once Paddle actually applies it (the canonical
+        // planKey+interval catch up to what we scheduled) or the subscription is gone - no local cron
+        // needed, this just needs to notice either has happened.
+        if (PendingPlanKey is not null && (status == SubscriptionStatus.Cancelled || (planKey == PendingPlanKey && interval == PendingBillingInterval)))
         {
             PendingPlanKey = null;
+            PendingBillingInterval = null;
             PendingPlanEffectiveAt = null;
         }
 
@@ -142,17 +149,23 @@ public sealed class OrganizationSubscription
         if (status == SubscriptionStatus.Cancelled)
         {
             PlanKey = SubscriptionPlan.Free.Key;
+            BillingInterval = BillingInterval.Monthly;
             CancelledAt ??= DateTimeOffset.UtcNow;
         }
         else if (status is SubscriptionStatus.Unknown or SubscriptionStatus.PastDue)
         {
             PlanKey = SubscriptionPlan.Free.Key;
+            BillingInterval = BillingInterval.Monthly;
             CancelledAt ??= DateTimeOffset.UtcNow;
         }
         else
         {
             var plan = SubscriptionPlan.FromKey(planKey);
-            if (plan is not null) PlanKey = plan.Key;
+            if (plan is not null)
+            {
+                PlanKey = plan.Key;
+                BillingInterval = interval;
+            }
             CancelledAt = null;
         }
 
@@ -162,10 +175,10 @@ public sealed class OrganizationSubscription
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    public void ReconcileFromPaddle(string planKey, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string subscriptionId, string paddleCustomerId)
+    public void ReconcileFromPaddle(string planKey, BillingInterval interval, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string subscriptionId, string paddleCustomerId)
     {
         var lastWebhook = LastWebhookEventAt;
-        SyncFromPaddle(planKey, status, currentPeriodStart, currentPeriodEnd, subscriptionId, paddleCustomerId, lastWebhook ?? DateTimeOffset.MinValue);
+        SyncFromPaddle(planKey, interval, status, currentPeriodStart, currentPeriodEnd, subscriptionId, paddleCustomerId, lastWebhook ?? DateTimeOffset.MinValue);
         LastWebhookEventAt = lastWebhook;
     }
 }

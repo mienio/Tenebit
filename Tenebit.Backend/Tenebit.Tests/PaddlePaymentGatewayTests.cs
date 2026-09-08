@@ -49,10 +49,83 @@ public class PaddlePaymentGatewayTests
             ["Paddle:ClientSideToken"] = "fake_client_token",
             ["Paddle:WebhookSecret"] = "whsec_test"
         };
-        foreach (var (planKey, priceId) in prices) settings[$"Paddle:Prices:{planKey}"] = priceId;
+        foreach (var (planKey, priceId) in prices) settings[$"Paddle:Prices:{planKey}:monthly"] = priceId;
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
         var http = new HttpClient(handler) { BaseAddress = new Uri("https://fake-paddle.test/") };
         return new PaddlePaymentGateway(http, configuration, NullLogger<PaddlePaymentGateway>.Instance);
+    }
+
+    private static PaddlePaymentGateway CreateGatewayWithIntervals(StubHandler handler, string planKey, string? monthlyPriceId, string? annualPriceId)
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["Paddle:ApiKey"] = "fake_api_key",
+            ["Paddle:ClientSideToken"] = "fake_client_token",
+            ["Paddle:WebhookSecret"] = "whsec_test"
+        };
+        if (monthlyPriceId is not null) settings[$"Paddle:Prices:{planKey}:monthly"] = monthlyPriceId;
+        if (annualPriceId is not null) settings[$"Paddle:Prices:{planKey}:annual"] = annualPriceId;
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://fake-paddle.test/") };
+        return new PaddlePaymentGateway(http, configuration, NullLogger<PaddlePaymentGateway>.Instance);
+    }
+
+    [Fact]
+    public void IsPlanConfigured_TracksMonthlyAndAnnualIndependently()
+    {
+        var gateway = CreateGatewayWithIntervals(new StubHandler(), "growth", "pri_growth_monthly", annualPriceId: null);
+
+        Assert.True(gateway.IsPlanConfigured("growth", BillingInterval.Monthly));
+        Assert.False(gateway.IsPlanConfigured("growth", BillingInterval.Annual));
+    }
+
+    [Fact]
+    public async Task GetCheckoutParamsAsync_ResolvesTheDistinctPriceIdForEachInterval()
+    {
+        var gateway = CreateGatewayWithIntervals(new StubHandler(), "growth", "pri_growth_monthly", "pri_growth_annual");
+
+        var monthly = await gateway.GetCheckoutParamsAsync("ctm_1", "growth", BillingInterval.Monthly, CancellationToken.None);
+        var annual = await gateway.GetCheckoutParamsAsync("ctm_1", "growth", BillingInterval.Annual, CancellationToken.None);
+
+        Assert.Equal("pri_growth_monthly", monthly.PriceId);
+        Assert.Equal("pri_growth_annual", annual.PriceId);
+    }
+
+    [Fact]
+    public void ParseWebhookEvent_MatchesAnAnnualPriceId_AndReportsAnnualInterval()
+    {
+        const string secret = "whsec_test_secret";
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Paddle:ApiKey"] = "fake_api_key",
+            ["Paddle:ClientSideToken"] = "fake_client_token",
+            ["Paddle:WebhookSecret"] = secret,
+            ["Paddle:Prices:business:monthly"] = "pri_business_monthly",
+            ["Paddle:Prices:business:annual"] = "pri_business_annual"
+        }).Build();
+        using var http = new HttpClient();
+        var gateway = new PaddlePaymentGateway(http, configuration, NullLogger<PaddlePaymentGateway>.Instance);
+        var now = DateTimeOffset.UtcNow;
+        var payload = JsonSerializer.Serialize(new
+        {
+            notification_id = "ntf_annual_price",
+            event_type = "subscription.created",
+            occurred_at = now.ToString("O"),
+            data = new
+            {
+                id = "sub_123",
+                customer_id = "ctm_123",
+                status = "active",
+                current_billing_period = new { starts_at = now.ToString("O"), ends_at = now.AddYears(1).ToString("O") },
+                items = new[] { new { price = new { id = "pri_business_annual" }, quantity = 1 } }
+            }
+        });
+
+        var parsed = gateway.ParseWebhookEvent(payload, SignedHeader(secret, payload, now.ToUnixTimeSeconds()));
+
+        Assert.NotNull(parsed);
+        Assert.Equal(SubscriptionPlan.Business.Key, parsed!.PlanKey);
+        Assert.Equal(BillingInterval.Annual, parsed.BillingInterval);
     }
 
     private static string Wrap(string dataJson) => $$"""{"data": {{dataJson}}}""";
@@ -87,7 +160,7 @@ public class PaddlePaymentGatewayTests
             .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(ChangedToGrowthSubscriptionJson));
         var gateway = CreateGateway(handler, ("growth", "pri_growth"));
 
-        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", PlanChangeTiming.Immediately, "idem-1", CancellationToken.None);
+        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeTiming.Immediately, "idem-1", CancellationToken.None);
 
         Assert.Equal(17m, result.AmountCharged);
         Assert.Equal("EUR", result.Currency);
@@ -109,7 +182,7 @@ public class PaddlePaymentGatewayTests
         var gateway = CreateGateway(handler, ("growth", "pri_growth"));
 
         var ex = await Assert.ThrowsAsync<PaymentGatewayException>(
-            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", PlanChangeTiming.Immediately, "idem-1", CancellationToken.None));
+            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeTiming.Immediately, "idem-1", CancellationToken.None));
 
         Assert.Equal(402, ex.StatusCode);
     }
@@ -122,7 +195,7 @@ public class PaddlePaymentGatewayTests
         var gateway = CreateGateway(handler, ("growth", "pri_growth"));
 
         var ex = await Assert.ThrowsAsync<PaymentGatewayException>(
-            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", PlanChangeTiming.Immediately, "idem-1", CancellationToken.None));
+            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeTiming.Immediately, "idem-1", CancellationToken.None));
 
         Assert.Equal(402, ex.StatusCode);
     }
@@ -143,7 +216,7 @@ public class PaddlePaymentGatewayTests
             .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(ScheduledDowngradeSubscriptionJson));
         var gateway = CreateGateway(handler, ("starter", "pri_starter"));
 
-        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "starter", PlanChangeTiming.NextBillingPeriod, "idem-1", CancellationToken.None);
+        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "starter", BillingInterval.Monthly, PlanChangeTiming.NextBillingPeriod, "idem-1", CancellationToken.None);
 
         Assert.Equal(0m, result.AmountCharged);
         Assert.Equal(new DateTimeOffset(2025, 2, 1, 0, 0, 0, TimeSpan.Zero), result.PendingEffectiveAt);
@@ -179,7 +252,7 @@ public class PaddlePaymentGatewayTests
             ["Paddle:ApiKey"] = "fake_api_key",
             ["Paddle:ClientSideToken"] = "fake_client_token",
             ["Paddle:WebhookSecret"] = secret,
-            ["Paddle:Prices:business"] = "pri_business_expected"
+            ["Paddle:Prices:business:monthly"] = "pri_business_expected"
         }).Build();
         using var http = new HttpClient();
         var gateway = new PaddlePaymentGateway(http, configuration, NullLogger<PaddlePaymentGateway>.Instance);
@@ -215,7 +288,7 @@ public class PaddlePaymentGatewayTests
             ["Paddle:ApiKey"] = "fake_api_key",
             ["Paddle:ClientSideToken"] = "fake_client_token",
             ["Paddle:WebhookSecret"] = secret,
-            ["Paddle:Prices:business"] = "pri_business_expected"
+            ["Paddle:Prices:business:monthly"] = "pri_business_expected"
         }).Build();
         using var http = new HttpClient();
         var gateway = new PaddlePaymentGateway(http, configuration, NullLogger<PaddlePaymentGateway>.Instance);

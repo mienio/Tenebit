@@ -99,3 +99,38 @@ public sealed class PromoCode
         return Math.Max(0m, Math.Round(discounted, 2));
     }
 }
+
+/// <summary>Amount, discount type, and how long it recurs - the shape both a <see cref="PromoCode"/> and
+/// an affiliate's configured default discount reduce to before being handed to the payment gateway. Lives
+/// next to <see cref="PromoCode"/> (not in Application) because <see cref="AdjustForBillingInterval"/> is
+/// domain logic about what a discount duration means, not gateway plumbing.</summary>
+public sealed record PromoCodeDiscount(PromoDiscountType Type, decimal Value, PromoDurationType DurationType, int? DurationInMonths)
+{
+    /// <summary>
+    /// A <see cref="PromoDurationType.Repeating"/> discount is defined in months and implemented as Paddle
+    /// <c>maximum_recurring_intervals</c> - a count of the subscription's own billing cycles. That is
+    /// correct only when the subscription bills monthly (1 cycle = 1 month). On an annual subscription 1
+    /// cycle = 12 months, so applying the same "3" literally would recur the discount for 3 *years*, not 3
+    /// months - a real overpay/undercharge bug, not a cosmetic one.
+    ///
+    /// For <see cref="BillingInterval.Annual"/> a repeating discount is instead converted into a single
+    /// one-time reduction on the first annual invoice, sized to match the total value the discount would
+    /// have given a monthly customer over the same number of months: for a percentage discount that's
+    /// <c>value * months / 12</c> (e.g. "20% for 3 months" -> one-time 5%); for a fixed amount it's
+    /// <c>value * months</c> (the summed absolute saving). <see cref="PromoDurationType.Once"/> and
+    /// <see cref="PromoDurationType.Forever"/> need no conversion - "once" already means "first invoice
+    /// only" regardless of interval, and "forever" already means every renewal regardless of how long a
+    /// cycle is.
+    /// </summary>
+    public PromoCodeDiscount AdjustForBillingInterval(BillingInterval interval)
+    {
+        if (interval != BillingInterval.Annual || DurationType != PromoDurationType.Repeating || DurationInMonths is not { } months)
+            return this;
+
+        var adjustedValue = Type == PromoDiscountType.Percentage
+            ? Math.Round(Value * months / 12m, 2)
+            : Math.Round(Value * months, 2);
+
+        return this with { Value = adjustedValue, DurationType = PromoDurationType.Once, DurationInMonths = null };
+    }
+}

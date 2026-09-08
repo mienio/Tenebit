@@ -857,6 +857,27 @@ button.authIcon:hover { filter: brightness(0.94); }
    cards rendered ~217px wide, unreadably cramped, regardless of how wide the monitor was. */
 .pricing-section { container-type: inline-size; }
 
+/* Monthly/Annual toggle - full-width bar (not a small pill) so it reads as a real choice, not a settings
+   switch tucked in a corner. Sits between the legend and the cards, right above the row it controls.
+   The Annual side always carries its savings badge and an accent tint even when NOT selected, so the
+   incentive to switch is visible before the click, not just after. */
+.pricing-billingToggle { display: flex; justify-content: center; margin: 0 0 28px; }
+.pricing-billingToggle__group { display: flex; width: 100%; max-width: 640px; gap: 6px; padding: 6px; border: 2px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-soft); }
+.pricing-billingToggle__pill { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 15px 20px; border: none; border-radius: calc(var(--radius) - 2px); background: transparent; font-family: var(--font-mono); font-size: 15px; font-weight: 700; letter-spacing: .02em; color: var(--muted); cursor: pointer; transition: all .18s ease; }
+/* Scoped to :not(--active) - otherwise this tied with --active on specificity and (as the source order
+   here has :hover after the base rule but before --active in the cascade) could still lose to it in some
+   build orderings, silently turning the active pill's own text the same color as its own background the
+   instant the pointer that just clicked it stays put - which is always, right after a click. */
+.pricing-billingToggle__pill:not(.pricing-billingToggle__pill--active):hover { color: var(--text); }
+.pricing-billingToggle__pill--annual:not(.pricing-billingToggle__pill--active) { background: var(--accent-soft); color: var(--accent); }
+.pricing-billingToggle__pill--annual:not(.pricing-billingToggle__pill--active):hover { color: var(--accent); }
+.pricing-billingToggle__pill--active { background: var(--brand); color: #fff; box-shadow: 2px 2px 0 rgba(34,29,24,.18); }
+.pricing-billingToggle__badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
+.pricing-billingToggle__badge svg { flex: 0 0 auto; }
+@media (max-width: 560px) {
+  .pricing-billingToggle__pill { flex-direction: column; gap: 6px; padding: 12px 10px; font-size: 13px; }
+}
+
 /* Centered, not flush-left: .pricing-cards below is centered too (margin: 0 auto), and this box's own
    max-width is well under the section's, so a left margin of 0 left it visibly off-center against the
    centered card row on anything wider than ~800px - the app shell's sidebar-relative content area in
@@ -890,6 +911,7 @@ button.authIcon:hover { filter: brightness(0.94); }
 .pricing-card h3 { margin: 0; font-size: 20px; font-weight: 700; }
 .pricing-price { font-size: 36px; font-weight: 780; letter-spacing: -0.03em; }
 .pricing-price small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.pricing-price__equivalent { margin-top: 2px; font-size: 12px; color: var(--muted); }
 .pricing-hero-limit { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; text-align: center; }
 .pricing-card--featured .pricing-hero-limit, .pricing-card--max .pricing-hero-limit { background: var(--surface); }
 .pricing-hero-limit__num { font-family: var(--font-serif); font-weight: 700; font-size: 24px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }

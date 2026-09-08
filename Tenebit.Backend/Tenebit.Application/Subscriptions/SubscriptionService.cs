@@ -202,7 +202,7 @@ public sealed class SubscriptionService
 
     /// <summary>Looks up a promo code for the given plan without redeeming it - used to show the discounted
     /// price in the checkout dialog before the customer commits to paying.</summary>
-    public async Task<Result<PromoCodeValidationResponse>> ValidatePromoCodeAsync(string planKey, string code, CancellationToken cancellationToken)
+    public async Task<Result<PromoCodeValidationResponse>> ValidatePromoCodeAsync(string planKey, BillingInterval interval, string code, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<PromoCodeValidationResponse>.Failure(access.Error!);
@@ -211,14 +211,15 @@ public sealed class SubscriptionService
         if (plan is null || plan.Key == SubscriptionPlan.Free.Key)
             return Result<PromoCodeValidationResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
-        var resolved = await ResolveCodeAsync(plan, code, redeem: false, cancellationToken);
+        var resolved = await ResolveCodeAsync(plan, interval, code, redeem: false, cancellationToken);
         if (resolved.IsFailure) return Result<PromoCodeValidationResponse>.Failure(resolved.Error!);
         if (resolved.Value!.Discount is not { } discount)
             return Result<PromoCodeValidationResponse>.Failure(Error.Validation("Kod promocyjny jest nieprawidłowy lub wygasł."));
 
-        var discountedPrice = PromoCode.ComputeDiscountedPrice(plan.MonthlyPrice, discount.Type, discount.Value);
+        var price = plan.GetPrice(interval);
+        var discountedPrice = PromoCode.ComputeDiscountedPrice(price, discount.Type, discount.Value);
         return Result<PromoCodeValidationResponse>.Success(new PromoCodeValidationResponse(
-            code.Trim().ToUpperInvariant(), discount.Type.ToString(), discount.Value, plan.MonthlyPrice, discountedPrice, plan.Currency,
+            code.Trim().ToUpperInvariant(), discount.Type.ToString(), discount.Value, price, discountedPrice, plan.Currency,
             discount.DurationType.ToString(), discount.DurationInMonths, resolved.Value.Description));
     }
 
@@ -238,14 +239,16 @@ public sealed class SubscriptionService
     /// can't be spent twice by two concurrent requests racing past a validate-only check; an affiliate
     /// code has no equivalent counter to increment - its "redemption" is the conversion recorded later,
     /// off the same Paddle transaction, by AffiliateConversionRecordingService.</summary>
-    private async Task<Result<ResolvedCode>> ResolveCodeAsync(SubscriptionPlan plan, string? code, bool redeem, CancellationToken cancellationToken)
+    private async Task<Result<ResolvedCode>> ResolveCodeAsync(SubscriptionPlan plan, BillingInterval interval, string? code, bool redeem, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(code)) return Result<ResolvedCode>.Success(new ResolvedCode(null, null, null));
+
+        var price = plan.GetPrice(interval);
 
         var promo = await _promoCodes.GetByCodeAsync(code, cancellationToken);
         if (promo is not null && promo.PlanKey == plan.Key && promo.IsUsable(_clock.UtcNow))
         {
-            if (promo.ApplyTo(plan.MonthlyPrice) < MinimumChargeableAmount)
+            if (promo.ApplyTo(price) < MinimumChargeableAmount)
                 return Result<ResolvedCode>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
 
             if (redeem)
@@ -254,7 +257,8 @@ public sealed class SubscriptionService
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
-            var discount = new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue, promo.DurationType, promo.DurationInMonths);
+            var discount = new PromoCodeDiscount(promo.DiscountType, promo.DiscountValue, promo.DurationType, promo.DurationInMonths)
+                .AdjustForBillingInterval(interval);
             return Result<ResolvedCode>.Success(new ResolvedCode(discount, null, promo.Description));
         }
 
@@ -263,9 +267,9 @@ public sealed class SubscriptionService
             var affiliateCode = await _affiliateCodes.GetByCodeAsync(code, cancellationToken);
             if (affiliateCode is { IsActive: true })
             {
-                var affiliateDiscount = await BuildAffiliateCustomerDiscountAsync(cancellationToken);
+                var affiliateDiscount = (await BuildAffiliateCustomerDiscountAsync(cancellationToken))?.AdjustForBillingInterval(interval);
                 if (affiliateDiscount is not null
-                    && PromoCode.ComputeDiscountedPrice(plan.MonthlyPrice, affiliateDiscount.Type, affiliateDiscount.Value) < MinimumChargeableAmount)
+                    && PromoCode.ComputeDiscountedPrice(price, affiliateDiscount.Type, affiliateDiscount.Value) < MinimumChargeableAmount)
                 {
                     return Result<ResolvedCode>.Failure(Error.Validation("Ten kod obniża cenę poniżej minimalnej kwoty transakcji akceptowanej przez Paddle. Użyj kodu z mniejszą zniżką."));
                 }
@@ -295,7 +299,7 @@ public sealed class SubscriptionService
     /// there is no server-generated hosted redirect URL in Paddle Billing (unlike the old Stripe Checkout
     /// Session), so this returns the Price ID / customer ID / discount ID for Paddle.js to use directly.
     /// </summary>
-    public async Task<Result<CheckoutParamsResponse>> GetCheckoutParamsAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null, Guid? attributionToken = null)
+    public async Task<Result<CheckoutParamsResponse>> GetCheckoutParamsAsync(string planKey, BillingInterval interval, CancellationToken cancellationToken, string? promoCode = null, Guid? attributionToken = null)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<CheckoutParamsResponse>.Failure(access.Error!);
@@ -304,10 +308,10 @@ public sealed class SubscriptionService
         if (targetPlan is null || targetPlan.Key == SubscriptionPlan.Free.Key)
             return Result<CheckoutParamsResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
-        if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key))
+        if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(targetPlan.Key, interval))
             return Result<CheckoutParamsResponse>.Failure(Error.Validation("Płatności Paddle nie są jeszcze skonfigurowane dla tego planu."));
 
-        var resolvedResult = await ResolveCodeAsync(targetPlan, promoCode, redeem: true, cancellationToken);
+        var resolvedResult = await ResolveCodeAsync(targetPlan, interval, promoCode, redeem: true, cancellationToken);
         if (resolvedResult.IsFailure) return Result<CheckoutParamsResponse>.Failure(resolvedResult.Error!);
         var discount = resolvedResult.Value!.Discount;
 
@@ -328,7 +332,7 @@ public sealed class SubscriptionService
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
                 throw new PaymentGatewayException("Paddle subscription association mismatch.");
 
-            subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+            subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.BillingInterval, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             if (canonical.Status != SubscriptionStatus.Cancelled)
                 return Result<CheckoutParamsResponse>.Failure(Error.Validation("Istnieje subskrypcja Paddle wymagająca naprawy lub zarządzania. Użyj portalu rozliczeniowego zamiast tworzyć drugą subskrypcję."));
@@ -346,7 +350,7 @@ public sealed class SubscriptionService
         // click-through cookie - it's an explicit, just-validated action by the customer, whereas the
         // cookie could be stale or from a different affiliate's link clicked earlier in the same browser.
         var affiliateCode = resolvedResult.Value!.AffiliateCode ?? await ResolveAffiliateCodeAsync(attributionToken, cancellationToken);
-        var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, cancellationToken, discount, affiliateCode);
+        var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, interval, cancellationToken, discount, affiliateCode);
         return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId, checkoutParams.AffiliateCode));
     }
 
@@ -372,7 +376,7 @@ public sealed class SubscriptionService
     /// date (a downgrade's deferred effective date) instead of the new plan's flat list price, which is
     /// wrong for a mid-cycle switch and is what made a correctly-charged upgrade look like nothing happened.
     /// </summary>
-    public async Task<Result<PlanChangePreviewResponse>> PreviewPlanChangeAsync(string planKey, CancellationToken cancellationToken)
+    public async Task<Result<PlanChangePreviewResponse>> PreviewPlanChangeAsync(string planKey, BillingInterval interval, CancellationToken cancellationToken)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<PlanChangePreviewResponse>.Failure(access.Error!);
@@ -386,9 +390,13 @@ public sealed class SubscriptionService
             return Result<PlanChangePreviewResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Paddle do zmiany - najpierw ją załóż przez płatność."));
 
         var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
-        var timing = newPlan.MonthlyPrice < currentPlan.MonthlyPrice ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
+        // Compares the actual price of the requested (plan, interval) pair against the actual price of
+        // what the org is on right now - not raw MonthlyPrice, which would be wrong the moment either side
+        // is billed annually (e.g. switching monthly Business -> annual Starter still charges *more* right
+        // now than staying on monthly Business, even though Starter is the cheaper tier).
+        var timing = newPlan.GetPrice(interval) < currentPlan.GetPrice(subscription.BillingInterval) ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
 
-        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.PaddleSubscriptionId!, newPlan.Key, timing, cancellationToken);
+        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.PaddleSubscriptionId!, newPlan.Key, interval, timing, cancellationToken);
         var chargesNow = timing == PlanChangeTiming.Immediately;
         return Result<PlanChangePreviewResponse>.Success(new PlanChangePreviewResponse(
             preview.AmountDue, preview.Currency, chargesNow, chargesNow ? null : preview.EffectiveAt ?? subscription.CurrentPeriodEnd));
@@ -404,7 +412,7 @@ public sealed class SubscriptionService
     /// actually ends, so Paddle is told to apply it at the next billing period instead: the plan, price and
     /// entitlements stay put until then, no separate schedule object needed (unlike Stripe).
     /// </summary>
-    public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, CancellationToken cancellationToken, string? promoCode = null)
+    public async Task<Result<SubscriptionResponse>> ChangePlanAsync(string planKey, BillingInterval interval, CancellationToken cancellationToken, string? promoCode = null)
     {
         var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
         if (access.IsFailure) return Result<SubscriptionResponse>.Failure(access.Error!);
@@ -413,7 +421,7 @@ public sealed class SubscriptionService
         if (newPlan is null || newPlan.Key == SubscriptionPlan.Free.Key)
             return Result<SubscriptionResponse>.Failure(Error.Validation($"Unknown plan: {planKey}"));
 
-        if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(newPlan.Key))
+        if (!_paymentGateway.IsConfigured || !_paymentGateway.IsPlanConfigured(newPlan.Key, interval))
             return Result<SubscriptionResponse>.Failure(Error.Validation("Płatności Paddle nie są jeszcze skonfigurowane dla tego planu."));
 
         var organizationId = _currentUser.OrganizationId;
@@ -425,15 +433,19 @@ public sealed class SubscriptionService
         decimal? chargedAmount = null;
         string? chargedCurrency = null;
 
-        if (subscription.PlanKey == newPlan.Key)
+        if (subscription.PlanKey == newPlan.Key && subscription.BillingInterval == interval)
         {
-            // No-op: already on the requested plan.
+            // No-op: already on the requested plan and interval.
         }
         else
         {
-            var timing = newPlan.MonthlyPrice < currentPlan.MonthlyPrice ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
+            // See PreviewPlanChangeAsync for why this compares actual (plan, interval) prices rather than
+            // raw MonthlyPrice - this is also the mechanism that makes a monthly->annual switch of the same
+            // plan charge immediately (Immediately => Paddle's prorated_immediately credits the unused
+            // monthly time against the new annual price, so the customer pays the difference, not the sum).
+            var timing = newPlan.GetPrice(interval) < currentPlan.GetPrice(subscription.BillingInterval) ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
             var codeResult = timing == PlanChangeTiming.Immediately
-                ? await ResolveCodeAsync(newPlan, promoCode, redeem: true, cancellationToken)
+                ? await ResolveCodeAsync(newPlan, interval, promoCode, redeem: true, cancellationToken)
                 : Result<ResolvedCode>.Success(new ResolvedCode(null, null, null)); // A deferred downgrade charges nothing today - nothing for a code to discount.
             if (codeResult.IsFailure) return Result<SubscriptionResponse>.Failure(codeResult.Error!);
             var discount = codeResult.Value!.Discount;
@@ -448,8 +460,9 @@ public sealed class SubscriptionService
                 result = await _paymentGateway.ChangeSubscriptionPlanAsync(
                     subscription.PaddleSubscriptionId!,
                     newPlan.Key,
+                    interval,
                     timing,
-                    $"tenebit-planchange-{subscription.PaddleSubscriptionId}-{newPlan.Key}-{discountKey}",
+                    $"tenebit-planchange-{subscription.PaddleSubscriptionId}-{newPlan.Key}-{interval}-{discountKey}",
                     cancellationToken,
                     discount);
             }
@@ -471,7 +484,7 @@ public sealed class SubscriptionService
             if (timing == PlanChangeTiming.NextBillingPeriod)
             {
                 var effectiveAt = result.PendingEffectiveAt ?? subscription.CurrentPeriodEnd;
-                subscription.ScheduleDowngrade(newPlan.Key, effectiveAt);
+                subscription.ScheduleDowngrade(newPlan.Key, interval, effectiveAt);
 
                 _activity.Add(new ActivityLog(
                     organizationId,
@@ -492,7 +505,7 @@ public sealed class SubscriptionService
             }
             else
             {
-                subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+                subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.BillingInterval, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
                 chargedAmount = result.AmountCharged;
                 chargedCurrency = result.Currency;
 
@@ -567,14 +580,17 @@ public sealed class SubscriptionService
             plan.Name,
             plan.AssetLimit,
             plan.MonthlyPrice,
+            plan.AnnualPrice,
             plan.Currency,
             usage.First(x => x.Resource == "assets").Current,
             subscription.Status.ToString(),
             subscription.CurrentPeriodEnd,
             usage,
+            subscription.BillingInterval.ToString(),
             pendingPlan?.Key,
             pendingPlan?.Name,
-            subscription.PendingPlanEffectiveAt
+            subscription.PendingPlanEffectiveAt,
+            subscription.PendingBillingInterval?.ToString()
         );
     }
 
@@ -665,6 +681,7 @@ public sealed class SubscriptionService
         }
 
         var appliedPlan = webhookEvent.PlanKey;
+        var appliedInterval = webhookEvent.BillingInterval;
         var appliedStatus = webhookEvent.Status;
         var appliedStart = webhookEvent.CurrentPeriodStart;
         var appliedEnd = webhookEvent.CurrentPeriodEnd;
@@ -681,7 +698,7 @@ public sealed class SubscriptionService
             {
                 throw new PaymentGatewayException("Paddle canonical association mismatch.");
             }
-            appliedPlan = canonical.PlanKey; appliedStatus = canonical.Status; appliedStart = canonical.CurrentPeriodStart;
+            appliedPlan = canonical.PlanKey; appliedInterval = canonical.BillingInterval; appliedStatus = canonical.Status; appliedStart = canonical.CurrentPeriodStart;
             appliedEnd = canonical.CurrentPeriodEnd; appliedSubscriptionId = canonical.SubscriptionId; appliedCustomerId = canonical.CustomerId;
         }
         else if (subscription.LastWebhookEventAt is { } lastEventAt && webhookEvent.EventCreatedAt < lastEventAt)
@@ -692,7 +709,7 @@ public sealed class SubscriptionService
 
         var planBefore = subscription.PlanKey;
         var wasEntitledBefore = subscription.IsEntitledToPaidPlan;
-        subscription.SyncFromPaddle(appliedPlan, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
+        subscription.SyncFromPaddle(appliedPlan, appliedInterval, appliedStatus, appliedStart, appliedEnd, appliedSubscriptionId, appliedCustomerId, webhookEvent.EventCreatedAt);
 
         _activity.Add(new ActivityLog(
             subscription.OrganizationId,
@@ -755,14 +772,17 @@ public sealed record SubscriptionResponse(
     string PlanName,
     int AssetLimit,
     decimal MonthlyPrice,
+    decimal AnnualPrice,
     string Currency,
     int CurrentAssetCount,
     string Status,
     DateTimeOffset CurrentPeriodEnd,
     IReadOnlyList<ResourceUsage> Usage,
+    string BillingInterval,
     string? PendingPlanKey = null,
     string? PendingPlanName = null,
     DateTimeOffset? PendingPlanEffectiveAt = null,
+    string? PendingBillingInterval = null,
     /// <summary>Set only on the response to a just-applied plan change - the exact amount Paddle charged
     /// for it (post proration credit; can legitimately be 0). Null everywhere else, including a plain
     /// GetCurrentAsync, where there's no "just happened" charge to report.</summary>

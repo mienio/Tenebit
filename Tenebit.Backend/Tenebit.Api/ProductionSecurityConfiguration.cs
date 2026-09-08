@@ -53,9 +53,13 @@ internal static class ProductionSecurityConfiguration
             errors.Add("Production database connection string is missing or uses the repository default password.");
 
         var paddleCoreParts = new[] { configuration["Paddle:ApiKey"], configuration["Paddle:ClientSideToken"], configuration["Paddle:WebhookSecret"] };
-        var paddleAnyPriceConfigured = configuration.GetSection("Paddle:Prices").GetChildren().Any(x => !string.IsNullOrWhiteSpace(x.Value));
+        // Prices now nest one level deeper (Paddle:Prices:<plan>:monthly/annual) - the leaves live under
+        // the plan sections' own children, not directly under Paddle:Prices.
+        var paddleAnyPriceConfigured = configuration.GetSection("Paddle:Prices").GetChildren()
+            .SelectMany(plan => plan.GetChildren())
+            .Any(x => !string.IsNullOrWhiteSpace(x.Value));
         if (paddleCoreParts.Any(x => !string.IsNullOrWhiteSpace(x)) && (paddleCoreParts.Any(string.IsNullOrWhiteSpace) || !paddleAnyPriceConfigured))
-            errors.Add("Paddle must be either fully disabled or configured with ApiKey, ClientSideToken, WebhookSecret and at least one Paddle:Prices:<plan> entry together.");
+            errors.Add("Paddle must be either fully disabled or configured with ApiKey, ClientSideToken, WebhookSecret and at least one Paddle:Prices:<plan>:<interval> entry together.");
 
         var emailEnabled = configuration.GetValue("Email:Enabled", false);
         if (emailEnabled && (string.IsNullOrWhiteSpace(configuration["Email:Host"]) || string.IsNullOrWhiteSpace(configuration["Email:FromAddress"])))
