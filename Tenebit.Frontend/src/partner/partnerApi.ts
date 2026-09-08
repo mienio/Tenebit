@@ -148,7 +148,6 @@ export interface AffiliateCode {
   isActive: boolean;
   clickCount: number;
   createdAt: string;
-  trackingUrl: string;
 }
 
 export function listMyCodes(): Promise<AffiliateCode[]> {

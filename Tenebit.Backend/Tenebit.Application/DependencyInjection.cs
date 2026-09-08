@@ -75,7 +75,6 @@ public static class DependencyInjection
         services.AddScoped<ServiceTicketService>();
         services.AddScoped<AffiliateAuthService>();
         services.AddScoped<AffiliateCodeService>();
-        services.AddScoped<AffiliateTrackingService>();
         services.AddScoped<AffiliateMessageService>();
         services.AddScoped<AffiliateDashboardService>();
         services.AddScoped<AffiliateConversionRecordingService>();

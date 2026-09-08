@@ -8,43 +8,39 @@ import { createMyCode, listMyCodes, setMyCodeActive, type AffiliateCode } from '
 import { usePartnerLocale, type PartnerLocale } from './i18n';
 
 const content: Record<PartnerLocale, {
-  copyLink: string; copied: string;
+  copyCode: string; copied: string;
   title: string; description: string; fetchError: string; createError: string; toggleError: string;
   customCodeLabel: (activeCount: number) => string; customCodeInfo: string; customCodePlaceholder: string;
   create: string; creating: string;
-  colCode: string; colLink: string; colClicks: string; colStatus: string;
+  colCode: string; colStatus: string;
   active: string; disabled: string; disable: string; enable: string;
   empty: string;
 }> = {
   en: {
-    copyLink: 'Copy link', copied: 'Copied',
-    title: 'Your codes', description: 'Every code has its own ready-to-copy link. Codes never expire.',
+    copyCode: 'Copy code', copied: 'Copied',
+    title: 'Your codes', description: 'Share a code directly with customers - it’s applied at checkout and counted toward your commission there. Codes never expire.',
     fetchError: 'Could not fetch codes.', createError: 'Could not create the code.', toggleError: 'Could not change the code status.',
     customCodeLabel: activeCount => `Custom code (optional) - ${activeCount} active`,
     customCodeInfo: 'Leave blank to generate a code automatically.',
     customCodePlaceholder: 'e.g. DAMIAN20',
     create: 'Create code', creating: 'Creating…',
-    colCode: 'Code', colLink: 'Link', colClicks: 'Clicks', colStatus: 'Status',
+    colCode: 'Code', colStatus: 'Status',
     active: 'Active', disabled: 'Disabled', disable: 'Disable', enable: 'Enable',
     empty: 'No codes yet - create your first one above.',
   },
   pl: {
-    copyLink: 'Kopiuj link', copied: 'Skopiowano',
-    title: 'Twoje kody', description: 'Każdy kod ma osobny, gotowy do skopiowania link. Kody nie wygasają.',
+    copyCode: 'Kopiuj kod', copied: 'Skopiowano',
+    title: 'Twoje kody', description: 'Udostępniaj kod bezpośrednio klientom - jest stosowany przy checkout i tam liczy się do Twojej prowizji. Kody nie wygasają.',
     fetchError: 'Nie udało się pobrać kodów.', createError: 'Nie udało się utworzyć kodu.', toggleError: 'Nie udało się zmienić statusu kodu.',
     customCodeLabel: activeCount => `Własny kod (opcjonalnie) - ${activeCount} aktywnych`,
     customCodeInfo: 'Zostaw puste, aby wygenerować kod automatycznie.',
     customCodePlaceholder: 'np. DAMIAN20',
     create: 'Utwórz kod', creating: 'Tworzenie…',
-    colCode: 'Kod', colLink: 'Link', colClicks: 'Kliknięcia', colStatus: 'Status',
+    colCode: 'Kod', colStatus: 'Status',
     active: 'Aktywny', disabled: 'Wyłączony', disable: 'Wyłącz', enable: 'Włącz',
     empty: 'Brak kodów - utwórz pierwszy powyżej.',
   },
 };
-
-function displayUrl(url: string): string {
-  return url.replace(/^https?:\/\//, '');
-}
 
 function CopyButton({ text, copyLabel, copiedLabel }: { text: string; copyLabel: string; copiedLabel: string }) {
   const [copied, setCopied] = useState(false);
@@ -127,18 +123,16 @@ export function PartnerCodesPage() {
       {!codes ? <LoadingState /> : (
         <div className="card adminTableCard">
           <table className="adminTable">
-            <thead><tr><th>{t.colCode}</th><th>{t.colLink}</th><th>{t.colClicks}</th><th>{t.colStatus}</th><th /></tr></thead>
+            <thead><tr><th>{t.colCode}</th><th>{t.colStatus}</th><th /></tr></thead>
             <tbody>
               {codes.map(c => (
                 <tr key={c.id}>
-                  <td><code>{c.code}</code></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="adminMuted" style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{displayUrl(c.trackingUrl)}</span>
-                      <CopyButton text={c.trackingUrl} copyLabel={t.copyLink} copiedLabel={t.copied} />
+                      <code>{c.code}</code>
+                      <CopyButton text={c.code} copyLabel={t.copyCode} copiedLabel={t.copied} />
                     </div>
                   </td>
-                  <td>{c.clickCount}</td>
                   <td>{c.isActive ? <span className="adminTag adminTag--ok">{t.active}</span> : <span className="adminTag">{t.disabled}</span>}</td>
                   <td className="adminTable__actions">
                     <Button variant="secondary" icon={<Power size={14} />} disabled={busyId === c.id} onClick={() => handleToggle(c)}>
@@ -147,7 +141,7 @@ export function PartnerCodesPage() {
                   </td>
                 </tr>
               ))}
-              {codes.length === 0 ? <tr><td colSpan={5} className="adminMuted">{t.empty}</td></tr> : null}
+              {codes.length === 0 ? <tr><td colSpan={3} className="adminMuted">{t.empty}</td></tr> : null}
             </tbody>
           </table>
         </div>

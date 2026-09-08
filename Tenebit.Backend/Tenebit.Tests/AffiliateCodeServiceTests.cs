@@ -18,7 +18,7 @@ public class AffiliateCodeServiceTests
         var promoCodes = new InMemoryPromoCodeRepository();
         var settings = new InMemoryAffiliateProgramSettingsRepository();
         var clock = new FakeClock();
-        var service = new AffiliateCodeService(codes, affiliates, promoCodes, settings, new FakeAppLinkBuilder(), new FakeUnitOfWork(), clock);
+        var service = new AffiliateCodeService(codes, affiliates, promoCodes, settings, new FakeUnitOfWork(), clock);
 
         var affiliate = new Affiliate("damian@example.com", "hash", "Damian", "Kowalski", "PL", clock.UtcNow);
         if (maxActiveCodesOverride.HasValue) affiliate.OverrideMaxActiveCodes(maxActiveCodesOverride.Value);
@@ -106,7 +106,7 @@ public class AffiliateCodeServiceTests
         var promoCodes = new InMemoryPromoCodeRepository();
         var settings = new InMemoryAffiliateProgramSettingsRepository();
         var clock = new FakeClock();
-        var service = new AffiliateCodeService(codes, affiliates, promoCodes, settings, new FakeAppLinkBuilder(), new FakeUnitOfWork(), clock);
+        var service = new AffiliateCodeService(codes, affiliates, promoCodes, settings, new FakeUnitOfWork(), clock);
         var affiliate = new Affiliate("x@example.com", "hash", "X", "X", null, clock.UtcNow);
         affiliate.OverrideMaxActiveCodes(10);
         affiliates.Add(affiliate);

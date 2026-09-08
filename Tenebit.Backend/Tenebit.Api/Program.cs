@@ -154,9 +154,6 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("affiliate-login", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(10)));
     options.AddPolicy("affiliate-recovery", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(10)));
     options.AddPolicy("affiliate-code-check", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(60)));
-    // The redirect is the main bot target but also the one endpoint that must absorb a real traffic
-    // spike from a viral post, so it gets a higher ceiling than the other public policy.
-    options.AddPolicy("affiliate-redirect", context => RateLimitPartition.GetFixedWindowLimiter(PartitionKey(context), _ => Window(120)));
     // The checkout "promo code" box now also resolves against AffiliateCode (typing a partner's code
     // counts, not just clicking their link - see SubscriptionService.ResolveCodeAsync), which turns it
     // into a live oracle for whether a guessed string is a real code. Both endpoints require an
@@ -412,7 +409,6 @@ app.Use(async (context, next) =>
 app.MapTenebitApi();
 app.MapAdminEndpoints();
 app.MapPartnerEndpoints();
-app.MapRedirectEndpoints();
 
 var verifyEncryptedDataOnly = args.Any(arg => string.Equals(arg, "--verify-encrypted-data", StringComparison.OrdinalIgnoreCase));
 if (verifyEncryptedDataOnly)

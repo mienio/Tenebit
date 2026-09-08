@@ -16,12 +16,12 @@ const en: AffiliateTermsSection[] = [
   {
     title: '1. What this program is',
     paragraphs: [
-      'The TENEB.IT PARTNERS program lets you promote Tenebit using your own, unique promo codes and referral links. When someone pays for a Tenebit subscription using your code, you receive a commission on that payment.',
+      'The TENEB.IT PARTNERS program lets you promote Tenebit using your own, unique promo codes. When someone pays for a Tenebit subscription using your code, you receive a commission on that payment.',
       'Participation in the program is voluntary and free. Registration requires approval by Tenebit - the account stays in "pending approval" status until it is verified.',
     ],
   },
   {
-    title: '2. Your codes and links',
+    title: '2. Your codes',
     paragraphs: [
       'You can create your own code (if available) or use one generated automatically. The limit on active codes is set by Tenebit and shown in the panel.',
       'Codes never expire. Deactivating a code frees up a slot in the limit but does not delete history - commissions already accrued remain accrued.',
@@ -60,7 +60,7 @@ const en: AffiliateTermsSection[] = [
     title: '6. Your responsibilities',
     bullets: [
       'Promote Tenebit in a way that is lawful and follows good business practice.',
-      'Do not send unsolicited messages (spam) containing your partner link.',
+      'Do not send unsolicited messages (spam) containing your partner code.',
       'Do not make false promises about the product, pricing, or guarantees.',
       'Report to Tenebit any situation that raises doubts about compliance with these terms.',
     ],
@@ -111,12 +111,12 @@ const pl: AffiliateTermsSection[] = [
   {
     title: '1. Czym jest program',
     paragraphs: [
-      'Program partnerski TENEB.IT PARTNERS pozwala promować Tenebit przy użyciu własnych, unikalnych kodów i linków polecających. Gdy ktoś zapłaci za subskrypcję Tenebit, korzystając z Twojego kodu, otrzymujesz prowizję od tej wpłaty.',
+      'Program partnerski TENEB.IT PARTNERS pozwala promować Tenebit przy użyciu własnych, unikalnych kodów. Gdy ktoś zapłaci za subskrypcję Tenebit, korzystając z Twojego kodu, otrzymujesz prowizję od tej wpłaty.',
       'Uczestnictwo w programie jest dobrowolne i bezpłatne. Rejestracja wymaga zatwierdzenia przez Tenebit - konto pozostaje w stanie "oczekuje na zatwierdzenie" do czasu weryfikacji.',
     ],
   },
   {
-    title: '2. Twoje kody i linki',
+    title: '2. Twoje kody',
     paragraphs: [
       'Możesz utworzyć własny kod (jeśli jest dostępny) albo skorzystać z wygenerowanego automatycznie. Limit aktywnych kodów jest ustalany przez Tenebit i widoczny w panelu.',
       'Kody nie wygasają. Dezaktywowanie kodu zwalnia miejsce w limicie, ale nie usuwa historii - naliczone wcześniej prowizje pozostają naliczone.',
@@ -155,7 +155,7 @@ const pl: AffiliateTermsSection[] = [
     title: '6. Twoje obowiązki',
     bullets: [
       'Promuj Tenebit w sposób zgodny z prawem i dobrymi obyczajami.',
-      'Nie wysyłaj niechcianych wiadomości (spam) z linkiem partnerskim.',
+      'Nie wysyłaj niechcianych wiadomości (spam) ze swoim kodem partnerskim.',
       'Nie składaj fałszywych obietnic dotyczących produktu, cen ani gwarancji.',
       'Zgłaszaj Tenebit każdą sytuację, która budzi Twoje wątpliwości co do zgodności z regulaminem.',
     ],

@@ -7,7 +7,7 @@ using Tenebit.Domain.Common;
 
 namespace Tenebit.Application.Affiliates;
 
-public sealed record AffiliateCodeResponse(Guid Id, string Code, string? CountryCode, bool IsActive, int ClickCount, DateTimeOffset CreatedAt, string TrackingUrl);
+public sealed record AffiliateCodeResponse(Guid Id, string Code, string? CountryCode, bool IsActive, int ClickCount, DateTimeOffset CreatedAt);
 
 /// <summary>
 /// Code creation/validation for the affiliate's own dashboard - enforces the active-code limit and
@@ -22,19 +22,17 @@ public sealed class AffiliateCodeService
     private readonly IAffiliateRepository _affiliates;
     private readonly IPromoCodeRepository _promoCodes;
     private readonly IAffiliateProgramSettingsRepository _settings;
-    private readonly IAppLinkBuilder _appLinkBuilder;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
     public AffiliateCodeService(
         IAffiliateCodeRepository codes, IAffiliateRepository affiliates, IPromoCodeRepository promoCodes,
-        IAffiliateProgramSettingsRepository settings, IAppLinkBuilder appLinkBuilder, IUnitOfWork unitOfWork, IClock clock)
+        IAffiliateProgramSettingsRepository settings, IUnitOfWork unitOfWork, IClock clock)
     {
         _codes = codes;
         _affiliates = affiliates;
         _promoCodes = promoCodes;
         _settings = settings;
-        _appLinkBuilder = appLinkBuilder;
         _unitOfWork = unitOfWork;
         _clock = clock;
     }
@@ -158,7 +156,6 @@ public sealed class AffiliateCodeService
         throw new DomainException("Nie udało się wygenerować unikalnego kodu, spróbuj ponownie.");
     }
 
-    private AffiliateCodeResponse ToResponse(AffiliateCode code) => new(
-        code.Id, code.Code, code.CountryCode, code.IsActive, code.ClickCount, code.CreatedAt,
-        _appLinkBuilder.BuildAppUrl($"/r/{code.Code}"));
+    private static AffiliateCodeResponse ToResponse(AffiliateCode code) => new(
+        code.Id, code.Code, code.CountryCode, code.IsActive, code.ClickCount, code.CreatedAt);
 }
