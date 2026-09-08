@@ -106,6 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+    // Keyed on user?.id, not user, so a role change already reflected on the same user
+    // object doesn't skip a refetch, but object-identity churn from unrelated state doesn't
+    // trigger one either.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   useEffect(() => {
