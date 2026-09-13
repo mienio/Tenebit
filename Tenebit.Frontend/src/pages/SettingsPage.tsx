@@ -72,6 +72,20 @@ function parsePermissionKey(permissionKey: string): { moduleKey: string; kind: '
   return null;
 }
 
+// Same order as backend PermissionModules.All - groups the per-role permission toggle list into a
+// section per app module instead of one long flat list. "licenses.viewKey" (the field-level "show
+// license keys" permission) doesn't parse as {module}.view/.manage, so it's pinned to "licenses".
+const permissionModuleOrder = [
+  'dashboard', 'assets', 'customFields', 'locations', 'licenses', 'assignments', 'assetAudits',
+  'people', 'onboarding', 'offboarding', 'procedures', 'jobProfiles', 'reports', 'activityLog',
+  'alerts', 'settings', 'organizationUsers'
+];
+
+function permissionModuleGroupKey(permissionKey: string): string {
+  if (permissionKey === 'licenses.viewKey') return 'licenses';
+  return parsePermissionKey(permissionKey)?.moduleKey ?? 'other';
+}
+
 export function SettingsPage() {
   const { t } = useI18n();
   const auth = useAuth();
@@ -819,25 +833,34 @@ export function SettingsPage() {
                 </h3>
               )}
               <p className="permissionPanel__hint">{(() => { const role = roles.data?.find(r => r.key === selectedRoleKey); return role ? roleDisplayDescription(role) : t('settings.rolePermissionsHint'); })()}</p>
-              {(rolePermissions.data ?? []).filter(p => p.roleKey === selectedRoleKey).map(permission => (
-                <div className="permissionRow" key={permission.permissionKey}>
-                  <div>
-                    <div className="permissionRow__label">{permissionDisplayLabel(permission)}</div>
-                    <div className="permissionRow__desc">{permissionDisplayDescription(permission)}</div>
+              {permissionModuleOrder.map(moduleKey => {
+                const modulePermissions = (rolePermissions.data ?? []).filter(p => p.roleKey === selectedRoleKey && permissionModuleGroupKey(p.permissionKey) === moduleKey);
+                if (!modulePermissions.length) return null;
+                return (
+                  <div className="permissionSection" key={moduleKey}>
+                    <div className="permissionSection__title">{t(`permission.module.${moduleKey}`)}</div>
+                    {modulePermissions.map(permission => (
+                      <div className="permissionRow" key={permission.permissionKey}>
+                        <div>
+                          <div className="permissionRow__label">{permissionDisplayLabel(permission)}</div>
+                          <div className="permissionRow__desc">{permissionDisplayDescription(permission)}</div>
+                        </div>
+                        <label className="toggleSwitch">
+                          <input
+                            type="checkbox"
+                            checked={permission.allowed}
+                            disabled={permissionSaving === permission.permissionKey}
+                            onChange={event => togglePermission(permission.roleKey, permission.permissionKey, event.target.checked)}
+                            aria-label={permissionDisplayLabel(permission)}
+                          />
+                          <span className="toggleSwitch__track" />
+                          <span className="toggleSwitch__thumb" />
+                        </label>
+                      </div>
+                    ))}
                   </div>
-                  <label className="toggleSwitch">
-                    <input
-                      type="checkbox"
-                      checked={permission.allowed}
-                      disabled={permissionSaving === permission.permissionKey}
-                      onChange={event => togglePermission(permission.roleKey, permission.permissionKey, event.target.checked)}
-                      aria-label={permissionDisplayLabel(permission)}
-                    />
-                    <span className="toggleSwitch__track" />
-                    <span className="toggleSwitch__thumb" />
-                  </label>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

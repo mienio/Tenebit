@@ -1122,8 +1122,11 @@ button.authIcon:hover { filter: brightness(0.94); }
 .roleLabelEdit { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; max-width: 320px; }
 .roleLabelEdit .input { flex: 1; }
 .permissionPanel__hint { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+.permissionSection { margin-bottom: 8px; }
+.permissionSection__title { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); padding: 16px 0 4px; border-top: 1px solid var(--border); }
+.permissionSection:first-child .permissionSection__title { border-top: none; padding-top: 0; }
 .permissionRow { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
-.permissionRow:last-child { border-bottom: none; }
+.permissionSection .permissionRow:last-child { border-bottom: none; }
 .permissionRow__label { font-weight: 650; }
 .permissionRow__desc { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .toggleSwitch { position: relative; width: 42px; height: 24px; flex: 0 0 auto; display: inline-block; }
