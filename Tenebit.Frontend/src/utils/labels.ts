@@ -27,7 +27,11 @@ export function activityLabel(t: Translate, action: string) {
 export function activityActionLabel(t: (key: string) => string, action: string): string {
   const key = `activity.${action}`;
   const label = t(key);
-  return label === key ? action.replace(/[._]/g, ' ') : label;
+  if (label !== key) return label;
+  // Safety net for a missing translation key: still capitalize instead of showing a raw,
+  // all-lowercase backend action string (e.g. "procedure.deleted" -> "Procedure deleted").
+  const fallback = action.replace(/[._]/g, ' ');
+  return fallback.charAt(0).toUpperCase() + fallback.slice(1);
 }
 
 export function auditEntityLabel(t: (key: string) => string, entityType: string): string {

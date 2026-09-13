@@ -174,23 +174,47 @@ public class ErrorMessageTranslatorTests
 
     // Komunikaty z RequestObjectValidator (DataAnnotations) i z walidacji multipart. Wracaja do
     // klienta przez ValidationEndpointFilter, ktory biegnie przed KAZDYM handlerem Minimal API, wiec
-    // luka tutaj dotyka calego API naraz. Nazwa pola jest techniczna i ma zostac nietknieta.
+    // luka tutaj dotyka calego API naraz. Nazwa pola C# (PascalCase) nie ma byc pokazana userowi
+    // wprost w jezykach innych niz polski - zostaje rozbita na slowa i sprowadzona do malych liter
+    // (patrz HumanizePropertyName), zeby "FirstName" nie przeciekalo jako "The FirstName field...".
     public static TheoryData<string, string> ValidationMessages() =>
         new()
         {
-            { "Pole Email może mieć maksymalnie 200 znaków.", "Email" },
-            { "Pole AssetIds może zawierać maksymalnie 100 elementów.", "AssetIds" },
-            { "Pole Name nie może być puste.", "Name" },
-            { "Pole Email nie zawiera prawidłowego adresu e-mail.", "Email" },
-            { "Pole ReturnUrl musi być względną ścieżką aplikacji.", "ReturnUrl" },
-            { "Pole CategoryId musi zawierać prawidłowy identyfikator.", "CategoryId" },
-            { "Pole StatusKey ma nieprawidłową wartość.", "StatusKey" },
-            { "Pole Seats ma wartość poza dozwolonym zakresem.", "Seats" },
-            { "Pole PurchasePrice nie może być ujemne.", "PurchasePrice" },
-            { "Pole PurchaseDate ma datę poza dozwolonym zakresem.", "PurchaseDate" },
-            { "Pole Notes zawiera nieprawidłową wartość tekstową.", "Notes" },
-            { "Pole RetentionDays zawiera wartość poza dozwolonym zakresem 0-3650.", "RetentionDays" },
-            { "Pole Items nie jest kolekcją.", "Items" },
+            { "Pole Email może mieć maksymalnie 200 znaków.", "email" },
+            { "Pole AssetIds może zawierać maksymalnie 100 elementów.", "asset ids" },
+            { "Pole Name nie może być puste.", "name" },
+            { "Pole Email nie zawiera prawidłowego adresu e-mail.", "email" },
+            { "Pole ReturnUrl musi być względną ścieżką aplikacji.", "return url" },
+            { "Pole CategoryId musi zawierać prawidłowy identyfikator.", "category id" },
+            { "Pole StatusKey ma nieprawidłową wartość.", "status key" },
+            { "Pole Seats ma wartość poza dozwolonym zakresem.", "seats" },
+            { "Pole PurchasePrice nie może być ujemne.", "purchase price" },
+            { "Pole PurchaseDate ma datę poza dozwolonym zakresem.", "purchase date" },
+            { "Pole Notes zawiera nieprawidłową wartość tekstową.", "notes" },
+            { "Pole RetentionDays zawiera wartość poza dozwolonym zakresem 0-3650.", "retention days" },
+            { "Pole Items nie jest kolekcją.", "items" },
+        };
+
+    [Theory]
+    [MemberData(nameof(ValidationMessages))]
+    public void Translate_TranslatesValidationMessages_AndHumanizesFieldName(string message, string humanizedFieldName)
+    {
+        foreach (var language in new[] { "en", "es", "de", "it", "fr" })
+        {
+            var result = ErrorMessageTranslator.Translate(message, language);
+            Assert.NotEqual(message, result);
+            Assert.Contains(humanizedFieldName, result);
+            var leaked = result.Where(character => "ąćęłńśźżĄĆĘŁŃŚŹŻ".Contains(character)).ToArray();
+            Assert.True(leaked.Length == 0, $"{language}: polskie znaki w tlumaczeniu -> {result}");
+        }
+    }
+
+    // Kontrapunkt: te komunikaty niosa albo nazwe widoczna juz dla uzytkownika (etykieta pola
+    // niestandardowego wpisana przez organizacje), albo techniczny identyfikator kontraktu JSON
+    // rozpoznawany przez integracje klienta - w obu przypadkach maja zostac nietkniete w kazdym jezyku.
+    public static TheoryData<string, string> UntouchedNameMessages() =>
+        new()
+        {
             { "Klucz w polu CustomFields może mieć maksymalnie 80 znaków.", "CustomFields" },
             { "Wartość w polu CustomFields może mieć maksymalnie 500 znaków.", "CustomFields" },
             { "Pole 'request' jest wymagane.", "request" },
@@ -199,7 +223,7 @@ public class ErrorMessageTranslatorTests
         };
 
     [Theory]
-    [MemberData(nameof(ValidationMessages))]
+    [MemberData(nameof(UntouchedNameMessages))]
     public void Translate_TranslatesValidationMessages_AndKeepsFieldName(string message, string fieldName)
     {
         foreach (var language in new[] { "en", "es", "de", "it", "fr" })

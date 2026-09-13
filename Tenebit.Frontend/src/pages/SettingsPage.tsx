@@ -35,6 +35,43 @@ const pageSize = 20;
 const validTabs: Tab[] = ['account', 'company', 'locations', 'customFields', 'qrLabel', 'profiles', 'users', 'permissions', 'alerts'];
 const organizationOnlyTabs: Tab[] = ['company', 'locations', 'customFields', 'qrLabel', 'profiles', 'users', 'permissions', 'alerts'];
 
+// Groups the flat role list into named sections in the roles & permissions rail. Purely a display
+// grouping - role keys and their permission matrix are unaffected. Keep in sync with TenebitRoles.All
+// (backend) if a role is ever added/removed.
+const roleGroups: { key: string; roleKeys: string[] }[] = [
+  { key: 'management', roleKeys: ['owner', 'admin'] },
+  { key: 'assets', roleKeys: ['asset_operator', 'technician', 'license_manager'] },
+  { key: 'people', roleKeys: ['manager', 'hr', 'procedure_manager'] },
+  { key: 'finance', roleKeys: ['finance', 'auditor'] },
+  { key: 'employee', roleKeys: ['employee'] }
+];
+
+// The built-in Polish labels from TenebitRoles.All (backend), used to detect whether an
+// organization has renamed a role via the inline "edit role label" feature - a customized label is
+// free text and must not be silently overwritten by the i18n translation on language switch.
+const defaultRoleLabelsPl: Record<string, string> = {
+  owner: 'Właściciel',
+  admin: 'Administrator',
+  asset_operator: 'Operator aktywów',
+  technician: 'Serwisant',
+  manager: 'Kierownik',
+  employee: 'Pracownik',
+  hr: 'HR / onboarding',
+  procedure_manager: 'Procedury',
+  license_manager: 'Licencje',
+  finance: 'Finanse',
+  auditor: 'Audytor'
+};
+
+// Permission keys are always generated as "{moduleKey}.view" / "{moduleKey}.manage" (see backend
+// RolePermissionKeys.BuildCatalog) - label/description are never organization-customizable, so they
+// can be fully re-derived from translated templates instead of showing the backend's Polish text.
+function parsePermissionKey(permissionKey: string): { moduleKey: string; kind: 'view' | 'manage' } | null {
+  if (permissionKey.endsWith('.manage')) return { moduleKey: permissionKey.slice(0, -'.manage'.length), kind: 'manage' };
+  if (permissionKey.endsWith('.view')) return { moduleKey: permissionKey.slice(0, -'.view'.length), kind: 'view' };
+  return null;
+}
+
 export function SettingsPage() {
   const { t } = useI18n();
   const auth = useAuth();
@@ -53,6 +90,26 @@ export function SettingsPage() {
     alerts: auth.can('alerts', 'manage')
   };
   const categoryTypeLabels: Record<AssetCategoryType, string> = Object.fromEntries(categoryTypeValues.map(value => [value, t(`categoryType.${value}`)])) as Record<AssetCategoryType, string>;
+  function roleDisplayLabel(role: { key: string; label: string }) {
+    return defaultRoleLabelsPl[role.key] === role.label ? t(`role.${role.key}.label`) : role.label;
+  }
+  function roleDisplayDescription(role: { key: string }) {
+    return t(`role.${role.key}.description`);
+  }
+  function permissionDisplayLabel(permission: { permissionKey: string; permissionLabel: string }) {
+    if (permission.permissionKey === 'licenses.viewKey') return t('permission.viewLicenseKeys.label');
+    const parsed = parsePermissionKey(permission.permissionKey);
+    if (!parsed) return permission.permissionLabel;
+    const moduleName = t(`permission.module.${parsed.moduleKey}`);
+    return t(parsed.kind === 'view' ? 'permission.template.viewLabel' : 'permission.template.manageLabel', { module: moduleName });
+  }
+  function permissionDisplayDescription(permission: { permissionKey: string; permissionDescription: string }) {
+    if (permission.permissionKey === 'licenses.viewKey') return t('permission.viewLicenseKeys.description');
+    const parsed = parsePermissionKey(permission.permissionKey);
+    if (!parsed) return permission.permissionDescription;
+    const moduleName = t(`permission.module.${parsed.moduleKey}`);
+    return t(parsed.kind === 'view' ? 'permission.template.viewDescription' : 'permission.template.manageDescription', { module: moduleName });
+  }
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') as Tab | null;
   const initialTabAllowed = initialTab && validTabs.includes(initialTab) && (canManageTab[initialTab] || !organizationOnlyTabs.includes(initialTab));
@@ -95,9 +152,11 @@ export function SettingsPage() {
   const [relationTypeDrafts, setRelationTypeDrafts] = useState<Record<string, string>>({});
   const [creatingRelationType, setCreatingRelationType] = useState(false);
   const [justCreatedRelationTypeId, setJustCreatedRelationTypeId] = useState<string | null>(null);
+  const [addRelationTypeOpen, setAddRelationTypeOpen] = useState(false);
   const [teamDrafts, setTeamDrafts] = useState<Record<string, string>>({});
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [justCreatedTeamId, setJustCreatedTeamId] = useState<string | null>(null);
+  const [addTeamOpen, setAddTeamOpen] = useState(false);
   const [iconPickerFor, setIconPickerFor] = useState<string | null>(null);
   const [settingsSearch, setSettingsSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -154,6 +213,7 @@ export function SettingsPage() {
   const filteredCategories = useMemo(() => (categories.data ?? []).filter(item => `${item.name} ${categoryTypeLabels[item.type]} ${item.description ?? ''}`.toLowerCase().includes(debouncedSearch)), [categories.data, debouncedSearch, categoryTypeLabels]);
   const filteredProfiles = useMemo(() => (profiles.data ?? []).filter(item => `${item.name} ${item.description ?? ''}`.toLowerCase().includes(debouncedSearch)), [profiles.data, debouncedSearch]);
   const filteredUsers = useMemo(() => (users.data ?? []).filter(item => `${item.displayName} ${item.email} ${item.roles.join(' ')}`.toLowerCase().includes(debouncedSearch)), [debouncedSearch, users.data]);
+  const pagedCategories = useMemo(() => paginate(filteredCategories, page, pageSize), [filteredCategories, page]);
   const pagedProfiles = useMemo(() => paginate(filteredProfiles, page, pageSize), [filteredProfiles, page]);
   const pagedUsers = useMemo(() => paginate(filteredUsers, page, pageSize), [filteredUsers, page]);
 
@@ -243,11 +303,17 @@ export function SettingsPage() {
     setRelationTypeDrafts(current => ({ ...current, [id]: name }));
   }
 
-  async function addRelationType() {
+  async function addRelationType(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
+    if (!name) return setMessage({ type: 'error', text: t('people.relationTypeNameRequired') });
     setCreatingRelationType(true);
     try {
-      const created = await api.createPersonRelationType({ name: t('settings.newRelationTypeDefaultName') });
+      const created = await api.createPersonRelationType({ name });
       setJustCreatedRelationTypeId(created.id);
+      setAddRelationTypeOpen(false);
+      success(t('settings.relationTypeSaved'));
       await relationTypeSettings.reload();
     } catch (error) {
       failure(error, t('settings.relationTypeSaveFailed'));
@@ -273,11 +339,17 @@ export function SettingsPage() {
     setTeamDrafts(current => ({ ...current, [id]: name }));
   }
 
-  async function addTeamSetting() {
+  async function addTeamSetting(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
+    if (!name) return setMessage({ type: 'error', text: t('people.teamNameRequired') });
     setCreatingTeam(true);
     try {
-      const created = await api.createTeam({ name: t('settings.newTeamDefaultName'), managerId: null, costCenter: null });
+      const created = await api.createTeam({ name, managerId: null, costCenter: null });
       setJustCreatedTeamId(created.id);
+      setAddTeamOpen(false);
+      success(t('settings.teamSaved'));
       await teamSettings.reload();
     } catch (error) {
       failure(error, t('settings.teamSaveFailed'));
@@ -488,8 +560,9 @@ export function SettingsPage() {
             <div className="sectionTitle"><div><h2>{t('settings.assetCategories')}</h2><p>{t('settings.customFieldsCategoriesHint')}</p></div></div>
             <SettingsSearch value={settingsSearch} onChange={value => { setSettingsSearch(value); setPage(1); }} total={filteredCategories.length} />
             {categories.isLoading ? <p className="muted">{t('settings.loadingCategories')}</p> : categories.error ? <ErrorState message={categories.error} onRetry={categories.reload} /> : !filteredCategories.length ? <EmptyState title={t('settings.emptyCategoriesTitle')} description={t('settings.emptyCategoriesDesc')} /> : (
+              <>
               <div className="statusList">
-                {filteredCategories.map(category => {
+                {pagedCategories.items.map(category => {
                   const draft = categoryDrafts[category.id] ?? { name: category.name, type: category.type, description: category.description ?? '', depreciationMonths: category.depreciationMonths?.toString() ?? '' };
                   return (
                     <div className="statusTile categoryTile" key={category.id}>
@@ -532,6 +605,8 @@ export function SettingsPage() {
                   );
                 })}
               </div>
+              <Pagination page={pagedCategories.page} total={pagedCategories.total} pageSize={pageSize} onPageChange={setPage} />
+              </>
             )}
             <div className="formActions"><Button type="button" variant="secondary" disabled={creatingCategory} onClick={addCategory} icon={<Plus size={16} />}>{creatingCategory ? t('common.saving') : t('settings.addCategory')}</Button></div>
           </Card>
@@ -602,7 +677,7 @@ export function SettingsPage() {
                 ))}
               </div>
             )}
-            <div className="formActions"><Button type="button" variant="secondary" disabled={creatingRelationType} onClick={addRelationType} icon={<Plus size={16} />}>{creatingRelationType ? t('common.saving') : t('settings.addRelationType')}</Button></div>
+            <div className="formActions"><Button type="button" variant="secondary" onClick={() => setAddRelationTypeOpen(true)} icon={<Plus size={16} />}>{t('settings.addRelationType')}</Button></div>
           </Card>
 
           <Card>
@@ -624,8 +699,28 @@ export function SettingsPage() {
                 ))}
               </div>
             )}
-            <div className="formActions"><Button type="button" variant="secondary" disabled={creatingTeam} onClick={addTeamSetting} icon={<Plus size={16} />}>{creatingTeam ? t('common.saving') : t('settings.addTeam')}</Button></div>
+            <div className="formActions"><Button type="button" variant="secondary" onClick={() => setAddTeamOpen(true)} icon={<Plus size={16} />}>{t('settings.addTeam')}</Button></div>
           </Card>
+
+          <Modal open={addRelationTypeOpen} title={t('people.addRelationTypeTitle')} onClose={() => setAddRelationTypeOpen(false)}>
+            <form className="formGrid" onSubmit={addRelationType}>
+              <Field label={t('people.relationTypeNameLabel')}><TextInput name="name" required /></Field>
+              <div className="formActions formActions--split">
+                <Button type="button" variant="ghost" onClick={() => setAddRelationTypeOpen(false)}>{t('common.cancel')}</Button>
+                <Button disabled={creatingRelationType}>{creatingRelationType ? t('common.saving') : t('people.addRelationTypeTitle')}</Button>
+              </div>
+            </form>
+          </Modal>
+
+          <Modal open={addTeamOpen} title={t('people.addTeamTitle')} onClose={() => setAddTeamOpen(false)}>
+            <form className="formGrid" onSubmit={addTeamSetting}>
+              <Field label={t('people.teamNameLabel')}><TextInput name="name" required /></Field>
+              <div className="formActions formActions--split">
+                <Button type="button" variant="ghost" onClick={() => setAddTeamOpen(false)}>{t('common.cancel')}</Button>
+                <Button disabled={creatingTeam}>{creatingTeam ? t('common.saving') : t('people.addTeamTitle')}</Button>
+              </div>
+            </form>
+          </Modal>
         </div>
       ) : null}
 
@@ -666,7 +761,7 @@ export function SettingsPage() {
         {users.isLoading ? <p className="muted">{t('settings.loadingLogins')}</p> : users.error ? <ErrorState message={users.error} onRetry={users.reload} /> : !filteredUsers.length ? <EmptyState title={t('settings.emptyLoginsTitle')} description={t('settings.emptyLoginsDesc')} /> : (
           <>
             <div className="tableWrap"><table><thead><tr><th>{t('settings.colUser')}</th><th>{t('settings.colRoles')}</th><th>{t('assets.statusLabel')}</th><th></th></tr></thead><tbody>
-              {pagedUsers.items.map(user => <tr key={user.id}><td><strong>{user.displayName || user.email}</strong><small>{user.email}</small></td><td>{user.roles.map(key => roles.data?.find(r => r.key === key)?.label ?? key).join(', ') || '-'}</td><td>{user.isActive ? t('settings.active') : t('settings.inactive')}</td><td><Button variant="ghost" onClick={() => { setEditingUser(user); setModal('user'); }}>{t('common.edit')}</Button></td></tr>)}
+              {pagedUsers.items.map(user => <tr key={user.id}><td><strong>{user.displayName || user.email}</strong><small>{user.email}</small></td><td>{user.roles.map(key => { const role = roles.data?.find(r => r.key === key); return role ? roleDisplayLabel(role) : key; }).join(', ') || '-'}</td><td>{user.isActive ? t('settings.active') : t('settings.inactive')}</td><td><Button variant="ghost" onClick={() => { setEditingUser(user); setModal('user'); }}>{t('common.edit')}</Button></td></tr>)}
             </tbody></table></div>
             <Pagination page={pagedUsers.page} total={pagedUsers.total} pageSize={pageSize} onPageChange={setPage} />
           </>
@@ -680,17 +775,28 @@ export function SettingsPage() {
         {roles.isLoading || rolePermissions.isLoading ? <p className="muted">{t('settings.rolePermissionsLoading')}</p> : rolePermissions.error ? <ErrorState message={rolePermissions.error} onRetry={rolePermissions.reload} /> : (
           <div className="roleSplit">
             <nav className="roleRail" aria-label={t('settings.rolePermissions')}>
-              {roles.data?.map(role => (
-                <button
-                  key={role.key}
-                  type="button"
-                  className={role.key === selectedRoleKey ? 'roleRail__item--active' : ''}
-                  onClick={() => { setSelectedRoleKey(role.key); setEditingRoleLabel(false); }}
-                  title={role.description}
-                >
-                  {role.label}
-                </button>
-              ))}
+              {roleGroups.map(group => {
+                const groupRoles = group.roleKeys
+                  .map(key => roles.data?.find(role => role.key === key))
+                  .filter((role): role is NonNullable<typeof role> => !!role);
+                if (!groupRoles.length) return null;
+                return (
+                  <div className="roleRail__group" key={group.key}>
+                    <div className="roleRail__groupTitle">{t(`settings.roleGroup.${group.key}`)}</div>
+                    {groupRoles.map(role => (
+                      <button
+                        key={role.key}
+                        type="button"
+                        className={role.key === selectedRoleKey ? 'roleRail__item--active' : ''}
+                        onClick={() => { setSelectedRoleKey(role.key); setEditingRoleLabel(false); }}
+                        title={roleDisplayDescription(role)}
+                      >
+                        {roleDisplayLabel(role)}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
             </nav>
             <div className="permissionPanel">
               {editingRoleLabel ? (
@@ -701,7 +807,7 @@ export function SettingsPage() {
                 </form>
               ) : (
                 <h3 className="permissionPanel__heading">
-                  {roles.data?.find(r => r.key === selectedRoleKey)?.label}
+                  {(() => { const role = roles.data?.find(r => r.key === selectedRoleKey); return role ? roleDisplayLabel(role) : null; })()}
                   <button
                     type="button"
                     className="iconButton"
@@ -712,12 +818,12 @@ export function SettingsPage() {
                   </button>
                 </h3>
               )}
-              <p className="permissionPanel__hint">{roles.data?.find(r => r.key === selectedRoleKey)?.description ?? t('settings.rolePermissionsHint')}</p>
+              <p className="permissionPanel__hint">{(() => { const role = roles.data?.find(r => r.key === selectedRoleKey); return role ? roleDisplayDescription(role) : t('settings.rolePermissionsHint'); })()}</p>
               {(rolePermissions.data ?? []).filter(p => p.roleKey === selectedRoleKey).map(permission => (
                 <div className="permissionRow" key={permission.permissionKey}>
                   <div>
-                    <div className="permissionRow__label">{permission.permissionLabel}</div>
-                    <div className="permissionRow__desc">{permission.permissionDescription}</div>
+                    <div className="permissionRow__label">{permissionDisplayLabel(permission)}</div>
+                    <div className="permissionRow__desc">{permissionDisplayDescription(permission)}</div>
                   </div>
                   <label className="toggleSwitch">
                     <input
@@ -725,7 +831,7 @@ export function SettingsPage() {
                       checked={permission.allowed}
                       disabled={permissionSaving === permission.permissionKey}
                       onChange={event => togglePermission(permission.roleKey, permission.permissionKey, event.target.checked)}
-                      aria-label={permission.permissionLabel}
+                      aria-label={permissionDisplayLabel(permission)}
                     />
                     <span className="toggleSwitch__track" />
                     <span className="toggleSwitch__thumb" />
@@ -765,7 +871,25 @@ export function SettingsPage() {
             </SelectInput>
           </Field>
           <label className="checkField"><input name="isActive" type="checkbox" defaultChecked={editingUser?.isActive ?? true} /> {t('settings.accountActive')}</label>
-          <fieldset className="checkboxGroup"><legend>{t('settings.rolesLegend')}</legend>{roles.data?.map(role => <label key={role.key} title={role.description}><input name="roles" value={role.key} type="checkbox" defaultChecked={editingUser?.roles.includes(role.key)} /> {role.label}</label>)}</fieldset>
+          <fieldset className="checkboxGroup">
+            <legend>{t('settings.rolesLegend')}</legend>
+            {roleGroups.map(group => {
+              const groupRoles = group.roleKeys
+                .map(key => roles.data?.find(role => role.key === key))
+                .filter((role): role is NonNullable<typeof role> => !!role);
+              if (!groupRoles.length) return null;
+              return (
+                <div className="checkboxGroup__section" key={group.key}>
+                  <div className="checkboxGroup__groupTitle">{t(`settings.roleGroup.${group.key}`)}</div>
+                  {groupRoles.map(role => (
+                    <label key={role.key} title={roleDisplayDescription(role)}>
+                      <input name="roles" value={role.key} type="checkbox" defaultChecked={editingUser?.roles.includes(role.key)} /> {roleDisplayLabel(role)}
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+          </fieldset>
           <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setModal(null)}>{t('common.cancel')}</Button><Button disabled={userSaving}>{userSaving ? t('common.saving') : t('settings.saveLogin')}</Button></div>
         </form>
       </Modal>

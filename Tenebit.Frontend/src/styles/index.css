@@ -212,6 +212,9 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .choiceBox legend, .checkboxGroup legend { padding: 0 8px; color: var(--muted); font-weight: 680; }
 .choiceBox label, .checkboxGroup label { display: flex; gap: 10px; align-items: center; color: var(--muted); font-weight: 500; line-height: 1.35; }
 .checkboxGroup small { color: var(--muted); margin-left: auto; }
+.checkboxGroup__section { display: contents; }
+.checkboxGroup__groupTitle { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.checkboxGroup__section:first-child .checkboxGroup__groupTitle { margin-top: 0; }
 .choiceBox p { margin: 0; }
 
 .tableWrap { overflow-x: auto; }
@@ -1107,7 +1110,9 @@ button.authIcon:hover { filter: brightness(0.94); }
 }
 
 .roleSplit { display: grid; grid-template-columns: 240px 1fr; border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden; min-height: 420px; }
-.roleRail { background: var(--brand); padding: 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.roleRail { background: var(--brand); padding: 10px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.roleRail__group { display: flex; flex-direction: column; gap: 2px; }
+.roleRail__groupTitle { padding: 8px 12px 2px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: rgba(255,255,255,.5); }
 .roleRail button { text-align: left; padding: 10px 12px; border-radius: var(--radius); border: none; background: transparent; color: #cbd5e1; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s ease, color .15s ease; }
 .roleRail button:hover { background: rgba(255,255,255,.08); color: #fff; }
 .roleRail button.roleRail__item--active { background: var(--surface); color: var(--text); }

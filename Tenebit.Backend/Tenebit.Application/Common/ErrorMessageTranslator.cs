@@ -654,7 +654,12 @@ public static class ErrorMessageTranslator
             if (template is null) return null;
 
             var limit = match.Groups["limit"].Success ? match.Groups["limit"].Value : string.Empty;
-            var name = language == AppLanguages.Source ? FieldLabel(match.Groups["name"].Value) : match.Groups["name"].Value;
+            // Dla polskiego (języka źródłowego) etykieta zastępuje nazwę pola w pozycji podmiotu
+            // zdania, więc musi być czytelna i, gdy dostępna, gramatycznie poprawna (FieldLabel).
+            // Pozostałe języki wstawiają nazwę pola w środku zdania ("The {0} field ...", "El campo
+            // {0} ...") - tam wystarczy (i wygląda naturalniej) surowa nazwa właściwości rozbita na
+            // słowa, żeby użytkownik nie widział "FirstName" tylko "first name".
+            var name = language == AppLanguages.Source ? FieldLabel(match.Groups["name"].Value) : HumanizePropertyName(match.Groups["name"].Value);
             return string.Format(template, name, limit);
         });
     }
@@ -1053,19 +1058,20 @@ public static class ErrorMessageTranslator
             new Regex(@"^Pole (?<name>.+?) nie może być puste\.$"),
             (m, language) =>
             {
+                var raw = m.Groups["name"].Value;
                 if (language == AppLanguages.Source)
                 {
-                    var raw = m.Groups["name"].Value;
                     var word = Agree(GenderOf(raw), "puste", "pusta", "pusty");
                     return $"{FieldLabel(raw)} nie może być {word}.";
                 }
+                var name = HumanizePropertyName(raw);
                 return language switch
                 {
-                    "en" => $"The {m.Groups["name"].Value} field cannot be empty.",
-                    "es" => $"El campo {m.Groups["name"].Value} no puede estar vacío.",
-                    "de" => $"Das Feld {m.Groups["name"].Value} darf nicht leer sein.",
-                    "it" => $"Il campo {m.Groups["name"].Value} non può essere vuoto.",
-                    "fr" => $"Le champ {m.Groups["name"].Value} ne peut pas être vide.",
+                    "en" => $"The {name} field cannot be empty.",
+                    "es" => $"El campo {name} no puede estar vacío.",
+                    "de" => $"Das Feld {name} darf nicht leer sein.",
+                    "it" => $"Il campo {name} non può essere vuoto.",
+                    "fr" => $"Le champ {name} ne peut pas être vide.",
                     _ => null,
                 };
             }),
@@ -1073,19 +1079,20 @@ public static class ErrorMessageTranslator
             new Regex(@"^Pole (?<name>.+?) nie może być ujemne\.$"),
             (m, language) =>
             {
+                var raw = m.Groups["name"].Value;
                 if (language == AppLanguages.Source)
                 {
-                    var raw = m.Groups["name"].Value;
                     var word = Agree(GenderOf(raw), "ujemne", "ujemna", "ujemny");
                     return $"{FieldLabel(raw)} nie może być {word}.";
                 }
+                var name = HumanizePropertyName(raw);
                 return language switch
                 {
-                    "en" => $"The {m.Groups["name"].Value} field cannot be negative.",
-                    "es" => $"El campo {m.Groups["name"].Value} no puede ser negativo.",
-                    "de" => $"Das Feld {m.Groups["name"].Value} darf nicht negativ sein.",
-                    "it" => $"Il campo {m.Groups["name"].Value} non può essere negativo.",
-                    "fr" => $"Le champ {m.Groups["name"].Value} ne peut pas être négatif.",
+                    "en" => $"The {name} field cannot be negative.",
+                    "es" => $"El campo {name} no puede ser negativo.",
+                    "de" => $"Das Feld {name} darf nicht negativ sein.",
+                    "it" => $"Il campo {name} non può essere negativo.",
+                    "fr" => $"Le champ {name} ne peut pas être négatif.",
                     _ => null,
                 };
             }),
