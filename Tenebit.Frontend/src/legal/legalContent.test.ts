@@ -30,6 +30,9 @@ describe('treści prawne', () => {
   it.each(CODES)('%s nie zawiera deweloperskich placeholderów', (language) => {
     const content = JSON.stringify(legalContentFor(language));
     expect(content).not.toMatch(/VITE_/);
+    // Serwis nie wskazuje podmiotu prowadzącego i nie ma tego robić - żadnych danych rejestrowych
+    // ani nazwiska w publicznej treści.
+    expect(content).not.toMatch(/NIP|REGON|KRS|VAT ID/);
     // TODO/FIXME tylko wersalikami - hiszpańskie "todos los derechos" nie jest placeholderem.
     expect(content).not.toMatch(/placeholder/i);
     expect(content).not.toMatch(/\b(TODO|FIXME)\b/);

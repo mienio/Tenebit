@@ -48,21 +48,6 @@ export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
           </dl>
 
           <div className="legalSections">
-            {/* Operator identification is optional and comes entirely from configuration. With nothing
-                configured the section is left out rather than filled with a stand-in: a public legal
-                document should never carry build-time scaffolding, and the documents themselves point
-                readers at the contact address instead. */}
-            {legalConfig.operatorName ? (
-              <section>
-                <h2>{ui.operator}</h2>
-                <dl className="legalMeta">
-                  <div><dt>{ui.operator}</dt><dd>{legalConfig.operatorName}</dd></div>
-                  {legalConfig.operatorAddress ? <div><dt>{ui.address}</dt><dd>{legalConfig.operatorAddress}</dd></div> : null}
-                  {legalConfig.operatorRegistration ? <div><dt>{ui.registration}</dt><dd>{legalConfig.operatorRegistration}</dd></div> : null}
-                  {legalConfig.operatorTaxId ? <div><dt>{ui.taxId}</dt><dd>{legalConfig.operatorTaxId}</dd></div> : null}
-                </dl>
-              </section>
-            ) : null}
             {document.sections.map(section => (
               <section key={section.title}>
                 <h2>{section.title}</h2>
