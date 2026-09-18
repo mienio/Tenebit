@@ -204,7 +204,7 @@ export function AdminAffiliateDetailPage() {
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Dane kontaktowe i wypłatowe</h3>
         <div className="adminMuted">
-          Kraj: {detail.countryCode ?? '—'} · Telefon: {detail.phoneNumber ?? '—'} · Firma: {detail.companyName ?? '—'} · NIP: {detail.taxId ?? '—'}
+          Kraj: {detail.countryCode ?? '—'} · Telefon: {detail.phoneNumber ?? '—'}
         </div>
         <div style={{ marginTop: 8 }}>
           Metoda wypłaty: <strong>{detail.payoutMethod === 'PayPal' ? 'PayPal' : 'Revolut'}</strong> ·{' '}

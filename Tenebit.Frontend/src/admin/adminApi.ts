@@ -418,8 +418,6 @@ export interface AffiliateAdminDetail {
   status: AffiliateStatus;
   countryCode: string | null;
   phoneNumber: string | null;
-  companyName: string | null;
-  taxId: string | null;
   payoutMethod: 'Revolut' | 'PayPal';
   payoutAccountTag: string | null;
   commissionPercentOverride: number | null;

@@ -44,8 +44,6 @@ public sealed record AffiliateUpdateProfileRequest(
     [property: Required, StringLength(120)] string LastName,
     [property: StringLength(40)] string? PhoneNumber,
     [property: StringLength(2, MinimumLength = 2)] string? CountryCode,
-    [property: StringLength(200)] string? CompanyName,
-    [property: StringLength(40)] string? TaxId,
     [property: StringLength(10)] string? PayoutMethod,
     [property: StringLength(200)] string? PayoutAccountTag);
 
@@ -184,7 +182,7 @@ public static class PartnerEndpoints
         partner.MapPatch("/me", async (AffiliateUpdateProfileRequest request, HttpContext http, AffiliateAuthService service, CancellationToken cancellationToken) =>
             (await service.UpdateProfileAsync(
                 http.GetAffiliateId(), request.FirstName, request.LastName, request.PhoneNumber, request.CountryCode,
-                request.CompanyName, request.TaxId, request.PayoutMethod, request.PayoutAccountTag, cancellationToken)).ToHttpResult());
+                request.PayoutMethod, request.PayoutAccountTag, cancellationToken)).ToHttpResult());
     }
 
     private static void MapCodes(RouteGroupBuilder partner)

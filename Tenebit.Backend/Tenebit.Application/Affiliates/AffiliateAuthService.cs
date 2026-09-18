@@ -9,7 +9,7 @@ namespace Tenebit.Application.Affiliates;
 
 public sealed record AffiliateProfileResponse(
     Guid Id, string Email, string FirstName, string LastName, string Status, string? CountryCode,
-    string? PhoneNumber, string? CompanyName, string? TaxId, string PayoutMethod, string? PayoutAccountTag, bool IsEmailVerified,
+    string? PhoneNumber, string PayoutMethod, string? PayoutAccountTag, bool IsEmailVerified,
     DateTimeOffset? AcceptedTermsAt, DateTimeOffset CreatedAt);
 
 public sealed record AffiliateLoginOutcome(AffiliateProfileResponse Affiliate, Guid SecurityStamp);
@@ -115,7 +115,7 @@ public sealed class AffiliateAuthService
 
     public async Task<Result<AffiliateProfileResponse>> UpdateProfileAsync(
         Guid affiliateId, string firstName, string lastName, string? phoneNumber, string? countryCode,
-        string? companyName, string? taxId, string? payoutMethod, string? payoutAccountTag, CancellationToken cancellationToken)
+        string? payoutMethod, string? payoutAccountTag, CancellationToken cancellationToken)
     {
         var affiliate = await _affiliates.GetByIdAsync(affiliateId, cancellationToken);
         if (affiliate is null) return Result<AffiliateProfileResponse>.Failure(Error.NotFound("Konto partnerskie nie istnieje."));
@@ -124,7 +124,6 @@ public sealed class AffiliateAuthService
         {
             var now = _clock.UtcNow;
             affiliate.UpdateContactDetails(firstName, lastName, phoneNumber, countryCode, now);
-            affiliate.UpdateCompanyDetails(companyName, taxId, now);
             affiliate.SetPayoutAccount(ParsePayoutMethod(payoutMethod), payoutAccountTag, now);
         }
         catch (DomainException ex)
@@ -340,7 +339,7 @@ public sealed class AffiliateAuthService
 
     public static AffiliateProfileResponse Map(Affiliate affiliate) => new(
         affiliate.Id, affiliate.Email, affiliate.FirstName, affiliate.LastName, affiliate.Status.ToString(),
-        affiliate.CountryCode, affiliate.PhoneNumber, affiliate.CompanyName, affiliate.TaxId,
+        affiliate.CountryCode, affiliate.PhoneNumber,
         affiliate.PayoutMethod.ToString(), affiliate.PayoutAccountTag,
         affiliate.IsEmailVerified, affiliate.AcceptedTermsAt, affiliate.CreatedAt);
 

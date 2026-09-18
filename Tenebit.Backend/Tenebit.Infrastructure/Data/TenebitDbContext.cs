@@ -1265,8 +1265,6 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.CountryCode).HasMaxLength(2);
             entity.Property(x => x.PhoneNumber).HasMaxLength(40);
-            entity.Property(x => x.CompanyName).HasMaxLength(200);
-            entity.Property(x => x.TaxId).HasMaxLength(40);
             entity.Property(x => x.CommissionPercentOverride).HasColumnType("numeric(5,2)");
             entity.Property(x => x.AcceptedTermsVersion).HasMaxLength(40);
             entity.Property(x => x.BlockedReason).HasMaxLength(500);

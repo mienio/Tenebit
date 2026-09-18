@@ -8,7 +8,7 @@ import { usePartnerLocale, type PartnerLocale } from './i18n';
 
 const content: Record<PartnerLocale, {
   title: string; missingRevtag: string; saveError: string; saveSuccess: string;
-  firstName: string; lastName: string; phone: string; country: string; company: string; taxId: string;
+  firstName: string; lastName: string; phone: string; country: string;
   payoutMethod: string; revtagInfo: string; revtagPlaceholderRevolut: string; revtagPlaceholderPayPal: string;
   save: string; saving: string;
 }> = {
@@ -17,7 +17,7 @@ const content: Record<PartnerLocale, {
     missingRevtag: 'Add your PayPal/Revolut account below - without it we cannot pay out your commission.',
     saveError: 'Could not save changes.', saveSuccess: 'Changes saved.',
     firstName: 'First name', lastName: 'Last name', phone: 'Phone (optional)',
-    country: 'Country (ISO code, optional)', company: 'Company (optional)', taxId: 'Tax ID (optional)',
+    country: 'Country (ISO code, optional)',
     payoutMethod: 'PayPal / Revolut account',
     revtagInfo: 'Revolut: format @name. PayPal: your account e-mail. Commission payouts go there.',
     revtagPlaceholderRevolut: '@your-name', revtagPlaceholderPayPal: 'you@example.com',
@@ -28,7 +28,7 @@ const content: Record<PartnerLocale, {
     missingRevtag: 'Uzupełnij konto PayPal/Revolut poniżej - bez niego nie możemy zrealizować wypłaty prowizji.',
     saveError: 'Nie udało się zapisać zmian.', saveSuccess: 'Zapisano zmiany.',
     firstName: 'Imię', lastName: 'Nazwisko', phone: 'Telefon (opcjonalnie)',
-    country: 'Kraj (kod ISO, opcjonalnie)', company: 'Firma (opcjonalnie)', taxId: 'NIP (opcjonalnie)',
+    country: 'Kraj (kod ISO, opcjonalnie)',
     payoutMethod: 'Konto PayPal / Revolut',
     revtagInfo: 'Revolut: format @nazwa. PayPal: e-mail Twojego konta. Tam trafiają wypłaty prowizji.',
     revtagPlaceholderRevolut: '@twoja-nazwa', revtagPlaceholderPayPal: 'ty@example.com',
@@ -44,8 +44,6 @@ export function PartnerProfilePage() {
   const [lastName, setLastName] = useState(affiliate?.lastName ?? '');
   const [phoneNumber, setPhoneNumber] = useState(affiliate?.phoneNumber ?? '');
   const [countryCode, setCountryCode] = useState(affiliate?.countryCode ?? '');
-  const [companyName, setCompanyName] = useState(affiliate?.companyName ?? '');
-  const [taxId, setTaxId] = useState(affiliate?.taxId ?? '');
   const [payoutMethod, setPayoutMethod] = useState<'Revolut' | 'PayPal'>(affiliate?.payoutMethod ?? 'Revolut');
   const [payoutAccountTag, setPayoutAccountTag] = useState(affiliate?.payoutAccountTag ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +60,6 @@ export function PartnerProfilePage() {
         firstName, lastName,
         phoneNumber: phoneNumber.trim() || null,
         countryCode: countryCode.trim() || null,
-        companyName: companyName.trim() || null,
-        taxId: taxId.trim() || null,
         payoutMethod,
         payoutAccountTag: payoutAccountTag.trim() || null,
       });
@@ -97,12 +93,6 @@ export function PartnerProfilePage() {
           </Field>
           <Field label={t.country}>
             <TextInput value={countryCode} onChange={e => setCountryCode(e.target.value.toUpperCase())} maxLength={2} />
-          </Field>
-          <Field label={t.company}>
-            <TextInput value={companyName} onChange={e => setCompanyName(e.target.value)} />
-          </Field>
-          <Field label={t.taxId}>
-            <TextInput value={taxId} onChange={e => setTaxId(e.target.value)} />
           </Field>
           <Field label={t.payoutMethod} info={t.revtagInfo}>
             <SelectInput value={payoutMethod} onChange={e => setPayoutMethod(e.target.value as 'Revolut' | 'PayPal')}>

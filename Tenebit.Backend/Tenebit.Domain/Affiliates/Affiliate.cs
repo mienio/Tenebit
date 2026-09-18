@@ -67,13 +67,6 @@ public sealed class Affiliate
     public string? CountryCode { get; private set; }
     public string? PhoneNumber { get; private set; }
 
-    /// <summary>Optional company name/tax id - the program does not require these at registration
-    /// (see spec §16.5, left as an admin-configurable decision), but the field is reserved now so a
-    /// later switch to invoiced B2B commissions never needs a migration against existing financial
-    /// records.</summary>
-    public string? CompanyName { get; private set; }
-    public string? TaxId { get; private set; }
-
     /// <summary>Which payout rail <see cref="PayoutAccountTag"/> should be read as - a PayPal e-mail or
     /// a Revolut "@handle". Defaults to Revolut since that's the only rail the program launched with.</summary>
     public PayoutMethod PayoutMethod { get; private set; } = PayoutMethod.Revolut;
@@ -129,13 +122,6 @@ public sealed class Affiliate
         LastName = lastName.Trim();
         PhoneNumber = string.IsNullOrWhiteSpace(phoneNumber) ? null : phoneNumber.Trim();
         CountryCode = NormalizeCountryCode(countryCode);
-        UpdatedAt = now;
-    }
-
-    public void UpdateCompanyDetails(string? companyName, string? taxId, DateTimeOffset now)
-    {
-        CompanyName = string.IsNullOrWhiteSpace(companyName) ? null : companyName.Trim();
-        TaxId = string.IsNullOrWhiteSpace(taxId) ? null : taxId.Trim().ToUpperInvariant();
         UpdatedAt = now;
     }
 

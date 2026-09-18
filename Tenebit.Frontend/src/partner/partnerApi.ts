@@ -84,8 +84,6 @@ export interface AffiliateProfile {
   status: 'PendingApproval' | 'Active' | 'Blocked';
   countryCode: string | null;
   phoneNumber: string | null;
-  companyName: string | null;
-  taxId: string | null;
   payoutMethod: 'Revolut' | 'PayPal';
   payoutAccountTag: string | null;
   isEmailVerified: boolean;
@@ -138,7 +136,7 @@ export function getMyProfile(): Promise<AffiliateProfile> {
 
 export function updateMyProfile(body: {
   firstName: string; lastName: string; phoneNumber?: string | null; countryCode?: string | null;
-  companyName?: string | null; taxId?: string | null; payoutMethod?: 'Revolut' | 'PayPal' | null; payoutAccountTag?: string | null;
+  payoutMethod?: 'Revolut' | 'PayPal' | null; payoutAccountTag?: string | null;
 }): Promise<AffiliateProfile> {
   return partnerFetch('/api/partner/me', { method: 'PATCH', body: JSON.stringify(body) });
 }
