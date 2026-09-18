@@ -123,6 +123,11 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .metricCard { min-height: 126px; display: grid; gap: 12px; align-content: space-between; color: inherit; text-decoration: none; }
 .metricCard--link { transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
 .metricCard--link:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: 4px 4px 0 rgba(34, 29, 24, .12); }
+/* Kafelek KPI na pulpicie jest linkiem do przefiltrowanej listy. Link rozciąga się na całą kartę wraz
+   z jej paddingiem, żeby klikalny był cały kafelek, a nie tylko napis w środku. */
+.metricCard__link { display: grid; gap: 12px; align-content: space-between; flex: 1; min-height: 0; margin: -20px; padding: 20px; color: inherit; text-decoration: none; }
+.metricCard:has(.metricCard__link:hover) { border-color: var(--border-strong); }
+.metricCard__link:hover strong { color: var(--brand); }
 .metricCard__top { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 620; }
 .metricCard__icon { width: 36px; height: 36px; display: grid; place-items: center; color: var(--brand); }
 .metricCard__body { display: grid; gap: 5px; align-content: end; }
@@ -180,6 +185,11 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 .toolbarHint { min-height: 42px; display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; justify-self: end; }
 .field { display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 560; }
 .field small { color: var(--muted); font-weight: 400; }
+/* Komunikat walidacji pod polem. Sam kolor obwódki nie niesie treści (a czytnik ekranu go nie widzi),
+   więc błąd zawsze ma też zdanie - aria-invalid ustawia <Field> na samej kontrolce. */
+.field--invalid .input, .field--invalid .input:focus-visible { border-color: var(--danger); }
+.fieldError { color: var(--danger); font-weight: 500; }
+
 .input { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 3px; padding: 10px 12px; color: var(--text); background: rgba(255,255,255,.92); }
 .textarea { min-height: 96px; resize: vertical; }
 .formActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; align-items: center; flex-wrap: wrap; }

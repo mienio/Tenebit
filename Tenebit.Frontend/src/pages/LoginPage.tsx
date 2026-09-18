@@ -2,6 +2,7 @@ import { ArrowLeft, LogIn, ShieldCheck } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BackButton } from '../components/BackButton';
+import { LegalConsentText } from '../components/LegalConsentText';
 import { Button } from '../components/Button';
 import { Field, TextInput } from '../components/FormFields';
 import { SocialLoginButtons } from '../components/SocialLoginButtons';
@@ -9,14 +10,12 @@ import { PublicFooter } from '../components/PublicFooter';
 import { useAuth } from '../auth/AuthProvider';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
-import { legalContentFor } from '../legal/legalContent';
 
 export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { t, language } = useI18n();
-  const legal = legalContentFor(language).ui;
+  const { t } = useI18n();
   const routeState = location.state as { from?: unknown; challengeToken?: unknown } | null;
   const fromState = routeState?.from;
   const returnTo = typeof fromState === 'string' && fromState.startsWith('/') ? fromState : '/dashboard';
@@ -79,7 +78,7 @@ export function LoginPage() {
           </div>
           <h1>{t('auth.twoFactorTitle')}</h1>
           <p>{t('auth.twoFactorPrompt')}</p>
-          <form className="formGrid" onSubmit={handleTwoFactorSubmit}>
+          <form className="formGrid" onSubmit={handleTwoFactorSubmit} onChange={() => setError(null)}>
             <Field label={t('auth.twoFactorCodeLabel')} info={t('auth.twoFactorCodeHint')}><TextInput name="code" maxLength={11} required autoFocus autoComplete="one-time-code" /></Field>
             <label className="checkField"><input name="rememberDevice" type="checkbox" /> {t('auth.rememberDevice')}</label>
             {error ? <p className="formMessage formMessage--error">{error}</p> : null}
@@ -103,9 +102,11 @@ export function LoginPage() {
         {showSessionExpired ? <p className="formMessage formMessage--error">{t('auth.sessionExpired')}</p> : null}
         <SocialLoginButtons returnUrl={returnTo} />
         <p className="authCard__hint">
-          {t('auth.socialTermsNotice')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.
+          <LegalConsentText prefixKey="auth.socialTermsNotice" />
         </p>
-        <form className="formGrid" onSubmit={handleSubmit}>
+        {/* Komunikat o błędnym logowaniu dotyczy konkretnej pary e-mail/hasło, więc gaśnie, gdy któreś
+            z pól się zmieni - inaczej wisiał nad nową próbą i sugerował błąd, którego jeszcze nie było. */}
+        <form className="formGrid" onSubmit={handleSubmit} onChange={() => setError(null)}>
           <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required autoFocus /></Field>
           <Field label={t('auth.passwordLabel')}><TextInput name="password" type="password" required /></Field>
           <p className="authInlineLink"><Link to="/forgot-password">{t('auth.forgotLink')}</Link></p>

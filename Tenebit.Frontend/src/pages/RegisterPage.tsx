@@ -3,6 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { BackButton } from '../components/BackButton';
+import { LegalConsentText } from '../components/LegalConsentText';
 import { Button } from '../components/Button';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter';
@@ -11,7 +12,6 @@ import { SocialLoginButtons } from '../components/SocialLoginButtons';
 import { TurnstileWidget } from '../components/TurnstileWidget';
 import { useI18n } from '../i18n/I18nProvider';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
-import { legalContentFor } from '../legal/legalContent';
 
 // EUR first as the default/fallback (same role FALLBACK_LANGUAGE plays for language below), then the
 // rest of the roughly top 50 currencies by global trade volume.
@@ -56,7 +56,6 @@ export function RegisterPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { t, language } = useI18n();
-  const legal = legalContentFor(language).ui;
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [password, setPassword] = useState('');
@@ -108,7 +107,7 @@ export function RegisterPage() {
         <h1>{t('auth.registerTitle')}</h1>
         <SocialLoginButtons returnUrl="/dashboard" />
         <p className="authCard__hint">
-          {t('auth.socialTermsNotice')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.
+          <LegalConsentText prefixKey="auth.socialTermsNotice" />
         </p>
         <form className="formGrid" onSubmit={handleSubmit}>
           <Field label={t('auth.orgNameLabel')}><TextInput name="organizationName" required autoFocus /></Field>
@@ -138,7 +137,7 @@ export function RegisterPage() {
           {passwordsMismatch ? <p className="formMessage formMessage--error">{t('auth.passwordMismatch')}</p> : null}
           <label className="authLegalConsent">
             <input type="checkbox" name="acceptTerms" required />
-            <span>{t('auth.acceptTermsPrefix')} <Link to="/terms">{legal.terms}</Link> {t('auth.acceptTermsAnd')} <Link to="/privacy">{legal.privacy}</Link>.</span>
+            <span><LegalConsentText prefixKey="auth.acceptTermsPrefix" /></span>
           </label>
           {TURNSTILE_SITE_KEY ? <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} onToken={setTurnstileToken} /> : null}
           {error ? <p className="formMessage formMessage--error">{error}</p> : null}

@@ -300,6 +300,10 @@ function NewCampaignWizard({ open, onClose, onCreated }: { open: boolean; onClos
     }
   }
 
+  // Kampania bez odbiorców i bez sprzętu nie ma czego potwierdzać - przycisk startu jest wtedy wyłączony,
+  // a backend odrzuca ją i tak (QA: BUG-005).
+  const isEmptyScope = !!preview && (preview.participantCount === 0 || preview.assetCount === 0);
+
   return (
     <Modal open={open} title={t('assetAudits.wizardTitle')} description={t('assetAudits.wizardStep', { step, total: 3 })} onClose={onClose} width="wide">
       {error ? <p className="formMessage formMessage--error">{error}</p> : null}
@@ -369,6 +373,11 @@ function NewCampaignWizard({ open, onClose, onCreated }: { open: boolean; onClos
             <DetailItem label={t('assetAudits.previewParticipants')} value={String(preview.participantCount)} />
             <DetailItem label={t('assetAudits.previewAssets')} value={String(preview.assetCount)} />
           </DetailGrid>
+          {isEmptyScope ? (
+            <p className="formMessage formMessage--error">
+              <AlertTriangle size={16} /> {t('assetAudits.previewEmptyWarning')}
+            </p>
+          ) : null}
           {preview.peopleWithoutEmail.length ? (
             <Card className="card--flat">
               <p className="formMessage formMessage--error">
@@ -379,7 +388,7 @@ function NewCampaignWizard({ open, onClose, onCreated }: { open: boolean; onClos
           ) : null}
           <div className="formActions formActions--split">
             <Button type="button" variant="ghost" onClick={() => setStep(2)}>{t('common.back')}</Button>
-            <Button type="button" disabled={busy} onClick={() => void handleStart()}>{busy ? t('common.saving') : t('assetAudits.startCampaign')}</Button>
+            <Button type="button" disabled={busy || isEmptyScope} onClick={() => void handleStart()}>{busy ? t('common.saving') : t('assetAudits.startCampaign')}</Button>
           </div>
         </div>
       ) : null}
@@ -443,10 +452,12 @@ function AssetAuditDetailsView({
 
       {tab === 'participants' ? (
         <Card className="card--flat">
-          <div className="formActions formActions--split">
-            <span />
-            <Button variant="secondary" disabled={actionBusy === 'remind'} onClick={() => void onAction('remind', () => api.remindAssetAuditParticipants(campaign.id), 'assetAudits.reminderSent')} icon={<Mail size={16} />}>{t('assetAudits.remindAll')}</Button>
-          </div>
+          {campaign.status === 'Cancelled' || campaign.status === 'Completed' ? null : (
+            <div className="formActions formActions--split">
+              <span />
+              <Button variant="secondary" disabled={actionBusy === 'remind'} onClick={() => void onAction('remind', () => api.remindAssetAuditParticipants(campaign.id), 'assetAudits.reminderSent')} icon={<Mail size={16} />}>{t('assetAudits.remindAll')}</Button>
+            </div>
+          )}
           <div className="listRows">
             {details.participants.map(participant => (
               <ParticipantRow key={participant.id} participant={participant} campaignId={campaign.id} actionBusy={actionBusy} onAction={onAction} />

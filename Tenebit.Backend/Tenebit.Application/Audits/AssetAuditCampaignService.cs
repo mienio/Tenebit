@@ -195,12 +195,20 @@ public sealed class AssetAuditCampaignService
         var scope = DeserializeScope(campaign.ScopeJson);
         if (scope is null) return Result<AssetAuditCampaignDetailsResponse>.Failure(Error.Validation("Nieprawidłowy zakres kampanii."));
 
+        // Zakres rozwiązujemy przed zmianą statusu: kampania bez odbiorców i bez sprzętu nie ma czego
+        // potwierdzać, a uruchomiona zostawiałaby aktywny rekord z postępem 0/0, którego nie da się
+        // domknąć inaczej niż anulowaniem.
+        var (personAssets, _) = await ResolveScopeAsync(organizationId, scope, cancellationToken);
+        if (personAssets.Count == 0 || personAssets.Values.Sum(assets => assets.Count) == 0)
+        {
+            return Result<AssetAuditCampaignDetailsResponse>.Failure(Error.Validation("Kampania nie ma odbiorców ani sprzętu do potwierdzenia. Zmień zakres kampanii."));
+        }
+
         try
         {
             var now = _clock.UtcNow;
             campaign.Start(now);
 
-            var (personAssets, _) = await ResolveScopeAsync(organizationId, scope, cancellationToken);
             // Token żyje do terminu kampanii + 14 dni bufora, analogicznie do offboardingu (tam +30 dni,
             // bo dotyczy fizycznego zwrotu sprzętu; tu wyłącznie potwierdzenia online, więc krótszy margines).
             var tokenExpiresAt = campaign.DueDate.AddDays(14);
@@ -469,6 +477,12 @@ public sealed class AssetAuditCampaignService
         var organizationId = _currentUser.OrganizationId;
         var campaign = await _campaigns.GetAsync(organizationId, id, cancellationToken);
         if (campaign is null) return Result<RemindParticipantsResponse>.Failure(Error.NotFound("Kampania nie istnieje."));
+        // Anulowana lub zakończona kampania nie zbiera już odpowiedzi - przypomnienie wysłałoby link,
+        // którego odbiorca i tak nie może użyć.
+        if (campaign.Status is AssetAuditCampaignStatus.Cancelled or AssetAuditCampaignStatus.Completed)
+        {
+            return Result<RemindParticipantsResponse>.Failure(Error.Validation("Przypomnienia można wysyłać tylko w trwającej kampanii."));
+        }
 
         var now = _clock.UtcNow;
         var participants = await _participants.ListByCampaignAsync(organizationId, id, cancellationToken);

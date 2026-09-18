@@ -58,7 +58,10 @@ export function DashboardWidgetContent({ type, data, editing, t }: { type: Widge
       </>
     );
     const to = metricLinks[type];
-    if (!editing && to) return <Link to={to} style={{ display: 'contents' }}>{body}</Link>;
+    // `display: contents` sprawiało, że link nie miał własnego pudełka: klikalny był tylko sam tekst,
+    // a kliknięcie w kafelek obok napisu nie robiło nic (QA: BUG-011). Link wypełnia teraz całą kartę
+    // razem z jej paddingiem (ujemny margines), więc klikalny jest cały kafelek.
+    if (!editing && to) return <Link to={to} className="metricCard__link">{body}</Link>;
     return <>{body}</>;
   }
 

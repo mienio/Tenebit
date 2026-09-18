@@ -133,7 +133,10 @@ export function LicensesPage() {
   if (licenses.error) return <ErrorState message={licenses.error} onRetry={licenses.reload} />;
 
   const rows = licenses.data ?? [];
-  const availablePeople = (people.data ?? []).filter(p => !selected?.seats.some(seat => seat.personId === p.id));
+  // Osoby nieaktywne są wykluczone z wydań i offboardingu, więc stanowisko licencji też nie może im
+  // przypaść - dezaktywacja zapowiada "niedostępna dla nowych przydziałów", a stanowisko jest przydziałem.
+  // Już przypisane stanowiska zostają widoczne na liście seats i można je zwolnić ręcznie.
+  const availablePeople = (people.data ?? []).filter(p => p.employmentStatus === 'Active' && !selected?.seats.some(seat => seat.personId === p.id));
 
   return (
     <div className="pageStack">

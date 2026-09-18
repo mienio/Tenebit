@@ -25,6 +25,16 @@ describe('treści prawne', () => {
     }
   });
 
+  // Dokumenty prawne są publiczne (także dla wylogowanych), więc nie mogą zawierać rusztowania z
+  // czasu builda: ani nazw zmiennych środowiskowych, ani tekstu "uzupełnij przed publikacją".
+  it.each(CODES)('%s nie zawiera deweloperskich placeholderów', (language) => {
+    const content = JSON.stringify(legalContentFor(language));
+    expect(content).not.toMatch(/VITE_/);
+    // TODO/FIXME tylko wersalikami - hiszpańskie "todos los derechos" nie jest placeholderem.
+    expect(content).not.toMatch(/placeholder/i);
+    expect(content).not.toMatch(/\b(TODO|FIXME)\b/);
+  });
+
   // Sekcje są numerowane i cytowane ("zgodnie z pkt 4 regulaminu"), więc każda wersja językowa musi
   // mieć tę samą liczbę sekcji w tej samej kolejności - inaczej numeracja rozjeżdża się między językami.
   it.each(KINDS)('%s ma tę samą strukturę sekcji we wszystkich językach', (kind) => {

@@ -1,4 +1,4 @@
-import { ChevronDown, FileSpreadsheet, Printer, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, FileSpreadsheet, Printer, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -16,6 +16,7 @@ interface AssetsToolbarProps {
   onBulkLocation(): void;
   onExportSelected(): void;
   onBatchQr(): void;
+  onBulkDelete(): void;
   onClearSelection(): void;
   owner: string;
   setOwner(value: string): void;
@@ -57,6 +58,7 @@ export function AssetsToolbar(props: AssetsToolbarProps) {
             {props.canManage && <Button variant="secondary" onClick={props.onBulkLocation}>{t('assets.bulkMove')}</Button>}
             <Button variant="secondary" onClick={props.onExportSelected} icon={<FileSpreadsheet size={16} />}>{t('assets.bulkExport')}</Button>
             <Button variant="secondary" disabled={props.batchQrLoading} onClick={props.onBatchQr} icon={<Printer size={16} />}>{props.batchQrLoading ? t('common.loading') : t('assets.bulkPrintQr')}</Button>
+            {props.canManage && <Button variant="danger" onClick={props.onBulkDelete} icon={<Trash2 size={16} />}>{t('assets.bulkDelete')}</Button>}
             <Button variant="ghost" onClick={props.onClearSelection} icon={<X size={16} />}>{t('assets.bulkClear')}</Button>
           </div>
         </Card>

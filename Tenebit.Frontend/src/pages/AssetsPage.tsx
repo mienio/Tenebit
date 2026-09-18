@@ -106,6 +106,8 @@ export function AssetsPage() {
   const [revealedFields, setRevealedFields] = useState<Record<string, string>>({});
   const [revealingKey, setRevealingKey] = useState<string | null>(null);
   const [bulkModal, setBulkModal] = useState<'status' | 'location' | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [pendingBulkOverride, setPendingBulkOverride] = useState<Partial<CreateAssetRequest & { status: AssetStatus }> | null>(null);
   const [batchQr, setBatchQr] = useState<{ asset: Asset; svg: string }[] | null>(null);
@@ -356,6 +358,30 @@ export function AssetsPage() {
     setBulkModal(null);
     const failed = failedIds.length;
     setMessage({ type: failed ? 'error' : 'success', text: t(failed ? 'assets.bulkFailedKept' : 'assets.bulkResult', { success, failed }) });
+    keepOnly(failedIds);
+    await reloadAssets();
+  }
+
+  // Usuwanie masowe idzie rekord po rekordzie tym samym endpointem co pojedyncze, więc zachowuje wszystkie
+  // reguły backendu (wydany sprzęt czy otwarte sprawy zostają odrzucone). Odrzucone zostają zaznaczone,
+  // żeby było widać, czego nie udało się usunąć i dlaczego - tak samo jak przy masowej edycji.
+  async function applyBulkDelete() {
+    setBulkDeleting(true);
+    let success = 0;
+    const failedIds: string[] = [];
+    for (const asset of selectedAssets) {
+      try {
+        await api.deleteAsset(asset.id);
+        success++;
+      } catch {
+        failedIds.push(asset.id);
+      }
+    }
+    setBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    const failed = failedIds.length;
+    setMessage({ type: failed ? 'error' : 'success', text: t(failed ? 'assets.bulkDeleteFailedKept' : 'assets.bulkDeleteResult', { success, failed }) });
+    setSelected(current => (current && !failedIds.includes(current.id) ? null : current));
     keepOnly(failedIds);
     await reloadAssets();
   }
@@ -722,6 +748,7 @@ export function AssetsPage() {
         onBulkLocation={() => setBulkModal('location')}
         onExportSelected={exportSelectedCsv}
         onBatchQr={openBatchQr}
+        onBulkDelete={() => setBulkDeleteOpen(true)}
         onClearSelection={clearSelection}
         owner={owner}
         setOwner={setOwner}
@@ -1018,6 +1045,16 @@ export function AssetsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={t('assets.bulkDeleteConfirmTitle')}
+        description={t('assets.bulkDeleteConfirmDesc', { count: selectedAssets.length })}
+        confirmLabel={t('assets.bulkDelete')}
+        confirmDisabled={bulkDeleting}
+        onConfirm={() => void applyBulkDelete()}
+        onClose={() => setBulkDeleteOpen(false)}
+      />
 
       <ConfirmDialog
         open={!!pendingBulkOverride}

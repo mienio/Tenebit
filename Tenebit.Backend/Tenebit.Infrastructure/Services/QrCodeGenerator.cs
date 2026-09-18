@@ -15,6 +15,7 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
     private const int HeaderLineHeight = 18;
     private const int FooterLineHeight = 22;
     private const int MinimumWidth = 180;
+    private const int MinimumFontSize = 8;
 
     public string CreateAssetQrSvg(string payload) => CreateSvg(payload);
 
@@ -67,10 +68,13 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
                           .Replace("{{h}}", LogoHeight.ToString()));
         }
 
+        var textWidth = width - 2 * LabelPadding;
+
         for (var i = 0; i < headerLines.Count; i++)
         {
             var y = LabelPadding + logoHeight + (i + 1) * HeaderLineHeight - 5;
-            sb.Append(Text(headerLines[i], width / 2, y, 13, i == 0 ? "600" : "400", "#4b4139"));
+            var line = FitLine(headerLines[i], textWidth, 13, i == 0);
+            sb.Append(Text(line.Text, width / 2, y, line.FontSize, i == 0 ? "600" : "400", "#4b4139"));
         }
 
         sb.Append(positionedQr);
@@ -78,7 +82,8 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
         for (var i = 0; i < footerLines.Count; i++)
         {
             var y = topBlock + qrSize + LabelPadding + (i + 1) * FooterLineHeight - 6;
-            sb.Append(Text(footerLines[i], width / 2, y, i == 0 ? 16 : 13, i == 0 ? "700" : "500", "#111111"));
+            var line = FitLine(footerLines[i], textWidth, i == 0 ? 16 : 13, i == 0);
+            sb.Append(Text(line.Text, width / 2, y, line.FontSize, i == 0 ? "700" : "500", "#111111"));
         }
 
         sb.Append("</svg>");
@@ -86,6 +91,28 @@ public sealed class QrCodeGenerator : IQrCodeGenerator
     }
 
     public string CreateTotpQrSvg(string otpAuthUri) => CreateSvg(otpAuthUri);
+
+    /// <summary>
+    /// The label is a fixed-width SVG with no text layout engine behind it, so a line longer than the
+    /// label used to run off both edges and get clipped - an asset name with a long description came
+    /// out as "...aude Asset 01 - Edytowany". Lines are fitted here instead: first by stepping the
+    /// font size down, then, if that is not enough, by cutting the tail off with an ellipsis. Widths
+    /// are estimated from Arial's average advance (~0.55 em, wider in bold), which is approximate but
+    /// errs on the safe side - the point is that the whole line stays inside the label.
+    /// </summary>
+    private static (string Text, int FontSize) FitLine(string value, int maxWidth, int fontSize, bool bold)
+    {
+        if (maxWidth <= 0) return (value, fontSize);
+
+        var advance = bold ? 0.60 : 0.55;
+        var size = fontSize;
+        while (size > MinimumFontSize && value.Length * size * advance > maxWidth) size--;
+
+        var maxCharacters = (int)Math.Floor(maxWidth / (size * advance));
+        if (maxCharacters >= value.Length || maxCharacters < 2) return (value, size);
+
+        return (string.Concat(value.AsSpan(0, maxCharacters - 1).ToString().TrimEnd(), "\u2026"), size);
+    }
 
     private static string Text(string value, int x, int y, int fontSize, string weight, string fill) =>
         $"<text x=\"{x}\" y=\"{y}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"{fontSize}\" font-weight=\"{weight}\" fill=\"{fill}\">{WebUtility.HtmlEncode(value)}</text>";

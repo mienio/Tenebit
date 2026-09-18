@@ -3,6 +3,7 @@ using Tenebit.Application.Common;
 using Tenebit.Domain.Audit;
 using Tenebit.Domain.Common;
 using Tenebit.Domain.Licenses;
+using Tenebit.Domain.People;
 using Tenebit.Domain.Subscriptions;
 
 namespace Tenebit.Application.Licenses;
@@ -131,6 +132,12 @@ public sealed class LicenseService
             if (license is null) return Result<LicenseResponse>.Failure(Error.NotFound("Licencja nie istnieje."));
             var person = await _people.GetAsync(organizationId, request.PersonId, cancellationToken);
             if (person is null) return Result<LicenseResponse>.Failure(Error.Validation("Wybrana osoba nie istnieje."));
+            // Ta sama zasada co przy wydaniach i offboardingu: osoba nieaktywna nie dostaje nowych
+            // przydziałów. Zwalnianie już zajętego stanowiska pozostaje możliwe (UnassignSeatAsync).
+            if (person.EmploymentStatus != EmploymentStatus.Active)
+            {
+                return Result<LicenseResponse>.Failure(Error.Validation("Stanowisko licencji można przypisać tylko aktywnej osobie."));
+            }
             license.AssignSeat(request.PersonId, _clock.UtcNow);
             _activity.Add(new ActivityLog(organizationId, "license.seat_assigned", "license", license.Id, _currentUser.Subject, $"{license.Name} → {person.FullName}", _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);

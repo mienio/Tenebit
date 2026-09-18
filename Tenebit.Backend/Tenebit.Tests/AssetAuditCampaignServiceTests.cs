@@ -120,6 +120,41 @@ public class AssetAuditCampaignServiceTests
     }
 
     [Fact]
+    public async Task StartAsync_PustyZakres_NieUruchamiaKampanii()
+    {
+        // QA: BUG-009 w raporcie - kampanię bez odbiorców i sprzętu dało się uruchomić i zostawała
+        // aktywna z postępem 0/0, bez żadnej treści do potwierdzenia.
+        var (service, user, campaigns, participants, items, people, _, _, _) = CreateService();
+        AddPerson(user, people, "without.asset@acme.test");
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        Assert.True(started.IsFailure);
+        Assert.Equal(AssetAuditCampaignStatus.Draft, campaigns.Campaigns.Single().Status);
+        Assert.Empty(participants.Participants);
+        Assert.Empty(items.Items);
+    }
+
+    [Fact]
+    public async Task RemindParticipantsAsync_AnulowanaKampania_NieWysylaPrzypomnien()
+    {
+        var (service, user, _, _, _, people, assets, _, emailSender) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(OrganizationScopeRequest(), CancellationToken.None);
+        await service.StartAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        await service.CancelAsync(created.Value!.Campaign.Id, CancellationToken.None);
+        var sentBeforeReminder = emailSender.Sent.Count;
+
+        var reminded = await service.RemindParticipantsAsync(created.Value!.Campaign.Id, CancellationToken.None);
+
+        Assert.True(reminded.IsFailure);
+        Assert.Equal(sentBeforeReminder, emailSender.Sent.Count);
+    }
+
+    [Fact]
     public async Task StartAsync_IssuesDistinctTokensPerParticipant()
     {
         var (service, user, _, participants, _, people, assets, _, _) = CreateService();

@@ -30,6 +30,14 @@ const onboardingStepRoutes: Record<string, string> = {
 
 const onboardingDismissKey = 'tenebit_onboarding_dismissed';
 
+// Powitanie idzie za zegarem przeglądarki, czyli za lokalnym czasem osoby, która patrzy na pulpit -
+// "Good morning" o 21:00 (QA: BUG-004) brało się stąd, że wariant był jeden na cały dzień.
+function greetingKey(hour: number): string {
+  if (hour >= 5 && hour < 12) return 'page.dashboard.titleMorning';
+  if (hour >= 12 && hour < 18) return 'page.dashboard.titleAfternoon';
+  return 'page.dashboard.titleEvening';
+}
+
 // Siatka widgetów ma sens dopiero na prawdziwym desktopie. Na telefonie i tablecie (także iPadzie
 // w poziomie) kafelki w 20-kolumnowym gridzie robiły się węższe niż ich własny tekst, więc poniżej
 // tego progu układamy je w jedną czytelną kolumnę.
@@ -80,7 +88,7 @@ export function DashboardPage() {
     <div className="pageStack">
       <PageHeader
         eyebrow={t('page.dashboard.eyebrow')}
-        title={t('page.dashboard.title')}
+        title={t(greetingKey(new Date().getHours()))}
         actions={isDesktop ? (
           layout.editing ? (
             <>
