@@ -12,5 +12,11 @@ public interface ISubscriptionRepository
     /// PaddleSubscriptionId linked - the case a lost/failed created-subscription webhook leaves behind,
     /// which <see cref="ListWithPaddleSubscriptionAsync"/> can never discover since it requires one.</summary>
     Task<IReadOnlyList<OrganizationSubscription>> ListPendingPaddleLinkAsync(CancellationToken cancellationToken);
+
+    /// <summary>Subscriptions carrying a scheduled plan change that is due on or before
+    /// <paramref name="dueBefore"/> - the work list for
+    /// SubscriptionReconciliationService.ApplyDuePlanChangesAsync.</summary>
+    Task<IReadOnlyList<OrganizationSubscription>> ListDuePlanChangesAsync(DateTimeOffset dueBefore, CancellationToken cancellationToken);
+
     void Add(OrganizationSubscription subscription);
 }

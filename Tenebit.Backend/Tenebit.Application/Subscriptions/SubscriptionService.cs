@@ -390,16 +390,50 @@ public sealed class SubscriptionService
             return Result<PlanChangePreviewResponse>.Failure(Error.Validation("Brak aktywnej subskrypcji Paddle do zmiany - najpierw ją załóż przez płatność."));
 
         var currentPlan = SubscriptionPlan.FromKey(subscription.PlanKey) ?? SubscriptionPlan.Free;
-        // Compares the actual price of the requested (plan, interval) pair against the actual price of
-        // what the org is on right now - not raw MonthlyPrice, which would be wrong the moment either side
-        // is billed annually (e.g. switching monthly Business -> annual Starter still charges *more* right
-        // now than staying on monthly Business, even though Starter is the cheaper tier).
-        var timing = newPlan.GetPrice(interval) < currentPlan.GetPrice(subscription.BillingInterval) ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
+        var timing = ResolveTiming(currentPlan, subscription.BillingInterval, newPlan, interval);
+        var priceFromEffectiveDate = newPlan.GetPrice(interval);
 
-        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.PaddleSubscriptionId!, newPlan.Key, interval, timing, cancellationToken);
-        var chargesNow = timing == PlanChangeTiming.Immediately;
+        // A deferred downgrade is entirely ours (see OrganizationSubscription.PendingPlanKey): nothing is
+        // charged today, the switch lands at the period end the org already paid for, and Paddle is not
+        // asked anything - which is also what closes the 500 on every annual -> monthly preview (błąd 3),
+        // since Paddle rejects a billing-cycle change that is not billed immediately.
+        if (timing == PlanChangeTiming.NextBillingPeriod)
+        {
+            return Result<PlanChangePreviewResponse>.Success(new PlanChangePreviewResponse(
+                0m, newPlan.Currency, false, subscription.CurrentPeriodEnd, priceFromEffectiveDate));
+        }
+
+        var preview = await _paymentGateway.PreviewPlanChangeAsync(subscription.PaddleSubscriptionId!, newPlan.Key, interval, cancellationToken);
+
+        // Paddle returns a negative figure when the credit for the unused remainder of the current plan is
+        // worth more than the new plan (e.g. two months into an annual Business, switching to monthly
+        // Growth). Nothing is collected and nothing is refunded - the excess sits on the Paddle balance and
+        // pays for later renewals - so the customer must be shown "0 now, X as credit", never a negative
+        // amount due (błąd 0).
+        var amountDue = Math.Max(0m, preview.AmountDue);
+        var creditToBalance = Math.Max(0m, -preview.AmountDue);
+
         return Result<PlanChangePreviewResponse>.Success(new PlanChangePreviewResponse(
-            preview.AmountDue, preview.Currency, chargesNow, chargesNow ? null : preview.EffectiveAt ?? subscription.CurrentPeriodEnd));
+            amountDue, preview.Currency, true, null, priceFromEffectiveDate, creditToBalance));
+    }
+
+    /// <summary>
+    /// Whether a switch takes effect now or at the end of the paid period.
+    ///
+    /// Tier first, interval second - comparing the two (plan, interval) prices directly, as this used to,
+    /// reads "monthly Max -> annual Starter" (98,95 vs 119,50) as an upgrade and charges for it on the spot
+    /// while silently cutting the org's limit from 10 000 assets to 100. Anything that lowers the tier waits
+    /// for the period the customer already paid for to run out; within the same tier only the switch to a
+    /// longer cycle (monthly -> annual) is immediate.
+    /// </summary>
+    private static PlanChangeTiming ResolveTiming(SubscriptionPlan currentPlan, BillingInterval currentInterval, SubscriptionPlan newPlan, BillingInterval newInterval)
+    {
+        if (newPlan.MonthlyPrice > currentPlan.MonthlyPrice) return PlanChangeTiming.Immediately;
+        if (newPlan.MonthlyPrice < currentPlan.MonthlyPrice) return PlanChangeTiming.NextBillingPeriod;
+
+        return newInterval == BillingInterval.Annual && currentInterval == BillingInterval.Monthly
+            ? PlanChangeTiming.Immediately
+            : PlanChangeTiming.NextBillingPeriod;
     }
 
     /// <summary>
@@ -437,16 +471,36 @@ public sealed class SubscriptionService
         {
             // No-op: already on the requested plan and interval.
         }
+        else if (ResolveTiming(currentPlan, subscription.BillingInterval, newPlan, interval) == PlanChangeTiming.NextBillingPeriod)
+        {
+            // Held locally and pushed to Paddle on its effective date by
+            // SubscriptionReconciliationService.ApplyDuePlanChangesAsync. Paddle is deliberately not called
+            // here: it cannot schedule a plan change, so any call now would switch the price - and the
+            // org's entitlements - on the spot, which is exactly the downgrade-applies-immediately defect
+            // (błąd 2), and for an annual -> monthly switch it fails outright (błąd 3).
+            var effectiveAt = subscription.CurrentPeriodEnd;
+            subscription.ScheduleDowngrade(newPlan.Key, interval, effectiveAt);
+
+            _activity.Add(new ActivityLog(
+                organizationId,
+                "subscription.plan_change_scheduled",
+                "subscription",
+                subscription.Id,
+                _currentUser.Subject,
+                $"Scheduled downgrade to {newPlan.Name}/{interval} effective {effectiveAt:O}",
+                _clock.UtcNow));
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var (scheduledSubject, scheduledHtml) = EmailTemplates.PlanChangeScheduled(
+                _currentUser.Language, newPlan.Name, effectiveAt, _appLinkBuilder.BuildAppUrl("/pricing"));
+            await SendPlanChangeEmailAsync(
+                organizationId, _currentUser.Email, _currentUser.Language, scheduledSubject, scheduledHtml,
+                "plan-change-scheduled", $"plan-change-scheduled:{subscription.Id:N}:{effectiveAt:O}:{newPlan.Key}", cancellationToken);
+        }
         else
         {
-            // See PreviewPlanChangeAsync for why this compares actual (plan, interval) prices rather than
-            // raw MonthlyPrice - this is also the mechanism that makes a monthly->annual switch of the same
-            // plan charge immediately (Immediately => Paddle's prorated_immediately credits the unused
-            // monthly time against the new annual price, so the customer pays the difference, not the sum).
-            var timing = newPlan.GetPrice(interval) < currentPlan.GetPrice(subscription.BillingInterval) ? PlanChangeTiming.NextBillingPeriod : PlanChangeTiming.Immediately;
-            var codeResult = timing == PlanChangeTiming.Immediately
-                ? await ResolveCodeAsync(newPlan, interval, promoCode, redeem: true, cancellationToken)
-                : Result<ResolvedCode>.Success(new ResolvedCode(null, null, null)); // A deferred downgrade charges nothing today - nothing for a code to discount.
+            var codeResult = await ResolveCodeAsync(newPlan, interval, promoCode, redeem: true, cancellationToken);
             if (codeResult.IsFailure) return Result<SubscriptionResponse>.Failure(codeResult.Error!);
             var discount = codeResult.Value!.Discount;
 
@@ -461,7 +515,7 @@ public sealed class SubscriptionService
                     subscription.PaddleSubscriptionId!,
                     newPlan.Key,
                     interval,
-                    timing,
+                    PlanChangeBilling.ProrateImmediately,
                     $"tenebit-planchange-{subscription.PaddleSubscriptionId}-{newPlan.Key}-{interval}-{discountKey}",
                     cancellationToken,
                     discount);
@@ -481,51 +535,29 @@ public sealed class SubscriptionService
                 || (canonical.OrganizationId.HasValue && canonical.OrganizationId.Value != organizationId))
                 throw new PaymentGatewayException("Paddle subscription association mismatch.");
 
-            if (timing == PlanChangeTiming.NextBillingPeriod)
-            {
-                var effectiveAt = result.PendingEffectiveAt ?? subscription.CurrentPeriodEnd;
-                subscription.ScheduleDowngrade(newPlan.Key, interval, effectiveAt);
+            // An upgrade supersedes a downgrade the owner scheduled earlier in the same period - the plan
+            // they just paid for is the one they get to keep.
+            subscription.ClearPendingPlanChange();
+            subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.BillingInterval, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
+            chargedAmount = Math.Max(0m, result.AmountCharged);
+            chargedCurrency = result.Currency;
 
-                _activity.Add(new ActivityLog(
-                    organizationId,
-                    "subscription.plan_change_scheduled",
-                    "subscription",
-                    subscription.Id,
-                    _currentUser.Subject,
-                    $"Scheduled downgrade to {newPlan.Name} effective {effectiveAt:O}",
-                    _clock.UtcNow));
+            _activity.Add(new ActivityLog(
+                organizationId,
+                "subscription.plan_changed",
+                "subscription",
+                subscription.Id,
+                _currentUser.Subject,
+                $"Changed to {newPlan.Name}",
+                _clock.UtcNow));
 
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-                var (scheduledSubject, scheduledHtml) = EmailTemplates.PlanChangeScheduled(
-                    _currentUser.Language, newPlan.Name, effectiveAt, _appLinkBuilder.BuildAppUrl("/pricing"));
-                await SendPlanChangeEmailAsync(
-                    organizationId, _currentUser.Email, _currentUser.Language, scheduledSubject, scheduledHtml,
-                    "plan-change-scheduled", $"plan-change-scheduled:{subscription.Id:N}:{effectiveAt:O}:{newPlan.Key}", cancellationToken);
-            }
-            else
-            {
-                subscription.ReconcileFromPaddle(canonical.PlanKey, canonical.BillingInterval, canonical.Status, canonical.CurrentPeriodStart, canonical.CurrentPeriodEnd, canonical.SubscriptionId, canonical.CustomerId);
-                chargedAmount = result.AmountCharged;
-                chargedCurrency = result.Currency;
-
-                _activity.Add(new ActivityLog(
-                    organizationId,
-                    "subscription.plan_changed",
-                    "subscription",
-                    subscription.Id,
-                    _currentUser.Subject,
-                    $"Changed to {newPlan.Name}",
-                    _clock.UtcNow));
-
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-                var (changedSubject, changedHtml) = EmailTemplates.PlanChanged(
-                    _currentUser.Language, newPlan.Name, _appLinkBuilder.BuildAppUrl("/dashboard"));
-                await SendPlanChangeEmailAsync(
-                    organizationId, _currentUser.Email, _currentUser.Language, changedSubject, changedHtml,
-                    "plan-changed", $"plan-changed:{subscription.Id:N}:{canonical.SubscriptionId}:{newPlan.Key}:{canonical.CurrentPeriodStart:O}", cancellationToken);
-            }
+            var (changedSubject, changedHtml) = EmailTemplates.PlanChanged(
+                _currentUser.Language, newPlan.Name, _appLinkBuilder.BuildAppUrl("/dashboard"));
+            await SendPlanChangeEmailAsync(
+                organizationId, _currentUser.Email, _currentUser.Language, changedSubject, changedHtml,
+                "plan-changed", $"plan-changed:{subscription.Id:N}:{canonical.SubscriptionId}:{newPlan.Key}:{canonical.CurrentPeriodStart:O}", cancellationToken);
         }
 
         var response = await BuildSubscriptionResponseAsync(subscription, cancellationToken);
@@ -540,18 +572,11 @@ public sealed class SubscriptionService
         if (access.IsFailure) return Result<SubscriptionResponse>.Failure(access.Error!);
 
         var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
-        if (subscription?.PendingPlanKey is null || string.IsNullOrWhiteSpace(subscription.PaddleSubscriptionId))
+        if (subscription?.PendingPlanKey is null)
             return Result<SubscriptionResponse>.Failure(Error.Validation("Brak zaplanowanej zmiany planu do anulowania."));
 
-        try
-        {
-            await _paymentGateway.CancelScheduledChangeAsync(subscription.PaddleSubscriptionId, cancellationToken);
-        }
-        catch (PaymentGatewayException)
-        {
-            return Result<SubscriptionResponse>.Failure(Error.Validation("Nie udało się anulować zaplanowanej zmiany planu. Spróbuj ponownie później."));
-        }
-
+        // Nothing to undo on Paddle: a scheduled downgrade only ever exists here until its effective date
+        // (see OrganizationSubscription.PendingPlanKey), so dropping the local record is the whole job.
         subscription.ClearPendingPlanChange();
 
         _activity.Add(new ActivityLog(
@@ -802,4 +827,16 @@ public sealed record CheckoutParamsResponse(string PriceId, string CustomerId, s
 /// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
 /// immediately (an upgrade), or - when ChargesNow is false - the date the new price takes effect for free
 /// with nothing charged today (a downgrade).</summary>
-public sealed record PlanChangePreviewResponse(decimal AmountDue, string Currency, bool ChargesNow, DateTimeOffset? EffectiveAt);
+/// <param name="AmountDue">Collected today. Never negative: an over-credit is reported as
+/// <paramref name="CreditToBalance"/> instead.</param>
+/// <param name="AmountAtRenewal">The new plan's list price per billing period, i.e. what the org pays from
+/// <paramref name="EffectiveAt"/> (a deferred change) or from the next renewal (an immediate one) onwards.</param>
+/// <param name="CreditToBalance">Proration credit in excess of today's charge. It is not refunded - Paddle
+/// holds it on the account and spends it on the following invoices.</param>
+public sealed record PlanChangePreviewResponse(
+    decimal AmountDue,
+    string Currency,
+    bool ChargesNow,
+    DateTimeOffset? EffectiveAt,
+    decimal AmountAtRenewal = 0m,
+    decimal CreditToBalance = 0m);

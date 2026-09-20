@@ -39,13 +39,12 @@ export function PricingPage() {
   // instead of a fresh checkout, which only ever creates a first subscription.
   const hasLivePaidSubscription = !!subscription.data && subscription.data.planKey !== 'free' && subscription.data.status !== 'Cancelled';
   const currentPlan = currentPlanKey ? PLANS.find(p => p.key === currentPlanKey) ?? null : null;
-  // A plan change to a cheaper (plan, interval) combination is scheduled for the end of the paid period,
-  // not charged now (see SubscriptionService.ChangePlanAsync's price comparison, which now compares the
-  // actual price of the requested interval, not always MonthlyPrice) - a promo code has nothing to
-  // discount there, so only offer it for a real upgrade (equal-or-higher price now), which bills
-  // immediately.
+  // Mirrors SubscriptionService.ResolveTiming: the tier decides, and only within the same tier does the
+  // cycle (monthly -> annual bills now, annual -> monthly waits). A deferred change charges nothing today,
+  // so there is nothing for a promo code to discount - the field is only offered for an immediate upgrade.
   const isDowngrade = hasLivePaidSubscription && !!selectedPlan && !!currentPlan
-    && planPrice(selectedPlan, selectedInterval) < planPrice(currentPlan, currentInterval);
+    && (selectedPlan.price < currentPlan.price
+      || (selectedPlan.price === currentPlan.price && !(selectedInterval === 'annual' && currentInterval === 'monthly')));
 
   // Paddle's overlay checkout never navigates the browser on its own after a successful payment (unlike a
   // classic hosted-redirect flow) - without this, the app keeps showing whatever plan/asset-limit state it
@@ -220,7 +219,20 @@ export function PricingPage() {
         </div>
       )}
 
+      {hasLivePaidSubscription && subscription.data && (
+        <div className="pricing-scheduledBanner">
+          <span>{t('pricing.renewsOn', {
+            plan: subscription.data.planName,
+            interval: t(currentInterval === 'annual' ? 'pricing.billing.annual' : 'pricing.billing.monthly'),
+            date: formatDate(subscription.data.currentPeriodEnd)
+          })}</span>
+        </div>
+      )}
+
       <PricingCards
+        // Remounted once the subscription is known so an annual customer opens on the annual tab.
+        key={currentInterval}
+        initialInterval={currentInterval}
         renderCta={(plan, interval) => {
           const isCurrent = currentPlanKey === plan.key && currentInterval === interval;
           const showCta = !isCurrent && plan.key !== 'free';
@@ -278,14 +290,33 @@ export function PricingPage() {
                 ) : previewError ? (
                   <p className="formMessage formMessage--error">{previewError}</p>
                 ) : preview?.chargesNow ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                    <span>{t('pricing.checkout.dueNow')}</span>
-                    <span>{preview.amountDue.toFixed(2)} {preview.currency}</span>
-                  </div>
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                      <span>{t('pricing.checkout.dueNow')}</span>
+                      <span>{preview.amountDue.toFixed(2)} {preview.currency}</span>
+                    </div>
+                    {preview.creditToBalance > 0 && (
+                      <p className="pricing-confirm-detail">
+                        {t('pricing.checkout.creditToBalance', { amount: preview.creditToBalance.toFixed(2), currency: preview.currency })}
+                      </p>
+                    )}
+                    {preview.amountAtRenewal > 0 && (
+                      <p className="pricing-confirm-detail">
+                        {t('pricing.checkout.thenPerPeriod', { amount: preview.amountAtRenewal.toFixed(2), currency: preview.currency, period: periodSuffix })}
+                      </p>
+                    )}
+                  </>
                 ) : preview ? (
-                  <p className="pricing-confirm-detail">
-                    {t('pricing.checkout.downgradeNotice', { date: formatDate(preview.effectiveAt!) })}
-                  </p>
+                  <>
+                    <p className="pricing-confirm-detail">
+                      {t('pricing.checkout.downgradeNotice', { date: formatDate(preview.effectiveAt!) })}
+                    </p>
+                    {preview.amountAtRenewal > 0 && (
+                      <p className="pricing-confirm-detail">
+                        {t('pricing.checkout.fromThenPerPeriod', { amount: preview.amountAtRenewal.toFixed(2), currency: preview.currency, period: periodSuffix, date: formatDate(preview.effectiveAt!) })}
+                      </p>
+                    )}
+                  </>
                 ) : null}
               </div>
             ) : (

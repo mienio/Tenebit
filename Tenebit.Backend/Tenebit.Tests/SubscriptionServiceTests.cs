@@ -655,7 +655,7 @@ public class SubscriptionServiceTests
         Assert.Equal(SubscriptionPlan.Growth.Key, result.Value!.PlanKey);
         Assert.Equal(SubscriptionPlan.Growth.Key, local.PlanKey);
         Assert.Equal(1, paymentGateway.PlanChangeCalls);
-        Assert.Equal(PlanChangeTiming.Immediately, paymentGateway.LastPlanChangeTiming);
+        Assert.Equal(PlanChangeBilling.ProrateImmediately, paymentGateway.LastPlanChangeBilling);
         Assert.Equal("sub_1", paymentGateway.LastPlanChangeSubscriptionId);
         Assert.Equal(SubscriptionPlan.Growth.Key, paymentGateway.LastPlanChangeNewPlanKey);
     }
@@ -680,7 +680,7 @@ public class SubscriptionServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, paymentGateway.PlanChangeCalls);
-        Assert.Equal(PlanChangeTiming.Immediately, paymentGateway.LastPlanChangeTiming);
+        Assert.Equal(PlanChangeBilling.ProrateImmediately, paymentGateway.LastPlanChangeBilling);
         Assert.Equal(BillingInterval.Annual, paymentGateway.LastPlanChangeInterval);
         Assert.Equal(BillingInterval.Annual, local.BillingInterval);
     }
@@ -697,15 +697,16 @@ public class SubscriptionServiceTests
         local.AttachPaddleCustomer("ctm_1");
         local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Annual, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
         subscriptions.Add(local);
-        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
-            "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId, BillingInterval.Annual);
-        paymentGateway.NextPendingEffectiveAt = periodEnd;
 
         var result = await service.ChangePlanAsync(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(PlanChangeTiming.NextBillingPeriod, paymentGateway.LastPlanChangeTiming);
+        // Paddle is not touched: it cannot hold a scheduled plan change, and asking it to change the
+        // billing cycle without billing it immediately is exactly the call that returned 500 on every
+        // annual -> monthly attempt (test report 19.09.2026, błąd 3).
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
         Assert.Equal(SubscriptionPlan.Growth.Key, local.PendingPlanKey);
+        Assert.Equal(BillingInterval.Monthly, local.PendingBillingInterval);
         Assert.Equal(periodEnd, local.PendingPlanEffectiveAt);
         // Entitlement/interval stay on the paid-for annual plan until the scheduled switch actually lands.
         Assert.Equal(BillingInterval.Annual, local.BillingInterval);
@@ -836,7 +837,8 @@ public class SubscriptionServiceTests
         Assert.Equal(20.88m, result.Value.AmountDue);
         Assert.Equal("EUR", result.Value.Currency);
         Assert.Null(result.Value.EffectiveAt);
-        Assert.Equal(PlanChangeTiming.Immediately, paymentGateway.LastPreviewTiming);
+        Assert.Equal(SubscriptionPlan.Growth.MonthlyPrice, result.Value.AmountAtRenewal);
+        Assert.Equal(1, paymentGateway.PreviewCalls);
     }
 
     [Fact]
@@ -849,7 +851,6 @@ public class SubscriptionServiceTests
         local.AttachPaddleCustomer("ctm_1");
         local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
         subscriptions.Add(local);
-        paymentGateway.NextPlanChangePreview = new PlanChangePreview(0m, "EUR", periodEnd);
 
         var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
@@ -857,7 +858,10 @@ public class SubscriptionServiceTests
         Assert.False(result.Value!.ChargesNow);
         Assert.Equal(0m, result.Value.AmountDue);
         Assert.Equal(periodEnd, result.Value.EffectiveAt);
-        Assert.Equal(PlanChangeTiming.NextBillingPeriod, paymentGateway.LastPreviewTiming);
+        Assert.Equal(SubscriptionPlan.Starter.MonthlyPrice, result.Value.AmountAtRenewal);
+        // Paddle is never asked to price a deferred downgrade: nothing is charged today, and asking it to
+        // preview one with a different billing cycle is what returned 500 (test report, błąd 3).
+        Assert.Equal(0, paymentGateway.PreviewCalls);
     }
 
     [Fact]
@@ -938,7 +942,6 @@ public class SubscriptionServiceTests
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
-        paymentGateway.NextPendingEffectiveAt = periodEnd;
         var promo = new PromoCode("IGNORED", SubscriptionPlan.Starter.Key, PromoDiscountType.Percentage, 20m, 5, null, PromoDurationType.Once, null, null, now);
         promoCodes.Add(promo);
 
@@ -1018,8 +1021,9 @@ public class SubscriptionServiceTests
     public async Task ChangePlanAsync_SchedulesDowngrade_InsteadOfSwitchingImmediately()
     {
         // A downgrade must not take the org off its current (higher) plan - and its entitlements - until
-        // the period already paid for actually ends. ChangePlanAsync must tell Paddle to apply it at the
-        // next billing period (proration_billing_mode=full_next_billing_period), never bill anything now.
+        // the period already paid for actually ends. Paddle has no way to hold that (every proration mode
+        // swaps the price on the spot), so ChangePlanAsync records it locally and leaves Paddle alone until
+        // ApplyDuePlanChangesAsync pushes it on the effective date.
         var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
         var periodEnd = now.AddMonths(1);
@@ -1029,15 +1033,11 @@ public class SubscriptionServiceTests
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
-        paymentGateway.NextPendingEffectiveAt = periodEnd;
 
         var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, paymentGateway.PlanChangeCalls);
-        Assert.Equal(PlanChangeTiming.NextBillingPeriod, paymentGateway.LastPlanChangeTiming);
-        Assert.Equal("sub_1", paymentGateway.LastPlanChangeSubscriptionId);
-        Assert.Equal(0m, paymentGateway.NextChargedAmount);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
         // Still on Growth right now - the whole point of scheduling instead of switching immediately.
         Assert.Equal(SubscriptionPlan.Growth.Key, local.PlanKey);
         Assert.Equal(SubscriptionPlan.Starter.Key, local.PendingPlanKey);
@@ -1060,7 +1060,6 @@ public class SubscriptionServiceTests
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
-        paymentGateway.NextPendingEffectiveAt = periodEnd;
 
         var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
@@ -1069,7 +1068,7 @@ public class SubscriptionServiceTests
     }
 
     [Fact]
-    public async Task CancelScheduledPlanChangeAsync_ClearsPendingStateAndCancelsItOnPaddle()
+    public async Task CancelScheduledPlanChangeAsync_ClearsPendingState()
     {
         var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
         var now = DateTimeOffset.UtcNow;
@@ -1082,8 +1081,8 @@ public class SubscriptionServiceTests
         var result = await service.CancelScheduledPlanChangeAsync(CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, paymentGateway.CancelScheduledChangeCalls);
-        Assert.Equal("sub_1", paymentGateway.LastCancelScheduledSubscriptionId);
+        // Nothing to undo on Paddle - the scheduled downgrade only ever existed here.
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
         Assert.Null(local.PendingPlanKey);
         Assert.Null(local.PendingPlanEffectiveAt);
         Assert.Null(result.Value!.PendingPlanKey);
@@ -1120,7 +1119,6 @@ public class SubscriptionServiceTests
         subscriptions.Add(local);
         paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
             "ctm_1", "sub_1", SubscriptionPlan.Growth.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
-        paymentGateway.NextPendingEffectiveAt = periodEnd;
 
         await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, CancellationToken.None);
 
@@ -1222,7 +1220,7 @@ public class SubscriptionServiceTests
         var result = await service.CancelScheduledPlanChangeAsync(CancellationToken.None);
 
         Assert.True(result.IsFailure);
-        Assert.Equal(0, paymentGateway.CancelScheduledChangeCalls);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
     }
 
     /// <summary>Limity pozostałych zasobów są egzekwowane, ale nie mogą wyciec przez API - w
@@ -1241,5 +1239,92 @@ public class SubscriptionServiceTests
         Assert.Equal(SubscriptionPlan.Free.AssetLimit, usage[0].Limit);
         Assert.Equal(1, usage[0].Current);
         Assert.Equal(result.Value!.CurrentAssetCount, usage[0].Current);
+    }
+
+    [Fact]
+    public async Task PreviewPlanChangeAsync_NeverShowsANegativeAmountDue_AndReportsTheExcessAsCredit()
+    {
+        // Błąd 0 from the 18-19.09.2026 report: the dialog offered "Due now -189,14 EUR". Paddle collects
+        // nothing and refunds nothing in that case - the surplus credit sits on the account - so the
+        // customer must be told exactly that.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Annual, SubscriptionStatus.Active, now, now.AddYears(1), "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextPlanChangePreview = new PlanChangePreview(-189.14m, "EUR", null);
+
+        var result = await service.PreviewPlanChangeAsync(SubscriptionPlan.ThousandPlus.Key, BillingInterval.Annual, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0m, result.Value!.AmountDue);
+        Assert.Equal(189.14m, result.Value.CreditToBalance);
+        Assert.True(result.Value.ChargesNow);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_MonthlyTopTierToAnnualStarter_IsDeferred_NotChargedAsAnUpgrade()
+    {
+        // The annual Starter list price (119,50) is higher than a monthly Max charge (98,95), which the old
+        // price-versus-price rule read as an upgrade: it billed immediately and cut the org from 10 000
+        // assets to 100 on the spot. Tier decides, so this waits for the paid month to end.
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddDays(20);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.ThousandPlus.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.ThousandPlus.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Starter.Key, BillingInterval.Annual, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, paymentGateway.PlanChangeCalls);
+        Assert.Equal(SubscriptionPlan.ThousandPlus.Key, local.PlanKey);
+        Assert.Equal(SubscriptionPlan.ThousandPlus.AssetLimit, local.GetAssetLimit());
+        Assert.Equal(SubscriptionPlan.Starter.Key, local.PendingPlanKey);
+        Assert.Equal(BillingInterval.Annual, local.PendingBillingInterval);
+        Assert.Equal(periodEnd, local.PendingPlanEffectiveAt);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_UpgradeSupersedesAScheduledDowngrade()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var periodEnd = now.AddDays(10);
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Growth.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Growth.Key, BillingInterval.Monthly, SubscriptionStatus.Active, now, periodEnd, "sub_1", "ctm_1", now);
+        local.ScheduleDowngrade(SubscriptionPlan.Starter.Key, BillingInterval.Monthly, periodEnd);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.Business.Key, SubscriptionStatus.Active, now, periodEnd, user.OrganizationId);
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.Business.Key, BillingInterval.Monthly, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SubscriptionPlan.Business.Key, local.PlanKey);
+        Assert.Null(local.PendingPlanKey);
+    }
+
+    [Fact]
+    public async Task ChangePlanAsync_NeverReportsANegativeChargedAmount()
+    {
+        var (service, user, _, subscriptions, paymentGateway, _, _) = CreateService();
+        var now = DateTimeOffset.UtcNow;
+        var local = new OrganizationSubscription(user.OrganizationId, SubscriptionPlan.Business.Key);
+        local.AttachPaddleCustomer("ctm_1");
+        local.SyncFromPaddle(SubscriptionPlan.Business.Key, BillingInterval.Annual, SubscriptionStatus.Active, now, now.AddYears(1), "sub_1", "ctm_1", now);
+        subscriptions.Add(local);
+        paymentGateway.NextChangedSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.ThousandPlus.Key, SubscriptionStatus.Active, now, now.AddYears(1), user.OrganizationId, BillingInterval.Annual);
+        paymentGateway.NextChargedAmount = -189.14m;
+
+        var result = await service.ChangePlanAsync(SubscriptionPlan.ThousandPlus.Key, BillingInterval.Annual, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0m, result.Value!.LastChargeAmount);
     }
 }

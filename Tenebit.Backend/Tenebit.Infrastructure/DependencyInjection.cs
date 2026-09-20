@@ -141,6 +141,7 @@ public static class DependencyInjection
         services.AddHostedService<SecurityStateCleanupBackgroundService>();
         services.AddHostedService<PublicIpRetentionBackgroundService>();
         services.AddHostedService<SubscriptionReconciliationBackgroundService>();
+        services.AddHostedService<PendingPlanChangeBackgroundService>();
         services.AddHostedService<EmailOutboxBackgroundService>();
         services.AddHostedService<AffiliatePayoutPeriodCloseBackgroundService>();
         return services;

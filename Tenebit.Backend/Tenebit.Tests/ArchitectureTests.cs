@@ -108,7 +108,9 @@ public class ArchitectureTests
         "IOffboardingCaseRepository.FindByPublicTokenHashAsync",
         "ISubscriptionRepository.GetByPaddleCustomerAsync",
         "ISubscriptionRepository.ListWithPaddleSubscriptionAsync",
-        "ISubscriptionRepository.ListPendingPaddleLinkAsync"
+        "ISubscriptionRepository.ListPendingPaddleLinkAsync",
+        // Cross-tenant by design: the background job that lands scheduled downgrades sweeps every org.
+        "ISubscriptionRepository.ListDuePlanChangesAsync"
     ];
 
     /// <summary>

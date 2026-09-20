@@ -41,9 +41,14 @@ const LIMIT_CATEGORIES: { key: string; icon: LucideIcon }[] = [
   { key: 'teams', icon: Users },
 ];
 
-export function PricingCards({ renderCta }: { renderCta: (plan: PlanDef, interval: BillingInterval) => ReactNode }) {
+export function PricingCards({ renderCta, initialInterval = 'monthly' }: {
+  renderCta: (plan: PlanDef, interval: BillingInterval) => ReactNode;
+  /** Which tab opens first. Callers with a live subscription pass the customer's own billing cycle, so an
+   * annual customer does not land on a monthly price list showing their plan as if they were not on it. */
+  initialInterval?: BillingInterval;
+}) {
   const { t, language } = useI18n();
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>(initialInterval);
   const formatLimit = (limit: number) => new Intl.NumberFormat(language).format(limit);
   const formatPrice = (amount: number) => new Intl.NumberFormat(language, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 

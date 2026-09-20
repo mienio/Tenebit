@@ -157,15 +157,16 @@ public class PaddlePaymentGatewayTests
         // (on_payment_failure=prevent_change) instead of silently applying the higher plan regardless of
         // whether the proration charge actually succeeds.
         var handler = new StubHandler()
-            .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(ChangedToGrowthSubscriptionJson));
+            .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(ChangedToGrowthSubscriptionJson))
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(ChangedToGrowthSubscriptionJson));
         var gateway = CreateGateway(handler, ("growth", "pri_growth"));
 
-        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeTiming.Immediately, "idem-1", CancellationToken.None);
+        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeBilling.ProrateImmediately, "idem-1", CancellationToken.None);
 
         Assert.Equal(17m, result.AmountCharged);
         Assert.Equal("EUR", result.Currency);
 
-        var update = handler.Requests.Single();
+        var update = handler.Requests[0];
         Assert.Contains("\"proration_billing_mode\":\"prorated_immediately\"", update.Body);
         Assert.Contains("\"on_payment_failure\":\"prevent_change\"", update.Body);
         Assert.Contains("\"price_id\":\"pri_growth\"", update.Body);
@@ -182,7 +183,7 @@ public class PaddlePaymentGatewayTests
         var gateway = CreateGateway(handler, ("growth", "pri_growth"));
 
         var ex = await Assert.ThrowsAsync<PaymentGatewayException>(
-            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeTiming.Immediately, "idem-1", CancellationToken.None));
+            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeBilling.ProrateImmediately, "idem-1", CancellationToken.None));
 
         Assert.Equal(402, ex.StatusCode);
     }
@@ -195,45 +196,117 @@ public class PaddlePaymentGatewayTests
         var gateway = CreateGateway(handler, ("growth", "pri_growth"));
 
         var ex = await Assert.ThrowsAsync<PaymentGatewayException>(
-            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeTiming.Immediately, "idem-1", CancellationToken.None));
+            () => gateway.ChangeSubscriptionPlanAsync("sub_1", "growth", BillingInterval.Monthly, PlanChangeBilling.ProrateImmediately, "idem-1", CancellationToken.None));
 
         Assert.Equal(402, ex.StatusCode);
     }
 
-    private const string ScheduledDowngradeSubscriptionJson = """
+    private const string SwitchedToStarterSubscriptionJson = """
         {
           "id": "sub_1", "customer_id": "ctm_1", "status": "active",
-          "items": [ { "price": { "id": "pri_old" }, "quantity": 1 } ],
-          "current_billing_period": { "starts_at": "2025-01-01T00:00:00Z", "ends_at": "2025-02-01T00:00:00Z" },
-          "scheduled_change": { "action": "update", "effective_at": "2025-02-01T00:00:00Z" }
+          "items": [ { "price": { "id": "pri_starter" }, "quantity": 1 } ],
+          "current_billing_period": { "starts_at": "2025-01-01T00:00:00Z", "ends_at": "2025-02-01T00:00:00Z" }
         }
         """;
 
     [Fact]
-    public async Task ChangeSubscriptionPlanAsync_NextBillingPeriod_ChargesNothingAndReportsTheScheduledEffectiveDate()
+    public async Task ChangeSubscriptionPlanAsync_SwitchWithoutCharge_BillsNothingAndKeepsTheBillingAnchor()
     {
+        // How a scheduled downgrade lands on its effective date: the price swaps, the next renewal bills
+        // the new plan, and no money moves today - so it must not send a proration mode that charges, nor
+        // on_payment_failure (there is no payment to fail).
         var handler = new StubHandler()
-            .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(ScheduledDowngradeSubscriptionJson));
+            .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(SwitchedToStarterSubscriptionJson))
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(SwitchedToStarterSubscriptionJson));
         var gateway = CreateGateway(handler, ("starter", "pri_starter"));
 
-        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "starter", BillingInterval.Monthly, PlanChangeTiming.NextBillingPeriod, "idem-1", CancellationToken.None);
+        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "starter", BillingInterval.Monthly, PlanChangeBilling.SwitchWithoutCharge, "idem-1", CancellationToken.None);
 
         Assert.Equal(0m, result.AmountCharged);
-        Assert.Equal(new DateTimeOffset(2025, 2, 1, 0, 0, 0, TimeSpan.Zero), result.PendingEffectiveAt);
+        Assert.Equal(new DateTimeOffset(2025, 2, 1, 0, 0, 0, TimeSpan.Zero), result.Subscription.CurrentPeriodEnd);
 
-        var update = handler.Requests.Single();
-        Assert.Contains("\"proration_billing_mode\":\"full_next_billing_period\"", update.Body);
+        var update = handler.Requests[0];
+        Assert.Contains("\"proration_billing_mode\":\"do_not_bill\"", update.Body);
+        Assert.DoesNotContain("on_payment_failure", update.Body);
+    }
+
+    private const string DuplicatedItemsSubscriptionJson = """
+        {
+          "id": "sub_1", "customer_id": "ctm_1", "status": "active",
+          "items": [
+            { "status": "active", "price": { "id": "pri_starter" }, "quantity": 1 },
+            { "status": "active", "price": { "id": "pri_starter" }, "quantity": 1 },
+            { "status": "active", "price": { "id": "pri_junk" }, "quantity": 1 }
+          ],
+          "current_billing_period": { "starts_at": "2025-01-01T00:00:00Z", "ends_at": "2025-02-01T00:00:00Z" }
+        }
+        """;
+
+    [Fact]
+    public async Task ChangeSubscriptionPlanAsync_RewritesTheItemList_WhenTheSwitchLeavesADuplicateBehind()
+    {
+        // The 18-19.09.2026 report's most expensive defect: a subscription carrying its own plan twice
+        // renews at double the list price and hands back double the proration credit on the next switch.
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(DuplicatedItemsSubscriptionJson))
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(DuplicatedItemsSubscriptionJson))
+            .Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(SwitchedToStarterSubscriptionJson))
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(SwitchedToStarterSubscriptionJson));
+        var gateway = CreateGateway(handler, ("starter", "pri_starter"));
+
+        var result = await gateway.ChangeSubscriptionPlanAsync("sub_1", "starter", BillingInterval.Monthly, PlanChangeBilling.SwitchWithoutCharge, "idem-1", CancellationToken.None);
+
+        Assert.Equal(SubscriptionPlan.Starter.Key, result.Subscription.PlanKey);
+
+        var repair = handler.Requests[2];
+        Assert.Equal(HttpMethod.Patch, repair.Method);
+        Assert.Contains("\"price_id\":\"pri_starter\"", repair.Body);
+        Assert.Contains("\"proration_billing_mode\":\"do_not_bill\"", repair.Body);
     }
 
     [Fact]
-    public async Task CancelScheduledChangeAsync_SendsScheduledChangeNull()
+    public async Task EnsureCanonicalItemsAsync_DoesNothing_WhenTheSubscriptionAlreadyHoldsExactlyOnePlan()
     {
-        var handler = new StubHandler().Enqueue(HttpMethod.Patch, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(CurrentSubscriptionJson));
-        var gateway = CreateGateway(handler);
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(SwitchedToStarterSubscriptionJson));
+        var gateway = CreateGateway(handler, ("starter", "pri_starter"));
 
-        await gateway.CancelScheduledChangeAsync("sub_1", CancellationToken.None);
+        var repair = await gateway.EnsureCanonicalItemsAsync("sub_1", "starter", BillingInterval.Monthly, CancellationToken.None);
 
-        Assert.Contains("\"scheduled_change\":null", handler.Requests.Single().Body);
+        Assert.False(repair.Repaired);
+        Assert.True(repair.Canonical);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task ListPlanPriceMismatchesAsync_ReportsAPaddlePriceThatDriftedFromTheCatalogue()
+    {
+        // Błąd 4: Growth Annual priced 252,65 EUR in Paddle against the 289,50 EUR the pricing page sells.
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "prices/pri_growth", HttpStatusCode.OK, Wrap("""
+                { "id": "pri_growth", "unit_price": { "amount": "2500", "currency_code": "EUR" }, "billing_cycle": { "interval": "month", "frequency": 1 } }
+                """));
+        var gateway = CreateGateway(handler, ("growth", "pri_growth"));
+
+        var mismatches = await gateway.ListPlanPriceMismatchesAsync(CancellationToken.None);
+
+        var mismatch = Assert.Single(mismatches);
+        Assert.Equal("growth", mismatch.PlanKey);
+        Assert.Equal("amount_mismatch", mismatch.Reason);
+        Assert.Equal(SubscriptionPlan.Growth.MonthlyPrice, mismatch.Expected);
+        Assert.Equal(25m, mismatch.Actual);
+    }
+
+    [Fact]
+    public async Task ListPlanPriceMismatchesAsync_ReportsNothing_WhenPaddleMatchesTheCatalogue()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "prices/pri_growth", HttpStatusCode.OK, Wrap("""
+                { "id": "pri_growth", "unit_price": { "amount": "2895", "currency_code": "EUR" }, "billing_cycle": { "interval": "month", "frequency": 1 } }
+                """));
+        var gateway = CreateGateway(handler, ("growth", "pri_growth"));
+
+        Assert.Empty(await gateway.ListPlanPriceMismatchesAsync(CancellationToken.None));
     }
 
     private static string SignedHeader(string secret, string payload, long? timestampOverride = null)

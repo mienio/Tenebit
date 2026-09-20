@@ -33,9 +33,14 @@ public sealed class OrganizationSubscription
     public string? PaddleSubscriptionId { get; private set; }
 
     /// <summary>A downgrade in progress: <see cref="PlanKey"/> (and its entitlements) stays on the current,
-    /// higher plan until <see cref="PendingPlanEffectiveAt"/> - Paddle applies the actual price switch
-    /// itself (proration_billing_mode=full_next_billing_period on the subscription, no separate schedule
-    /// object needed) at that date, no local cron needed.</summary>
+    /// higher plan - the one the org has already paid for - until <see cref="PendingPlanEffectiveAt"/>, the
+    /// end of the paid period.
+    ///
+    /// Nothing about this is known to Paddle: Paddle can only schedule a cancel/pause, never a plan change,
+    /// and every proration_billing_mode swaps the price on the subscription *immediately* (that is exactly
+    /// how a downgrade came to take effect the same second it was requested, test report 19.09.2026, błąd
+    /// 2). So the switch is held here and pushed to Paddle on its effective date by
+    /// SubscriptionReconciliationService.ApplyDuePlanChangesAsync.</summary>
     public string? PendingPlanKey { get; private set; }
     public BillingInterval? PendingBillingInterval { get; private set; }
     public DateTimeOffset? PendingPlanEffectiveAt { get; private set; }
@@ -106,14 +111,39 @@ public sealed class OrganizationSubscription
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// <summary>Records a downgrade scheduled on Paddle's side to take effect at <paramref name="effectiveAt"/>
-    /// (the current period end) - entitlements are untouched until then; see <see cref="SyncFromPaddle"/>
-    /// for how the pending state clears once Paddle actually applies it.</summary>
+    /// <summary>Records a downgrade to take effect at <paramref name="effectiveAt"/> (the current period
+    /// end). Nothing is sent to Paddle and no entitlement changes until <see cref="ApplyPendingPlanChange"/>
+    /// runs on that date; see <see cref="PendingPlanKey"/> for why Paddle cannot hold this itself.</summary>
     public void ScheduleDowngrade(string planKey, BillingInterval interval, DateTimeOffset effectiveAt)
     {
+        if (SubscriptionPlan.FromKey(planKey) is null) throw new DomainException($"Unknown plan: {planKey}");
+
         PendingPlanKey = planKey;
         PendingBillingInterval = interval;
         PendingPlanEffectiveAt = effectiveAt;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>True once the scheduled downgrade is close enough to its effective date to be pushed to
+    /// Paddle. Applied slightly early on purpose: the swap has to land before Paddle raises the renewal
+    /// invoice, or the org is billed another full period of the plan it asked to leave.</summary>
+    public bool IsPlanChangeDue(DateTimeOffset now, TimeSpan lead) =>
+        PendingPlanKey is not null && PendingPlanEffectiveAt is not null && now >= PendingPlanEffectiveAt.Value - lead;
+
+    /// <summary>Moves the scheduled plan/interval onto the subscription itself once Paddle has accepted the
+    /// switch, and clears the pending state.</summary>
+    public void ApplyPendingPlanChange()
+    {
+        if (PendingPlanKey is null) return;
+
+        var plan = SubscriptionPlan.FromKey(PendingPlanKey);
+        if (plan is null) throw new DomainException($"Unknown plan: {PendingPlanKey}");
+
+        PlanKey = plan.Key;
+        BillingInterval = PendingBillingInterval ?? BillingInterval;
+        PendingPlanKey = null;
+        PendingBillingInterval = null;
+        PendingPlanEffectiveAt = null;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
@@ -132,9 +162,11 @@ public sealed class OrganizationSubscription
     /// </summary>
     public void SyncFromPaddle(string planKey, BillingInterval interval, SubscriptionStatus status, DateTimeOffset currentPeriodStart, DateTimeOffset currentPeriodEnd, string? paddleSubscriptionId, string paddleCustomerId, DateTimeOffset webhookEventCreatedAt)
     {
-        // A pending plan/interval change resolves itself once Paddle actually applies it (the canonical
-        // planKey+interval catch up to what we scheduled) or the subscription is gone - no local cron
-        // needed, this just needs to notice either has happened.
+        // A pending plan/interval change resolves once it has actually landed on Paddle (the canonical
+        // planKey+interval catch up to what was scheduled - normally because ApplyDuePlanChangesAsync just
+        // pushed it, but an operator editing the subscription in the Paddle dashboard counts too) or the
+        // subscription is gone. Until then the canonical plan below is still the *current*, paid-for one,
+        // so it is applied as usual and entitlements stay where the customer paid for them.
         if (PendingPlanKey is not null && (status == SubscriptionStatus.Cancelled || (planKey == PendingPlanKey && interval == PendingBillingInterval)))
         {
             PendingPlanKey = null;

@@ -120,6 +120,8 @@ export interface FleetValue {
   assetsWithoutPrice: number;
   currency: string;
   byCategory: CategoryValueSlice[];
+  /** Priced in a currency other than `currency`, so left out of the totals rather than converted. */
+  assetsInOtherCurrency: number;
 }
 
 export interface Asset {
@@ -976,10 +978,15 @@ export interface Subscription {
 }
 
 export interface PlanChangePreview {
+  /** Collected today. Never negative - an over-credit is reported in `creditToBalance` instead. */
   amountDue: number;
   currency: string;
   chargesNow: boolean;
   effectiveAt: string | null;
+  /** The new plan's price per billing period, i.e. what is paid from `effectiveAt` / the next renewal on. */
+  amountAtRenewal: number;
+  /** Proration credit beyond today's charge. Not refunded - Paddle spends it on the following invoices. */
+  creditToBalance: number;
 }
 
 export interface PromoCodeValidation {

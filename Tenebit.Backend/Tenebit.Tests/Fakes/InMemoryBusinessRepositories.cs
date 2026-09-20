@@ -395,6 +395,12 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
             .Where(x => !string.IsNullOrWhiteSpace(x.PaddleCustomerId) && string.IsNullOrWhiteSpace(x.PaddleSubscriptionId))
             .ToList());
 
+    public Task<IReadOnlyList<OrganizationSubscription>> ListDuePlanChangesAsync(DateTimeOffset dueBefore, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<OrganizationSubscription>>(Subscriptions
+            .Where(x => x.PendingPlanKey is not null && x.PendingPlanEffectiveAt is not null && x.PendingPlanEffectiveAt <= dueBefore)
+            .OrderBy(x => x.PendingPlanEffectiveAt)
+            .ToList());
+
     public void Add(OrganizationSubscription subscription) => Subscriptions.Add(subscription);
 }
 
@@ -672,50 +678,51 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public string? LastPlanChangeSubscriptionId { get; private set; }
     public string? LastPlanChangeNewPlanKey { get; private set; }
     public BillingInterval? LastPlanChangeInterval { get; private set; }
-    public PlanChangeTiming? LastPlanChangeTiming { get; private set; }
+    public PlanChangeBilling? LastPlanChangeBilling { get; private set; }
     public PromoCodeDiscount? LastPlanChangeDiscount { get; private set; }
     public int PlanChangeCalls { get; private set; }
 
     public decimal NextChargedAmount { get; set; }
     public string NextChargedCurrency { get; set; } = "EUR";
-    public DateTimeOffset? NextPendingEffectiveAt { get; set; }
 
-    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeBilling billing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         LastPlanChangeSubscriptionId = subscriptionId;
         LastPlanChangeNewPlanKey = newPlanKey;
         LastPlanChangeInterval = newInterval;
-        LastPlanChangeTiming = timing;
+        LastPlanChangeBilling = billing;
         LastPlanChangeIdempotencyKey = idempotencyKey;
         LastPlanChangeDiscount = discount;
         PlanChangeCalls++;
         if (ThrowOnPlanChange is not null) throw ThrowOnPlanChange;
         var subscription = NextChangedSubscription ?? throw new InvalidOperationException("NextChangedSubscription not set");
-        return Task.FromResult(new PlanChangeResult(subscription, NextChargedAmount, NextChargedCurrency, NextPendingEffectiveAt));
+        return Task.FromResult(new PlanChangeResult(subscription, NextChargedAmount, NextChargedCurrency));
     }
 
     public PlanChangePreview? NextPlanChangePreview { get; set; }
-    public PlanChangeTiming? LastPreviewTiming { get; private set; }
     public BillingInterval? LastPreviewInterval { get; private set; }
+    public int PreviewCalls { get; private set; }
 
-    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, CancellationToken cancellationToken)
+    public Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, CancellationToken cancellationToken)
     {
-        LastPreviewTiming = timing;
         LastPreviewInterval = newInterval;
+        PreviewCalls++;
         return Task.FromResult(NextPlanChangePreview ?? throw new InvalidOperationException("NextPlanChangePreview not set"));
     }
 
-    public Exception? ThrowOnCancelScheduledChange { get; set; }
-    public string? LastCancelScheduledSubscriptionId { get; private set; }
-    public int CancelScheduledChangeCalls { get; private set; }
+    public SubscriptionItemRepair NextItemRepair { get; set; } = SubscriptionItemRepair.AlreadyCanonical;
+    public int EnsureCanonicalItemsCalls { get; private set; }
 
-    public Task CancelScheduledChangeAsync(string subscriptionId, CancellationToken cancellationToken)
+    public Task<SubscriptionItemRepair> EnsureCanonicalItemsAsync(string subscriptionId, string planKey, BillingInterval interval, CancellationToken cancellationToken)
     {
-        LastCancelScheduledSubscriptionId = subscriptionId;
-        CancelScheduledChangeCalls++;
-        if (ThrowOnCancelScheduledChange is not null) throw ThrowOnCancelScheduledChange;
-        return Task.CompletedTask;
+        EnsureCanonicalItemsCalls++;
+        return Task.FromResult(NextItemRepair);
     }
+
+    public IReadOnlyList<PlanPriceMismatch> NextPriceMismatches { get; set; } = [];
+
+    public Task<IReadOnlyList<PlanPriceMismatch>> ListPlanPriceMismatchesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(NextPriceMismatches);
 }
 
 public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository

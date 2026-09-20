@@ -45,6 +45,16 @@ internal sealed class SubscriptionRepository : ISubscriptionRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<OrganizationSubscription>> ListDuePlanChangesAsync(DateTimeOffset dueBefore, CancellationToken cancellationToken)
+    {
+        return await _context.Subscriptions
+            .Where(x => x.PendingPlanKey != null
+                && x.PendingPlanEffectiveAt != null
+                && x.PendingPlanEffectiveAt <= dueBefore)
+            .OrderBy(x => x.PendingPlanEffectiveAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(OrganizationSubscription subscription)
     {
         _context.Subscriptions.Add(subscription);

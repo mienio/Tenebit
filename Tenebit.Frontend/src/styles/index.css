@@ -738,7 +738,9 @@ button.authIcon:hover { filter: brightness(0.94); }
 .modalBody { padding: 22px; }
 .modalBody .formGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .modalBody .formGrid > .field:has(.textarea), .modalBody .checkField, .modalBody .choiceBox, .modalBody .checkboxGroup, .modalBody .formActions { grid-column: 1 / -1; }
-.confirmDialog { position: relative; width: min(460px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; display: grid; gap: 12px; }
+/* max-height + scroll, same as .modalPanel: the plan-change dialog grows past 700px once it lists the
+   proration detail, and without this its buttons sat off-screen on any window under ~800px tall. */
+.confirmDialog { position: relative; width: min(460px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; display: grid; gap: 12px; }
 .confirmDialog h2 { margin: 0; font-size: 22px; letter-spacing: -.025em; }
 .confirmDialog p { margin: 0; color: var(--muted); line-height: 1.5; }
 .confirmIcon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 3px; color: var(--danger); background: #fff1f2; }

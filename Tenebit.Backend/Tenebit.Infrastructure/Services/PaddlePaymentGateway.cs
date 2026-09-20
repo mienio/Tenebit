@@ -407,12 +407,12 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         return MapSubscriptionState(json[0]);
     }
 
-    public async Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
+    public async Task<PlanChangeResult> ChangeSubscriptionPlanAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeBilling billing, string idempotencyKey, CancellationToken cancellationToken, PromoCodeDiscount? discount = null)
     {
         if (!PlanPrices.TryGetValue((newPlanKey, newInterval), out var newPriceId))
             throw new PaymentGatewayException($"Paddle:Prices:{newPlanKey}:{newInterval} is not configured.");
 
-        var body = await BuildChangeBodyAsync(newPriceId, timing, discount, cancellationToken);
+        var body = await BuildChangeBodyAsync(newPriceId, billing, discount, cancellationToken);
         var updated = await PatchJsonAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}", body, cancellationToken);
 
         // prevent_change (see BuildChangeBodyAsync) should make Paddle reject the whole update - the
@@ -424,69 +424,176 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         // non-2xx here (in which case SendJsonAsync's own PaymentGatewayException already covers it) or a
         // 200 with the update effectively reverted.
         var appliedMatch = MatchConfiguredPlanAndInterval(updated);
-        if (timing == PlanChangeTiming.Immediately
-            && (appliedMatch is null || appliedMatch.Value.PlanKey != newPlanKey || appliedMatch.Value.Interval != newInterval))
+        if (appliedMatch is null || appliedMatch.Value.PlanKey != newPlanKey || appliedMatch.Value.Interval != newInterval)
             throw new PaymentGatewayException("Paddle did not apply the plan change (payment likely failed).", 402);
 
         var amountCharged = 0m;
         var currency = "EUR";
-        DateTimeOffset? pendingEffectiveAt = null;
 
-        if (timing == PlanChangeTiming.Immediately && updated.TryGetProperty("immediate_transaction", out var immediateTransaction) && immediateTransaction.ValueKind == JsonValueKind.Object)
+        if (updated.TryGetProperty("immediate_transaction", out var immediateTransaction) && immediateTransaction.ValueKind == JsonValueKind.Object)
         {
             (amountCharged, currency) = ReadTransactionTotal(immediateTransaction);
         }
-        else if (timing == PlanChangeTiming.NextBillingPeriod && updated.TryGetProperty("scheduled_change", out var scheduledChange) && scheduledChange.ValueKind == JsonValueKind.Object)
-        {
-            pendingEffectiveAt = RequiredDateTime(scheduledChange, "effective_at");
-        }
 
-        return new PlanChangeResult(MapSubscriptionState(updated), amountCharged, currency, pendingEffectiveAt);
+        // The swap must leave the subscription holding exactly one item. A leftover duplicate would renew at
+        // a multiple of the list price and hand back a multiple of the proration credit on the next switch,
+        // so it is repaired here rather than discovered on the customer's next invoice.
+        var repair = await EnsureCanonicalItemsAsync(subscriptionId, newPlanKey, newInterval, cancellationToken);
+        var state = repair.Repaired && repair.Canonical
+            ? await GetSubscriptionAsync(subscriptionId, cancellationToken) ?? MapSubscriptionState(updated)
+            : MapSubscriptionState(updated);
+
+        return new PlanChangeResult(state, amountCharged, currency);
     }
 
-    public async Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, PlanChangeTiming timing, CancellationToken cancellationToken)
+    public async Task<PlanChangePreview> PreviewPlanChangeAsync(string subscriptionId, string newPlanKey, BillingInterval newInterval, CancellationToken cancellationToken)
     {
         if (!PlanPrices.TryGetValue((newPlanKey, newInterval), out var newPriceId))
             throw new PaymentGatewayException($"Paddle:Prices:{newPlanKey}:{newInterval} is not configured.");
 
-        var body = await BuildChangeBodyAsync(newPriceId, timing, null, cancellationToken);
+        var body = await BuildChangeBodyAsync(newPriceId, PlanChangeBilling.ProrateImmediately, null, cancellationToken);
         var preview = await PatchJsonAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}/preview", body, cancellationToken);
 
-        if (timing == PlanChangeTiming.Immediately && preview.TryGetProperty("immediate_transaction", out var immediateTransaction) && immediateTransaction.ValueKind == JsonValueKind.Object)
+        if (preview.TryGetProperty("immediate_transaction", out var immediateTransaction) && immediateTransaction.ValueKind == JsonValueKind.Object)
         {
             var (amount, currency) = ReadTransactionTotal(immediateTransaction);
             return new PlanChangePreview(amount, currency, null);
         }
 
-        if (preview.TryGetProperty("scheduled_change", out var scheduledChange) && scheduledChange.ValueKind == JsonValueKind.Object)
+        // No immediate_transaction: Paddle found nothing to bill (e.g. the same price). Report the
+        // subscription's own current period end as the "nothing changes before" date.
+        return new PlanChangePreview(0m, "EUR", ReadBillingPeriod(preview, DateTimeOffset.UtcNow).End);
+    }
+
+    /// <inheritdoc />
+    public async Task<SubscriptionItemRepair> EnsureCanonicalItemsAsync(string subscriptionId, string planKey, BillingInterval interval, CancellationToken cancellationToken)
+    {
+        if (!PlanPrices.TryGetValue((planKey, interval), out var expectedPriceId))
+            throw new PaymentGatewayException($"Paddle:Prices:{planKey}:{interval} is not configured.");
+
+        var subscription = await GetJsonAsync($"subscriptions/{Uri.EscapeDataString(subscriptionId)}", cancellationToken);
+        var (before, canonical) = InspectItems(subscription, expectedPriceId);
+        if (canonical) return SubscriptionItemRepair.AlreadyCanonical;
+
+        _logger.LogError(
+            "Paddle subscription {SubscriptionId} carries {ItemCount} line item(s) instead of the single {PriceId} - rewriting the item list.",
+            subscriptionId, before, expectedPriceId);
+
+        // do_not_bill: this is a correction of Paddle's bookkeeping, not a plan change - it must never
+        // charge, credit or move the billing anchor. The next renewal then bills exactly one plan.
+        var repaired = await PatchJsonAsync(
+            $"subscriptions/{Uri.EscapeDataString(subscriptionId)}",
+            new Dictionary<string, object?>
+            {
+                ["items"] = new[] { new Dictionary<string, object?> { ["price_id"] = expectedPriceId, ["quantity"] = 1 } },
+                ["proration_billing_mode"] = "do_not_bill"
+            },
+            cancellationToken);
+
+        var (after, nowCanonical) = InspectItems(repaired, expectedPriceId);
+        if (!nowCanonical)
         {
-            return new PlanChangePreview(0m, "EUR", RequiredDateTime(scheduledChange, "effective_at"));
+            _logger.LogError(
+                "Paddle subscription {SubscriptionId} still carries {ItemCount} line item(s) after the rewrite - manual cleanup required in the Paddle dashboard.",
+                subscriptionId, after);
         }
 
-        // No scheduled_change and no immediate_transaction: Paddle applied nothing to bill (e.g. same
-        // price). Report the subscription's own current period end as the "nothing changes before" date.
-        return new PlanChangePreview(0m, "EUR", RequiredDateTime(preview.TryGetProperty("current_billing_period", out var period) ? period : preview, "ends_at"));
+        return new SubscriptionItemRepair(before, true, nowCanonical, $"{before} -> {after} item(s), expected {expectedPriceId}");
     }
 
-    public async Task CancelScheduledChangeAsync(string subscriptionId, CancellationToken cancellationToken)
+    /// <summary>Exactly one line item, and it is the expected price - anything else (a duplicate of the
+    /// plan, a leftover price from an earlier switch, a stray one-off charge) is not canonical.</summary>
+    private static (int Count, bool Canonical) InspectItems(JsonElement subscription, string expectedPriceId)
     {
-        await PatchJsonAsync(
-            $"subscriptions/{Uri.EscapeDataString(subscriptionId)}",
-            new Dictionary<string, object?> { ["scheduled_change"] = null },
-            cancellationToken);
+        if (!subscription.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+            return (0, false);
+
+        // Paddle keeps an item that was removed mid-period around with status "inactive" until the period
+        // rolls over; only the active ones are billed, so only those have to be canonical.
+        var active = items.EnumerateArray()
+            .Where(item => !item.TryGetProperty("status", out var status)
+                || status.ValueKind != JsonValueKind.String
+                || string.Equals(status.GetString(), "active", StringComparison.Ordinal))
+            .ToList();
+
+        return (active.Count, active.Count == 1 && ReadItemPriceId(active[0]) == expectedPriceId && ReadItemQuantity(active[0]) == 1);
     }
 
-    private async Task<Dictionary<string, object?>> BuildChangeBodyAsync(string newPriceId, PlanChangeTiming timing, PromoCodeDiscount? discount, CancellationToken cancellationToken)
+    private static int ReadItemQuantity(JsonElement item) =>
+        item.TryGetProperty("quantity", out var quantity) && quantity.ValueKind == JsonValueKind.Number && quantity.TryGetInt32(out var value)
+            ? value
+            : 1;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PlanPriceMismatch>> ListPlanPriceMismatchesAsync(CancellationToken cancellationToken)
     {
+        var mismatches = new List<PlanPriceMismatch>();
+
+        foreach (var ((planKey, interval), priceId) in PlanPrices)
+        {
+            var plan = SubscriptionPlan.FromKey(planKey);
+            if (plan is null) continue;
+
+            JsonElement price;
+            try
+            {
+                price = await GetJsonAsync($"prices/{Uri.EscapeDataString(priceId)}", cancellationToken);
+            }
+            catch (PaymentGatewayException ex)
+            {
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, $"price_unreadable: {ex.Message}", plan.GetPrice(interval), 0m, plan.Currency));
+                continue;
+            }
+
+            var expected = plan.GetPrice(interval);
+
+            if (!price.TryGetProperty("unit_price", out var unitPrice) || unitPrice.ValueKind != JsonValueKind.Object)
+            {
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "unit_price_missing", expected, 0m, plan.Currency));
+                continue;
+            }
+
+            var actual = unitPrice.TryGetProperty("amount", out var amount) && amount.ValueKind == JsonValueKind.String && long.TryParse(amount.GetString(), out var minorUnits)
+                ? minorUnits / 100m
+                : -1m;
+            var currency = unitPrice.TryGetProperty("currency_code", out var currencyCode) ? (currencyCode.GetString() ?? "") : "";
+
+            if (actual != expected)
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "amount_mismatch", expected, actual, currency));
+            else if (!string.Equals(currency, plan.Currency, StringComparison.OrdinalIgnoreCase))
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "currency_mismatch", expected, actual, currency));
+            else if (ReadBillingCycle(price) is { } cycle && cycle != (interval == BillingInterval.Annual ? "year:1" : "month:1"))
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, $"billing_cycle_mismatch: {cycle}", expected, actual, currency));
+        }
+
+        return mismatches;
+    }
+
+    private static string? ReadBillingCycle(JsonElement price)
+    {
+        if (!price.TryGetProperty("billing_cycle", out var cycle) || cycle.ValueKind != JsonValueKind.Object) return null;
+        var unit = cycle.TryGetProperty("interval", out var intervalProperty) ? intervalProperty.GetString() : null;
+        var frequency = cycle.TryGetProperty("frequency", out var frequencyProperty) && frequencyProperty.ValueKind == JsonValueKind.Number
+            ? frequencyProperty.GetInt32()
+            : 0;
+        return unit is null ? null : $"{unit}:{frequency}";
+    }
+
+    private async Task<Dictionary<string, object?>> BuildChangeBodyAsync(string newPriceId, PlanChangeBilling billing, PromoCodeDiscount? discount, CancellationToken cancellationToken)
+    {
+        // "items" replaces the subscription's entire line-item list; the swap therefore has to carry the
+        // full intended state (one plan, quantity 1), never just the addition.
         var body = new Dictionary<string, object?>
         {
             ["items"] = new[] { new Dictionary<string, object?> { ["price_id"] = newPriceId, ["quantity"] = 1 } },
-            ["proration_billing_mode"] = timing == PlanChangeTiming.Immediately ? "prorated_immediately" : "full_next_billing_period",
-            // Fail closed: if the immediate proration payment fails, the plan must not change - mirrors the
-            // Stripe fix (error_if_incomplete) that closed a free-upgrade hole where a failed charge still
-            // silently applied the higher plan.
-            ["on_payment_failure"] = "prevent_change"
+            ["proration_billing_mode"] = billing == PlanChangeBilling.ProrateImmediately ? "prorated_immediately" : "do_not_bill"
         };
+
+        // Fail closed: if the immediate proration payment fails, the plan must not change - mirrors the
+        // Stripe fix (error_if_incomplete) that closed a free-upgrade hole where a failed charge still
+        // silently applied the higher plan. Meaningless (and rejected by Paddle) when nothing is billed.
+        if (billing == PlanChangeBilling.ProrateImmediately)
+            body["on_payment_failure"] = "prevent_change";
 
         if (discount is not null)
         {
@@ -544,16 +651,34 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         if (!obj.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array) return null;
 
         var itemPriceIds = items.EnumerateArray()
+            .Where(item => !item.TryGetProperty("status", out var status)
+                || status.ValueKind != JsonValueKind.String
+                || string.Equals(status.GetString(), "active", StringComparison.Ordinal))
             .Select(ReadItemPriceId)
             .Where(x => x is not null)
             .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var (key, priceId) in PlanPrices)
+        // A healthy subscription matches exactly one configured price. When a stale item has survived a
+        // switch it can match several, and which one wins decides what the customer is entitled to - so
+        // pick the highest tier deterministically (never silently strip entitlements the org paid for)
+        // instead of whatever the configuration happened to enumerate first.
+        var matches = PlanPrices
+            .Where(pair => itemPriceIds.Contains(pair.Value))
+            .Select(pair => pair.Key)
+            .OrderByDescending(key => SubscriptionPlan.FromKey(key.PlanKey)?.MonthlyPrice ?? 0m)
+            .ThenByDescending(key => key.Interval == BillingInterval.Annual)
+            .ToList();
+
+        if (matches.Count > 1)
         {
-            if (itemPriceIds.Contains(priceId)) return key;
+            _logger.LogError(
+                "Paddle subscription {SubscriptionId} matches {Count} configured plans at once ({Plans}) - entitlement resolved to the highest tier; the item list needs repairing.",
+                obj.TryGetProperty("id", out var id) ? id.GetString() : "?",
+                matches.Count,
+                string.Join(", ", matches.Select(m => $"{m.PlanKey}/{m.Interval}")));
         }
 
-        return null;
+        return matches.Count == 0 ? null : matches[0];
     }
 
     private static string? ReadItemPriceId(JsonElement item)
