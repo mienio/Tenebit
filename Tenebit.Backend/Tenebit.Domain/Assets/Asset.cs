@@ -100,6 +100,25 @@ public sealed class Asset
             throw new DomainException("Cena zakupu nie może być ujemna.");
         }
 
+        if (purchasePrice.HasValue && !string.IsNullOrWhiteSpace(currency) && !SupportedCurrencies.IsSupported(currency))
+        {
+            throw new DomainException("Nieobsługiwany kod waluty.");
+        }
+
+        // An asset is recorded once it exists, so a purchase date cannot be in the future and a warranty
+        // cannot expire before the purchase it covers. One day of slack absorbs the difference between the
+        // client's local date and UTC (stress test 19.09.2026, błąd 11).
+        var latestAcceptablePurchaseDate = DateOnly.FromDateTime(DateTime.UtcNow.Date).AddDays(1);
+        if (purchaseDate > latestAcceptablePurchaseDate)
+        {
+            throw new DomainException("Data zakupu nie może być z przyszłości.");
+        }
+
+        if (purchaseDate.HasValue && warrantyUntil.HasValue && warrantyUntil < purchaseDate)
+        {
+            throw new DomainException("Gwarancja nie może kończyć się przed datą zakupu.");
+        }
+
         Name = name.Trim();
         AssetTag = assetTag.Trim();
         QrCodePayload = AssetTag;

@@ -23,7 +23,10 @@ public sealed record UpdateAssetCategoryRequest([property: Required, StringLengt
 [ValidatedRequest]
 public sealed record UpdateAssetCategoryReturnPolicyRequest(ReturnHandlingMode ReturnHandlingMode, PostReturnDisposition PostReturnDisposition, string? ReturnChecklistTemplate, PhotoRequirement PhotoOnIssue, PhotoRequirement PhotoOnReturn);
 
-/// <summary>Book value of the whole fleet, and per category, under each category's depreciation schedule.</summary>
+/// <summary>Book value of the whole fleet, and per category, under each category's depreciation schedule.
+/// Every amount is in <paramref name="Currency"/>, the organization's reporting currency: assets priced in
+/// anything else are counted in <paramref name="AssetsInOtherCurrency"/> and excluded from the totals
+/// rather than converted at a rate nobody supplied.</summary>
 public sealed record FleetValueResponse(
     decimal TotalPurchaseValue,
     decimal TotalCurrentValue,
@@ -31,7 +34,8 @@ public sealed record FleetValueResponse(
     int AssetsWithValue,
     int AssetsWithoutPrice,
     string Currency,
-    IReadOnlyList<CategoryValueSlice> ByCategory);
+    IReadOnlyList<CategoryValueSlice> ByCategory,
+    int AssetsInOtherCurrency = 0);
 
 /// <summary>Running totals while grouping assets by category; internal to the fleet-value calculation.</summary>
 internal sealed record CategoryAccumulator(string Name, int? Months, int Count, decimal Purchase, decimal Current);

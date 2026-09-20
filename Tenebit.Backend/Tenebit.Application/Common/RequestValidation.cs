@@ -1,5 +1,6 @@
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
+using Tenebit.Domain.Common;
 
 namespace Tenebit.Application.Common;
 
@@ -149,8 +150,11 @@ public static class RequestObjectValidator
             {
                 var max = StringLimit(type, property.Name);
                 if (text.Length > max) return $"Pole {property.Name} może mieć maksymalnie {max} znaków.";
+                if (ContainsControlCharacter(text)) return $"Pole {property.Name} zawiera niedozwolone znaki sterujące.";
                 if (NullabilityState(property) == System.Reflection.NullabilityState.NotNull && string.IsNullOrWhiteSpace(text))
                     return $"Pole {property.Name} nie może być puste.";
+                if (property.Name is "Currency" && text.Length > 0 && !SupportedCurrencies.IsSupported(text))
+                    return $"Pole {property.Name} musi zawierać obsługiwany kod waluty ISO 4217.";
                 if (property.Name.EndsWith("Email", StringComparison.OrdinalIgnoreCase) && text.Length > 0 && !new EmailAddressAttribute().IsValid(text))
                     return $"Pole {property.Name} nie zawiera prawidłowego adresu e-mail.";
                 if (property.Name is "SuccessUrl" or "CancelUrl" or "ReturnUrl")
@@ -200,8 +204,12 @@ public static class RequestObjectValidator
                 {
                     if (entry.Key is string key && key.Length > RequestLimits.Name)
                         return $"Klucz w polu {property.Name} może mieć maksymalnie {RequestLimits.Name} znaków.";
+                    if (entry.Key is string controlKey && ContainsControlCharacter(controlKey))
+                        return $"Klucz w polu {property.Name} zawiera niedozwolone znaki sterujące.";
                     if (entry.Value is string dictionaryValue && dictionaryValue.Length > RequestLimits.Note)
                         return $"Wartość w polu {property.Name} może mieć maksymalnie {RequestLimits.Note} znaków.";
+                    if (entry.Value is string controlValue && ContainsControlCharacter(controlValue))
+                        return $"Wartość w polu {property.Name} zawiera niedozwolone znaki sterujące.";
                 }
                 continue;
             }
@@ -223,7 +231,7 @@ public static class RequestObjectValidator
                 {
                     if (item is Guid itemGuid && itemGuid == Guid.Empty)
                         return $"Pole {property.Name} zawiera pusty identyfikator.";
-                    if (item is string itemText && (string.IsNullOrWhiteSpace(itemText) || itemText.Length > RequestLimits.Name))
+                    if (item is string itemText && (string.IsNullOrWhiteSpace(itemText) || itemText.Length > RequestLimits.Name || ContainsControlCharacter(itemText)))
                         return $"Pole {property.Name} zawiera nieprawidłową wartość tekstową.";
                     if (property.Name.Contains("ThresholdDays", StringComparison.OrdinalIgnoreCase) &&
                         item is int day && (day < 0 || day > 3650))
@@ -232,6 +240,25 @@ public static class RequestObjectValidator
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Rejects C0 control characters, keeping only tab/CR/LF, which legitimately appear in notes and
+    /// descriptions.
+    ///
+    /// The one that matters is NUL: PostgreSQL cannot store <c>\u0000</c> in a text column, so it slipped
+    /// through validation and blew up as a 500 INTERNAL_ERROR at save time on every entity with a name
+    /// (stress test 19.09.2026, błąd 8). Refusing it here turns that into an ordinary 400 for the whole API
+    /// at once, and the rest of the C0 range has no business in stored text either.
+    /// </summary>
+    private static bool ContainsControlCharacter(string text)
+    {
+        foreach (var character in text)
+        {
+            if (character is '\t' or '\n' or '\r') continue;
+            if (character < '\u0020' || character == '\u007F') return true;
+        }
+        return false;
     }
 
     private static System.Reflection.NullabilityState NullabilityState(System.Reflection.PropertyInfo property) =>

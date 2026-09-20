@@ -806,9 +806,11 @@ public sealed class AssetService
         var organization = await _organizations.GetAsync(organizationId, cancellationToken);
         var today = DateOnly.FromDateTime(_clock.UtcNow.UtcDateTime);
 
+        var reportingCurrency = organization?.Currency ?? "PLN";
+
         var slices = new Dictionary<Guid, CategoryAccumulator>();
         decimal totalPurchase = 0m, totalCurrent = 0m;
-        int withValue = 0, withoutPrice = 0;
+        int withValue = 0, withoutPrice = 0, otherCurrency = 0;
 
         foreach (var asset in assets)
         {
@@ -817,6 +819,16 @@ public sealed class AssetService
             if (book is null)
             {
                 withoutPrice++;
+                continue;
+            }
+
+            // Amounts in another currency are left out rather than added up as if they were the reporting
+            // currency: there is no exchange-rate source here, and a fleet value that silently sums 1000 EUR
+            // and 1000 USD into "2000 PLN" is worse than one that says how many rows it could not price
+            // (stress test 19.09.2026, błąd 10). A blank currency is legacy data, assumed to be the org's own.
+            if (!string.IsNullOrWhiteSpace(asset.Currency) && !string.Equals(asset.Currency, reportingCurrency, StringComparison.OrdinalIgnoreCase))
+            {
+                otherCurrency++;
                 continue;
             }
 
@@ -843,7 +855,7 @@ public sealed class AssetService
 
         return Result<FleetValueResponse>.Success(new FleetValueResponse(
             totalPurchase, totalCurrent, totalPurchase - totalCurrent,
-            withValue, withoutPrice, organization?.Currency ?? "PLN", byCategory));
+            withValue, withoutPrice, reportingCurrency, byCategory, otherCurrency));
     }
 
     /// <summary>

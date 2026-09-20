@@ -36,7 +36,11 @@ public sealed class SentAlertRepository : ISentAlertRepository
             .OrderByDescending(x => x.CreatedAt);
 
         var total = await query.CountAsync(cancellationToken);
-        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        // Same hard cap every other paged repository applies - a caller asking for a million rows gets a
+        // page, not the whole table.
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var items = await query.Skip((safePage - 1) * safePageSize).Take(safePageSize).ToListAsync(cancellationToken);
         return (items, total);
     }
 }

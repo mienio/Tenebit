@@ -382,4 +382,46 @@ public class AssetServiceTests
         Assert.DoesNotContain("10.0.0.1", a1);      // the address itself is never stored
         Assert.Equal(PublicReporterKey.AnonymousBucket, PublicReporterKey.Derive(orgA, "not-an-ip"));
     }
+
+    [Fact]
+    public async Task GetFleetValueAsync_ExcludesAssetsPricedInAnotherCurrency_InsteadOfAddingThemUp()
+    {
+        // Błąd 10: 1000 EUR + 1000 USD were summed into the organization's PLN total, so the "fleet value"
+        // report was simply wrong for anyone holding mixed-currency equipment.
+        var (service, user, assets, categories, _) = CreateService();
+        var category = new AssetCategory(user.OrganizationId, "Sprzęt", AssetCategoryType.Physical, null, null);
+        categories.Categories.Add(category);
+
+        var domestic = new Asset(user.OrganizationId, category.Id, "Laptop PL", "AT-001");
+        domestic.UpdateCore("Laptop PL", "AT-001", null, category.Id, null, null, null, 1000m, "PLN", null, null, null);
+        var foreign = new Asset(user.OrganizationId, category.Id, "Laptop EU", "AT-002");
+        foreign.UpdateCore("Laptop EU", "AT-002", null, category.Id, null, null, null, 1000m, "EUR", null, null, null);
+        assets.Assets.Add(domestic);
+        assets.Assets.Add(foreign);
+
+        var result = await service.GetFleetValueAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("PLN", result.Value!.Currency);
+        Assert.Equal(1000m, result.Value.TotalPurchaseValue);
+        Assert.Equal(1, result.Value.AssetsWithValue);
+        Assert.Equal(1, result.Value.AssetsInOtherCurrency);
+    }
+
+    [Fact]
+    public async Task GetFleetValueAsync_CountsAssetsWithNoCurrencyAsTheOrganizationsOwn()
+    {
+        var (service, user, assets, categories, _) = CreateService();
+        var category = new AssetCategory(user.OrganizationId, "Sprzęt", AssetCategoryType.Physical, null, null);
+        categories.Categories.Add(category);
+
+        var legacy = new Asset(user.OrganizationId, category.Id, "Laptop", "AT-001");
+        legacy.UpdateCore("Laptop", "AT-001", null, category.Id, null, null, null, 500m, null, null, null, null);
+        assets.Assets.Add(legacy);
+
+        var result = await service.GetFleetValueAsync(CancellationToken.None);
+
+        Assert.Equal(500m, result.Value!.TotalPurchaseValue);
+        Assert.Equal(0, result.Value.AssetsInOtherCurrency);
+    }
 }

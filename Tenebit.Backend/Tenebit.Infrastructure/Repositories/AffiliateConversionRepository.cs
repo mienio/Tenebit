@@ -26,8 +26,8 @@ public sealed class AffiliateConversionRepository : IAffiliateConversionReposito
     public async Task<IReadOnlyList<AffiliateConversion>> ListByAffiliateAsync(Guid affiliateId, int page, int pageSize, CancellationToken cancellationToken) =>
         await _db.AffiliateConversions.Where(x => x.AffiliateId == affiliateId)
             .OrderByDescending(x => x.OccurredAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 200))
+            .Take(Math.Clamp(pageSize, 1, 200))
             .ToListAsync(cancellationToken);
 
     public Task<int> CountByAffiliateAsync(Guid affiliateId, CancellationToken cancellationToken) =>

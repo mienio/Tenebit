@@ -187,6 +187,15 @@ export function ReportsPage() {
                 {t('reports.fleetMissingPrices', { count: String(fleetValue.data.assetsWithoutPrice) })}
               </p>
             ) : null}
+
+            {fleetValue.data.assetsInOtherCurrency > 0 ? (
+              <p className="muted" style={{ marginTop: '4px' }}>
+                {t('reports.fleetOtherCurrency', {
+                  count: String(fleetValue.data.assetsInOtherCurrency),
+                  currency: fleetValue.data.currency
+                })}
+              </p>
+            ) : null}
           </>
         )}
       </Card>

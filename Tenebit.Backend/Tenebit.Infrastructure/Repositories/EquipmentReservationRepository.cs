@@ -85,8 +85,8 @@ public sealed class EquipmentReservationRepository : IEquipmentReservationReposi
         var total = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(x => x.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 100))
+            .Take(Math.Clamp(pageSize, 1, 100))
             .ToListAsync(cancellationToken);
 
         return (items, total);
