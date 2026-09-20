@@ -194,6 +194,13 @@ export function PricingPage() {
     }
   }
 
+  // Resources the organization already holds more of than the target plan allows. Nothing is deleted when
+  // a downgrade lands - the caps only block *new* records - but finding that out afterwards, with the
+  // period already paid for and the switch irreversible until the next one, is not a fair surprise.
+  const overLimitResources = selectedPlan && subscription.data
+    ? subscription.data.usage.filter(item => item.current > selectedPlan.limit)
+    : [];
+
   const totalPrice = appliedPromo ? appliedPromo.discountedPrice : selectedPlan ? planPrice(selectedPlan, selectedInterval) : 0;
   const periodSuffix = selectedInterval === 'annual' ? t('pricing.billing.perYear') : t('landing.perMonth');
 
@@ -282,6 +289,17 @@ export function PricingPage() {
             <p className="pricing-confirm-detail">
               {t(hasLivePaidSubscription ? 'pricing.confirmChangePlanDetail' : 'pricing.confirmUpgradeDetail', { limit: new Intl.NumberFormat(language).format(selectedPlan.limit) })}
             </p>
+
+            {overLimitResources.length > 0 && (
+              <p className="formMessage formMessage--error" style={{ marginTop: 12 }}>
+                {t('pricing.checkout.overLimitWarning', {
+                  limit: new Intl.NumberFormat(language).format(selectedPlan.limit),
+                  resources: overLimitResources
+                    .map(item => `${t(`pricing.legend.${item.resource}`)} (${item.current})`)
+                    .join(', ')
+                })}
+              </p>
+            )}
 
             {hasLivePaidSubscription ? (
               <div style={{ marginTop: 14 }}>

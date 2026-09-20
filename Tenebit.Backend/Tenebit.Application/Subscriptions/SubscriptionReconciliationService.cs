@@ -205,6 +205,20 @@ public sealed class SubscriptionReconciliationService
                 continue;
             }
 
+            // The target was configured when the owner scheduled it; if its Paddle Price has since been
+            // removed from configuration there is nothing to switch to, and retrying every five minutes
+            // forever would only hammer Paddle. Held (not dropped) so it resumes once the price is back -
+            // meanwhile the org simply stays on the plan it is paying for.
+            if (!_paymentGateway.IsPlanConfigured(planKey, interval))
+            {
+                // Operator-level misconfiguration, and this pass repeats every few minutes - it belongs in
+                // the logs, not as a new audit row per attempt in somebody's activity feed.
+                _logger.LogError(
+                    "Scheduled switch to {PlanKey}/{Interval} for subscription {SubscriptionId} cannot be applied: no Paddle price is configured for it.",
+                    planKey, interval, subscriptionId);
+                continue;
+            }
+
             try
             {
                 // A switch that keeps the billing cycle needs no money to move: the item swap alone makes
