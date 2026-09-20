@@ -49,12 +49,32 @@ public interface IPaymentGateway
     /// (<paramref name="planKey"/>, <paramref name="interval"/>) - and rewrites the item list when it does
     /// not, without billing anything.
     ///
-    /// A subscription that accumulates a second copy of its own plan (or a leftover one-off item) renews at
-    /// a multiple of its list price and hands back a multiple of the proration credit on the next switch -
-    /// the "double credit / negative amount due" failure from the 18-19.09.2026 payment test report. This is
-    /// the belt-and-braces check that neither can survive a plan change or a reconciliation cycle.
+    /// A subscription that accumulates a second copy of its own plan renews at a multiple of its list price
+    /// and hands back a multiple of the proration credit on the next switch - the "double credit / negative
+    /// amount due" failure from the 18-19.09.2026 payment test report. This is the belt-and-braces check
+    /// that neither can survive a plan change or a reconciliation cycle.
+    ///
+    /// Scope, precisely: this covers the subscription's own <c>items</c> and nothing else. Deferred
+    /// proration already accrued against the *upcoming transaction* is not an item and cannot be rewritten
+    /// away here - see <see cref="GetRenewalAuditAsync"/>, which is what surfaces those.
     /// </summary>
     Task<SubscriptionItemRepair> EnsureCanonicalItemsAsync(string subscriptionId, string planKey, BillingInterval interval, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads what Paddle will actually bill at the next renewal, so a renewal inflated beyond the plan's
+    /// list price is noticed before the customer pays it rather than afterwards.
+    ///
+    /// A healthy renewal is a single line: the plan, at its price. Extra lines are deferred proration -
+    /// charges Paddle accrued but postponed, which is exactly what <c>full_next_billing_period</c> produced
+    /// while the deferred-downgrade path still went through Paddle (the 0,01 EUR and 2,76 EUR lines the
+    /// 20.09.2026 verification found still queued on the sandbox account, with accrual windows that match
+    /// the pre-fix plan changes to the second). No current code path can create one - the switch either
+    /// bills immediately or does not bill at all - but residue from before the fix stays on the account
+    /// until it is billed, and Paddle offers no API to drop a charge from a future transaction. Detecting
+    /// and reporting it is therefore the whole remedy available in code; anything further is a credit
+    /// issued by hand.
+    /// </summary>
+    Task<SubscriptionRenewalAudit?> GetRenewalAuditAsync(string subscriptionId, CancellationToken cancellationToken);
 
     /// <summary>Compares every configured Paddle Price against the plan catalogue's own amount. A price
     /// edited (or mistyped) in the Paddle dashboard silently overrides what the pricing page promises - the
@@ -155,6 +175,18 @@ public sealed record SubscriptionItemRepair(int ItemsBefore, bool Repaired, bool
 {
     public static readonly SubscriptionItemRepair AlreadyCanonical = new(1, false, true);
 }
+
+/// <summary>What Paddle will charge at the next renewal. <paramref name="DeferredCharges"/> holds every
+/// line beyond the plan's own - each one an amount accrued earlier and postponed to this invoice.</summary>
+public sealed record SubscriptionRenewalAudit(
+    decimal Total,
+    string Currency,
+    DateTimeOffset? BillingPeriodStart,
+    IReadOnlyList<DeferredChargeLine> DeferredCharges);
+
+/// <summary>One postponed proration charge riding along on the next renewal, and the window it accrued
+/// over - the window is what identifies which earlier plan change produced it.</summary>
+public sealed record DeferredChargeLine(decimal Amount, DateTimeOffset? AccruedFrom, DateTimeOffset? AccruedTo);
 
 /// <summary>A configured Paddle Price whose amount does not match the plan catalogue's.</summary>
 public sealed record PlanPriceMismatch(string PlanKey, BillingInterval Interval, string PriceId, string Reason, decimal Expected, decimal Actual, string Currency);

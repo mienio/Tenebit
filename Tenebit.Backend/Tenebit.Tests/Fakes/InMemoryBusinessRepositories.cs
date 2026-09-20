@@ -719,6 +719,18 @@ public sealed class FakePaymentGateway : IPaymentGateway
         return Task.FromResult(NextItemRepair);
     }
 
+    public SubscriptionRenewalAudit? NextRenewalAudit { get; set; }
+    public int RenewalAuditCalls { get; private set; }
+
+    public Exception? ThrowOnRenewalAudit { get; set; }
+
+    public Task<SubscriptionRenewalAudit?> GetRenewalAuditAsync(string subscriptionId, CancellationToken cancellationToken)
+    {
+        RenewalAuditCalls++;
+        if (ThrowOnRenewalAudit is not null) throw ThrowOnRenewalAudit;
+        return Task.FromResult(NextRenewalAudit);
+    }
+
     public IReadOnlyList<PlanPriceMismatch> NextPriceMismatches { get; set; } = [];
 
     public Task<IReadOnlyList<PlanPriceMismatch>> ListPlanPriceMismatchesAsync(CancellationToken cancellationToken) =>

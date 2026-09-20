@@ -525,6 +525,51 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             : 1;
 
     /// <inheritdoc />
+    public async Task<SubscriptionRenewalAudit?> GetRenewalAuditAsync(string subscriptionId, CancellationToken cancellationToken)
+    {
+        var subscription = await GetJsonAsync(
+            $"subscriptions/{Uri.EscapeDataString(subscriptionId)}?include=next_transaction", cancellationToken);
+
+        if (!subscription.TryGetProperty("next_transaction", out var next) || next.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var (total, currency) = ReadTransactionTotal(next);
+        DateTimeOffset? periodStart = next.TryGetProperty("billing_period", out var period)
+            && period.ValueKind == JsonValueKind.Object
+            && period.TryGetProperty("starts_at", out var startsAt)
+            && DateTimeOffset.TryParse(startsAt.GetString(), out var parsedStart)
+                ? parsedStart
+                : null;
+
+        var deferred = new List<DeferredChargeLine>();
+        if (next.TryGetProperty("details", out var details)
+            && details.TryGetProperty("line_items", out var lineItems)
+            && lineItems.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var line in lineItems.EnumerateArray())
+            {
+                // The renewal's own line has no proration block; every line that carries one is an amount
+                // accrued over an earlier window and postponed onto this invoice.
+                if (!line.TryGetProperty("proration", out var proration) || proration.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var amount = line.TryGetProperty("totals", out var lineTotals) ? ReadAmountMajorUnits(lineTotals, "total") : 0m;
+                deferred.Add(new DeferredChargeLine(amount, ReadProrationBound(proration, "starts_at"), ReadProrationBound(proration, "ends_at")));
+            }
+        }
+
+        return new SubscriptionRenewalAudit(total, currency, periodStart, deferred);
+    }
+
+    private static DateTimeOffset? ReadProrationBound(JsonElement proration, string property) =>
+        proration.TryGetProperty("billing_period", out var period)
+        && period.ValueKind == JsonValueKind.Object
+        && period.TryGetProperty(property, out var value)
+        && DateTimeOffset.TryParse(value.GetString(), out var parsed)
+            ? parsed
+            : null;
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<PlanPriceMismatch>> ListPlanPriceMismatchesAsync(CancellationToken cancellationToken)
     {
         var mismatches = new List<PlanPriceMismatch>();

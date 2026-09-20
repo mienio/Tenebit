@@ -130,16 +130,19 @@ public sealed class SubscriptionReconciliationService
         {
             var repair = await _paymentGateway.EnsureCanonicalItemsAsync(
                 subscription.PaddleSubscriptionId!, subscription.PlanKey, subscription.BillingInterval, cancellationToken);
-            if (!repair.Repaired) return;
+            if (repair.Repaired)
+            {
+                _activity.Add(new ActivityLog(
+                    subscription.OrganizationId,
+                    repair.Canonical ? "subscription.paddle_items_repaired" : "subscription.paddle_items_repair_failed",
+                    "subscription",
+                    subscription.Id,
+                    "paddle-reconciliation",
+                    repair.Detail,
+                    _clock.UtcNow));
+            }
 
-            _activity.Add(new ActivityLog(
-                subscription.OrganizationId,
-                repair.Canonical ? "subscription.paddle_items_repaired" : "subscription.paddle_items_repair_failed",
-                "subscription",
-                subscription.Id,
-                "paddle-reconciliation",
-                repair.Detail,
-                _clock.UtcNow));
+            await AuditNextRenewalAsync(subscription, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -159,6 +162,33 @@ public sealed class SubscriptionReconciliationService
         }
     }
 
+    /// <summary>
+    /// Reports a renewal that Paddle will bill above the plan's list price.
+    ///
+    /// Deferred proration is not a subscription item, so <see cref="IPaymentGateway.EnsureCanonicalItemsAsync"/>
+    /// cannot rewrite it away, and Paddle has no API to drop a charge from a transaction it has not raised
+    /// yet - the honest remedy in code is to make the overcharge visible before the invoice goes out, so it
+    /// can be credited by hand. Nothing in the current switch path creates these (a change either bills
+    /// immediately or not at all); what is still out there is residue from when a deferred downgrade was
+    /// pushed to Paddle as full_next_billing_period, and it clears itself once billed.
+    ///
+    /// Logged rather than written to the activity feed on purpose: the condition persists until the renewal
+    /// is billed, so an audit row per cycle would mean thousands of identical entries in one tenant's feed
+    /// for a single fact that an operator has to act on once.
+    /// </summary>
+    private async Task AuditNextRenewalAsync(Domain.Subscriptions.OrganizationSubscription subscription, CancellationToken cancellationToken)
+    {
+        var audit = await _paymentGateway.GetRenewalAuditAsync(subscription.PaddleSubscriptionId!, cancellationToken);
+        if (audit is null || audit.DeferredCharges.Count == 0) return;
+
+        var extra = audit.DeferredCharges.Sum(line => line.Amount);
+        var windows = string.Join(", ", audit.DeferredCharges.Select(line => $"{line.Amount:0.00} ({line.AccruedFrom:u} -> {line.AccruedTo:u})"));
+
+        _logger.LogError(
+            "Paddle subscription {SubscriptionId} (org {OrganizationId}) renews on {RenewsAt} at {Total} {Currency}, which includes {Extra} {Currency} of deferred proration not part of the {PlanKey} list price: {Windows}. Paddle cannot drop these from a future transaction - credit the customer by hand if the renewal has not been billed yet.",
+            subscription.PaddleSubscriptionId, subscription.OrganizationId, audit.BillingPeriodStart, audit.Total,
+            audit.Currency, extra, audit.Currency, subscription.PlanKey, windows);
+    }
     /// <summary>How long before its effective date a scheduled downgrade is pushed to Paddle. Paddle raises
     /// the renewal invoice at the period end, and the swap has to be in place by then or the org pays for
     /// another full period of the plan it asked to leave - so this errs on the early side. Must stay

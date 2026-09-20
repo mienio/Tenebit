@@ -610,4 +610,86 @@ public class PaddlePaymentGatewayTests
 
         Assert.Null(parsed);
     }
+
+    // Shaped after the real sandbox response for sub_01m2tda3anczs160mcfh8ntnhw on 20.09.2026: one clean
+    // renewal line for the plan, plus two postponed proration lines left over from plan changes made while
+    // the deferred downgrade still went through Paddle as full_next_billing_period.
+    private const string SubscriptionWithInflatedRenewalJson = """
+        {
+          "id": "sub_1", "customer_id": "ctm_1", "status": "active",
+          "items": [ { "status": "active", "price": { "id": "pri_starter" }, "quantity": 1 } ],
+          "current_billing_period": { "starts_at": "2026-09-18T14:11:40Z", "ends_at": "2027-09-18T14:11:40Z" },
+          "next_transaction": {
+            "currency_code": "EUR",
+            "billing_period": { "starts_at": "2027-09-18T14:11:40Z", "ends_at": "2028-09-18T14:11:40Z" },
+            "details": {
+              "totals": { "subtotal": "80724", "tax": "18567", "total": "99291", "grand_total": "99291" },
+              "line_items": [
+                { "totals": { "total": "98950" } },
+                { "proration": { "rate": "0.00011", "billing_period": { "starts_at": "2026-09-18T14:15:53Z", "ends_at": "2026-09-18T15:08:17Z" } }, "totals": { "total": "1" } },
+                { "proration": { "rate": "0.00576", "billing_period": { "starts_at": "2026-09-19T08:35:15Z", "ends_at": "2026-09-20T16:40:18Z" } }, "totals": { "total": "340" } }
+              ]
+            }
+          }
+        }
+        """;
+
+    [Fact]
+    public async Task GetRenewalAuditAsync_ReportsEveryPostponedProrationLineRidingOnTheRenewal()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(SubscriptionWithInflatedRenewalJson));
+        var gateway = CreateGateway(handler, ("starter", "pri_starter"));
+
+        var audit = await gateway.GetRenewalAuditAsync("sub_1", CancellationToken.None);
+
+        Assert.NotNull(audit);
+        Assert.Equal(992.91m, audit!.Total);
+        Assert.Equal("EUR", audit.Currency);
+        Assert.Equal(new DateTimeOffset(2027, 9, 18, 14, 11, 40, TimeSpan.Zero), audit.BillingPeriodStart);
+
+        // The plan's own line carries no proration block and must not be counted as deferred.
+        Assert.Equal(2, audit.DeferredCharges.Count);
+        Assert.Equal(3.41m, audit.DeferredCharges.Sum(line => line.Amount));
+        Assert.Equal(new DateTimeOffset(2026, 9, 19, 8, 35, 15, TimeSpan.Zero), audit.DeferredCharges[1].AccruedFrom);
+        Assert.Equal(new DateTimeOffset(2026, 9, 20, 16, 40, 18, TimeSpan.Zero), audit.DeferredCharges[1].AccruedTo);
+    }
+
+    [Fact]
+    public async Task GetRenewalAuditAsync_ReportsNothingDeferred_ForACleanRenewal()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap("""
+                {
+                  "id": "sub_1", "customer_id": "ctm_1", "status": "active",
+                  "items": [ { "status": "active", "price": { "id": "pri_starter" }, "quantity": 1 } ],
+                  "current_billing_period": { "starts_at": "2026-09-18T14:11:40Z", "ends_at": "2026-10-18T14:11:40Z" },
+                  "next_transaction": {
+                    "currency_code": "EUR",
+                    "billing_period": { "starts_at": "2026-10-18T14:11:40Z", "ends_at": "2026-11-18T14:11:40Z" },
+                    "details": {
+                      "totals": { "total": "1195", "grand_total": "1195" },
+                      "line_items": [ { "totals": { "total": "1195" } } ]
+                    }
+                  }
+                }
+                """));
+        var gateway = CreateGateway(handler, ("starter", "pri_starter"));
+
+        var audit = await gateway.GetRenewalAuditAsync("sub_1", CancellationToken.None);
+
+        Assert.NotNull(audit);
+        Assert.Empty(audit!.DeferredCharges);
+        Assert.Equal(11.95m, audit.Total);
+    }
+
+    [Fact]
+    public async Task GetRenewalAuditAsync_ReturnsNull_WhenPaddleHasNoNextTransaction()
+    {
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "subscriptions/sub_1", HttpStatusCode.OK, Wrap(CurrentSubscriptionJson));
+        var gateway = CreateGateway(handler, ("starter", "pri_starter"));
+
+        Assert.Null(await gateway.GetRenewalAuditAsync("sub_1", CancellationToken.None));
+    }
 }

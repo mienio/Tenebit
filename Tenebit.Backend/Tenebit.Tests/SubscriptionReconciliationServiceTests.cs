@@ -278,4 +278,42 @@ public sealed class SubscriptionReconciliationServiceTests
 
         Assert.DoesNotContain(activity.Logs, x => x.Action.StartsWith("subscription.paddle_items_repair"));
     }
+
+    [Fact]
+    public async Task Reconciliation_ChecksTheNextRenewal_EvenWhenTheItemListIsAlreadyClean()
+    {
+        // Deferred proration is not a subscription item, so a clean item list says nothing about whether the
+        // renewal is inflated - the check has to run either way.
+        var (service, subscriptions, gateway, _, clock) = CreateService();
+        var local = LiveSubscription(clock, SubscriptionPlan.ThousandPlus, BillingInterval.Annual, clock.UtcNow.AddYears(1));
+        subscriptions.Add(local);
+        gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.ThousandPlus.Key, SubscriptionStatus.Active,
+            clock.UtcNow, clock.UtcNow.AddYears(1), local.OrganizationId, BillingInterval.Annual);
+        gateway.NextRenewalAudit = new SubscriptionRenewalAudit(992.91m, "EUR", clock.UtcNow.AddYears(1), [
+            new DeferredChargeLine(0.01m, clock.UtcNow.AddDays(-2), clock.UtcNow.AddDays(-2)),
+            new DeferredChargeLine(3.40m, clock.UtcNow.AddDays(-1), clock.UtcNow)
+        ]);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Equal(1, gateway.RenewalAuditCalls);
+    }
+
+    [Fact]
+    public async Task Reconciliation_SurvivesAFailingRenewalCheck_WithoutLosingTheReconciledState()
+    {
+        var (service, subscriptions, gateway, activity, clock) = CreateService();
+        var local = LiveSubscription(clock, SubscriptionPlan.Business, BillingInterval.Annual, clock.UtcNow.AddYears(1));
+        subscriptions.Add(local);
+        gateway.NextCanonicalSubscription = new PaymentSubscriptionState(
+            "ctm_1", "sub_1", SubscriptionPlan.Business.Key, SubscriptionStatus.Active,
+            clock.UtcNow, clock.UtcNow.AddYears(1), local.OrganizationId, BillingInterval.Annual);
+        gateway.ThrowOnRenewalAudit = new PaymentGatewayException("Paddle API error 500", 500);
+
+        await service.RunAsync(CancellationToken.None);
+
+        Assert.Contains(activity.Logs, x => x.Action == "subscription.paddle_reconciled");
+        Assert.Equal(SubscriptionPlan.Business.Key, local.PlanKey);
+    }
 }
