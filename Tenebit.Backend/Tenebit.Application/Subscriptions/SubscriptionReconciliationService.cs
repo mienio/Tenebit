@@ -330,8 +330,9 @@ public sealed class SubscriptionReconciliationService
         {
             SecurityTelemetry.ReconciliationFailure();
             _logger.LogError(
-                "Paddle price {PriceId} for {PlanKey}/{Interval} does not match the plan catalogue ({Reason}): expected {Expected} {Currency}, Paddle has {Actual}. Customers are being billed the Paddle amount.",
-                mismatch.PriceId, mismatch.PlanKey, mismatch.Interval, mismatch.Reason, mismatch.Expected, mismatch.Currency, mismatch.Actual);
+                "Paddle price {PriceId} for {PlanKey}/{Interval} does not match the plan catalogue ({Reason}): the pricing page sells {Expected} {ExpectedCurrency}, Paddle charges {Actual} {ActualCurrency}. Customers are being billed the Paddle amount.",
+                mismatch.PriceId, mismatch.PlanKey, mismatch.Interval, mismatch.Reason,
+                mismatch.Expected, mismatch.ExpectedCurrency, mismatch.Actual, mismatch.ActualCurrency);
         }
     }
 

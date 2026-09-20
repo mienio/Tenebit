@@ -298,6 +298,27 @@ public class PaddlePaymentGatewayTests
     }
 
     [Fact]
+    public async Task ListPlanPriceMismatchesAsync_ReportsAPriceDenominatedInTheWrongCurrency()
+    {
+        // The real case behind this: after Growth Annual was rebuilt in Paddle to fix its billing cycle, the
+        // replacement came out in USD while the pricing page sells euro. The amount matches to the cent, so
+        // only the currency check catches it - and the report has to name both sides, or "expected 289,50
+        // USD" reads as though the catalogue had asked for dollars.
+        var handler = new StubHandler()
+            .Enqueue(HttpMethod.Get, "prices/pri_growth", HttpStatusCode.OK, Wrap("""
+                { "id": "pri_growth", "unit_price": { "amount": "2895", "currency_code": "USD" }, "billing_cycle": { "interval": "month", "frequency": 1 } }
+                """));
+        var gateway = CreateGateway(handler, ("growth", "pri_growth"));
+
+        var mismatch = Assert.Single(await gateway.ListPlanPriceMismatchesAsync(CancellationToken.None));
+
+        Assert.Equal("currency_mismatch", mismatch.Reason);
+        Assert.Equal("EUR", mismatch.ExpectedCurrency);
+        Assert.Equal("USD", mismatch.ActualCurrency);
+        Assert.Equal(mismatch.Expected, mismatch.Actual);
+    }
+
+    [Fact]
     public async Task ListPlanPriceMismatchesAsync_ReportsNothing_WhenPaddleMatchesTheCatalogue()
     {
         var handler = new StubHandler()

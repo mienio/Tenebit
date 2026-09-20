@@ -586,7 +586,7 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             }
             catch (PaymentGatewayException ex)
             {
-                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, $"price_unreadable: {ex.Message}", plan.GetPrice(interval), 0m, plan.Currency));
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, $"price_unreadable: {ex.Message}", plan.GetPrice(interval), plan.Currency, 0m, ""));
                 continue;
             }
 
@@ -594,7 +594,7 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
 
             if (!price.TryGetProperty("unit_price", out var unitPrice) || unitPrice.ValueKind != JsonValueKind.Object)
             {
-                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "unit_price_missing", expected, 0m, plan.Currency));
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "unit_price_missing", expected, plan.Currency, 0m, ""));
                 continue;
             }
 
@@ -604,11 +604,11 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
             var currency = unitPrice.TryGetProperty("currency_code", out var currencyCode) ? (currencyCode.GetString() ?? "") : "";
 
             if (actual != expected)
-                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "amount_mismatch", expected, actual, currency));
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "amount_mismatch", expected, plan.Currency, actual, currency));
             else if (!string.Equals(currency, plan.Currency, StringComparison.OrdinalIgnoreCase))
-                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "currency_mismatch", expected, actual, currency));
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, "currency_mismatch", expected, plan.Currency, actual, currency));
             else if (ReadBillingCycle(price) is { } cycle && cycle != (interval == BillingInterval.Annual ? "year:1" : "month:1"))
-                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, $"billing_cycle_mismatch: {cycle}", expected, actual, currency));
+                mismatches.Add(new PlanPriceMismatch(planKey, interval, priceId, $"billing_cycle_mismatch: {cycle}", expected, plan.Currency, actual, currency));
         }
 
         return mismatches;

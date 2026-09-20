@@ -188,8 +188,18 @@ public sealed record SubscriptionRenewalAudit(
 /// over - the window is what identifies which earlier plan change produced it.</summary>
 public sealed record DeferredChargeLine(decimal Amount, DateTimeOffset? AccruedFrom, DateTimeOffset? AccruedTo);
 
-/// <summary>A configured Paddle Price whose amount does not match the plan catalogue's.</summary>
-public sealed record PlanPriceMismatch(string PlanKey, BillingInterval Interval, string PriceId, string Reason, decimal Expected, decimal Actual, string Currency);
+/// <summary>A configured Paddle Price that does not match the plan catalogue. Both sides carry their own
+/// currency: the interesting mismatch is often exactly that the two differ, which a single shared currency
+/// field cannot express without reading as though the catalogue asked for Paddle's.</summary>
+public sealed record PlanPriceMismatch(
+    string PlanKey,
+    BillingInterval Interval,
+    string PriceId,
+    string Reason,
+    decimal Expected,
+    string ExpectedCurrency,
+    decimal Actual,
+    string ActualCurrency);
 
 /// <summary>The outcome of an applied plan switch - the updated subscription plus what was actually
 /// charged (0 for a downgrade, or when the proration credit fully covered the new plan - a real, correct
