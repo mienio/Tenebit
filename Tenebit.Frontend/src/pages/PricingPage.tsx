@@ -1,7 +1,7 @@
 import { Tag, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
-import { ensurePaddleReady, openPaddleCheckout } from '../api/paddleClient';
+import { ensurePaddleReady, openPaddleCheckout, paddleLocaleFor } from '../api/paddleClient';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TextInput } from '../components/FormFields';
@@ -61,9 +61,9 @@ export function PricingPage() {
   useEffect(() => {
     if (hasLivePaidSubscription) return;
     api.paddleConfig()
-      .then(config => { if (config.clientToken) ensurePaddleReady(config.clientToken, config.environment, handlePaddleCheckoutCompleted); })
+      .then(config => { if (config.clientToken) ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language)); })
       .catch(() => { /* Paddle not configured yet - checkout will surface its own error when attempted. */ });
-  }, [hasLivePaidSubscription]);
+  }, [hasLivePaidSubscription, language]);
 
   useEffect(() => {
     if (!message) return;
@@ -149,7 +149,7 @@ export function PricingPage() {
       } else {
         const config = await api.paddleConfig();
         if (!config.clientToken) throw new Error('Paddle is not configured yet.');
-        const paddle = await ensurePaddleReady(config.clientToken, config.environment, handlePaddleCheckoutCompleted);
+        const paddle = await ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language));
         const params = await api.checkoutParams(plan.key, selectedInterval, promoCode);
         openPaddleCheckout(paddle, {
           items: [{ priceId: params.priceId, quantity: 1 }],
@@ -160,7 +160,7 @@ export function PricingPage() {
           // outright (verified live: transaction-checkout 400s with "validation.no_validation_set" at
           // /data/settings/allow_quantity - a real Paddle.js/API quirk, not something wrong on our end).
           // Omitting the setting entirely still gets us the single-item, quantity-1 checkout we want.
-          settings: { successUrl: `${window.location.origin}/dashboard?checkout=success` }
+          settings: { successUrl: `${window.location.origin}/dashboard?checkout=success`, locale: paddleLocaleFor(language) }
         });
         setUpgrading(false);
       }

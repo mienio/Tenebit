@@ -11,6 +11,12 @@ export const languages: { value: Language; label: string }[] = [
 
 export const translations: Record<Language, Record<string, string>> = {
   pl: {
+    'checkout.loadingTitle': 'Trwa ładowanie płatności…',
+    'checkout.loadingLead': 'Za chwilę otworzy się bezpieczne okno płatności Paddle.',
+    'checkout.error': 'Nie udało się otworzyć okna płatności. Odśwież stronę albo otwórz link od Paddle jeszcze raz.',
+    'checkout.successTitle': 'Dziękujemy, płatność przyjęta.',
+    'checkout.successLead': 'Plan zostanie aktywowany w ciągu kilku chwil.',
+    'checkout.successCta': 'Przejdź do aplikacji',
     'legal.fallbackNotice': 'Ten dokument nie ma jeszcze wersji w wybranym języku. Poniżej jest wersja angielska — wiążąca pozostaje treść w języku wskazanym w regulaminie.',
     'nav.dashboard': 'Pulpit',
     'nav.my': 'Mój sprzęt i procedury',
@@ -2028,6 +2034,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.offboardingAttentionLink': 'Przejdź do offboardingu'
   },
   en: {
+    'checkout.loadingTitle': 'Loading payment…',
+    'checkout.loadingLead': 'The secure Paddle payment window will open in a moment.',
+    'checkout.error': 'The payment window could not be opened. Refresh the page or open the link from Paddle again.',
+    'checkout.successTitle': 'Thank you, payment received.',
+    'checkout.successLead': 'Your plan will be activated in a few moments.',
+    'checkout.successCta': 'Go to the app',
     'legal.fallbackNotice': 'This document is not yet available in the selected language. The English version is shown below.',
     'nav.dashboard': 'Dashboard',
     'nav.my': 'My equipment & procedures',
@@ -4039,6 +4051,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'alerts.weekday.sunday': 'Sunday'
   },
   es: {
+    'checkout.loadingTitle': 'Cargando el pago…',
+    'checkout.loadingLead': 'La ventana de pago segura de Paddle se abrirá en un momento.',
+    'checkout.error': 'No se pudo abrir la ventana de pago. Actualiza la página o vuelve a abrir el enlace de Paddle.',
+    'checkout.successTitle': 'Gracias, hemos recibido tu pago.',
+    'checkout.successLead': 'Tu plan se activará en unos instantes.',
+    'checkout.successCta': 'Ir a la aplicación',
     'legal.fallbackNotice': 'Este documento aún no está disponible en el idioma seleccionado. A continuación se muestra la versión en inglés.',
     'search.title': 'Búsqueda rápida',
     'search.placeholder': 'Buscar activos, personas, ubicaciones, licencias…',
@@ -6027,6 +6045,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'activity.team.updated': 'Equipo actualizado',
   },
   de: {
+    'checkout.loadingTitle': 'Zahlung wird geladen…',
+    'checkout.loadingLead': 'Das sichere Paddle-Zahlungsfenster öffnet sich gleich.',
+    'checkout.error': 'Das Zahlungsfenster konnte nicht geöffnet werden. Laden Sie die Seite neu oder öffnen Sie den Link von Paddle erneut.',
+    'checkout.successTitle': 'Vielen Dank, die Zahlung ist eingegangen.',
+    'checkout.successLead': 'Ihr Tarif wird in wenigen Augenblicken aktiviert.',
+    'checkout.successCta': 'Zur App',
     'legal.fallbackNotice': 'Dieses Dokument liegt in der gewählten Sprache noch nicht vor. Nachfolgend wird die englische Fassung angezeigt.',
     'search.title': 'Schnellsuche',
     'search.placeholder': 'Assets, Personen, Standorte, Lizenzen suchen…',
@@ -8015,6 +8039,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'activity.team.updated': 'Team aktualisiert',
   },
   it: {
+    'checkout.loadingTitle': 'Caricamento del pagamento…',
+    'checkout.loadingLead': 'La finestra di pagamento sicura di Paddle si aprirà tra un istante.',
+    'checkout.error': 'Non è stato possibile aprire la finestra di pagamento. Aggiorna la pagina o riapri il link di Paddle.',
+    'checkout.successTitle': 'Grazie, pagamento ricevuto.',
+    'checkout.successLead': 'Il piano sarà attivato tra pochi istanti.',
+    'checkout.successCta': 'Vai all\'app',
     'legal.fallbackNotice': 'Questo documento non è ancora disponibile nella lingua selezionata. Di seguito è riportata la versione inglese.',
     'nav.dashboard': 'Cruscotto',
     'nav.my': 'Le mie attrezzature e procedure',
@@ -9986,6 +10016,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'assetAudits.completeCampaign': 'Completa la campagna'
   },
   fr: {
+    'checkout.loadingTitle': 'Chargement du paiement…',
+    'checkout.loadingLead': 'La fenêtre de paiement sécurisée Paddle va s\'ouvrir dans un instant.',
+    'checkout.error': 'Impossible d\'ouvrir la fenêtre de paiement. Actualisez la page ou rouvrez le lien envoyé par Paddle.',
+    'checkout.successTitle': 'Merci, paiement reçu.',
+    'checkout.successLead': 'Votre offre sera activée dans quelques instants.',
+    'checkout.successCta': 'Accéder à l\'application',
     'legal.fallbackNotice': "Ce document n'est pas encore disponible dans la langue sélectionnée. La version anglaise est affichée ci-dessous.",
     'nav.dashboard': 'Tableau de bord',
     'nav.my': 'Mon matériel et mes procédures',
