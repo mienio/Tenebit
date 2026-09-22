@@ -405,7 +405,7 @@ public sealed class OffboardingService
 
             _activity.Add(new ActivityLog(organizationId, "offboarding.asset_returned", "asset", asset.Id, _currentUser.Subject, asset.Name, now));
 
-            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            var items = await _items.ListByCaseForUpdateAsync(organizationId, id, cancellationToken);
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -458,7 +458,7 @@ public sealed class OffboardingService
 
             _activity.Add(new ActivityLog(organizationId, "offboarding.asset_inspection_completed", "offboarding_item", item.Id, _currentUser.Subject, item.Label, now));
 
-            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            var items = await _items.ListByCaseForUpdateAsync(organizationId, id, cancellationToken);
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -500,7 +500,7 @@ public sealed class OffboardingService
             item.MarkReleased(now, _currentUser.Subject);
             _activity.Add(new ActivityLog(organizationId, "offboarding.license_released", "offboarding_item", item.Id, _currentUser.Subject, item.Label, now));
 
-            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            var items = await _items.ListByCaseForUpdateAsync(organizationId, id, cancellationToken);
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -554,7 +554,7 @@ public sealed class OffboardingService
                 }
             }
 
-            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            var items = await _items.ListByCaseForUpdateAsync(organizationId, id, cancellationToken);
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -584,7 +584,7 @@ public sealed class OffboardingService
             item.Waive(request.Reason, _currentUser.Subject, now);
             _activity.Add(new ActivityLog(organizationId, "offboarding.item_waived", "offboarding_item", item.Id, _currentUser.Subject, item.Label, now));
 
-            var items = await _items.ListByCaseAsync(organizationId, id, cancellationToken);
+            var items = await _items.ListByCaseForUpdateAsync(organizationId, id, cancellationToken);
             offboardingCase.RecomputeStatus(items, now);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -609,6 +609,20 @@ public sealed class OffboardingService
         {
             var now = _clock.UtcNow;
             var alreadyCompleted = offboardingCase.Status == OffboardingCaseStatus.Completed;
+
+            // Judge readiness from the items as they stand now rather than trusting the status a previous
+            // operation left behind: a case whose required items are all settled must be closable.
+            var items = await _items.ListByCaseForUpdateAsync(organizationId, id, cancellationToken);
+            offboardingCase.RecomputeStatus(items, now);
+
+            // Name what is actually blocking instead of leaving the operator to guess against a progress bar.
+            var unsettled = items.Where(x => x.Required && !x.IsResolved).Select(x => x.Label).ToList();
+            if (unsettled.Count > 0)
+            {
+                return Result<OffboardingCaseDetailsResponse>.Failure(Error.Validation(
+                    $"Nie można zamknąć sprawy - te wymagane pozycje nie są rozliczone: {string.Join(", ", unsettled)}."));
+            }
+
             var protocolNumber = offboardingCase.FinalProtocolNumber ?? ReferenceNumberGenerator.Create("OFF", now);
             offboardingCase.Complete(now, _currentUser.Subject, protocolNumber);
 
@@ -849,7 +863,7 @@ public sealed class OffboardingService
 
         var offboardingCase = resolved.Value!;
         var now = _clock.UtcNow;
-        var items = await _items.ListByCaseAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
+        var items = await _items.ListByCaseForUpdateAsync(offboardingCase.OrganizationId, offboardingCase.Id, cancellationToken);
         var itemsById = items.ToDictionary(x => x.Id);
 
         foreach (var answer in request.Answers)

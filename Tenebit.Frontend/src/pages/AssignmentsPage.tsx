@@ -124,7 +124,6 @@ export function AssignmentsPage() {
       setIssueConditions({});
       setIssueEvidence({});
       setDrawerMode(null);
-      setMessage({ type: 'success', text: t('assignments.created') });
       celebrate(t('celebration.assignmentCreated'));
       await Promise.all([assignments.reload(), assets.reload()]);
     } catch (error) {

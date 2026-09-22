@@ -24,11 +24,18 @@ public sealed class Location
     public bool IsActive { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
+    public const int NameMaxLength = 120;
+
     public void Update(string name, string? type, Guid? parentId, bool isActive)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new DomainException("Nazwa lokalizacji jest wymagana.");
+        }
+
+        if (name.Trim().Length > NameMaxLength)
+        {
+            throw new DomainException($"Nazwa lokalizacji może mieć maksymalnie {NameMaxLength} znaków.");
         }
 
         Name = name.Trim();

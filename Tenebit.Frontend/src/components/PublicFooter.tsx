@@ -20,10 +20,9 @@ export function PublicFooter({ compact = false, language: languageOverride }: { 
           {legalConfig.supportEmail ? (
             <span className="publicFooter__contactPrompt">
               {ui.contactPrompt}{' '}
-              <a
-                href="#"
-                onClick={event => { event.preventDefault(); window.location.href = `mailto:${legalConfig.supportEmail}`; }}
-              >
+              {/* A real mailto: href - href="#" also broke middle-click, "open in new tab" and
+                  "copy email address", and left the address unreachable without JavaScript. */}
+              <a href={`mailto:${legalConfig.supportEmail}`}>
                 {legalConfig.supportEmail}
               </a>
             </span>

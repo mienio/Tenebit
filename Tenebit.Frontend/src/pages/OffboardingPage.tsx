@@ -112,8 +112,8 @@ export function OffboardingPage() {
     const form = new FormData(event.currentTarget);
     const body = {
       personId: String(form.get('personId') ?? ''),
-      employmentEndsAt: String(form.get('employmentEndsAt') ?? ''),
-      returnDueDate: String(form.get('returnDueDate') ?? ''),
+      employmentEndsAt: fromLocalDateTimeValue(String(form.get('employmentEndsAt') ?? '')),
+      returnDueDate: fromLocalDateTimeValue(String(form.get('returnDueDate') ?? '')),
       defaultReturnLocation: toNullable(String(form.get('defaultReturnLocation') ?? '')),
       notes: toNullable(String(form.get('notes') ?? '')),
       processOwnerId: toNullable(String(form.get('processOwnerId') ?? '')),
@@ -696,4 +696,13 @@ function toLocalDateTimeValue(value?: string | null) {
   if (Number.isNaN(date.getTime())) return '';
   const tz = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - tz).toISOString().slice(0, 16);
+}
+
+/** A datetime-local field yields wall-clock text with no zone ("2026-09-22T12:00"). Sending it as-is left the
+ *  server to read it as UTC, so a time typed as 12:00 was stored as 12:00Z and then rendered back in the
+ *  browser's zone as 14:00. Resolve it against the browser's zone first, the inverse of toLocalDateTimeValue. */
+function fromLocalDateTimeValue(value: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }

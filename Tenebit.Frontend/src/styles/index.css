@@ -1298,6 +1298,24 @@ button.authIcon:hover { filter: brightness(0.94); }
 .sortChip:hover { border-color: var(--border-strong); color: var(--text); }
 .sortChip--active { background: var(--brand-soft); border-color: var(--brand); color: var(--text); font-weight: 600; }
 
+/* Klikalny nagłówek kolumny w tabeli - odpowiednik .sortChip tam, gdzie wiersz nagłówka istnieje. */
+.sortHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.sortHeader:hover { color: var(--text); }
+.sortHeader:hover .sortHeader__idle { opacity: .55; }
+.sortHeader--active { color: var(--text); font-weight: 600; }
+.sortHeader__idle { opacity: 0; transition: opacity .12s ease; }
+.sortHeader:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+
 /* Kafelek zawsze mieści się w ekranie - lista nigdy nie jedzie w poziomie i nigdy nie rozbija aktywa
    na dwie linie. Zamiast ściskać wszystkie kolumny do nieczytelnych pasków, kolejne kolumny znikają
    w kolejności od najmniej istotnej. Nazwa i status zostają do samego końca. */

@@ -11,6 +11,10 @@ namespace Tenebit.Tests;
 
 public class OffboardingServiceTests
 {
+    private static readonly OffboardingItemStatus[] SettledStatuses =
+        [OffboardingItemStatus.Returned, OffboardingItemStatus.Released, OffboardingItemStatus.Missing,
+         OffboardingItemStatus.Damaged, OffboardingItemStatus.Retained, OffboardingItemStatus.Waived];
+
     private static (OffboardingService Service, FakeCurrentUser User, InMemoryOffboardingCaseRepository Cases, InMemoryOffboardingItemRepository Items,
         InMemoryPersonRepository People, InMemoryAssetRepository Assets, InMemoryAssignmentRepository Assignments, InMemoryLicenseRepository Licenses,
         InMemoryActivityLogRepository Activity, InMemoryAssetCategoryRepository Categories, InMemoryAssetInspectionRepository Inspections, FakeEmailSender EmailSender) CreateService()
@@ -298,6 +302,48 @@ public class OffboardingServiceTests
         var result = await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
 
         Assert.True(result.IsFailure);
+    }
+
+    /// <summary>QA BUG-003: every required item settled, progress at 100%, yet closing the case was refused
+    /// with "a case with unsettled required items cannot be closed".</summary>
+    [Fact]
+    public async Task CompleteAsync_ClosesOnceEveryRequiredItemIsSettled()
+    {
+        var (service, user, _, _, people, assets, _, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(3), null, null, null, false, false, false), CancellationToken.None);
+        var started = await service.StartAsync(created.Value!.Case.Id, new StartOffboardingCaseRequest(), CancellationToken.None);
+        var item = started.Value!.Items.Single();
+
+        var received = await service.ConfirmItemReturnAsync(created.Value.Case.Id, item.Id, new ConfirmOffboardingItemReturnRequest(null, null, null), CancellationToken.None);
+        Assert.True(received.IsSuccess, received.Error?.Message);
+        Assert.All(received.Value!.Items.Where(x => x.Required), x => Assert.Contains(x.Status, SettledStatuses));
+
+        await service.ExecuteScheduledActionsAsync(created.Value.Case.Id, CancellationToken.None);
+
+        var completed = await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
+
+        Assert.True(completed.IsSuccess, completed.Error?.Message);
+        Assert.Equal(OffboardingCaseStatus.Completed, completed.Value!.Case.Status);
+    }
+
+    /// <summary>The refusal has to name what is blocking, instead of leaving the operator to guess.</summary>
+    [Fact]
+    public async Task CompleteAsync_NamesTheUnsettledRequiredItems()
+    {
+        var (service, user, _, _, people, assets, _, _, _, _, _, _) = CreateService();
+        var person = AddPerson(user, people);
+        var asset = AddAsset(user, assets, person.Id);
+
+        var created = await service.CreateAsync(new CreateOffboardingCaseRequest(person.Id, DateTimeOffset.UtcNow.AddDays(14), DateTimeOffset.UtcNow.AddDays(21), null, null, null, false, false, false), CancellationToken.None);
+        await service.StartAsync(created.Value!.Case.Id, new StartOffboardingCaseRequest(), CancellationToken.None);
+
+        var result = await service.CompleteAsync(created.Value.Case.Id, CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains(asset.Name, result.Error!.Message);
     }
 
     [Fact]

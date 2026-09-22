@@ -37,6 +37,7 @@ import type {
   DashboardSummary,
   EmployeePackageResponse,
   JobProfile,
+  PersonSortKey,
   License,
   LocationInventory,
   LocationNode,
@@ -253,9 +254,13 @@ export const api = {
   deletePersonRelationType: (id: string) => apiRequest<void>(`/api/person-relation-types/${id}`, { method: 'DELETE' }),
 
   people: (search?: string) => apiRequest<Person[]>(`/api/people${search ? `?search=${encodeURIComponent(search)}` : ''}`),
-  peoplePaged: (params: { search?: string; page: number; pageSize: number }) => {
+  person: (id: string) => apiRequest<Person>(`/api/people/${id}`),
+  peoplePaged: (params: { search?: string; sort?: PersonSortKey; desc?: boolean; page: number; pageSize: number }) => {
     const query = new URLSearchParams();
     if (params.search) query.set('search', params.search);
+    // Ordering runs in the database: the list is paged, so sorting only the rows on screen would be a lie.
+    if (params.sort) query.set('sort', params.sort);
+    if (params.desc) query.set('desc', 'true');
     query.set('page', String(params.page));
     query.set('pageSize', String(params.pageSize));
     return apiRequest<Paged<Person>>(`/api/people?${query.toString()}`);

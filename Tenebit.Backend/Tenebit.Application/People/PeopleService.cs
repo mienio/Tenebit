@@ -54,7 +54,7 @@ public sealed class PeopleService
         return Result<IReadOnlyList<PersonResponse>>.Success(people.Select(person => Map(person, teams)).ToList());
     }
 
-    public async Task<Result<PagedResult<PersonResponse>>> ListPagedAsync(string? search, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<Result<PagedResult<PersonResponse>>> ListPagedAsync(string? search, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
         var access = await _permissions.EnsureAsync(PermissionModules.People, PermissionActions.View, cancellationToken);
         if (access.IsFailure) return Result<PagedResult<PersonResponse>>.Failure(access.Error!);
@@ -63,8 +63,8 @@ public sealed class PeopleService
         var teams = await _teams.ListAsync(organizationId, cancellationToken);
         var scope = await _managerScope.ResolveAsync(_currentUser, OrgWideRoles, cancellationToken);
         var (items, total) = scope is null
-            ? await _people.ListPagedAsync(organizationId, search, page, pageSize, cancellationToken)
-            : await _people.ListPagedScopedAsync(organizationId, search, page, pageSize, scope.PersonIds, cancellationToken);
+            ? await _people.ListPagedAsync(organizationId, search, sortKey, sortDesc, page, pageSize, cancellationToken)
+            : await _people.ListPagedScopedAsync(organizationId, search, sortKey, sortDesc, page, pageSize, scope.PersonIds, cancellationToken);
         return Result<PagedResult<PersonResponse>>.Success(new PagedResult<PersonResponse>(items.Select(person => Map(person, teams)).ToList(), total, page, pageSize));
     }
 

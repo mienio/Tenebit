@@ -124,6 +124,9 @@ export interface FleetValue {
   assetsInOtherCurrency: number;
 }
 
+/** Columns the People list can be ordered by; must match PersonRepository.ApplySort on the server. */
+export type PersonSortKey = 'name' | 'email' | 'jobTitle' | 'relationType' | 'status';
+
 export interface Asset {
   id: string;
   /** Drives the edge strip on the asset tile: green / orange / red / black. */

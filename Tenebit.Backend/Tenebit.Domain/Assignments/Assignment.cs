@@ -80,12 +80,14 @@ public sealed class Assignment
         }
 
         Status = AssignmentStatus.Accepted;
-        AcceptedAt = acceptedAt;
+        // v4 stores the timestamp at the precision the database keeps, so the seal can be reproduced
+        // after a reload - see IntegritySealTimestamp.
+        AcceptedAt = IntegritySealTimestamp.Normalize(acceptedAt);
         AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
         // v3 keeps IP outside the permanent integrity seal so privacy retention can remove/truncate
         // the address later without invalidating the signed business facts.
-        IntegrityVersion = Math.Max(IntegrityVersion, 3);
-        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp, ToIntegrityEntries(evidence));
+        IntegrityVersion = Math.Max(IntegrityVersion, 4);
+        AcceptanceHash = ComputeHash(AcceptedAt.Value, AcceptedIp, ToIntegrityEntries(evidence));
         foreach (var acceptance in ProcedureAcceptances)
         {
             acceptance.Accept(acceptedAt, ipAddress);
@@ -94,16 +96,21 @@ public sealed class Assignment
 
     // Recomputes the hash from the assignment's current field values - a mismatch with the stored
     // AcceptanceHash means the protocol was altered after signing, bypassing this class.
-    public bool VerifyIntegrity(IReadOnlyList<AssetEvidence>? evidence = null)
-    {
-        if (AcceptedAt is null || AcceptanceHash is null) return true;
-        return ComputeHash(AcceptedAt.Value, AcceptedIp, ToIntegrityEntries(evidence)) == AcceptanceHash;
-    }
+    public bool VerifyIntegrity(IReadOnlyList<AssetEvidence>? evidence = null) =>
+        VerifyIntegrity(ToIntegrityEntries(evidence));
 
     public bool VerifyIntegrity(IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence)
     {
         if (AcceptedAt is null || AcceptanceHash is null) return true;
-        return ComputeHash(AcceptedAt.Value, AcceptedIp, evidence) == AcceptanceHash;
+        if (IntegrityVersion >= 4)
+        {
+            return ComputeHash(AcceptedAt.Value, AcceptedIp, evidence) == AcceptanceHash;
+        }
+
+        // Seals written before v4 hashed a timestamp the database then truncated, so the digest can only
+        // be reproduced by trying the sub-microsecond values it may have carried (IntegritySealTimestamp).
+        return IntegritySealTimestamp.LegacyTexts(AcceptedAt.Value)
+            .Any(acceptedAtText => ComputeHash(acceptedAtText, AcceptedIp, evidence) == AcceptanceHash);
     }
 
     // Spec 6.6: wersja 2 obejmuje zdjęcia wydania w hashu akceptacji. Wersja 1 pozostaje bez zmian
@@ -121,10 +128,10 @@ public sealed class Assignment
         }
 
         Status = AssignmentStatus.Accepted;
-        AcceptedAt = acceptedAt;
+        AcceptedAt = IntegritySealTimestamp.Normalize(acceptedAt);
         AcceptedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
-        IntegrityVersion = Math.Max(IntegrityVersion, 3);
-        AcceptanceHash = ComputeHash(acceptedAt, AcceptedIp, evidence);
+        IntegrityVersion = Math.Max(IntegrityVersion, 4);
+        AcceptanceHash = ComputeHash(AcceptedAt.Value, AcceptedIp, evidence);
         foreach (var acceptance in ProcedureAcceptances)
         {
             acceptance.Accept(acceptedAt, ipAddress);
@@ -138,7 +145,8 @@ public sealed class Assignment
     {
         if (AcceptedAt is null || AcceptanceHash is null) return;
         AcceptedIp = string.IsNullOrWhiteSpace(storedIp) ? null : storedIp.Trim();
-        IntegrityVersion = Math.Max(IntegrityVersion, 3);
+        AcceptedAt = IntegritySealTimestamp.Normalize(AcceptedAt.Value);
+        IntegrityVersion = Math.Max(IntegrityVersion, 4);
         AcceptanceHash = ComputeHash(AcceptedAt.Value, AcceptedIp, evidence);
         foreach (var acceptance in ProcedureAcceptances) acceptance.ApplyIpPrivacy(AcceptedIp);
     }
@@ -178,12 +186,15 @@ public sealed class Assignment
         }
     }
 
-    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence)
+    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress, IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence) =>
+        ComputeHash(IntegritySealTimestamp.Text(acceptedAt), ipAddress, evidence);
+
+    private string ComputeHash(string acceptedAtText, string? ipAddress, IReadOnlyList<AssetEvidenceIntegrityEntry>? evidence)
     {
         var assetsPart = string.Join(',', Assets.OrderBy(x => x.AssetId).Select(x => $"{x.AssetId}:{x.IssueCondition}"));
         var proceduresPart = string.Join(',', ProcedureAcceptances.Select(x => x.ProcedureId).OrderBy(x => x));
         var privacySafeIpPart = IntegrityVersion >= 3 ? string.Empty : ipAddress ?? string.Empty;
-        var payload = string.Join('|', Id, OrganizationId, PersonId, ProtocolNumber, assetsPart, proceduresPart, acceptedAt.ToUniversalTime().ToString("O"), privacySafeIpPart);
+        var payload = string.Join('|', Id, OrganizationId, PersonId, ProtocolNumber, assetsPart, proceduresPart, acceptedAtText, privacySafeIpPart);
 
         if (IntegrityVersion >= 2)
         {

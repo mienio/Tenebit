@@ -23,8 +23,8 @@ public interface IPersonRepository
 {
     Task<IReadOnlyList<Person>> ListAsync(Guid organizationId, string? search, CancellationToken cancellationToken);
     Task<IReadOnlyList<Person>> ListScopedAsync(Guid organizationId, string? search, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
-    Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken);
-    Task<(IReadOnlyList<Person> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyList<Person> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, string? sortKey, bool sortDesc, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken);
     Task<IReadOnlyList<Guid>> ListManagedScopePersonIdsAsync(Guid organizationId, Guid managerPersonId, IReadOnlyCollection<Guid> managedTeamIds, CancellationToken cancellationToken);
     Task<Person?> GetAsync(Guid organizationId, Guid id, CancellationToken cancellationToken);
     Task<Person?> FindByEmailAsync(Guid organizationId, string email, CancellationToken cancellationToken);

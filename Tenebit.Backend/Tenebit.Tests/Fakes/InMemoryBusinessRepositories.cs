@@ -158,13 +158,13 @@ public sealed class InMemoryPersonRepository : IPersonRepository
     public Task<IReadOnlyList<Person>> ListScopedAsync(Guid organizationId, string? search, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<Person>>(People.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.Id)).ToList());
 
-    public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, int page, int pageSize, CancellationToken cancellationToken)
+    public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedAsync(Guid organizationId, string? search, string? sortKey, bool sortDesc, int page, int pageSize, CancellationToken cancellationToken)
     {
         var rows = People.Where(x => x.OrganizationId == organizationId).ToList();
         return Task.FromResult<(IReadOnlyList<Person>, int)>((rows, rows.Count));
     }
 
-    public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken)
+    public Task<(IReadOnlyList<Person> Items, int Total)> ListPagedScopedAsync(Guid organizationId, string? search, string? sortKey, bool sortDesc, int page, int pageSize, IReadOnlyCollection<Guid> personIds, CancellationToken cancellationToken)
     {
         var rows = People.Where(x => x.OrganizationId == organizationId && personIds.Contains(x.Id)).ToList();
         var safePage = Math.Max(page, 1);
@@ -538,6 +538,9 @@ public sealed class InMemoryOffboardingItemRepository : IOffboardingItemReposito
             .Where(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId)
             .OrderBy(x => x.SortOrder)
             .ToList());
+
+    public Task<IReadOnlyList<OffboardingItem>> ListByCaseForUpdateAsync(Guid organizationId, Guid offboardingCaseId, CancellationToken cancellationToken) =>
+        ListByCaseAsync(organizationId, offboardingCaseId, cancellationToken);
 
     public Task<OffboardingItem?> GetAsync(Guid organizationId, Guid offboardingCaseId, Guid itemId, CancellationToken cancellationToken) =>
         Task.FromResult(Items.FirstOrDefault(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId && x.Id == itemId));

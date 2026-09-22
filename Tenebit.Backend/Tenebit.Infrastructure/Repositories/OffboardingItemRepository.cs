@@ -18,6 +18,12 @@ public sealed class OffboardingItemRepository : IOffboardingItemRepository
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<OffboardingItem>> ListByCaseForUpdateAsync(Guid organizationId, Guid offboardingCaseId, CancellationToken cancellationToken) =>
+        await _db.OffboardingItems
+            .Where(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId)
+            .OrderBy(x => x.SortOrder)
+            .ToListAsync(cancellationToken);
+
     public async Task<OffboardingItem?> GetAsync(Guid organizationId, Guid offboardingCaseId, Guid itemId, CancellationToken cancellationToken) =>
         await _db.OffboardingItems
             .FirstOrDefaultAsync(x => x.OrganizationId == organizationId && x.OffboardingCaseId == offboardingCaseId && x.Id == itemId, cancellationToken);

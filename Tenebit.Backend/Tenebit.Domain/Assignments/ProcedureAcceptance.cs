@@ -41,18 +41,21 @@ public sealed class ProcedureAcceptance
         }
 
         Status = AcceptanceStatus.Accepted;
-        AcceptedAt = acceptedAt;
+        // v3 seals the timestamp at the precision the database keeps, so the hash can be reproduced
+        // after a reload - see IntegritySealTimestamp.
+        AcceptedAt = IntegritySealTimestamp.Normalize(acceptedAt);
         ConfirmedIp = string.IsNullOrWhiteSpace(ipAddress) ? null : ipAddress.Trim();
-        IntegrityVersion = Math.Max(IntegrityVersion, 2);
-        ConfirmationHash = ComputeHash(acceptedAt, ConfirmedIp);
+        IntegrityVersion = Math.Max(IntegrityVersion, 3);
+        ConfirmationHash = ComputeHash(SentAt, AcceptedAt.Value, ConfirmedIp);
     }
 
     public void ApplyIpPrivacy(string? storedIp)
     {
         if (AcceptedAt is null || ConfirmationHash is null) return;
         ConfirmedIp = string.IsNullOrWhiteSpace(storedIp) ? null : storedIp.Trim();
-        IntegrityVersion = Math.Max(IntegrityVersion, 2);
-        ConfirmationHash = ComputeHash(AcceptedAt.Value, ConfirmedIp);
+        AcceptedAt = IntegritySealTimestamp.Normalize(AcceptedAt.Value);
+        IntegrityVersion = Math.Max(IntegrityVersion, 3);
+        ConfirmationHash = ComputeHash(SentAt, AcceptedAt.Value, ConfirmedIp);
     }
 
     public void MarkOverdue()
@@ -68,13 +71,25 @@ public sealed class ProcedureAcceptance
     public bool VerifyIntegrity()
     {
         if (AcceptedAt is null || ConfirmationHash is null) return true;
-        return ComputeHash(AcceptedAt.Value, ConfirmedIp) == ConfirmationHash;
+        if (IntegrityVersion >= 3)
+        {
+            return ComputeHash(SentAt, AcceptedAt.Value, ConfirmedIp) == ConfirmationHash;
+        }
+
+        // Seals written before v3 hashed timestamps the database then truncated, so the digest can only be
+        // reproduced by trying the sub-microsecond values they may have carried (IntegritySealTimestamp).
+        return IntegritySealTimestamp.LegacyTexts(SentAt).Any(sentAtText =>
+            IntegritySealTimestamp.LegacyTexts(AcceptedAt.Value)
+                .Any(acceptedAtText => ComputeHash(sentAtText, acceptedAtText, ConfirmedIp) == ConfirmationHash));
     }
 
-    private string ComputeHash(DateTimeOffset acceptedAt, string? ipAddress)
+    private string ComputeHash(DateTimeOffset sentAt, DateTimeOffset acceptedAt, string? ipAddress) =>
+        ComputeHash(IntegritySealTimestamp.Text(sentAt), IntegritySealTimestamp.Text(acceptedAt), ipAddress);
+
+    private string ComputeHash(string sentAtText, string acceptedAtText, string? ipAddress)
     {
         var privacySafeIpPart = IntegrityVersion >= 2 ? string.Empty : ipAddress ?? string.Empty;
-        var payload = string.Join('|', Id, OrganizationId, ProcedureId, PersonId, AssignmentId, SentAt.ToUniversalTime().ToString("O"), acceptedAt.ToUniversalTime().ToString("O"), privacySafeIpPart);
+        var payload = string.Join('|', Id, OrganizationId, ProcedureId, PersonId, AssignmentId, sentAtText, acceptedAtText, privacySafeIpPart);
         var bytes = System.Text.Encoding.UTF8.GetBytes(payload);
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }

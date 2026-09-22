@@ -371,18 +371,11 @@ public sealed class AssignmentService
             var organization = await _organizations.GetAsync(organizationId, cancellationToken);
             if (organization is null) return Result<AssignmentResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
             var capturedIp = PublicIpPrivacyPolicy.Capture(organization, _currentUser.IpAddress, now);
-            var evidence = assignment.IntegrityVersion >= 2
-                ? await _evidence.ListMetadataByAssignmentAsync(organizationId, id, cancellationToken)
-                : null;
-            if (evidence is null)
-            {
-                assignment.Accept(now, capturedIp.StoredIp);
-            }
-            else
-            {
-                assignment.AcceptWithEvidenceIntegrity(now, capturedIp.StoredIp, evidence
-                    .Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList());
-            }
+            // The seal always covers issue photos, so they are always loaded: choosing from the stored
+            // IntegrityVersion could seal an empty evidence set under a version that includes it.
+            var evidence = await _evidence.ListMetadataByAssignmentAsync(organizationId, id, cancellationToken);
+            assignment.AcceptWithEvidenceIntegrity(now, capturedIp.StoredIp, evidence
+                .Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList());
             _activity.Add(new ActivityLog(organizationId, "assignment.accepted", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return await _responseBuilder.BuildResponseAsync(_currentUser.OrganizationId, id, cancellationToken);
@@ -623,18 +616,9 @@ public sealed class AssignmentService
             var organization = await _organizations.GetAsync(assignment.OrganizationId, cancellationToken);
             if (organization is null) return Result<PublicAssignmentResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
             var capturedIp = PublicIpPrivacyPolicy.Capture(organization, _currentUser.IpAddress, now);
-            var evidence = assignment.IntegrityVersion >= 2
-                ? await _evidence.ListMetadataByAssignmentAsync(assignment.OrganizationId, assignment.Id, cancellationToken)
-                : null;
-            var integrityEntries = evidence?.Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList();
-            if (integrityEntries is null)
-            {
-                assignment.Accept(now, capturedIp.StoredIp);
-            }
-            else
-            {
-                assignment.AcceptWithEvidenceIntegrity(now, capturedIp.StoredIp, integrityEntries);
-            }
+            var evidence = await _evidence.ListMetadataByAssignmentAsync(assignment.OrganizationId, assignment.Id, cancellationToken);
+            var integrityEntries = evidence.Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList();
+            assignment.AcceptWithEvidenceIntegrity(now, capturedIp.StoredIp, integrityEntries);
             _activity.Add(new ActivityLog(assignment.OrganizationId, "assignment.accepted", "assignment", assignment.Id, "public-link", assignment.ProtocolNumber, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             return Result<PublicAssignmentResponse>.Success(await _responseBuilder.MapPublicAsync(assignment.OrganizationId, assignment, cancellationToken));

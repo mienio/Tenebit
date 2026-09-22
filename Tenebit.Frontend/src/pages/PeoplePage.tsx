@@ -1,4 +1,4 @@
-import { FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Search, Trash2, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, FileSpreadsheet, KeyRound, Pencil, Plus, RefreshCw, Search, Trash2, UserCheck, UserRoundX, UserX, Mail, Phone, Briefcase, Upload, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/endpoints';
@@ -18,7 +18,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { getEmploymentStatusPresentation, type Person } from '../types/domain';
+import { getEmploymentStatusPresentation, type Person, type PersonSortKey } from '../types/domain';
 import { csvCell, formatDateTime, toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
 import { languages } from '../i18n/translations';
@@ -33,6 +33,7 @@ export function PeoplePage() {
   const auth = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [sort, setSort] = useState<{ key: PersonSortKey; desc: boolean }>({ key: 'name', desc: false });
   const [page, setPage] = useState(1);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -56,7 +57,9 @@ export function PeoplePage() {
   const [bulkSaving, setBulkSaving] = useState(false);
   const debouncedSearch = useDebouncedValue(search.trim(), 320);
 
-  const peopleLoader = useMemo(() => () => api.peoplePaged({ search: debouncedSearch, page, pageSize }), [debouncedSearch, page]);
+  const peopleLoader = useMemo(
+    () => () => api.peoplePaged({ search: debouncedSearch, sort: sort.key, desc: sort.desc, page, pageSize }),
+    [debouncedSearch, sort.key, sort.desc, page]);
   const people = useAsyncData(peopleLoader, [peopleLoader]);
   const allPeople = useAsyncData(() => api.people(), []);
   const teams = useAsyncData(api.teams, []);
@@ -73,10 +76,37 @@ export function PeoplePage() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.set('search', debouncedSearch);
+    if (selected) params.set('personId', selected.id);
     setSearchParams(params, { replace: true });
-    setPage(1);
     setSelectedIds(new Set());
-  }, [debouncedSearch, setSearchParams]);
+  }, [debouncedSearch, selected, setSearchParams]);
+
+  // A new search or ordering starts at the first page again.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, sort.key, sort.desc]);
+
+  // Reopen the detail panel for ?personId=... so the panel survives a reload and a shared link lands on
+  // the right person. Falls back to fetching, because the person may be on another page of the list.
+  useEffect(() => {
+    const personId = searchParams.get('personId');
+    if (!personId || selected?.id === personId) return;
+    const fromList = rows.find(person => person.id === personId);
+    if (fromList) {
+      setSelected(fromList);
+      return;
+    }
+    let cancelled = false;
+    void api.person(personId)
+      .then(person => { if (!cancelled) setSelected(person); })
+      .catch(() => { if (!cancelled) setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('personId'); return next; }, { replace: true }); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, rows]);
+
+  function toggleSort(key: PersonSortKey) {
+    setSort(current => (current.key === key ? { key, desc: !current.desc } : { key, desc: false }));
+  }
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -172,8 +202,9 @@ export function PeoplePage() {
       setPersonModalOpen(false);
       setEditing(null);
       setSelected(null);
-      setMessage({ type: 'success', text: editing ? t('people.saved') : t('people.created') });
-      if (!editing) celebrate(t('celebration.personAdded'));
+      // One confirmation per save: the celebration badge on create, the toast on edit.
+      if (editing) setMessage({ type: 'success', text: t('people.saved') });
+      else celebrate(t('celebration.personAdded'));
       await Promise.all([people.reload(), allPeople.reload()]);
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('people.saveFailed') });
@@ -417,13 +448,13 @@ export function PeoplePage() {
                   <tr>
                     <th style={{ width: '32px' }}><input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} onClick={event => event.stopPropagation()} aria-label={t('people.bulkSelectAll')} /></th>
                     <th style={{ width: '40px' }}></th>
-                    <th>{t('people.colFullName')}</th>
-                    <th className="colDropSm">{t('settings.emailLabel')}</th>
+                    <SortableHeader sortKey="name" label={t('people.colFullName')} sort={sort} onSort={toggleSort} t={t} />
+                    <SortableHeader sortKey="email" label={t('settings.emailLabel')} className="colDropSm" sort={sort} onSort={toggleSort} t={t} />
                     <th className="colDropLg">{t('people.colPhone')}</th>
-                    <th className="colDropMd">{t('people.colType')}</th>
-                    <th className="colDropLg">{t('people.colJobTitle')}</th>
+                    <SortableHeader sortKey="relationType" label={t('people.colType')} className="colDropMd" sort={sort} onSort={toggleSort} t={t} />
+                    <SortableHeader sortKey="jobTitle" label={t('people.colJobTitle')} className="colDropLg" sort={sort} onSort={toggleSort} t={t} />
                     <th className="colDropMd">{t('people.colTeam')}</th>
-                    <th>{t('people.colStatus')}</th>
+                    <SortableHeader sortKey="status" label={t('people.colStatus')} sort={sort} onSort={toggleSort} t={t} />
                   </tr>
                 </thead>
                 <tbody>
@@ -773,5 +804,26 @@ export function PeoplePage() {
         </form>
       </Modal>
     </div>
+  );
+}
+
+/** A column header that orders the whole list server-side. Team and phone are left out: the list is paged,
+ *  and neither maps to a single column the query can order by. */
+function SortableHeader({ sortKey, label, className, sort, onSort, t }: {
+  sortKey: PersonSortKey;
+  label: string;
+  className?: string;
+  sort: { key: PersonSortKey; desc: boolean };
+  onSort: (key: PersonSortKey) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const active = sort.key === sortKey;
+  return (
+    <th className={className} aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'}>
+      <button type="button" className={active ? 'sortHeader sortHeader--active' : 'sortHeader'} onClick={() => onSort(sortKey)} title={t('people.sortBy', { column: label })}>
+        {label}
+        {active ? (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />) : <ArrowUpDown size={12} className="sortHeader__idle" />}
+      </button>
+    </th>
   );
 }

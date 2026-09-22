@@ -85,7 +85,7 @@ public class AssignmentWithEvidenceTests
 
         assignment.Accept(DateTimeOffset.UtcNow, "1.2.3.4", new[] { evidence });
 
-        Assert.Equal(3, assignment.IntegrityVersion);
+        Assert.Equal(4, assignment.IntegrityVersion);
         Assert.True(assignment.VerifyIntegrity(new[] { evidence }));
 
         // The whole point of v3: the IP sits outside the seal, so retention can truncate or drop it
@@ -109,8 +109,8 @@ public class AssignmentWithEvidenceTests
 
         assignment.Accept(DateTimeOffset.UtcNow, "1.2.3.4", new[] { evidence });
 
-        // Accepting stamps v3; evidence has been part of the seal since v2 and still is.
-        Assert.Equal(3, assignment.IntegrityVersion);
+        // Accepting stamps v4; evidence has been part of the seal since v2 and still is.
+        Assert.Equal(4, assignment.IntegrityVersion);
         Assert.True(assignment.VerifyIntegrity(new[] { evidence }));
         // Dropping the evidence changes the hash - that is what makes the seal worth having.
         Assert.False(assignment.VerifyIntegrity(Array.Empty<AssetEvidence>()));

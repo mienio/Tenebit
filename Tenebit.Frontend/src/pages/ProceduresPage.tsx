@@ -112,8 +112,8 @@ export function ProceduresPage() {
         : await api.createProcedure(body);
 
       setDialog({ mode: 'edit', procedure: saved });
-      setMessage({ type: 'success', text: t('procedures.saved') });
       if (wasCreate) celebrate(t('celebration.procedureAdded'));
+      else setMessage({ type: 'success', text: t('procedures.saved') });
       await procedures.reload();
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : t('procedures.saveFailed') });

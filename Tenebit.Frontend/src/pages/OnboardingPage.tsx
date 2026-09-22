@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Plus, Rocket } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, type EvidencePhoto } from '../api/endpoints';
@@ -29,6 +29,8 @@ export function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [assetFilter, setAssetFilter] = useState('');
   const checklist = useAsyncData(() => (selectedPersonId ? api.onboardingChecklist(selectedPersonId) : Promise.resolve(null)), [selectedPersonId]);
+  // Which profile's suggestion has already been applied, so a later reload does not overwrite manual edits.
+  const appliedProfileRef = useRef<string | null>(null);
 
   const publishedProcedures = useMemo(() => procedures.data?.filter(item => item.status === 'Published') ?? [], [procedures.data]);
   const visibleAssets = useMemo(() => {
@@ -49,17 +51,36 @@ export function OnboardingPage() {
     return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
   }
 
-  function applyProfile(profileId: string) {
-    setSelectedJobProfileId(profileId);
-    const profile = profiles.data?.find(item => item.id === profileId);
-    if (!profile) return;
-    const recommendedAssets = profile.assetCategoryIds
-      .map(categoryId => assets.data?.find(asset => asset.categoryId === categoryId)?.id)
-      .filter((id): id is string => Boolean(id));
-    const recommendedProcedures = publishedProcedures.filter(procedure => profile.procedureIds.includes(procedure.id)).map(procedure => procedure.id);
-    setSelectedAssetIds(recommendedAssets);
-    setSelectedProcedureIds(recommendedProcedures);
-  }
+  // The profile is applied from an effect rather than straight out of the change handler: the handler ran
+  // against whatever `assets`/`procedures` happened to be loaded at click time, so choosing a profile before
+  // those requests came back silently selected nothing at all ("Selected: 0 assets, 0 procedures").
+  useEffect(() => {
+    if (!selectedJobProfileId) {
+      appliedProfileRef.current = null;
+      return;
+    }
+    if (appliedProfileRef.current === selectedJobProfileId) return;
+
+    const profile = profiles.data?.find(item => item.id === selectedJobProfileId);
+    // Still loading - the effect runs again once the data lands.
+    if (!profile || !assets.data || !procedures.data) return;
+
+    // Every in-stock asset of a matching category, not just the first one found per category.
+    const matchingAssets = (assets.data ?? [])
+      .filter(asset => profile.assetCategoryIds.includes(asset.categoryId))
+      .map(asset => asset.id);
+    const matchingProcedures = publishedProcedures
+      .filter(procedure => profile.procedureIds.includes(procedure.id))
+      .map(procedure => procedure.id);
+
+    appliedProfileRef.current = selectedJobProfileId;
+    setSelectedAssetIds(matchingAssets);
+    setSelectedProcedureIds(matchingProcedures);
+    // Say what the profile did, so "nothing got checked" is never left to guesswork.
+    setMessage(matchingAssets.length || matchingProcedures.length
+      ? { type: 'success', text: t('onboarding.profileApplied', { assets: matchingAssets.length, procedures: matchingProcedures.length }) }
+      : { type: 'error', text: t('onboarding.profileMatchedNothing', { profile: profile.name }) });
+  }, [selectedJobProfileId, profiles.data, assets.data, procedures.data, publishedProcedures, t]);
 
   async function createPackage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -129,7 +150,7 @@ export function OnboardingPage() {
           <section className="packageStep">
             <div className="packageStep__header"><span>2</span><div><strong>{t('onboarding.step2Title')}</strong><small>{t('onboarding.step2Hint')}</small></div></div>
             <Field label={t('onboarding.jobProfileLabel')}>
-              <SelectInput name="jobProfileId" value={selectedJobProfileId} disabled={profiles.isLoading || !!profiles.error || !profiles.data?.length} onChange={event => applyProfile(event.target.value)}>
+              <SelectInput name="jobProfileId" value={selectedJobProfileId} disabled={profiles.isLoading || !!profiles.error || !profiles.data?.length} onChange={event => setSelectedJobProfileId(event.target.value)}>
                 <option value="">{profiles.data?.length ? t('onboarding.noProfileOption') : t('onboarding.noProfilesOption')}</option>
                 {profiles.data?.map(profile => <option value={profile.id} key={profile.id}>{profile.name}</option>)}
               </SelectInput>

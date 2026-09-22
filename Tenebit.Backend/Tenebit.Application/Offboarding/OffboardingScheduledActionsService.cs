@@ -59,7 +59,7 @@ public sealed class OffboardingScheduledActionsService
 
         offboardingCase.MarkPersonDeactivated(now);
 
-        var allItems = await _items.ListByCaseAsync(organizationId, offboardingCase.Id, cancellationToken);
+        var allItems = await _items.ListByCaseForUpdateAsync(organizationId, offboardingCase.Id, cancellationToken);
         var scheduledItems = allItems
             .Where(i => i.Type == OffboardingItemType.LicenseRelease && i.AutomationMode == OffboardingItemAutomationMode.AtEmploymentEnd)
             .ToList();

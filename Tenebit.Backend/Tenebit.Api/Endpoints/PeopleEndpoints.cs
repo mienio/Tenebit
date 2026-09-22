@@ -73,9 +73,9 @@ public static class PeopleEndpoints
                 (await service.DeleteAsync(id, cancellationToken)).ToNoContentResult())
             .WithTags("People");
 
-        api.MapGet("/people", async (PeopleService service, string? search, int? page, int? pageSize, CancellationToken cancellationToken) =>
+        api.MapGet("/people", async (PeopleService service, string? search, string? sort, bool? desc, int? page, int? pageSize, CancellationToken cancellationToken) =>
                 page.HasValue
-                    ? (await service.ListPagedAsync(search, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
+                    ? (await service.ListPagedAsync(search, sort, desc ?? false, page.Value, pageSize ?? 25, cancellationToken)).ToHttpResult()
                     : (await service.ListAsync(search, cancellationToken)).ToHttpResult())
             .WithTags("People");
 

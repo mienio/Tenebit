@@ -428,7 +428,6 @@ export function AssetsPage() {
     setBatchAddOpen(false);
     setMessage({ type: 'success', text: t('assets.batchCreated', { count: created.length }) });
     setPage(1);
-    celebrate(t('celebration.assetAdded'));
     await reloadAssets();
     await openLabelSheet(created);
   }
@@ -569,8 +568,9 @@ export function AssetsPage() {
       setEditing(null);
       setDuplicating(null);
       setSelected(null);
-      setMessage({ type: 'success', text: editing ? t('assets.saved') : t('assets.created') });
-      if (!editing) {
+      if (editing) {
+        setMessage({ type: 'success', text: t('assets.saved') });
+      } else {
         setPage(1);
         celebrate(t('celebration.assetAdded'));
       }

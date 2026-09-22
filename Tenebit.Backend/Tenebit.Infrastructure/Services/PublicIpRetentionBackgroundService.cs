@@ -71,8 +71,13 @@ public sealed class PublicIpRetentionBackgroundService : BackgroundService
                 var capture = PublicIpPrivacyPolicy.Capture(organization, assignment.AcceptedIp, capturedAt);
                 var desired = capture.ExpiresAt.HasValue && capture.ExpiresAt <= now ? null : capture.StoredIp;
                 byAssignment.TryGetValue(assignment.Id, out var assignmentEvidence);
-                if (!string.Equals(desired, assignment.AcceptedIp, StringComparison.Ordinal) || assignment.IntegrityVersion < 3)
-                    assignment.ApplyAcceptedIpPrivacyWithEvidenceIntegrity(desired, assignmentEvidence);
+                if (string.Equals(desired, assignment.AcceptedIp, StringComparison.Ordinal) && assignment.IntegrityVersion >= 4) continue;
+
+                // Re-sealing rewrites a legal proof-of-receipt hash, so it may only ever happen on a record
+                // whose current seal still verifies. Re-sealing a mismatching one would launder tampering
+                // into a seal that looks valid, which is exactly what this hash exists to prevent.
+                if (!assignment.VerifyIntegrity(assignmentEvidence)) continue;
+                assignment.ApplyAcceptedIpPrivacyWithEvidenceIntegrity(desired, assignmentEvidence);
             }
         }
 

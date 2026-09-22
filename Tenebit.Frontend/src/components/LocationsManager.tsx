@@ -17,6 +17,8 @@ import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
 
 const customTypesStorageKey = 'tenebit_custom_location_types';
+/** Mirrors Location.NameMaxLength on the server, so the limit is hit at the keyboard, not after a round trip. */
+const locationNameMaxLength = 120;
 
 type LocationDialog =
   | { mode: 'create'; step: 'parent' | 'details'; parentId: string | null; hasParentStep: boolean }
@@ -125,7 +127,6 @@ export function LocationsManager() {
           parentId: dialog.parentId
         });
         setSelectedId(created.id);
-        setMessage({ type: 'success', text: t('locations.created') });
         celebrate(t('celebration.locationAdded'));
       }
       setDialog(null);
@@ -257,7 +258,7 @@ export function LocationsManager() {
         {dialog?.mode === 'create' && dialog.step === 'details' && (
           <form className="formGrid" onSubmit={submitLocation} key={`create-${dialog.parentId ?? 'root'}`}>
             <Field label={t('locations.nameLabel')}>
-              <TextInput name="name" required autoFocus placeholder={t('locations.namePlaceholder')} />
+              <TextInput name="name" required autoFocus maxLength={locationNameMaxLength} placeholder={t('locations.namePlaceholder')} />
             </Field>
             <Field label={t('locations.typeLabel')}>
               <div className="fieldWithAdd">
@@ -280,7 +281,7 @@ export function LocationsManager() {
 
         {dialog?.mode === 'edit' && (
           <form className="formGrid" onSubmit={submitLocation} key={dialog.location.id}>
-            <Field label={t('locations.nameLabel')}><TextInput name="name" required defaultValue={dialog.location.name} /></Field>
+            <Field label={t('locations.nameLabel')}><TextInput name="name" required maxLength={locationNameMaxLength} defaultValue={dialog.location.name} /></Field>
             <Field label={t('locations.typeLabel')}>
               <div className="fieldWithAdd">
                 <SelectInput name="type" value={typeValue} onChange={event => setTypeValue(event.target.value)}>
