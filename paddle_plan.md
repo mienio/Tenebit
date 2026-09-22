@@ -79,6 +79,34 @@ klientowi checkout w jego lokalnej walucie (adaptive pricing) bez potrzeby zakł
 per waluta, więc funkcjonalność z commita "Default billing currency to EUR..." (wybór waluty
 raportowania organizacji) **nie jest powiązana** z walutą płatności i nie wymaga zmian.
 
+### 1.5 Katalog produkcyjny (stan 2026-09-22)
+
+Produkcja stoi na **4 produktach po 2 ceny** (miesięczna + roczna), a nie na jednym produkcie z ośmioma
+cenami, jak początkowo w sandboxie. Dla kodu to bez różnicy — `PaddlePaymentGateway` mapuje wyłącznie
+`Paddle:Prices:<plan>:<monthly|annual>` na jedno `pri_`, Product ID nie jest nigdzie używany — ale w
+dashboardzie cena należy wtedy do właściwego produktu i raporty Paddle'a rozbijają się per plan.
+
+ID cen i produktów **nie są sekretami** (`pri_` i tak trafia do przeglądarki przy otwarciu checkoutu),
+więc są tu zapisane; sekretami są wyłącznie `ApiKey`/`ClientSideToken`/`WebhookSecret`, które zostają
+w `.env` poza repo.
+
+| Plan (klucz w configu) | Produkt | Miesięcznie | Rocznie |
+|---|---|---|---|
+| Starter (`starter`) | `pro_01m201cs74jzpnjt1ya1f1patf` "Tenebit Starter" | `pri_01m201ftczygmtzx27mt0s8ac3` — 11,95 € | `pri_01m202npt077d1096qp6c73h7n` — 119,50 € |
+| Growth (`growth`) | `pro_01m201hagafba6tkqychxfbzmy` "Tenebit Growth" | `pri_01m201t91jbfghrtxmrcp3r53v` — 28,95 € | `pri_01m202gw0hahzap8p9vstkgat2` — 289,50 € |
+| Business (`business`) | `pro_01m201vgzcvy16mnsqwzxvsvwy` "Tenebit Business" | `pri_01m201wn3rerq84bfdj5440n75` — 58,95 € | `pri_01m202g6kd3w8cy3crx1vna5wx` — 589,50 € |
+| Max (`enterprise`) | `pro_01m201xbx05de5r2jh1837a023` "Tenebit Max" | `pri_01m201yf4jb6s5ys53xk7ge10y` — 98,95 € | `pri_01m202ev0bea6nsaqnm5qgdy87` — 989,50 € |
+
+Klucz configu najwyższego planu to nadal `enterprise`, choć marketingowo nazywa się "Max" — patrz
+komentarz przy `SubscriptionPlan.ThousandPlus`.
+
+Sprawdzone 2026-09-22 przez `GET api.paddle.com/prices/{id}` i `/products/{id}` produkcyjnym kluczem:
+wszystkie osiem cen ma zgodną kwotę, walutę EUR, cykl (`month`/`year`, frequency 1), właściwy
+`product_id` i status `active`; wszystkie cztery produkty są `active` z kategorią podatkową `saas`.
+Roczna cena to dokładnie 10× miesięczna, zgodnie z `SubscriptionPlan.AnnualPrice`. To ten sam warunek,
+który `SubscriptionReconciliationService.AuditConfiguredPricesAsync` pilnuje potem w tle.
+
+
 ## 2. Mapowanie pojęć Stripe → Paddle
 
 | Stripe | Paddle Billing | Uwagi |
