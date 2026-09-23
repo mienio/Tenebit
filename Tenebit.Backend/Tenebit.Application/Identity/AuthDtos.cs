@@ -13,7 +13,9 @@ public sealed record RegisterRequest(
     [property: Required, StringLength(8, MinimumLength = 1)] string Currency,
     string? Language = null,
     bool AcceptTerms = false,
-    string? TurnstileToken = null);
+    string? TurnstileToken = null,
+    // Opcjonalny NIP / numer VAT UE - ten sam, który potem można poprawić w ustawieniach (dane do faktury).
+    [property: StringLength(40)] string? TaxId = null);
 
 /// <summary>
 /// Transport details of the sign-in attempt, captured by the endpoint and recorded in the login history.

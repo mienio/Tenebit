@@ -116,6 +116,42 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RegisterAsync_StoresOptionalTaxIdNormalized()
+    {
+        var (service, organizations, _) = CreateService();
+        var result = await service.RegisterAsync(
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true, TaxId: "123-456-32-18"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("PL1234563218", organizations.Organizations.Single().TaxId);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithoutTaxId_LeavesItEmpty()
+    {
+        var (service, organizations, _) = CreateService();
+        var result = await service.RegisterAsync(
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(organizations.Organizations.Single().TaxId);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_RejectsTaxIdOfInvalidLength()
+    {
+        var (service, organizations, _) = CreateService();
+        var result = await service.RegisterAsync(
+            new RegisterRequest("Acme", "owner@acme.test", "password123", "Owner", "PLN", AcceptTerms: true, TaxId: "12"),
+            CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(organizations.Organizations);
+    }
+
+    [Fact]
     public async Task RegisterAsync_GrantsOwnerRoleAndUnverifiedEmailOnSuccess()
     {
         var (service, _, _) = CreateService();

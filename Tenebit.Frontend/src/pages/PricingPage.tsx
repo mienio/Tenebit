@@ -1,16 +1,29 @@
-import { Tag, Zap } from 'lucide-react';
+import { FileText, Tag, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import { ensurePaddleReady, openPaddleCheckout, paddleLocaleFor } from '../api/paddleClient';
 import { Button } from '../components/Button';
+import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ErrorState } from '../components/StateViews';
 import { TextInput } from '../components/FormFields';
 import { PLANS, PricingCards, type BillingInterval, type PlanDef } from '../components/PricingCards';
 import { EXPECTED_PLAN_KEY } from './CheckoutSuccessPage';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
-import type { PlanChangePreview, PromoCodeValidation } from '../types/domain';
+import type { Organization, PlanChangePreview, PromoCodeValidation } from '../types/domain';
 import { formatDate } from '../utils/format';
+
+/** Adres nabywcy w jednej linii - dokładnie te dane trafiają na fakturę wystawianą przez Paddle. */
+function invoiceAddress(organization: Organization): string {
+  return [
+    organization.billingAddressLine1,
+    organization.billingAddressLine2,
+    [organization.billingPostalCode, organization.billingCity].filter(Boolean).join(' '),
+    organization.billingCountry ?? organization.country
+  ].map(part => part?.trim()).filter(Boolean).join(', ');
+}
 
 function planPrice(plan: PlanDef, interval: BillingInterval): number {
   return interval === 'annual' ? plan.annualPrice : plan.price;
@@ -19,6 +32,10 @@ function planPrice(plan: PlanDef, interval: BillingInterval): number {
 export function PricingPage() {
   const { t, language } = useI18n();
   const subscription = useAsyncData(api.subscription, []);
+  // Dane do faktury i wystawione faktury - jedno i drugie po to, żeby kupujący mógł sprawdzić, co
+  // wyjdzie na dokumencie, zanim zapłaci, i odebrać dokument po zapłacie bez wchodzenia do Paddle.
+  const organization = useAsyncData(api.organization, []);
+  const invoices = useAsyncData(api.invoices, []);
   const [upgrading, setUpgrading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanDef | null>(null);
   const [selectedInterval, setSelectedInterval] = useState<BillingInterval>('monthly');
@@ -166,7 +183,14 @@ export function PricingPage() {
         try { sessionStorage.setItem(EXPECTED_PLAN_KEY, plan.key); } catch { /* private mode - it will just skip the wait */ }
         openPaddleCheckout(paddle, {
           items: [{ priceId: params.priceId, quantity: 1 }],
-          customer: { id: params.customerId },
+          // address/business niosą dane do faktury (nazwa nabywcy, VAT ID, adres) przygotowane po stronie
+          // serwera. Gdy Paddle ich nie przyjął, zostaje samo konto klienta - overlay zbierze adres sam,
+          // zamiast w ogóle się nie otworzyć.
+          customer: {
+            id: params.customerId,
+            ...(params.addressId ? { address: { id: params.addressId } } : {}),
+            ...(params.businessId ? { business: { id: params.businessId } } : {})
+          },
           discountId: params.discountId,
           customData: params.affiliateCode ? { affiliate_code: params.affiliateCode } : undefined,
           // allowQuantity: false cannot be sent here: Paddle's checkout-service rejects it outright with
@@ -292,6 +316,49 @@ export function PricingPage() {
         </div>
       )}
 
+      {/* Faktury istnieją wyłącznie po stronie Paddle - niczego tu nie kopiujemy, więc lista jest zawsze
+          tym, co Paddle naprawdę wystawił. PDF-y otwieramy w nowej karcie: link generuje Paddle przy
+          odczycie i po chwili wygasa, nie ma czego zapisywać na później. */}
+      {(invoices.isLoading || invoices.error || (invoices.data?.length ?? 0) > 0) && (
+        <Card className="pricing-invoices">
+          <div className="sectionTitle"><div><h2>{t('pricing.invoices.title')}</h2><p>{t('pricing.invoices.hint')}</p></div></div>
+          {invoices.isLoading ? (
+            <p className="muted">{t('common.loading')}</p>
+          ) : invoices.error ? (
+            <ErrorState message={invoices.error} onRetry={invoices.reload} />
+          ) : (
+            <div className="tableWrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('pricing.invoices.colDate')}</th>
+                    <th>{t('pricing.invoices.colNumber')}</th>
+                    <th>{t('pricing.invoices.colAmount')}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.data!.map(invoice => (
+                    <tr key={invoice.id}>
+                      <td>{formatDate(invoice.issuedAt)}</td>
+                      <td>{invoice.number ?? '-'}</td>
+                      <td>{invoice.amount.toFixed(2)} {invoice.currency}</td>
+                      <td>
+                        {invoice.pdfUrl ? (
+                          <a className="pricing-promoToggle" href={invoice.pdfUrl} target="_blank" rel="noopener noreferrer">
+                            <FileText size={14} /> {t('pricing.invoices.download')}
+                          </a>
+                        ) : <span className="muted">{t('pricing.invoices.pdfPending')}</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
       <ConfirmDialog
         open={selectedPlan !== null}
         variant="positive"
@@ -373,6 +440,46 @@ export function PricingPage() {
                 </div>
               </>
             )}
+
+            {/* Podgląd faktury. Fakturę wystawia Paddle (Merchant of Record), więc to jedyne miejsce, w
+                którym kupujący widzi dane nabywcy przed zapłatą - wcześniej dowiadywał się, że nie ma na
+                niej NIP-u, dopiero z gotowego dokumentu. */}
+            <div className="invoicePreview">
+              <h3>{t('pricing.checkout.invoicePreviewTitle')}</h3>
+              <dl>
+                <div>
+                  <dt>{t('pricing.checkout.invoiceSeller')}</dt>
+                  <dd>{t('pricing.checkout.invoiceSellerValue')}</dd>
+                </div>
+                {organization.data ? (
+                  <>
+                    <div>
+                      <dt>{t('pricing.checkout.invoiceBuyer')}</dt>
+                      <dd>
+                        {organization.data.billingCompanyName?.trim() || organization.data.name}
+                        {invoiceAddress(organization.data) ? <><br />{invoiceAddress(organization.data)}</> : null}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('pricing.checkout.invoiceVatId')}</dt>
+                      <dd>{organization.data.taxId || <span className="muted">{t('pricing.checkout.invoiceVatIdMissing')}</span>}</dd>
+                    </div>
+                  </>
+                ) : null}
+                <div>
+                  <dt>{t('pricing.checkout.invoiceItem')}</dt>
+                  <dd>{t('pricing.checkout.invoiceItemValue', {
+                    plan: selectedPlan.name,
+                    interval: t(selectedInterval === 'annual' ? 'pricing.billing.annual' : 'pricing.billing.monthly')
+                  })}</dd>
+                </div>
+              </dl>
+              {organization.data && !organization.data.hasCompleteBillingDetails ? (
+                <p className="formMessage formMessage--error">{t('pricing.checkout.invoiceDetailsIncomplete')}</p>
+              ) : null}
+              <Link className="pricing-promoToggle" to="/settings?tab=company">{t('pricing.checkout.invoiceEditDetails')}</Link>
+              <p className="pricing-confirm-detail">{t('pricing.checkout.invoiceVatNote')}</p>
+            </div>
 
             {!isDowngrade && (
               <div style={{ marginTop: 16 }}>

@@ -7,6 +7,7 @@ import { PublicFooter } from '../components/PublicFooter';
 import { LoadingState } from '../components/StateViews';
 import { LanguageSwitcher } from '../i18n/LanguageSwitcher';
 import { useAuth } from '../auth/AuthProvider';
+import { useCelebration } from '../celebration/CelebrationProvider';
 import { useI18n } from '../i18n/I18nProvider';
 
 /** Set by the pricing page just before it opens Paddle, read here after the overlay reports a completed
@@ -39,6 +40,13 @@ export function CheckoutSuccessPage() {
   });
   const [activePlanName, setActivePlanName] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  const { celebrate } = useCelebration();
+
+  // The moment the plan the buyer paid for is really on the record - never on the bare payment event, so
+  // the fanfare cannot run ahead of an entitlement that has not landed yet.
+  useEffect(() => {
+    if (activePlanName) celebrate(t('checkout.celebrate', { plan: activePlanName }));
+  }, [activePlanName, celebrate, t]);
 
   // Nothing to wait for when the buyer is not signed in (an invoice paid from a Paddle mail via /checkout,
   // often by someone who is not the account owner) or when no plan was recorded before the checkout.

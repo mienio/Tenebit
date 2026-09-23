@@ -11,7 +11,10 @@ export interface PaddleCheckoutOpenOptions {
   /** An existing transaction to pay, used by the public /checkout page for payment links Paddle itself
    * sends out (invoice "Pay" buttons, failed-payment recovery mails). */
   transactionId?: string;
-  customer?: { id: string };
+  /** `address`/`business` are Paddle objects created server-side from the organization's own invoice
+   * details (see SubscriptionService.SyncBillingDetailsAsync) - passing them is what puts the buyer's
+   * VAT ID on the invoice Paddle issues, and saves a company retyping it inside the overlay. */
+  customer?: { id: string; address?: { id: string }; business?: { id: string } };
   discountId?: string | null;
   /** Echoed back verbatim on the transaction.completed webhook - carries the affiliate attribution
    * resolved server-side in GET /api/subscription/checkout-params (see CheckoutParams.affiliateCode). */

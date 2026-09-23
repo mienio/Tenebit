@@ -601,9 +601,25 @@ public sealed class FakePaymentGateway : IPaymentGateway
     public IReadOnlyList<PaymentInvoice> NextInvoices { get; set; } = [];
     public string? LastListInvoicesCustomerId { get; private set; }
 
-    public Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken)
+    public BillingProfile? LastBillingProfile { get; private set; }
+    public string? LastBillingCustomerId { get; private set; }
+    public PaddleBillingEntities NextBillingEntities { get; set; } = new("add_fake", "biz_fake");
+    public Exception? ThrowOnSyncCustomerBilling { get; set; }
+
+    public Task<PaddleBillingEntities> SyncCustomerBillingAsync(string customerId, BillingProfile profile, CancellationToken cancellationToken)
+    {
+        LastBillingCustomerId = customerId;
+        LastBillingProfile = profile;
+        if (ThrowOnSyncCustomerBilling is not null) throw ThrowOnSyncCustomerBilling;
+        return Task.FromResult(NextBillingEntities);
+    }
+
+    public int? LastListInvoicesLimit { get; private set; }
+
+    public Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken, int limit = 100)
     {
         LastListInvoicesCustomerId = customerId;
+        LastListInvoicesLimit = limit;
         return Task.FromResult(NextInvoices);
     }
 

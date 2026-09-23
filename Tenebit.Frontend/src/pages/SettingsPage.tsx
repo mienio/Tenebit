@@ -276,7 +276,16 @@ export function SettingsPage() {
         language: organization.data?.language ?? 'pl',
         currency: String(form.get('currency') ?? 'PLN').trim(),
         timeZone: String(form.get('timeZone') ?? 'Europe/Warsaw').trim(),
-        logoUrl: toNullable(String(form.get('logoUrl') ?? ''))
+        logoUrl: toNullable(String(form.get('logoUrl') ?? '')),
+        // Dane nabywcy na fakturę Paddle. Numer VAT normalizuje backend (usuwa separatory, dokłada
+        // prefiks kraju w UE), więc wysyłamy dokładnie to, co wpisano.
+        billingCompanyName: toNullable(String(form.get('billingCompanyName') ?? '')),
+        taxId: toNullable(String(form.get('taxId') ?? '')),
+        billingAddressLine1: toNullable(String(form.get('billingAddressLine1') ?? '')),
+        billingAddressLine2: toNullable(String(form.get('billingAddressLine2') ?? '')),
+        billingCity: toNullable(String(form.get('billingCity') ?? '')),
+        billingPostalCode: toNullable(String(form.get('billingPostalCode') ?? '')),
+        billingCountry: toNullable(String(form.get('billingCountry') ?? ''))
       });
       success(t('settings.companySaved'));
       await organization.reload();
@@ -562,6 +571,28 @@ export function SettingsPage() {
           <Field label={t('settings.currencyLabel')}><TextInput name="currency" defaultValue={organization.data.currency} /></Field>
           <Field label={t('settings.timeZoneLabel')}><TextInput name="timeZone" defaultValue={organization.data.timeZone} /></Field>
           <Field label={t('settings.logoUrlLabel')}><TextInput name="logoUrl" defaultValue={organization.data.logoUrl ?? ''} /></Field>
+
+          {/* Dane nabywcy na fakturze. Paddle jest sprzedawcą (Merchant of Record) i to on wystawia
+              dokument, więc numer VAT trafia na niego tylko stąd - bez tego pola firma nie miała gdzie
+              podać NIP-u i faktura wychodziła jak na osobę prywatną. */}
+          <div className="formSection">
+            <h3>{t('settings.billingDetails')}</h3>
+            <p>{t('settings.billingDetailsHint')}</p>
+          </div>
+          <Field label={t('settings.billingCompanyNameLabel')} info={t('settings.billingCompanyNameHint')}>
+            <TextInput name="billingCompanyName" defaultValue={organization.data.billingCompanyName ?? ''} placeholder={organization.data.name} />
+          </Field>
+          <Field label={t('settings.vatIdLabel')} info={t('settings.vatIdHint')}>
+            <TextInput name="taxId" defaultValue={organization.data.taxId ?? ''} placeholder="PL1234563218" />
+          </Field>
+          <Field label={t('settings.billingAddressLine1Label')}><TextInput name="billingAddressLine1" defaultValue={organization.data.billingAddressLine1 ?? ''} /></Field>
+          <Field label={t('settings.billingAddressLine2Label')}><TextInput name="billingAddressLine2" defaultValue={organization.data.billingAddressLine2 ?? ''} /></Field>
+          <Field label={t('settings.billingPostalCodeLabel')}><TextInput name="billingPostalCode" defaultValue={organization.data.billingPostalCode ?? ''} /></Field>
+          <Field label={t('settings.billingCityLabel')}><TextInput name="billingCity" defaultValue={organization.data.billingCity ?? ''} /></Field>
+          <Field label={t('settings.billingCountryLabel')} info={t('settings.billingCountryHint')}>
+            <TextInput name="billingCountry" defaultValue={organization.data.billingCountry ?? ''} placeholder={organization.data.country} maxLength={2} />
+          </Field>
+
           <div className="formActions formActions--split"><span className="muted">{t('settings.futureProtocolsHint')}</span><Button icon={<Save size={16} />}>{t('settings.save')}</Button></div>
         </form>
       </Card></div> : null}

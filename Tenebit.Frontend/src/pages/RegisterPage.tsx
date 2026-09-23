@@ -84,7 +84,8 @@ export function RegisterPage() {
         String(form.get('currency') ?? FALLBACK_CURRENCY),
         language,
         form.get('acceptTerms') === 'on',
-        turnstileToken
+        turnstileToken,
+        String(form.get('taxId') ?? '').trim()
       );
       const destination = result.requiresEmailVerification
         ? `/verify-email#email=${encodeURIComponent(email)}`
@@ -111,6 +112,7 @@ export function RegisterPage() {
         </p>
         <form className="formGrid" onSubmit={handleSubmit}>
           <Field label={t('auth.orgNameLabel')}><TextInput name="organizationName" required autoFocus /></Field>
+          <Field label={t('auth.taxIdLabel')} info={t('auth.taxIdHint')}><TextInput name="taxId" autoComplete="off" placeholder="PL1234563218" /></Field>
           <Field label={t('auth.displayNameLabel')}><TextInput name="displayName" required autoComplete="name" /></Field>
           <Field label={t('auth.emailLabel')}><TextInput name="email" type="email" required autoComplete="email" /></Field>
           <Field label={t('auth.currencyLabel')}>

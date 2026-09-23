@@ -38,7 +38,7 @@ type AuthContextValue = {
   avatarVersion: number;
   login: (email: string, password: string) => Promise<LoginOutcome>;
   completeTwoFactorLogin: (challengeToken: string, code: string, rememberDevice: boolean) => Promise<void>;
-  register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string, acceptTerms: boolean, turnstileToken: string | null) => Promise<RegisterOutcome>;
+  register: (organizationName: string, displayName: string, email: string, password: string, currency: string, language: string, acceptTerms: boolean, turnstileToken: string | null, taxId?: string | null) => Promise<RegisterOutcome>;
   loginWithToken: (token: string) => boolean;
   completeExternalLogin: () => Promise<boolean>;
   logout: () => Promise<boolean>;
@@ -213,10 +213,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiRequest<LoginResponse>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ challengeToken, code, rememberDevice }) });
       applySession(response);
     },
-    register: async (organizationName, displayName, email, password, currency, language, acceptTerms, turnstileToken) =>
+    register: async (organizationName, displayName, email, password, currency, language, acceptTerms, turnstileToken, taxId) =>
       apiRequest<RegisterOutcome>('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ organizationName, displayName, email, password, currency, language, acceptTerms, turnstileToken })
+        body: JSON.stringify({ organizationName, displayName, email, password, currency, language, acceptTerms, turnstileToken, taxId: taxId || null })
       }),
     loginWithToken: (token: string) => {
       const fromToken = userFromToken(token);

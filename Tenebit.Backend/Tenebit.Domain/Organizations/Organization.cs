@@ -48,6 +48,38 @@ public sealed class Organization
     public string? QrLabelLogoContentType { get; private set; }
     public bool HasCustomQrLabelLogo => QrLabelLogoImage is { Length: > 0 };
 
+    // Dane nabywcy drukowane na fakturze wystawianej przez Paddle (Merchant of Record). Trzymamy je u
+    // siebie, a nie tylko w Paddle, z dwóch powodów: kupujący musi móc je sprawdzić i poprawić w
+    // ustawieniach jeszcze przed zapłatą (podgląd faktury na /pricing), a checkout ma je podstawić
+    // zamiast kazać firmie przepisywać NIP w okienku Paddle.
+    public string? BillingCompanyName { get; private set; }
+
+    /// <summary>Numer VAT nabywcy - w Polsce NIP, w UE numer VAT UE. Zawsze przechowywany w postaci
+    /// znormalizowanej (bez spacji i myślników, wielkimi literami), bo tylko taką przyjmuje Paddle i tylko
+    /// taką da się porównać z tym, co wróci z jego API.</summary>
+    public string? TaxId { get; private set; }
+    public string? BillingAddressLine1 { get; private set; }
+    public string? BillingAddressLine2 { get; private set; }
+    public string? BillingCity { get; private set; }
+    public string? BillingPostalCode { get; private set; }
+    public string? BillingCountry { get; private set; }
+
+    /// <summary>Nazwa nabywcy na fakturze - dane rozliczeniowe, a w ich braku nazwa organizacji.</summary>
+    public string InvoiceName => string.IsNullOrWhiteSpace(BillingCompanyName) ? Name : BillingCompanyName;
+
+    /// <summary>Kraj nabywcy na fakturze (ISO 3166-1 alpha-2) - z danych rozliczeniowych, a w ich braku
+    /// kraj organizacji.</summary>
+    public string InvoiceCountry => string.IsNullOrWhiteSpace(BillingCountry) ? Country : BillingCountry;
+
+    /// <summary>Komplet danych, których Paddle wymaga do wystawienia faktury na firmę: nazwa, numer VAT
+    /// oraz adres (Paddle wymaga co najmniej kraju i kodu pocztowego).</summary>
+    public bool HasCompleteBillingDetails =>
+        !string.IsNullOrWhiteSpace(TaxId) &&
+        !string.IsNullOrWhiteSpace(BillingAddressLine1) &&
+        !string.IsNullOrWhiteSpace(BillingCity) &&
+        !string.IsNullOrWhiteSpace(BillingPostalCode) &&
+        !string.IsNullOrWhiteSpace(InvoiceCountry);
+
     public QrLabelAppearance QrLabelAppearance => new(
         QrLabelShowName,
         QrLabelShowTag,
@@ -182,6 +214,72 @@ public sealed class Organization
         var start = QuietHoursStart.Value;
         var end = QuietHoursEnd.Value;
         return start < end ? (localTime >= start && localTime < end) : (localTime >= start || localTime < end);
+    }
+
+    public const int TaxIdMaxLength = 20;
+
+    /// <summary>Kraje, w których numer VAT zaczyna się od dwuliterowego prefiksu - tam sam ciąg cyfr (np.
+    /// polski NIP przepisany z pieczątki) jest poprawnym numerem dopiero po dopisaniu prefiksu, a bez
+    /// niego Paddle odrzuca go jako nieprawidłowy. Grecja jest wyjątkiem: kod kraju to GR, a prefiks VAT
+    /// to EL.</summary>
+    private static readonly Dictionary<string, string> VatPrefixByCountry = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["AT"] = "ATU", ["BE"] = "BE", ["BG"] = "BG", ["HR"] = "HR", ["CY"] = "CY", ["CZ"] = "CZ",
+        ["DK"] = "DK", ["EE"] = "EE", ["FI"] = "FI", ["FR"] = "FR", ["DE"] = "DE", ["GR"] = "EL",
+        ["HU"] = "HU", ["IE"] = "IE", ["IT"] = "IT", ["LV"] = "LV", ["LT"] = "LT", ["LU"] = "LU",
+        ["MT"] = "MT", ["NL"] = "NL", ["PL"] = "PL", ["PT"] = "PT", ["RO"] = "RO", ["SK"] = "SK",
+        ["SI"] = "SI", ["ES"] = "ES", ["SE"] = "SE"
+    };
+
+    /// <summary>Sprowadza wpisany numer VAT do postaci, jakiej oczekuje Paddle: bez separatorów, wielkimi
+    /// literami i - dla krajów UE - z prefiksem kraju, jeśli użytkownik wpisał same cyfry.</summary>
+    public static string? NormalizeTaxId(string? raw, string? country)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        var compact = new string(raw.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        if (compact.Length == 0) return null;
+
+        if (compact.All(char.IsDigit)
+            && !string.IsNullOrWhiteSpace(country)
+            && VatPrefixByCountry.TryGetValue(country.Trim(), out var prefix))
+        {
+            compact = prefix + compact;
+        }
+
+        if (compact.Length < 5 || compact.Length > TaxIdMaxLength)
+        {
+            throw new DomainException("VAT ID ma nieprawidłową długość.");
+        }
+
+        return compact;
+    }
+
+    /// <summary>Dane nabywcy na fakturę. Wszystko jest opcjonalne - dopóki organizacja nie kupuje płatnego
+    /// planu, nie ma powodu ich wymagać; kompletności pilnuje dopiero checkout
+    /// (<see cref="HasCompleteBillingDetails"/>).</summary>
+    public void UpdateBillingDetails(string? companyName, string? taxId, string? addressLine1, string? addressLine2, string? city, string? postalCode, string? country)
+    {
+        var normalizedCountry = string.IsNullOrWhiteSpace(country) ? null : country.Trim().ToUpperInvariant();
+        if (normalizedCountry is { Length: not 2 })
+        {
+            throw new DomainException("Kraj do faktury podaj jako dwuliterowy kod ISO, np. PL.");
+        }
+
+        BillingCompanyName = Trimmed(companyName, 200);
+        TaxId = NormalizeTaxId(taxId, normalizedCountry ?? Country);
+        BillingAddressLine1 = Trimmed(addressLine1, 200);
+        BillingAddressLine2 = Trimmed(addressLine2, 200);
+        BillingCity = Trimmed(city, 120);
+        BillingPostalCode = Trimmed(postalCode, 20);
+        BillingCountry = normalizedCountry;
+    }
+
+    private static string? Trimmed(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 
     public void UpdateProfile(string name, string country, string language, string currency, string timeZone, string? logoUrl)

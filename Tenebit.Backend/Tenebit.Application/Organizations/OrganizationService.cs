@@ -32,7 +32,7 @@ public sealed class OrganizationService
         var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
         return organization is null
             ? Result<OrganizationResponse>.Failure(Error.NotFound("Organizacja nie istnieje."))
-            : Result<OrganizationResponse>.Success(new OrganizationResponse(organization.Id, organization.Name, organization.Country, organization.Language, organization.Currency, organization.TimeZone, organization.LogoUrl));
+            : Result<OrganizationResponse>.Success(ToResponse(organization));
     }
 
     public async Task<Result<OrganizationResponse>> UpdateCurrentAsync(UpdateOrganizationRequest request, CancellationToken cancellationToken)
@@ -45,13 +45,33 @@ public sealed class OrganizationService
             var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
             if (organization is null) return Result<OrganizationResponse>.Failure(Error.NotFound("Organizacja nie istnieje."));
             organization.UpdateProfile(request.Name, request.Country, request.Language, request.Currency, request.TimeZone, request.LogoUrl);
+            organization.UpdateBillingDetails(
+                request.BillingCompanyName, request.TaxId, request.BillingAddressLine1, request.BillingAddressLine2,
+                request.BillingCity, request.BillingPostalCode, request.BillingCountry);
             _activity.Add(new ActivityLog(organization.Id, "organization.updated", "organization", organization.Id, _currentUser.Subject, organization.Name, _clock.UtcNow));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
-            return Result<OrganizationResponse>.Success(new OrganizationResponse(organization.Id, organization.Name, organization.Country, organization.Language, organization.Currency, organization.TimeZone, organization.LogoUrl));
+            return Result<OrganizationResponse>.Success(ToResponse(organization));
         }
         catch (DomainException ex)
         {
             return Result<OrganizationResponse>.Failure(Error.Validation(ex.Message));
         }
     }
+
+    private static OrganizationResponse ToResponse(Domain.Organizations.Organization organization) => new(
+        organization.Id,
+        organization.Name,
+        organization.Country,
+        organization.Language,
+        organization.Currency,
+        organization.TimeZone,
+        organization.LogoUrl,
+        organization.BillingCompanyName,
+        organization.TaxId,
+        organization.BillingAddressLine1,
+        organization.BillingAddressLine2,
+        organization.BillingCity,
+        organization.BillingPostalCode,
+        organization.BillingCountry,
+        organization.HasCompleteBillingDetails);
 }

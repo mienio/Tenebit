@@ -851,6 +851,32 @@ export interface Organization {
   currency: string;
   timeZone: string;
   logoUrl?: string | null;
+  /** Nabywca na fakturze - puste oznacza "tak jak nazwa organizacji". */
+  billingCompanyName?: string | null;
+  /** Numer VAT / NIP nabywcy, znormalizowany przez backend (bez separatorów, z prefiksem kraju w UE). */
+  taxId?: string | null;
+  billingAddressLine1?: string | null;
+  billingAddressLine2?: string | null;
+  billingCity?: string | null;
+  billingPostalCode?: string | null;
+  billingCountry?: string | null;
+  /** Liczone przez backend - komplet danych, których Paddle potrzebuje do faktury na firmę. */
+  hasCompleteBillingDetails?: boolean;
+}
+
+/** Zapis profilu organizacji: `hasCompleteBillingDetails` liczy backend, więc nigdy go nie wysyłamy. */
+export type SaveOrganization = Omit<Organization, 'id' | 'hasCompleteBillingDetails'>;
+
+/** Faktura wystawiona przez Paddle (Merchant of Record). `pdfUrl` jest generowany przy odczycie i
+ * wygasa - nie da się go zapisać na później. */
+export interface Invoice {
+  id: string;
+  number: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  issuedAt: string;
+  pdfUrl: string | null;
 }
 
 
@@ -1015,6 +1041,11 @@ export interface CheckoutParams {
   /** Resolved server-side from the `tnb_aff` attribution cookie - echoed back verbatim as Paddle.js
    * `customData` so the webhook can credit the referring affiliate (never chosen by the frontend). */
   affiliateCode: string | null;
+  /** Paddle Address/Business objects carrying the organization's invoice details (company name, VAT ID,
+   * address). Null when there was nothing to attach or Paddle refused them - the overlay then collects
+   * the details itself instead of not opening at all. */
+  addressId: string | null;
+  businessId: string | null;
 }
 
 export interface PaddleClientConfig {

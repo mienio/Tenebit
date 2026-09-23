@@ -192,6 +192,21 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 
 .input { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 3px; padding: 10px 12px; color: var(--text); background: rgba(255,255,255,.92); }
 .textarea { min-height: 96px; resize: vertical; }
+/* Podglad faktury w oknie potwierdzenia zakupu - dane nabywcy, ktore trafia na dokument Paddle. */
+.invoicePreview { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.invoicePreview h3 { margin: 0 0 10px; font-size: 14px; font-weight: 680; }
+.invoicePreview dl { margin: 0; display: grid; gap: 8px; }
+.invoicePreview dl > div { display: grid; grid-template-columns: minmax(0, 110px) minmax(0, 1fr); gap: 10px; align-items: start; font-size: 13px; line-height: 1.5; }
+.invoicePreview dt { color: var(--muted); }
+.invoicePreview dd { margin: 0; }
+.invoicePreview .formMessage { margin-top: 10px; }
+.invoicePreview > a { display: inline-block; margin-top: 10px; }
+.pricing-invoices td a { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Naglowek sekcji wewnatrz dwukolumnowego formularza - np. "Dane do faktury" w ustawieniach firmy. */
+.formGrid .formSection { grid-column: 1 / -1; margin: 6px 0 0; }
+.formGrid .formSection h3 { margin: 0; font-size: 15px; font-weight: 680; letter-spacing: -0.02em; }
+.formGrid .formSection p { margin: 4px 0 0; color: var(--muted); line-height: 1.5; }
 .formActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; align-items: center; flex-wrap: wrap; }
 .formActions--split { justify-content: space-between; }
 .formMessage { grid-column: 1 / -1; margin: 0; color: var(--muted); background: var(--surface-strong); border: 1px solid var(--border); padding: 11px 13px; border-radius: 3px; }

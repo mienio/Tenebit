@@ -104,6 +104,10 @@ public static class SubscriptionEndpoints
             .RequireRateLimiting("code-guess")
             .WithTags("Subscription");
 
+        api.MapGet("/subscription/invoices", async (SubscriptionService service, CancellationToken cancellationToken) =>
+                (await service.ListInvoicesAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Subscription");
+
         api.MapPost("/subscription/billing-portal", async (SubscriptionService service, CancellationToken cancellationToken) =>
                 (await service.CreateCustomerPortalSessionAsync(cancellationToken)).ToHttpResult())
             .WithTags("Subscription");

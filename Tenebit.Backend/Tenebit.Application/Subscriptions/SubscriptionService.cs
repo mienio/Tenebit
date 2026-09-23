@@ -18,6 +18,9 @@ public sealed class SubscriptionService
     /// overlay.</summary>
     private const decimal MinimumChargeableAmount = 1.00m;
 
+    /// <summary>Ile faktur pokazujemy właścicielowi na stronie cennika.</summary>
+    private const int CustomerInvoiceHistoryLimit = 24;
+
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IProcessedPaddleEventRepository _processedEvents;
     private readonly IAssetRepository _assets;
@@ -350,8 +353,11 @@ public sealed class SubscriptionService
         // click-through cookie - it's an explicit, just-validated action by the customer, whereas the
         // cookie could be stale or from a different affiliate's link clicked earlier in the same browser.
         var affiliateCode = resolvedResult.Value!.AffiliateCode ?? await ResolveAffiliateCodeAsync(attributionToken, cancellationToken);
+        var billing = await SyncBillingDetailsAsync(subscription.PaddleCustomerId!, cancellationToken);
         var checkoutParams = await _paymentGateway.GetCheckoutParamsAsync(subscription.PaddleCustomerId!, targetPlan.Key, interval, cancellationToken, discount, affiliateCode);
-        return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId, checkoutParams.AffiliateCode));
+        return Result<CheckoutParamsResponse>.Success(new CheckoutParamsResponse(
+            checkoutParams.PriceId, checkoutParams.CustomerId, checkoutParams.DiscountId, checkoutParams.AffiliateCode,
+            billing.AddressId, billing.BusinessId));
     }
 
     /// <summary>Turns the <c>tnb_aff</c> attribution cookie (opaque token, spec §6.2/§13.1) into the
@@ -368,6 +374,67 @@ public sealed class SubscriptionService
 
         var code = await _affiliateCodes.GetByIdAsync(id, cancellationToken);
         return code is { IsActive: true } ? code.Code : null;
+    }
+
+    /// <summary>Pushes the organization's invoice details (company name, VAT ID, address) to Paddle right
+    /// before the overlay opens, so the invoice Paddle issues carries them and the buyer does not retype
+    /// the VAT ID inside the overlay.
+    ///
+    /// Best-effort by design: a rejected VAT number or any other Paddle-side problem with these details
+    /// must not stop someone from paying. The checkout then simply runs without them - Paddle still
+    /// collects an address itself - and the failure is logged rather than surfaced as a dead "upgrade"
+    /// button.</summary>
+    private async Task<PaddleBillingEntities> SyncBillingDetailsAsync(string customerId, CancellationToken cancellationToken)
+    {
+        var organization = await _organizations.GetAsync(_currentUser.OrganizationId, cancellationToken);
+        if (organization is null) return PaddleBillingEntities.None;
+
+        var profile = new BillingProfile(
+            organization.InvoiceName,
+            organization.TaxId,
+            organization.BillingAddressLine1,
+            organization.BillingAddressLine2,
+            organization.BillingCity,
+            organization.BillingPostalCode,
+            organization.InvoiceCountry);
+
+        try
+        {
+            return await _paymentGateway.SyncCustomerBillingAsync(customerId, profile, cancellationToken);
+        }
+        catch (PaymentGatewayException ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się przekazać do Paddle danych do faktury organizacji {OrganizationId}", _currentUser.OrganizationId);
+            return PaddleBillingEntities.None;
+        }
+    }
+
+    /// <summary>Faktury, które Paddle wystawił tej organizacji - z linkiem do PDF-a. Paddle jest tu
+    /// jedynym źródłem prawdy (niczego nie kopiujemy do własnej bazy), więc pusta lista to równie dobrze
+    /// "jeszcze nic nie kupiono", jak i "konto rozliczeniowe jeszcze nie istnieje".</summary>
+    public async Task<Result<IReadOnlyList<InvoiceResponse>>> ListInvoicesAsync(CancellationToken cancellationToken)
+    {
+        var access = AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner);
+        if (access.IsFailure) return Result<IReadOnlyList<InvoiceResponse>>.Failure(access.Error!);
+
+        var subscription = await _subscriptions.GetByOrganizationAsync(_currentUser.OrganizationId, cancellationToken);
+        if (!_paymentGateway.IsConfigured || string.IsNullOrWhiteSpace(subscription?.PaddleCustomerId))
+            return Result<IReadOnlyList<InvoiceResponse>>.Success([]);
+
+        try
+        {
+            // Kilka ostatnich dokumentów wystarcza na ekranie klienta, a każdy kosztuje osobne zapytanie do
+            // Paddle o link do PDF-a - pełna historia jest w portalu rozliczeniowym i w panelu admina.
+            var invoices = await _paymentGateway.ListInvoicesAsync(subscription.PaddleCustomerId, cancellationToken, CustomerInvoiceHistoryLimit);
+            return Result<IReadOnlyList<InvoiceResponse>>.Success(invoices
+                .Select(x => new InvoiceResponse(x.Id, x.Number, x.AmountDue, x.Currency, x.Status, x.Created, x.InvoicePdfUrl))
+                .ToList());
+        }
+        catch (PaymentGatewayException ex)
+        {
+            _logger.LogWarning(ex, "Nie udało się pobrać faktur organizacji {OrganizationId} z Paddle", _currentUser.OrganizationId);
+            return Result<IReadOnlyList<InvoiceResponse>>.Failure(Error.Validation("Nie udało się pobrać faktur z Paddle. Spróbuj ponownie za chwilę."));
+        }
     }
 
     /// <summary>
@@ -507,6 +574,12 @@ public sealed class SubscriptionService
             // Salt the idempotency key with the discount shape: a retry that adds/changes the code must not
             // be dropped as a duplicate of an earlier attempt that had no discount.
             var discountKey = discount is null ? "none" : $"{discount.Type}-{discount.Value:0.##}-{discount.DurationType}-{discount.DurationInMonths}";
+
+            // Ta gałąź wystawia fakturę od razu (proration), więc dane nabywcy muszą być u Paddle aktualne
+            // w tym momencie - inaczej NIP poprawiony w ustawieniach po pierwszym zakupie nigdy by na nią
+            // nie trafił, a podgląd faktury obiecywałby coś innego, niż Paddle wydrukuje.
+            if (!string.IsNullOrWhiteSpace(subscription.PaddleCustomerId))
+                await SyncBillingDetailsAsync(subscription.PaddleCustomerId, cancellationToken);
 
             PlanChangeResult result;
             try
@@ -830,7 +903,17 @@ public sealed record PromoCodeValidationResponse(
     string DurationType, int? DurationInMonths, string? Description);
 
 /// <summary>What Paddle.js needs to open a checkout overlay - no secrets, safe to hand to the frontend.</summary>
-public sealed record CheckoutParamsResponse(string PriceId, string CustomerId, string? DiscountId, string? AffiliateCode = null);
+public sealed record CheckoutParamsResponse(
+    string PriceId, string CustomerId, string? DiscountId, string? AffiliateCode = null,
+    /// <summary>Paddle Address/Business objects carrying the organization's invoice details (see
+    /// SubscriptionService.SyncBillingDetailsAsync). Null when there was nothing to attach or Paddle
+    /// refused them - the checkout then opens without prefilled invoice data rather than not at all.</summary>
+    string? AddressId = null, string? BusinessId = null);
+
+/// <summary>One invoice Paddle issued for the organization. <paramref name="PdfUrl"/> is a short-lived
+/// link generated by Paddle on read - never stored, never mirrored.</summary>
+public sealed record InvoiceResponse(
+    string Id, string? Number, decimal Amount, string Currency, string Status, DateTimeOffset IssuedAt, string? PdfUrl);
 
 /// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
 /// immediately (an upgrade), or - when ChargesNow is false - the date the new price takes effect for free

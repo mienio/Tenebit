@@ -560,6 +560,13 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.CapturePublicIp).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.PrivacyNoticeUrl).HasMaxLength(600);
             entity.Property(x => x.PrivacyContactEmail).HasMaxLength(320);
+            entity.Property(x => x.BillingCompanyName).HasMaxLength(200);
+            entity.Property(x => x.TaxId).HasMaxLength(20);
+            entity.Property(x => x.BillingAddressLine1).HasMaxLength(200);
+            entity.Property(x => x.BillingAddressLine2).HasMaxLength(200);
+            entity.Property(x => x.BillingCity).HasMaxLength(120);
+            entity.Property(x => x.BillingPostalCode).HasMaxLength(20);
+            entity.Property(x => x.BillingCountry).HasMaxLength(2);
             entity.Property(x => x.QrLabelShowName).HasDefaultValue(true);
             entity.Property(x => x.QrLabelShowTag).HasDefaultValue(true);
             entity.Property(x => x.QrLabelShowSerialNumber).HasDefaultValue(false);
@@ -571,6 +578,9 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
             entity.Property(x => x.QrLabelFormat).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(QrLabelFormat.Medium63);
             entity.Ignore(x => x.QrLabelAppearance);
             entity.Ignore(x => x.HasCustomQrLabelLogo);
+            entity.Ignore(x => x.InvoiceName);
+            entity.Ignore(x => x.InvoiceCountry);
+            entity.Ignore(x => x.HasCompleteBillingDetails);
         });
     }
 

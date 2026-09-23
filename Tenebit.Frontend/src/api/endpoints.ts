@@ -124,7 +124,7 @@ export const api = {
   dashboardLayout: () => apiRequest<{ layoutJson: string | null }>('/api/dashboard/layout'),
   saveDashboardLayout: (layoutJson: string) => apiRequest<{ layoutJson: string | null }>('/api/dashboard/layout', { method: 'PUT', body: JSON.stringify({ layoutJson }) }),
   organization: () => apiRequest<Organization>('/api/organization'),
-  updateOrganization: (body: Omit<Organization, 'id'>) => apiRequest<Organization>('/api/organization', { method: 'PUT', body: JSON.stringify(body) }),
+  updateOrganization: (body: import('../types/domain').SaveOrganization) => apiRequest<Organization>('/api/organization', { method: 'PUT', body: JSON.stringify(body) }),
 
   onboardingStatus: () => apiRequest<OnboardingStatus>('/api/onboarding/status'),
   createEmployeePackage: (body: CreateEmployeePackageRequest) => apiRequest<EmployeePackageResponse>('/api/onboarding/employee-package', { method: 'POST', body: JSON.stringify(body) }),
@@ -196,6 +196,9 @@ export const api = {
   // Unlike Stripe's Billing Portal, Paddle's customer portal session has no return-url concept - the
   // customer closes it (or the app tab) to come back, there's nothing for the backend to build a redirect
   // from.
+  // Paddle jest wystawcą faktur (Merchant of Record) i jedynym miejscem, gdzie one istnieją - my ich
+  // nie kopiujemy do własnej bazy, tylko pytamy o nie przy każdym wejściu na cennik.
+  invoices: () => apiRequest<import('../types/domain').Invoice[]>('/api/subscription/invoices'),
   createBillingPortalSession: () => apiRequest<string>('/api/subscription/billing-portal', { method: 'POST' }),
   validatePromoCode: (planKey: string, billingInterval: 'monthly' | 'annual', code: string) => apiRequest<import('../types/domain').PromoCodeValidation>('/api/subscription/promo-code/validate', { method: 'POST', body: JSON.stringify({ planKey, code, billingInterval }) }),
 

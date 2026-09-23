@@ -142,6 +142,10 @@ public sealed class AuthService
             var currency = string.IsNullOrWhiteSpace(request.Currency) ? "PLN" : request.Currency.Trim().ToUpperInvariant();
             var language = string.IsNullOrWhiteSpace(request.Language) ? "pl" : request.Language.Trim().ToLowerInvariant();
             var organization = new Organization(request.OrganizationName, "PL", language, currency, "Europe/Warsaw");
+            if (!string.IsNullOrWhiteSpace(request.TaxId))
+            {
+                organization.UpdateBillingDetails(null, request.TaxId, null, null, null, null, null);
+            }
             _organizations.Add(organization);
 
             var user = new OrganizationUser(organization.Id, request.Email, request.DisplayName, true);

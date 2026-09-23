@@ -81,10 +81,22 @@ public interface IPaymentGateway
     /// Growth Annual case from the test report, where Paddle charged 36,85 EUR/year less than advertised.</summary>
     Task<IReadOnlyList<PlanPriceMismatch>> ListPlanPriceMismatchesAsync(CancellationToken cancellationToken);
 
+    /// <summary>Pushes the organization's own invoice details (company name, VAT ID, address) onto the
+    /// Paddle customer, creating or updating Paddle's Address and Business objects for it, and returns
+    /// their ids so a checkout can be opened against them.
+    ///
+    /// Paddle is the Merchant of Record and issues the invoice itself, so this is the only way a buyer's
+    /// VAT ID ever reaches the document. Attaching it up front also means a company does not retype its
+    /// NIP inside the Paddle overlay - and that what the invoice preview shows before payment is exactly
+    /// what Paddle will print.</summary>
+    Task<PaddleBillingEntities> SyncCustomerBillingAsync(string customerId, BillingProfile profile, CancellationToken cancellationToken);
+
     /// <summary>Lists a customer's Paddle transactions, newest first - the actual payment record (amount
     /// charged, currency, status, invoice PDF link) behind a subscription. Paddle is the only place this is
     /// stored; Tenebit's own database never mirrors it (see AdminOverviewService.GetOrganizationPaymentsAsync).</summary>
-    Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken);
+    /// <param name="limit">How many of the newest transactions to read. Each one costs a second Paddle
+    /// call for its invoice PDF link, so a screen that only shows a recent history asks for that much.</param>
+    Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken, int limit = 100);
 }
 
 /// <summary>When a plan switch takes effect for the customer: right now (an upgrade - prorated and charged
@@ -160,7 +172,7 @@ public sealed record PaymentSubscriptionState(
 /// <summary>What Paddle.js needs to open a checkout overlay for a new subscription - no secrets, safe to
 /// return to the frontend (the same trust level as a Stripe Checkout Session's client_secret used to be,
 /// but here it's just the plan's Price ID plus the customer/discount to prefill).</summary>
-public sealed record PaddleCheckoutParams(string PriceId, string CustomerId, string? DiscountId, string? AffiliateCode = null);
+public sealed record PaddleCheckoutParams(string PriceId, string CustomerId, string? DiscountId, string? AffiliateCode = null, string? AddressId = null, string? BusinessId = null);
 
 /// <summary>What a plan switch would actually do right now: either the exact amount Paddle would charge
 /// immediately (an upgrade), or - when EffectiveAt is set - the date the new price takes effect for free
@@ -205,6 +217,20 @@ public sealed record PlanPriceMismatch(
 /// charged (0 for a downgrade, or when the proration credit fully covered the new plan - a real, correct
 /// outcome and not a sign that nothing happened).</summary>
 public sealed record PlanChangeResult(PaymentSubscriptionState Subscription, decimal AmountCharged, string Currency);
+
+/// <summary>The buyer's own details as they should appear on the invoice Paddle issues.
+/// <paramref name="TaxId"/> is already normalized by the domain (no separators, EU country prefix where
+/// one applies - see Organization.NormalizeTaxId).</summary>
+public sealed record BillingProfile(
+    string CompanyName, string? TaxId, string? AddressLine1, string? AddressLine2, string? City,
+    string? PostalCode, string CountryCode);
+
+/// <summary>The Paddle objects carrying those details. Either id can be null when Paddle had nothing to
+/// attach them to (no address data yet, or no VAT ID - Paddle rejects a Business without one).</summary>
+public sealed record PaddleBillingEntities(string? AddressId, string? BusinessId)
+{
+    public static readonly PaddleBillingEntities None = new(null, null);
+}
 
 /// <summary>A single Paddle transaction - amounts in major currency units (already converted from Paddle's
 /// minor-unit string amounts), Currency as an ISO 4217 code (e.g. "EUR").</summary>

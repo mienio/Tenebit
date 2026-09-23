@@ -179,14 +179,89 @@ public sealed class PaddlePaymentGateway : IPaymentGateway
         throw new PaymentGatewayException("Paddle customer portal session had no overview URL.");
     }
 
+    public async Task<PaddleBillingEntities> SyncCustomerBillingAsync(string customerId, BillingProfile profile, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(customerId)) return PaddleBillingEntities.None;
+
+        var addressId = await SyncAddressAsync(customerId, profile, cancellationToken);
+        var businessId = await SyncBusinessAsync(customerId, profile, cancellationToken);
+        return new PaddleBillingEntities(addressId, businessId);
+    }
+
+    /// <summary>Paddle keeps a customer's addresses as separate objects and never deletes them, so this
+    /// updates the one already on file instead of piling up a new one per settings save. Anything less
+    /// than a country code is not an address Paddle will take.</summary>
+    private async Task<string?> SyncAddressAsync(string customerId, BillingProfile profile, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(profile.CountryCode)) return null;
+
+        var body = new Dictionary<string, object?>
+        {
+            ["country_code"] = profile.CountryCode.ToUpperInvariant(),
+            ["first_line"] = NullIfBlank(profile.AddressLine1),
+            ["second_line"] = NullIfBlank(profile.AddressLine2),
+            ["city"] = NullIfBlank(profile.City),
+            ["postal_code"] = NullIfBlank(profile.PostalCode),
+            ["description"] = "Tenebit"
+        };
+
+        var existing = await FindActiveAsync($"customers/{Uri.EscapeDataString(customerId)}/addresses", cancellationToken);
+        var json = existing is null
+            ? await PostJsonAsync($"customers/{Uri.EscapeDataString(customerId)}/addresses", body, cancellationToken)
+            : await PatchJsonAsync($"customers/{Uri.EscapeDataString(customerId)}/addresses/{Uri.EscapeDataString(existing)}", body, cancellationToken);
+
+        return json.TryGetProperty("id", out var id) ? id.GetString() : null;
+    }
+
+    /// <summary>A Paddle Business is what carries the buyer's VAT ID onto the invoice. Paddle requires a
+    /// name on it, and there is no point creating one without a tax identifier - a company with no VAT ID
+    /// is billed as a consumer, which is exactly what the plain customer object already does.</summary>
+    private async Task<string?> SyncBusinessAsync(string customerId, BillingProfile profile, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(profile.TaxId) || string.IsNullOrWhiteSpace(profile.CompanyName)) return null;
+
+        var body = new Dictionary<string, object?>
+        {
+            ["name"] = profile.CompanyName,
+            ["tax_identifier"] = profile.TaxId
+        };
+
+        var existing = await FindActiveAsync($"customers/{Uri.EscapeDataString(customerId)}/businesses", cancellationToken);
+        var json = existing is null
+            ? await PostJsonAsync($"customers/{Uri.EscapeDataString(customerId)}/businesses", body, cancellationToken)
+            : await PatchJsonAsync($"customers/{Uri.EscapeDataString(customerId)}/businesses/{Uri.EscapeDataString(existing)}", body, cancellationToken);
+
+        return json.TryGetProperty("id", out var id) ? id.GetString() : null;
+    }
+
+    /// <summary>Id of the first non-archived entry of a customer's sub-collection (addresses/businesses),
+    /// or null when there is none to reuse.</summary>
+    private async Task<string?> FindActiveAsync(string path, CancellationToken cancellationToken)
+    {
+        var json = await GetJsonAsync($"{path}?per_page=50", cancellationToken);
+        if (json.ValueKind != JsonValueKind.Array) return null;
+
+        foreach (var item in json.EnumerateArray())
+        {
+            var status = item.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
+            if (status is not null && !string.Equals(status, "active", StringComparison.OrdinalIgnoreCase)) continue;
+            if (item.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String) return id.GetString();
+        }
+
+        return null;
+    }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     /// <summary>Read-only lookup used by the admin panel to show what an organization has actually paid
     /// (see AdminOverviewService.GetOrganizationPaymentsAsync) - this never feeds Tenebit's own billing
     /// state, so it deliberately doesn't go through ParseWebhookEvent/PaymentSubscriptionState.</summary>
-    public async Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PaymentInvoice>> ListInvoicesAsync(string customerId, CancellationToken cancellationToken, int limit = 100)
     {
         if (string.IsNullOrWhiteSpace(customerId)) return [];
 
-        var json = await GetJsonAsync($"transactions?customer_id={Uri.EscapeDataString(customerId)}&per_page=100&order_by=billed_at[DESC]", cancellationToken);
+        var perPage = Math.Clamp(limit, 1, 100);
+        var json = await GetJsonAsync($"transactions?customer_id={Uri.EscapeDataString(customerId)}&per_page={perPage}&order_by=billed_at[DESC]", cancellationToken);
         if (json.ValueKind != JsonValueKind.Array) return [];
 
         var invoices = new List<PaymentInvoice>(json.GetArrayLength());
