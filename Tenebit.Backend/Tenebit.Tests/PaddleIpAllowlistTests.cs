@@ -70,15 +70,26 @@ public class PaddleIpAllowlistTests
         var allowlist = Loaded();
 
         Assert.True(allowlist.IsAllowed(IPAddress.Parse("::ffff:34.237.3.244")));
+        // Still judged as IPv4 after unmapping, so an unknown mapped address is a real reject - unlike a
+        // native IPv6 peer, which has no list to be judged against.
         Assert.False(allowlist.IsAllowed(IPAddress.Parse("::ffff:203.0.113.9")));
     }
 
     [Fact]
-    public void Rejects_a_real_ipv6_peer_and_an_unknown_one_once_the_list_is_known()
+    public void Lets_a_genuine_ipv6_peer_through_because_paddle_publishes_no_ipv6_ranges()
+    {
+        // Not an oversight: /ips returns ipv4_cidrs only, so an IPv6 caller cannot be judged either way.
+        // Denying it would break every webhook the day Paddle adds IPv6 egress.
+        var allowlist = Loaded();
+
+        Assert.True(allowlist.IsAllowed(IPAddress.Parse("2001:db8::1")));
+    }
+
+    [Fact]
+    public void Rejects_an_unknown_peer_once_the_list_is_known()
     {
         var allowlist = Loaded();
 
-        Assert.False(allowlist.IsAllowed(IPAddress.Parse("2001:db8::1")));
         Assert.False(allowlist.IsAllowed(null));
     }
 

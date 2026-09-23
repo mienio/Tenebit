@@ -40,7 +40,13 @@ public sealed class PaddleIpAllowlist : IPaddleIpAllowlist
         var ipv4 = remoteIp.AddressFamily == AddressFamily.InterNetworkV6 && remoteIp.IsIPv4MappedToIPv6
             ? remoteIp.MapToIPv4()
             : remoteIp;
-        if (ipv4.AddressFamily != AddressFamily.InterNetwork) return false;
+
+        // A genuine IPv6 peer is unjudgeable, not suspicious: Paddle's /ips publishes ipv4_cidrs and
+        // nothing else, so there is no list to check such an address against. Denying it would mean that
+        // the day Paddle adds IPv6 egress, every webhook starts failing and paying customers stop being
+        // provisioned - the same trade-off as the never-fetched case above, and the signature check still
+        // stands behind it. Revisit if Paddle ever starts publishing ipv6 ranges.
+        if (ipv4.AddressFamily != AddressFamily.InterNetwork) return true;
 
         var value = ToUInt32(ipv4);
         foreach (var cidr in cidrs)

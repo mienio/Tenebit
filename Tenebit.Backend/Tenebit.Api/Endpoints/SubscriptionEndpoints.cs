@@ -118,14 +118,24 @@ public static class SubscriptionEndpoints
             .WithTags("Subscription");
 
         api.MapPost("/subscription/webhook", async (
-                HttpRequest httpRequest, SubscriptionService service, Tenebit.Application.Affiliates.AffiliateConversionRecordingService affiliateConversions, IPaddleIpAllowlist paddleIps, CancellationToken cancellationToken) =>
+                HttpRequest httpRequest, SubscriptionService service, Tenebit.Application.Affiliates.AffiliateConversionRecordingService affiliateConversions, IPaddleIpAllowlist paddleIps, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
             {
                 // Dropped before the body is even read. The Paddle-Signature HMAC below is still what proves
                 // a payload genuine - this only keeps forged bodies from reaching the parser at all. 403 and
                 // not 404: Paddle surfaces the status in its dashboard, and a wrongly-rejected delivery
                 // should look like a rejection there rather than a missing endpoint.
-                if (!paddleIps.IsAllowed(httpRequest.HttpContext.Connection.RemoteIpAddress))
+                var remoteIp = httpRequest.HttpContext.Connection.RemoteIpAddress;
+                if (!paddleIps.IsAllowed(remoteIp))
+                {
+                    // Logged, because from Paddle's side this is an opaque 403 in the notification log. If a
+                    // genuine delivery ever gets refused - a new Paddle range, or the proxy chain handing us
+                    // the nginx container address instead of the real peer - this line is what says so, and
+                    // the address it prints is what tells the two apart.
+                    loggerFactory.CreateLogger("Tenebit.Api.PaddleWebhook").LogWarning(
+                        "Rejected a Paddle webhook from {RemoteIp}: not in the published Paddle IP allowlist.",
+                        remoteIp?.ToString() ?? "an unknown address");
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
+                }
 
                 using var reader = new StreamReader(httpRequest.Body);
                 var payload = await reader.ReadToEndAsync(cancellationToken);
