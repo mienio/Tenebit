@@ -7,7 +7,7 @@ import type { Language } from '../i18n/translations';
 import { legalContentFor } from '../legal/legalContent';
 
 export function PublicFooter({ compact = false, language: languageOverride }: { compact?: boolean; language?: Language }) {
-  const { language: siteLanguage } = useI18n();
+  const { t, language: siteLanguage } = useI18n();
   const language = languageOverride ?? siteLanguage;
   const ui = legalContentFor(language).ui;
 
@@ -32,6 +32,9 @@ export function PublicFooter({ compact = false, language: languageOverride }: { 
           </Link>
         </div>
         <nav className="publicFooter__links" aria-label={ui.contact}>
+          {/* Domain review wants the price list reachable from the site, not only from the landing page
+              mid-scroll, so it sits here next to the policies it is checked alongside. */}
+          <Link to="/plans">{t('landing.navPricing')}</Link>
           <Link to="/privacy">{ui.privacy}</Link>
           <Link to="/terms">{ui.terms}</Link>
           {/* Paddle's domain review checks that Terms, Refund policy and Privacy are all reachable from
