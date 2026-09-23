@@ -11,6 +11,9 @@
 **/*.tsbuildinfo
 .env
 .env.*
+# ...except the committed template. It holds no secrets and is the only record of which keys a
+# deployment needs - leaving it ignored is how the list silently drifts out of date.
+!.env.example
 !.env.example
 **/appsettings.Production.json
 **/appsettings.*.local.json

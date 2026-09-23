@@ -34,6 +34,9 @@ interface PaddleInitializeOptions {
   token: string;
   eventCallback?: (event: PaddleEvent) => void;
   checkout?: { settings?: { locale?: string } };
+  /** Paddle Retain. Must be the Paddle customer id (ctm_...) - Retain looks the subscriber up by it, so
+   * our own organization/user id or an email address here silently matches nobody. */
+  pwCustomer?: { id: string };
 }
 
 interface PaddleGlobal {
@@ -125,7 +128,8 @@ export function ensurePaddleReady(
   clientToken: string,
   environment: 'sandbox' | 'production',
   checkoutHandlers: PaddleCheckoutHandlers = {},
-  locale?: string
+  locale?: string,
+  paddleCustomerId?: string | null
 ): Promise<PaddleGlobal> {
   handlers = checkoutHandlers;
   if (!readyPromise) {
@@ -135,6 +139,11 @@ export function ensurePaddleReady(
       window.Paddle.Initialize({
         token: clientToken,
         checkout: locale ? { settings: { locale } } : undefined,
+        // Retain identifies the subscriber here and nowhere else. Initialize runs once per page load, so a
+        // customer id that only arrives later cannot be attached afterwards - callers that have one must
+        // hold off on the first call until they do (see PricingPage). Omitted entirely when unknown, which
+        // is the honest state for the public /checkout page and for an org that has never paid.
+        pwCustomer: paddleCustomerId ? { id: paddleCustomerId } : undefined,
         eventCallback: event => {
           if (event.name === 'checkout.completed') handlers.onCompleted?.();
           if (event.name === 'checkout.closed') handlers.onClosed?.();

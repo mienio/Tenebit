@@ -615,7 +615,10 @@ public sealed class SubscriptionService
             pendingPlan?.Key,
             pendingPlan?.Name,
             subscription.PendingPlanEffectiveAt,
-            subscription.PendingBillingInterval?.ToString()
+            subscription.PendingBillingInterval?.ToString(),
+            PaddleCustomerId: AccessPolicy.EnsureAnyRole(_currentUser, TenebitRoles.Owner).IsSuccess
+                ? subscription.PaddleCustomerId
+                : null
         );
     }
 
@@ -812,7 +815,12 @@ public sealed record SubscriptionResponse(
     /// for it (post proration credit; can legitimately be 0). Null everywhere else, including a plain
     /// GetCurrentAsync, where there's no "just happened" charge to report.</summary>
     decimal? LastChargeAmount = null,
-    string? LastChargeCurrency = null
+    string? LastChargeCurrency = null,
+    /// <summary>The organization's Paddle customer id (ctm_...), for Paddle Retain's <c>pwCustomer</c> at
+    /// Paddle.Initialize. Owner-only and null for everyone else: every member reads this response, but only
+    /// the owner ever drives billing, so there is no reason to hand the billing identity to the rest of the
+    /// workspace. Also null until the first checkout creates the Paddle customer.</summary>
+    string? PaddleCustomerId = null
 );
 
 public sealed record ResourceUsage(string Resource, int Current, int Limit);

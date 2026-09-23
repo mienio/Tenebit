@@ -118,8 +118,15 @@ public static class SubscriptionEndpoints
             .WithTags("Subscription");
 
         api.MapPost("/subscription/webhook", async (
-                HttpRequest httpRequest, SubscriptionService service, Tenebit.Application.Affiliates.AffiliateConversionRecordingService affiliateConversions, CancellationToken cancellationToken) =>
+                HttpRequest httpRequest, SubscriptionService service, Tenebit.Application.Affiliates.AffiliateConversionRecordingService affiliateConversions, IPaddleIpAllowlist paddleIps, CancellationToken cancellationToken) =>
             {
+                // Dropped before the body is even read. The Paddle-Signature HMAC below is still what proves
+                // a payload genuine - this only keeps forged bodies from reaching the parser at all. 403 and
+                // not 404: Paddle surfaces the status in its dashboard, and a wrongly-rejected delivery
+                // should look like a rejection there rather than a missing endpoint.
+                if (!paddleIps.IsAllowed(httpRequest.HttpContext.Connection.RemoteIpAddress))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
+
                 using var reader = new StreamReader(httpRequest.Body);
                 var payload = await reader.ReadToEndAsync(cancellationToken);
                 var signature = httpRequest.Headers["Paddle-Signature"].ToString();

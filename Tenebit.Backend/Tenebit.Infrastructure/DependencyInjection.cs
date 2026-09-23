@@ -127,6 +127,12 @@ public static class DependencyInjection
         // BaseAddress is left unset here - PaddlePaymentGateway picks sandbox vs production based on
         // Paddle:Environment in its own constructor, since (unlike Stripe) the two are different hosts.
         services.AddHttpClient<IPaymentGateway, PaddlePaymentGateway>();
+        // The allowlist itself holds no HttpClient - it is read on the webhook request path and must not
+        // depend on one. Only the background refresher calls out, through this named client.
+        services.AddHttpClient(nameof(PaddleIpAllowlist));
+        services.AddSingleton<PaddleIpAllowlist>();
+        services.AddSingleton<IPaddleIpAllowlist>(sp => sp.GetRequiredService<PaddleIpAllowlist>());
+        services.AddHostedService<PaddleIpAllowlistRefresher>();
         services.AddHttpClient<ITurnstileVerifier, TurnstileVerifier>();
         services.AddSingleton<IFieldEncryptor, FieldEncryptor>();
         services.AddSingleton<IPublicCapabilitySessionProtector, PublicCapabilitySessionProtector>();

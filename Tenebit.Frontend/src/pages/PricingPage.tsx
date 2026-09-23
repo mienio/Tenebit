@@ -59,11 +59,15 @@ export function PricingPage() {
   // eagerly for every visitor keeps the pricing page paying that cost even for existing paid customers who
   // will only ever use the in-app plan-change/preview flow below.
   useEffect(() => {
-    if (hasLivePaidSubscription) return;
+    // Wait for the subscription before touching Paddle.js at all. Paddle.Initialize runs once per page load
+    // and pwCustomer can only be supplied there, so initializing while the subscription is still in flight
+    // would permanently init Retain without a customer id for exactly the orgs that already have one.
+    if (!subscription.data || hasLivePaidSubscription) return;
+    const paddleCustomerId = subscription.data.paddleCustomerId;
     api.paddleConfig()
-      .then(config => { if (config.clientToken) ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language)); })
+      .then(config => { if (config.clientToken) ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language), paddleCustomerId); })
       .catch(() => { /* Paddle not configured yet - checkout will surface its own error when attempted. */ });
-  }, [hasLivePaidSubscription, language]);
+  }, [subscription.data, hasLivePaidSubscription, language]);
 
   useEffect(() => {
     if (!message) return;
@@ -149,7 +153,7 @@ export function PricingPage() {
       } else {
         const config = await api.paddleConfig();
         if (!config.clientToken) throw new Error('Paddle is not configured yet.');
-        const paddle = await ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language));
+        const paddle = await ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language), subscription.data?.paddleCustomerId);
         const params = await api.checkoutParams(plan.key, selectedInterval, promoCode);
         openPaddleCheckout(paddle, {
           items: [{ priceId: params.priceId, quantity: 1 }],

@@ -978,6 +978,9 @@ export interface Subscription {
    * it (can legitimately be 0). Null on a plain subscription fetch. */
   lastChargeAmount: number | null;
   lastChargeCurrency: string | null;
+  /** Paddle customer id (ctm_...) for Paddle Retain's pwCustomer. Sent only to the owner, and only once a
+   * checkout has actually created the customer on Paddle's side - null in every other case. */
+  paddleCustomerId: string | null;
 }
 
 export interface PlanChangePreview {
