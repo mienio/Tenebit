@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api/endpoints';
 import {
   ensurePaddleReady,
@@ -37,7 +37,6 @@ export function CheckoutPage() {
   const completed = useRef(false);
 
   useEffect(() => {
-    if (!transactionId) return;
     let cancelled = false;
 
     (async () => {
@@ -48,7 +47,7 @@ export function CheckoutPage() {
 
         // Has to happen before Initialize: Paddle.js picks `_ptxn` out of the address bar itself and would
         // open a second, unlocalized overlay next to the one opened below.
-        window.history.replaceState(null, '', stripTransactionId(window.location.href));
+        if (transactionId) window.history.replaceState(null, '', stripTransactionId(window.location.href));
 
         const locale = paddleLocaleFor(language);
         const paddle = await ensurePaddleReady(
@@ -66,7 +65,9 @@ export function CheckoutPage() {
           locale
         );
         if (cancelled) return;
-        openPaddleCheckout(paddle, { transactionId, settings: { locale } });
+        // No transaction means this was a bare visit - Paddle.js is loaded and initialized, which is what
+        // the default payment link has to provide, but there is nothing to open.
+        if (transactionId) openPaddleCheckout(paddle, { transactionId, settings: { locale } });
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
@@ -75,10 +76,9 @@ export function CheckoutPage() {
     return () => { cancelled = true; };
   }, [transactionId, language, navigate]);
 
-  // No transaction to pay - somebody typed the address or followed a stale link. /pricing is the honest
-  // destination: it shows the plans to a signed-in owner and sends everyone else to log in.
-  if (!transactionId) return <Navigate to="/pricing" replace />;
-
+  // A bare visit used to redirect to /pricing, which sits behind the auth guard - so this page, which
+  // Paddle requires to be a public page carrying Paddle.js, bounced an anonymous visitor into a login
+  // wall. It now stands on its own and points at the public price list instead.
   return (
     <main className="authShell">
       <section className="authCard">
@@ -92,9 +92,15 @@ export function CheckoutPage() {
           </div>
           <LanguageSwitcher />
         </div>
-        {error
-          ? <ErrorState message={t('checkout.error')} />
-          : <LoadingState title={t('checkout.loadingTitle')} description={t('checkout.loadingLead')} />}
+        {error ? <ErrorState message={t('checkout.error')} />
+          : transactionId ? <LoadingState title={t('checkout.loadingTitle')} description={t('checkout.loadingLead')} />
+            : (
+              <div className="authIntro">
+                <h1>{t('checkout.idleTitle')}</h1>
+                <p>{t('checkout.idleLead')}</p>
+                <Link to="/plans" className="button button--primary">{t('landing.navPricing')}</Link>
+              </div>
+            )}
       </section>
       <PublicFooter compact />
     </main>

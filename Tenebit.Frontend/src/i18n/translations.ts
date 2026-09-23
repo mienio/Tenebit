@@ -11,6 +11,8 @@ export const languages: { value: Language; label: string }[] = [
 
 export const translations: Record<Language, Record<string, string>> = {
   pl: {
+    'checkout.idleTitle': 'Nie ma tu płatności do dokończenia.',
+    'checkout.idleLead': 'Ta strona otwiera się z linku płatniczego Paddle - z faktury albo z wiadomości o nieudanym obciążeniu. Jeśli chcesz wykupić plan, zacznij od cennika.',
     'checkout.loadingTitle': 'Trwa ładowanie płatności…',
     'checkout.loadingLead': 'Za chwilę otworzy się bezpieczne okno płatności Paddle.',
     'checkout.error': 'Nie udało się otworzyć okna płatności. Odśwież stronę albo otwórz link od Paddle jeszcze raz.',
@@ -2034,6 +2036,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.offboardingAttentionLink': 'Przejdź do offboardingu'
   },
   en: {
+    'checkout.idleTitle': 'There is no payment to complete here.',
+    'checkout.idleLead': 'This page opens from a Paddle payment link - an invoice or a failed-payment email. If you want to buy a plan, start from the pricing page.',
     'checkout.loadingTitle': 'Loading payment…',
     'checkout.loadingLead': 'The secure Paddle payment window will open in a moment.',
     'checkout.error': 'The payment window could not be opened. Refresh the page or open the link from Paddle again.',
@@ -4051,6 +4055,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'alerts.weekday.sunday': 'Sunday'
   },
   es: {
+    'checkout.idleTitle': 'Aquí no hay ningún pago pendiente.',
+    'checkout.idleLead': 'Esta página se abre desde un enlace de pago de Paddle: una factura o un correo de pago fallido. Si quieres contratar un plan, empieza por la página de precios.',
     'checkout.loadingTitle': 'Cargando el pago…',
     'checkout.loadingLead': 'La ventana de pago segura de Paddle se abrirá en un momento.',
     'checkout.error': 'No se pudo abrir la ventana de pago. Actualiza la página o vuelve a abrir el enlace de Paddle.',
@@ -6045,6 +6051,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'activity.team.updated': 'Equipo actualizado',
   },
   de: {
+    'checkout.idleTitle': 'Hier gibt es keine Zahlung abzuschließen.',
+    'checkout.idleLead': 'Diese Seite wird über einen Paddle-Zahlungslink geöffnet - aus einer Rechnung oder einer E-Mail zu einer fehlgeschlagenen Zahlung. Wenn Sie einen Plan buchen möchten, beginnen Sie bei den Preisen.',
     'checkout.loadingTitle': 'Zahlung wird geladen…',
     'checkout.loadingLead': 'Das sichere Paddle-Zahlungsfenster öffnet sich gleich.',
     'checkout.error': 'Das Zahlungsfenster konnte nicht geöffnet werden. Laden Sie die Seite neu oder öffnen Sie den Link von Paddle erneut.',
@@ -8039,6 +8047,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'activity.team.updated': 'Team aktualisiert',
   },
   it: {
+    'checkout.idleTitle': 'Non c’è alcun pagamento da completare qui.',
+    'checkout.idleLead': 'Questa pagina si apre da un link di pagamento Paddle: una fattura o un’email di pagamento non riuscito. Se vuoi acquistare un piano, parti dalla pagina dei prezzi.',
     'checkout.loadingTitle': 'Caricamento del pagamento…',
     'checkout.loadingLead': 'La finestra di pagamento sicura di Paddle si aprirà tra un istante.',
     'checkout.error': 'Non è stato possibile aprire la finestra di pagamento. Aggiorna la pagina o riapri il link di Paddle.',
@@ -10016,6 +10026,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'assetAudits.completeCampaign': 'Completa la campagna'
   },
   fr: {
+    'checkout.idleTitle': 'Aucun paiement à finaliser ici.',
+    'checkout.idleLead': 'Cette page s’ouvre depuis un lien de paiement Paddle : une facture ou un e-mail de paiement échoué. Pour souscrire une formule, commencez par la page des tarifs.',
     'checkout.loadingTitle': 'Chargement du paiement…',
     'checkout.loadingLead': 'La fenêtre de paiement sécurisée Paddle va s\'ouvrir dans un instant.',
     'checkout.error': 'Impossible d\'ouvrir la fenêtre de paiement. Actualisez la page ou rouvrez le lien envoyé par Paddle.',
