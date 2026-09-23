@@ -6,6 +6,7 @@ import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TextInput } from '../components/FormFields';
 import { PLANS, PricingCards, type BillingInterval, type PlanDef } from '../components/PricingCards';
+import { EXPECTED_PLAN_KEY } from './CheckoutSuccessPage';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
 import type { PlanChangePreview, PromoCodeValidation } from '../types/domain';
@@ -51,8 +52,13 @@ export function PricingPage() {
   // had cached before the purchase (Layout's own sidebar subscription fetch in particular only ever runs
   // once per app session) until the customer manually hard-refreshes. A full navigation here guarantees
   // every cached bit of subscription state across the whole app is fetched fresh.
+  //
+  // It goes to /checkout/success and not straight into the app on purpose. The entitlement is written by
+  // Paddle's webhook, which has not necessarily landed by the time this fires, so dropping the buyer into
+  // the dashboard shows them the plan they just paid to leave. /checkout/success waits for the new plan
+  // and only then hands them on - the thank-you is doing real work, not just being polite.
   function handlePaddleCheckoutCompleted() {
-    window.location.href = '/dashboard?checkout=success';
+    window.location.href = '/checkout/success';
   }
 
   // Paddle.js is only ever needed for a brand-new checkout (no live paid subscription yet) - loading it
@@ -155,16 +161,24 @@ export function PricingPage() {
         if (!config.clientToken) throw new Error('Paddle is not configured yet.');
         const paddle = await ensurePaddleReady(config.clientToken, config.environment, { onCompleted: handlePaddleCheckoutCompleted }, paddleLocaleFor(language), subscription.data?.paddleCustomerId);
         const params = await api.checkoutParams(plan.key, selectedInterval, promoCode);
+        // Recorded before the overlay opens: /checkout/success is reached by a full page load, so this is
+        // the only way to tell it which plan it should be waiting for.
+        try { sessionStorage.setItem(EXPECTED_PLAN_KEY, plan.key); } catch { /* private mode - it will just skip the wait */ }
         openPaddleCheckout(paddle, {
           items: [{ priceId: params.priceId, quantity: 1 }],
           customer: { id: params.customerId },
           discountId: params.discountId,
           customData: params.affiliateCode ? { affiliate_code: params.affiliateCode } : undefined,
-          // allowQuantity: false used to be sent here too, but Paddle's sandbox checkout-service rejects it
-          // outright (verified live: transaction-checkout 400s with "validation.no_validation_set" at
-          // /data/settings/allow_quantity - a real Paddle.js/API quirk, not something wrong on our end).
-          // Omitting the setting entirely still gets us the single-item, quantity-1 checkout we want.
-          settings: { successUrl: `${window.location.origin}/dashboard?checkout=success`, locale: paddleLocaleFor(language) }
+          // allowQuantity: false cannot be sent here: Paddle's checkout-service rejects it outright with
+          // "validation.no_validation_set" at /data/settings/allow_quantity - re-verified against the live
+          // account on 2026-09-23, so this is a Paddle-side bug, not a sandbox quirk. The quantity stepper
+          // is therefore held down in the catalog instead, by capping each price at quantity max 1, which
+          // is the only place Paddle actually honours the limit.
+          //
+          // successUrl is deliberately not set. In overlay mode Paddle navigates its own iframe to it, so
+          // the whole application rendered inside the small checkout window and the buyer had to close it
+          // by hand. Without it Paddle reports checkout.completed and the parent window moves on instead.
+          settings: { locale: paddleLocaleFor(language) }
         });
         setUpgrading(false);
       }
