@@ -126,6 +126,7 @@ export function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/privacy" element={<LegalPage kind="privacy" />} />
         <Route path="/terms" element={<LegalPage kind="terms" />} />
+        <Route path="/refund" element={<LegalPage kind="refund" />} />
         <Route path="/cookies" element={<LegalPage kind="cookies" />} />
         {/* Paddle's Default payment link. Public on purpose: the shopper arrives from a Paddle mail,
             often not logged in, and a bounce through /login would drop the ?_ptxn transaction id. */}

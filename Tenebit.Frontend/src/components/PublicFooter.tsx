@@ -34,6 +34,9 @@ export function PublicFooter({ compact = false, language: languageOverride }: { 
         <nav className="publicFooter__links" aria-label={ui.contact}>
           <Link to="/privacy">{ui.privacy}</Link>
           <Link to="/terms">{ui.terms}</Link>
+          {/* Paddle's domain review checks that Terms, Refund policy and Privacy are all reachable from
+              navigation - the refund policy is not optional dressing, it gates going live. */}
+          <Link to="/refund">{ui.refund}</Link>
           <Link to="/cookies">{ui.cookies}</Link>
         </nav>
       </footer>

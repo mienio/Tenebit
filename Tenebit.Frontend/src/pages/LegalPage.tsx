@@ -31,6 +31,7 @@ export function LegalPage({ kind }: { kind: LegalDocumentKind }) {
         <aside className="legalNav" aria-label={ui.terms}>
           <NavLink to="/privacy">{ui.privacy}</NavLink>
           <NavLink to="/terms">{ui.terms}</NavLink>
+          <NavLink to="/refund">{ui.refund}</NavLink>
           <NavLink to="/cookies">{ui.cookies}</NavLink>
         </aside>
 

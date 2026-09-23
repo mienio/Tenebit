@@ -1,7 +1,7 @@
 import { legalConfig } from '../config/legal';
 import type { Language } from '../i18n/translations';
 
-export type LegalDocumentKind = 'privacy' | 'terms' | 'cookies';
+export type LegalDocumentKind = 'privacy' | 'terms' | 'cookies' | 'refund';
 
 type LegalSection = {
   title: string;
@@ -20,6 +20,7 @@ type LegalUi = {
   privacy: string;
   terms: string;
   cookies: string;
+  refund: string;
   contact: string;
   contactPrompt: string;
   effectiveDate: string;
@@ -52,7 +53,7 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
       home: 'Strona główna',
       privacy: 'Polityka prywatności',
       terms: 'Regulamin',
-      cookies: 'Cookies i pamięć urządzenia',
+      cookies: 'Cookies i pamięć urządzenia', refund: 'Polityka zwrotów',
       contact: 'Kontakt',
       contactPrompt: 'Pytania biznesowe albo problem, z którym możemy pomóc?',
       effectiveDate: 'Obowiązuje od',
@@ -66,6 +67,53 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
       affiliateProgram: 'Program partnerski'
     },
     documents: {
+      refund: {
+        title: 'Polityka zwrotów i anulowania',
+        description: 'Jak anulować płatny plan, co dzieje się z opłaconym okresem i kiedy przysługuje zwrot.',
+        sections: [
+          {
+            title: '1. Czego dotyczy ten dokument',
+            paragraphs: [
+              'Dokument opisuje anulowanie płatnych planów Tenebit oraz zasady zwrotu opłat. Plan Free jest bezpłatny - nie jest za niego pobierana żadna opłata, więc nie ma też czego zwracać.',
+              'Sprzedawcą rejestrowym (Merchant of Record) jest Paddle.com Market Ltd. To Paddle wystawia fakturę, pobiera płatność i realizuje ewentualny zwrot na tę samą metodę płatności, z której skorzystano przy zakupie.',
+            ]
+          },
+          {
+            title: '2. Anulowanie subskrypcji',
+            bullets: [
+              'subskrypcję można anulować w dowolnym momencie w portalu rozliczeniowym dostępnym z poziomu konta',
+              'dostęp do opłaconego planu działa do końca bieżącego okresu rozliczeniowego - miesięcznego albo rocznego',
+              'po tej dacie subskrypcja nie odnawia się i nie jest pobierana kolejna opłata',
+              'niewykorzystana część już opłaconego okresu nie podlega zwrotowi proporcjonalnemu',
+              'po zakończeniu płatnego okresu organizacja wraca na plan Free; dane pozostają, ale obowiązują limity planu Free',
+            ]
+          },
+          {
+            title: '3. Prawo odstąpienia dla konsumentów',
+            paragraphs: [
+              'Konsumentowi, a także osobie fizycznej zawierającej umowę bezpośrednio związaną z jej działalnością gospodarczą, gdy nie ma ona dla tej osoby charakteru zawodowego, przysługuje prawo odstąpienia od umowy w terminie 14 dni bez podania przyczyny. Zwracana jest wtedy pełna kwota.',
+              'Jeżeli świadczenie usługi rozpocznie się na wyraźne żądanie przed upływem tego terminu, prawo odstąpienia wygasa z chwilą pełnego wykonania usługi, a przy wykonaniu częściowym zwrot może zostać pomniejszony proporcjonalnie do zakresu świadczenia spełnionego do momentu odstąpienia.',
+              'Klientom niebędącym konsumentami prawo odstąpienia nie przysługuje.',
+            ]
+          },
+          {
+            title: '4. Zwroty poza powyższymi przypadkami',
+            bullets: [
+              'podwójne obciążenie lub inny błąd rozliczeniowy - zwracamy nadpłatę w całości',
+              'opłata pobrana już po skutecznym anulowaniu - zwracamy w całości',
+              'długotrwała awaria uniemożliwiająca korzystanie z usługi - rozpatrujemy indywidualnie',
+              'poza tymi sytuacjami zwrot za rozpoczęty okres rozliczeniowy nie przysługuje',
+            ]
+          },
+          {
+            title: '5. Jak zgłosić wniosek',
+            paragraphs: [
+              `Wniosek o zwrot lub odstąpienie wyślij na ${legalConfig.supportEmail}, podając organizację, datę płatności i powód. Odpowiadamy bez zbędnej zwłoki, co do zasady w ciągu 14 dni.`,
+              'Zatwierdzony zwrot realizuje Paddle na pierwotną metodę płatności. Czas zaksięgowania zależy od wystawcy karty lub operatora płatności i zwykle wynosi kilka dni roboczych.',
+            ]
+          },
+        ]
+      },
       privacy: {
         title: 'Polityka prywatności',
         description: 'Informacja o przetwarzaniu danych osobowych w serwisie Tenebit.',
@@ -265,9 +313,56 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   en: {
     ui: {
-      home: 'Home', privacy: 'Privacy policy', terms: 'Terms of service', cookies: 'Cookies and device storage', contact: 'Contact', contactPrompt: "Have a business inquiry, feature request, or a quality-of-life improvement in mind? We'd love to hear from you:", effectiveDate: 'Effective from', version: 'Version', storageNotice: 'Tenebit uses technical storage needed for sign-in and security, and, with your consent, Google Analytics for visit statistics.', storageNoticeDetails: 'Technical storage always applies. Google Analytics only runs after you consent, and you can withdraw at any time. See the cookies notice for details.', consentAccept: 'Accept', consentReject: 'Reject', manageConsent: 'Manage cookie consent', footerRights: 'All rights reserved.', affiliateProgram: 'Affiliate Program'
+      home: 'Home', privacy: 'Privacy policy', terms: 'Terms of service', cookies: 'Cookies and device storage', refund: 'Refund policy', contact: 'Contact', contactPrompt: "Have a business inquiry, feature request, or a quality-of-life improvement in mind? We'd love to hear from you:", effectiveDate: 'Effective from', version: 'Version', storageNotice: 'Tenebit uses technical storage needed for sign-in and security, and, with your consent, Google Analytics for visit statistics.', storageNoticeDetails: 'Technical storage always applies. Google Analytics only runs after you consent, and you can withdraw at any time. See the cookies notice for details.', consentAccept: 'Accept', consentReject: 'Reject', manageConsent: 'Manage cookie consent', footerRights: 'All rights reserved.', affiliateProgram: 'Affiliate Program'
     },
     documents: {
+      refund: {
+        title: 'Refund and cancellation policy',
+        description: 'How to cancel a paid plan, what happens to the period you already paid for, and when a refund applies.',
+        sections: [
+          {
+            title: '1. What this covers',
+            paragraphs: [
+              'This document covers cancelling a paid Tenebit plan and the rules for refunding fees. The Free plan carries no charge, so there is nothing to refund.',
+              'Paddle.com Market Ltd is the Merchant of Record. Paddle issues the invoice, takes the payment, and processes any refund back to the payment method used for the purchase.',
+            ]
+          },
+          {
+            title: '2. Cancelling a subscription',
+            bullets: [
+              'a subscription can be cancelled at any time from the billing portal reachable from your account',
+              'access to the paid plan continues until the end of the current billing period, monthly or annual',
+              'after that date the subscription does not renew and no further charge is taken',
+              'the unused remainder of a period already paid for is not refunded pro rata',
+              'when the paid period ends the organization returns to the Free plan; data is kept, but Free plan limits apply',
+            ]
+          },
+          {
+            title: '3. Consumer right of withdrawal',
+            paragraphs: [
+              'A consumer has the right to withdraw from the contract within 14 days without giving a reason, and is refunded in full.',
+              'Where the service is started at the customer’s express request before that period expires, the right of withdrawal ends once the service has been fully performed, and for partial performance the refund may be reduced in proportion to what was provided up to the moment of withdrawal.',
+              'Customers who are not consumers have no right of withdrawal.',
+            ]
+          },
+          {
+            title: '4. Refunds outside those cases',
+            bullets: [
+              'a duplicate charge or other billing error - refunded in full',
+              'a charge taken after a cancellation had already taken effect - refunded in full',
+              'a prolonged outage that made the service unusable - reviewed case by case',
+              'outside these situations a billing period already started is not refunded',
+            ]
+          },
+          {
+            title: '5. How to ask for a refund',
+            paragraphs: [
+              `Send refund and withdrawal requests to ${legalConfig.supportEmail} with your organization, the payment date and the reason. We respond without undue delay, generally within 14 days.`,
+              'An approved refund is issued by Paddle to the original payment method. How long it takes to appear depends on your card issuer or payment provider, usually several business days.',
+            ]
+          },
+        ]
+      },
       privacy: {
         title: 'Privacy policy', description: 'Information about personal data processing in Tenebit.', sections: [
           { title: '1. Processing roles', paragraphs: ['The Tenebit operator is the controller for account, billing, service security, contact and public website data.', 'For employee, contractor, equipment, procedure and other workspace data entered by an organization, that organization remains the controller and Tenebit acts as its processor under documented instructions.'] },
@@ -307,9 +402,56 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   es: {
     ui: {
-      home: 'Inicio', privacy: 'Política de privacidad', terms: 'Términos del servicio', cookies: 'Cookies y almacenamiento del dispositivo', contact: 'Contacto', contactPrompt: '¿Consultas comerciales o algo que podamos ayudarte a resolver?', effectiveDate: 'Vigente desde', version: 'Versión', storageNotice: 'Tenebit utiliza almacenamiento técnico necesario para iniciar sesión y proteger la cuenta y, con tu consentimiento, Google Analytics para estadísticas de visitas.', storageNoticeDetails: 'El almacenamiento técnico siempre está activo. Google Analytics solo se activa con tu consentimiento y puedes retirarlo en cualquier momento. Consulta el aviso de cookies para más detalles.', consentAccept: 'Aceptar', consentReject: 'Rechazar', manageConsent: 'Gestionar el consentimiento de cookies', footerRights: 'Todos los derechos reservados.', affiliateProgram: 'Programa de afiliados'
+      home: 'Inicio', privacy: 'Política de privacidad', terms: 'Términos del servicio', cookies: 'Cookies y almacenamiento del dispositivo', refund: 'Política de reembolso', contact: 'Contacto', contactPrompt: '¿Consultas comerciales o algo que podamos ayudarte a resolver?', effectiveDate: 'Vigente desde', version: 'Versión', storageNotice: 'Tenebit utiliza almacenamiento técnico necesario para iniciar sesión y proteger la cuenta y, con tu consentimiento, Google Analytics para estadísticas de visitas.', storageNoticeDetails: 'El almacenamiento técnico siempre está activo. Google Analytics solo se activa con tu consentimiento y puedes retirarlo en cualquier momento. Consulta el aviso de cookies para más detalles.', consentAccept: 'Aceptar', consentReject: 'Rechazar', manageConsent: 'Gestionar el consentimiento de cookies', footerRights: 'Todos los derechos reservados.', affiliateProgram: 'Programa de afiliados'
     },
     documents: {
+      refund: {
+        title: 'Política de reembolso y cancelación',
+        description: 'Cómo cancelar un plan de pago, qué ocurre con el periodo ya abonado y cuándo procede un reembolso.',
+        sections: [
+          {
+            title: '1. Alcance',
+            paragraphs: [
+              'Este documento regula la cancelación de los planes de pago de Tenebit y las reglas de reembolso. El plan Free no conlleva cargo alguno, por lo que no hay nada que reembolsar.',
+              'Paddle.com Market Ltd actúa como comerciante registrado (Merchant of Record). Paddle emite la factura, cobra el pago y tramita cualquier reembolso al mismo método de pago utilizado en la compra.',
+            ]
+          },
+          {
+            title: '2. Cancelación de la suscripción',
+            bullets: [
+              'la suscripción puede cancelarse en cualquier momento desde el portal de facturación accesible desde tu cuenta',
+              'el acceso al plan de pago continúa hasta el final del periodo de facturación en curso, mensual o anual',
+              'a partir de esa fecha la suscripción no se renueva y no se realiza ningún cargo adicional',
+              'la parte no utilizada de un periodo ya abonado no se reembolsa de forma proporcional',
+              'al terminar el periodo de pago la organización vuelve al plan Free; los datos se conservan, pero se aplican los límites del plan Free',
+            ]
+          },
+          {
+            title: '3. Derecho de desistimiento del consumidor',
+            paragraphs: [
+              'El consumidor tiene derecho a desistir del contrato en un plazo de 14 días sin necesidad de justificación, con reembolso íntegro.',
+              'Si la prestación del servicio comienza a petición expresa del cliente antes de que venza ese plazo, el derecho de desistimiento se extingue una vez ejecutado por completo el servicio y, en caso de ejecución parcial, el reembolso puede reducirse en proporción a lo prestado hasta el momento del desistimiento.',
+              'Los clientes que no sean consumidores no disponen de derecho de desistimiento.',
+            ]
+          },
+          {
+            title: '4. Reembolsos fuera de esos supuestos',
+            bullets: [
+              'cargo duplicado u otro error de facturación: se reembolsa íntegramente',
+              'cargo realizado después de que la cancelación surtiera efecto: se reembolsa íntegramente',
+              'interrupción prolongada que impidió usar el servicio: se estudia caso por caso',
+              'fuera de estos supuestos, un periodo de facturación ya iniciado no se reembolsa',
+            ]
+          },
+          {
+            title: '5. Cómo solicitarlo',
+            paragraphs: [
+              `Envía las solicitudes de reembolso o desistimiento a ${legalConfig.supportEmail} indicando la organización, la fecha del pago y el motivo. Respondemos sin dilación indebida, por lo general en un plazo de 14 días.`,
+              'El reembolso aprobado lo emite Paddle al método de pago original. El tiempo hasta que se refleja depende de tu emisor de tarjeta o proveedor de pago, normalmente varios días hábiles.',
+            ]
+          },
+        ]
+      },
       privacy: {
         title: 'Política de privacidad', description: 'Información sobre el tratamiento de datos personales en Tenebit.', sections: [
           { title: '1. Roles de tratamiento', paragraphs: ['El operador de Tenebit es responsable de los datos de cuenta, facturación, seguridad, contacto y sitio público.', 'Para los datos de empleados, colaboradores, equipos, procedimientos y demás contenido introducido por una organización, dicha organización sigue siendo responsable y Tenebit actúa como encargado según sus instrucciones documentadas.'] },
@@ -349,9 +491,56 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   de: {
     ui: {
-      home: 'Startseite', privacy: 'Datenschutzerklärung', terms: 'Nutzungsbedingungen', cookies: 'Cookies und Gerätespeicher', contact: 'Kontakt', contactPrompt: 'Geschäftliche Anfragen oder ein Problem, bei dem wir helfen können?', effectiveDate: 'Gültig ab', version: 'Version', storageNotice: 'Tenebit verwendet technischen Speicher für Anmeldung und Sicherheit sowie, mit Ihrer Einwilligung, Google Analytics für Besuchsstatistiken.', storageNoticeDetails: 'Technischer Speicher ist immer aktiv. Google Analytics läuft erst nach Ihrer Einwilligung und kann jederzeit widerrufen werden. Details stehen im Cookie-Hinweis.', consentAccept: 'Akzeptieren', consentReject: 'Ablehnen', manageConsent: 'Cookie-Einwilligung verwalten', footerRights: 'Alle Rechte vorbehalten.', affiliateProgram: 'Partnerprogramm'
+      home: 'Startseite', privacy: 'Datenschutzerklärung', terms: 'Nutzungsbedingungen', cookies: 'Cookies und Gerätespeicher', refund: 'Erstattungsrichtlinie', contact: 'Kontakt', contactPrompt: 'Geschäftliche Anfragen oder ein Problem, bei dem wir helfen können?', effectiveDate: 'Gültig ab', version: 'Version', storageNotice: 'Tenebit verwendet technischen Speicher für Anmeldung und Sicherheit sowie, mit Ihrer Einwilligung, Google Analytics für Besuchsstatistiken.', storageNoticeDetails: 'Technischer Speicher ist immer aktiv. Google Analytics läuft erst nach Ihrer Einwilligung und kann jederzeit widerrufen werden. Details stehen im Cookie-Hinweis.', consentAccept: 'Akzeptieren', consentReject: 'Ablehnen', manageConsent: 'Cookie-Einwilligung verwalten', footerRights: 'Alle Rechte vorbehalten.', affiliateProgram: 'Partnerprogramm'
     },
     documents: {
+      refund: {
+        title: 'Erstattungs- und Kündigungsrichtlinie',
+        description: 'Wie ein kostenpflichtiger Plan gekündigt wird, was mit dem bereits bezahlten Zeitraum geschieht und wann eine Erstattung erfolgt.',
+        sections: [
+          {
+            title: '1. Geltungsbereich',
+            paragraphs: [
+              'Dieses Dokument regelt die Kündigung kostenpflichtiger Tenebit-Pläne und die Erstattung von Entgelten. Der Free-Plan ist kostenlos, es gibt also nichts zu erstatten.',
+              'Paddle.com Market Ltd ist Merchant of Record. Paddle stellt die Rechnung aus, zieht die Zahlung ein und wickelt eine Erstattung auf dasselbe Zahlungsmittel ab, das beim Kauf verwendet wurde.',
+            ]
+          },
+          {
+            title: '2. Kündigung des Abonnements',
+            bullets: [
+              'das Abonnement kann jederzeit im Abrechnungsportal gekündigt werden, das über das Konto erreichbar ist',
+              'der Zugang zum bezahlten Plan bleibt bis zum Ende der laufenden Abrechnungsperiode bestehen, monatlich oder jährlich',
+              'nach diesem Datum verlängert sich das Abonnement nicht und es wird kein weiteres Entgelt eingezogen',
+              'der ungenutzte Rest einer bereits bezahlten Periode wird nicht anteilig erstattet',
+              'nach Ablauf des bezahlten Zeitraums wechselt die Organisation zurück auf den Free-Plan; die Daten bleiben erhalten, es gelten jedoch die Limits des Free-Plans',
+            ]
+          },
+          {
+            title: '3. Widerrufsrecht für Verbraucher',
+            paragraphs: [
+              'Verbraucher können den Vertrag innerhalb von 14 Tagen ohne Angabe von Gründen widerrufen und erhalten den vollen Betrag zurück.',
+              'Wird die Leistung auf ausdrücklichen Wunsch vor Ablauf dieser Frist begonnen, erlischt das Widerrufsrecht mit vollständiger Erbringung der Leistung; bei teilweiser Erbringung kann die Erstattung anteilig um den bis zum Widerruf erbrachten Umfang gekürzt werden.',
+              'Kunden, die keine Verbraucher sind, steht kein Widerrufsrecht zu.',
+            ]
+          },
+          {
+            title: '4. Erstattungen außerhalb dieser Fälle',
+            bullets: [
+              'doppelte Belastung oder sonstiger Abrechnungsfehler - wird vollständig erstattet',
+              'Belastung nach bereits wirksamer Kündigung - wird vollständig erstattet',
+              'länger andauernde Störung, die die Nutzung unmöglich gemacht hat - Prüfung im Einzelfall',
+              'außerhalb dieser Fälle wird eine bereits begonnene Abrechnungsperiode nicht erstattet',
+            ]
+          },
+          {
+            title: '5. Antragstellung',
+            paragraphs: [
+              `Anträge auf Erstattung oder Widerruf senden Sie an ${legalConfig.supportEmail} unter Angabe der Organisation, des Zahlungsdatums und des Grundes. Wir antworten ohne schuldhaftes Zögern, in der Regel innerhalb von 14 Tagen.`,
+              'Eine bewilligte Erstattung führt Paddle auf das ursprüngliche Zahlungsmittel zurück. Wie lange die Gutschrift dauert, hängt vom Kartenherausgeber oder Zahlungsdienstleister ab und beträgt üblicherweise mehrere Werktage.',
+            ]
+          },
+        ]
+      },
       privacy: {
         title: 'Datenschutzerklärung', description: 'Informationen zur Verarbeitung personenbezogener Daten in Tenebit.', sections: [
           { title: '1. Rollen', paragraphs: ['Der Tenebit-Betreiber ist Verantwortlicher für Konto-, Abrechnungs-, Sicherheits-, Kontakt- und öffentliche Webseitendaten.', 'Für Mitarbeiter-, Auftragnehmer-, Geräte-, Verfahrens- und sonstige von einer Organisation eingegebene Daten bleibt diese Organisation Verantwortlicher. Tenebit verarbeitet diese Daten in ihrem Auftrag.'] },
@@ -391,9 +580,56 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   it: {
     ui: {
-      home: 'Home', privacy: 'Informativa sulla privacy', terms: 'Termini di servizio', cookies: 'Cookie e archiviazione sul dispositivo', contact: 'Contatti', contactPrompt: 'Richieste commerciali o un problema che possiamo aiutarti a risolvere?', effectiveDate: 'In vigore dal', version: 'Versione', storageNotice: "Tenebit utilizza l'archiviazione tecnica necessaria per l'accesso e la sicurezza e, con il tuo consenso, Google Analytics per le statistiche di visita.", storageNoticeDetails: "L'archiviazione tecnica è sempre attiva. Google Analytics si attiva solo dopo il tuo consenso e puoi revocarlo in qualsiasi momento. Consulta l'informativa sui cookie per i dettagli.", consentAccept: 'Accetto', consentReject: 'Rifiuto', manageConsent: 'Gestisci il consenso ai cookie', footerRights: 'Tutti i diritti riservati.', affiliateProgram: 'Programma di affiliazione'
+      home: 'Home', privacy: 'Informativa sulla privacy', terms: 'Termini di servizio', cookies: 'Cookie e archiviazione sul dispositivo', refund: 'Politica di rimborso', contact: 'Contatti', contactPrompt: 'Richieste commerciali o un problema che possiamo aiutarti a risolvere?', effectiveDate: 'In vigore dal', version: 'Versione', storageNotice: "Tenebit utilizza l'archiviazione tecnica necessaria per l'accesso e la sicurezza e, con il tuo consenso, Google Analytics per le statistiche di visita.", storageNoticeDetails: "L'archiviazione tecnica è sempre attiva. Google Analytics si attiva solo dopo il tuo consenso e puoi revocarlo in qualsiasi momento. Consulta l'informativa sui cookie per i dettagli.", consentAccept: 'Accetto', consentReject: 'Rifiuto', manageConsent: 'Gestisci il consenso ai cookie', footerRights: 'Tutti i diritti riservati.', affiliateProgram: 'Programma di affiliazione'
     },
       documents: {
+      refund: {
+        title: 'Politica di rimborso e cancellazione',
+        description: 'Come cancellare un piano a pagamento, cosa accade al periodo già pagato e quando spetta un rimborso.',
+        sections: [
+          {
+            title: '1. Ambito',
+            paragraphs: [
+              'Questo documento disciplina la cancellazione dei piani a pagamento di Tenebit e le regole di rimborso. Il piano Free non prevede alcun costo, quindi non c’è nulla da rimborsare.',
+              'Paddle.com Market Ltd è il Merchant of Record. Paddle emette la fattura, incassa il pagamento ed esegue l’eventuale rimborso sullo stesso metodo di pagamento usato per l’acquisto.',
+            ]
+          },
+          {
+            title: '2. Cancellazione dell’abbonamento',
+            bullets: [
+              'l’abbonamento può essere cancellato in qualsiasi momento dal portale di fatturazione raggiungibile dall’account',
+              'l’accesso al piano a pagamento prosegue fino alla fine del periodo di fatturazione in corso, mensile o annuale',
+              'da quella data l’abbonamento non si rinnova e non viene effettuato alcun ulteriore addebito',
+              'la parte non utilizzata di un periodo già pagato non viene rimborsata in modo proporzionale',
+              'al termine del periodo a pagamento l’organizzazione torna al piano Free; i dati restano, ma si applicano i limiti del piano Free',
+            ]
+          },
+          {
+            title: '3. Diritto di recesso del consumatore',
+            paragraphs: [
+              'Il consumatore ha diritto di recedere dal contratto entro 14 giorni senza doverne indicare il motivo, con rimborso integrale.',
+              'Se la prestazione inizia su richiesta espressa del cliente prima della scadenza di tale termine, il diritto di recesso si estingue con la piena esecuzione del servizio e, in caso di esecuzione parziale, il rimborso può essere ridotto in proporzione a quanto prestato fino al momento del recesso.',
+              'I clienti che non sono consumatori non hanno diritto di recesso.',
+            ]
+          },
+          {
+            title: '4. Rimborsi al di fuori di questi casi',
+            bullets: [
+              'addebito duplicato o altro errore di fatturazione: rimborsato per intero',
+              'addebito effettuato dopo che la cancellazione aveva già avuto effetto: rimborsato per intero',
+              'interruzione prolungata che ha reso il servizio inutilizzabile: valutata caso per caso',
+              'al di fuori di queste situazioni un periodo di fatturazione già iniziato non viene rimborsato',
+            ]
+          },
+          {
+            title: '5. Come presentare la richiesta',
+            paragraphs: [
+              `Invia le richieste di rimborso o recesso a ${legalConfig.supportEmail} indicando l’organizzazione, la data del pagamento e il motivo. Rispondiamo senza indebito ritardo, di norma entro 14 giorni.`,
+              'Il rimborso approvato viene emesso da Paddle sul metodo di pagamento originario. I tempi di accredito dipendono dall’emittente della carta o dal fornitore di pagamento e di solito sono di alcuni giorni lavorativi.',
+            ]
+          },
+        ]
+      },
       privacy: {
         title: 'Informativa sulla privacy', description: 'Informazioni sul trattamento dei dati personali in Tenebit.', sections: [
           { title: '1. Ruoli nel trattamento', paragraphs: ['Il gestore di Tenebit è titolare del trattamento per i dati relativi ad account, fatturazione, sicurezza del servizio, contatti e sito pubblico.', "Per i dati di dipendenti, collaboratori, attrezzature, procedure e altri contenuti dello spazio di lavoro inseriti da un'organizzazione, tale organizzazione resta titolare del trattamento e Tenebit agisce come suo responsabile, su istruzioni documentate."] },
@@ -433,9 +669,56 @@ const legalEntries: Record<Language, LegalLanguageEntry> = {
   },
   fr: {
     ui: {
-      home: 'Accueil', privacy: 'Politique de confidentialité', terms: 'Conditions générales', cookies: "Cookies et stockage sur l'appareil", contact: 'Contact', contactPrompt: "Une demande commerciale ou un problème qu'on peut vous aider à résoudre ?", effectiveDate: 'En vigueur à partir du', version: 'Version', storageNotice: "Tenebit utilise le stockage technique nécessaire à la connexion et à la sécurité et, avec votre consentement, Google Analytics pour des statistiques de visite.", storageNoticeDetails: "Le stockage technique est toujours actif. Google Analytics ne démarre qu'après votre consentement, que vous pouvez retirer à tout moment. Consultez la notice sur les cookies pour plus de détails.", consentAccept: 'Accepter', consentReject: 'Refuser', manageConsent: 'Gérer le consentement aux cookies', footerRights: 'Tous droits réservés.', affiliateProgram: "Programme d'affiliation"
+      home: 'Accueil', privacy: 'Politique de confidentialité', terms: 'Conditions générales', cookies: "Cookies et stockage sur l'appareil", refund: 'Politique de remboursement', contact: 'Contact', contactPrompt: "Une demande commerciale ou un problème qu'on peut vous aider à résoudre ?", effectiveDate: 'En vigueur à partir du', version: 'Version', storageNotice: "Tenebit utilise le stockage technique nécessaire à la connexion et à la sécurité et, avec votre consentement, Google Analytics pour des statistiques de visite.", storageNoticeDetails: "Le stockage technique est toujours actif. Google Analytics ne démarre qu'après votre consentement, que vous pouvez retirer à tout moment. Consultez la notice sur les cookies pour plus de détails.", consentAccept: 'Accepter', consentReject: 'Refuser', manageConsent: 'Gérer le consentement aux cookies', footerRights: 'Tous droits réservés.', affiliateProgram: "Programme d'affiliation"
     },
       documents: {
+      refund: {
+        title: 'Politique de remboursement et d’annulation',
+        description: 'Comment annuler une formule payante, ce qu’il advient de la période déjà réglée et dans quels cas un remboursement s’applique.',
+        sections: [
+          {
+            title: '1. Objet',
+            paragraphs: [
+              'Ce document régit l’annulation des formules payantes de Tenebit et les règles de remboursement. La formule Free est gratuite : il n’y a donc rien à rembourser.',
+              'Paddle.com Market Ltd agit en qualité de Merchant of Record. Paddle émet la facture, encaisse le paiement et procède à tout remboursement sur le moyen de paiement utilisé lors de l’achat.',
+            ]
+          },
+          {
+            title: '2. Annulation de l’abonnement',
+            bullets: [
+              'l’abonnement peut être annulé à tout moment depuis le portail de facturation accessible depuis votre compte',
+              'l’accès à la formule payante se poursuit jusqu’à la fin de la période de facturation en cours, mensuelle ou annuelle',
+              'passé cette date, l’abonnement ne se renouvelle pas et aucun nouveau prélèvement n’est effectué',
+              'la part non utilisée d’une période déjà réglée n’est pas remboursée au prorata',
+              'à la fin de la période payante, l’organisation revient à la formule Free ; les données sont conservées, mais les limites de la formule Free s’appliquent',
+            ]
+          },
+          {
+            title: '3. Droit de rétractation du consommateur',
+            paragraphs: [
+              'Le consommateur dispose d’un délai de 14 jours pour se rétracter sans avoir à motiver sa décision, avec remboursement intégral.',
+              'Lorsque l’exécution du service commence à la demande expresse du client avant l’expiration de ce délai, le droit de rétractation s’éteint une fois le service pleinement exécuté et, en cas d’exécution partielle, le remboursement peut être réduit à proportion de ce qui a été fourni jusqu’à la rétractation.',
+              'Les clients qui ne sont pas des consommateurs ne bénéficient pas du droit de rétractation.',
+            ]
+          },
+          {
+            title: '4. Remboursements en dehors de ces cas',
+            bullets: [
+              'double prélèvement ou autre erreur de facturation : remboursé intégralement',
+              'prélèvement effectué après la prise d’effet de l’annulation : remboursé intégralement',
+              'panne prolongée ayant rendu le service inutilisable : examinée au cas par cas',
+              'en dehors de ces situations, une période de facturation déjà entamée n’est pas remboursée',
+            ]
+          },
+          {
+            title: '5. Comment faire une demande',
+            paragraphs: [
+              `Adressez vos demandes de remboursement ou de rétractation à ${legalConfig.supportEmail} en précisant l’organisation, la date du paiement et le motif. Nous répondons sans retard injustifié, en principe sous 14 jours.`,
+              'Un remboursement accepté est émis par Paddle sur le moyen de paiement d’origine. Le délai de crédit dépend de votre émetteur de carte ou de votre prestataire de paiement, généralement quelques jours ouvrés.',
+            ]
+          },
+        ]
+      },
       privacy: {
         title: 'Politique de confidentialité', description: 'Informations sur le traitement des données personnelles dans Tenebit.', sections: [
           { title: '1. Rôles dans le traitement', paragraphs: ["L'exploitant de Tenebit est responsable du traitement des données relatives au compte, à la facturation, à la sécurité du service, aux contacts et au site public.", "Pour les données de collaborateurs, prestataires, matériels, procédures et autres contenus d'espace de travail saisis par une organisation, cette organisation demeure responsable du traitement et Tenebit agit en qualité de sous-traitant, sur instructions documentées."] },
