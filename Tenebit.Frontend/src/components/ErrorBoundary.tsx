@@ -16,6 +16,10 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
     console.error('Unhandled render error:', error);
   }
 
+  // A full reload, not setState({ hasError: false }). Clearing the flag re-renders the very same element
+  // tree that just threw, so the button only ever appeared to do nothing - most often because the render
+  // failed on a chunk left behind by a deploy, which React.lazy then refuses to re-fetch for the lifetime
+  // of the document (see utils/lazyRoute.ts). Reloading is what the user was doing by hand with F5.
   render() {
     if (!this.state.hasError) return this.props.children;
     return (
@@ -23,7 +27,7 @@ class Boundary extends Component<BoundaryProps, BoundaryState> {
         <AlertCircle size={30} />
         <h2>{this.props.title}</h2>
         <p>{this.props.description}</p>
-        <button className="button button--secondary" type="button" onClick={() => this.setState({ hasError: false })}>{this.props.retryLabel}</button>
+        <button className="button button--secondary" type="button" onClick={() => window.location.reload()}>{this.props.retryLabel}</button>
       </div>
     );
   }
