@@ -1,4 +1,6 @@
 import { Plus } from 'lucide-react';
+import { OptionPicker, pickerKindFor } from '../../components/OptionPicker';
+import { CurrencyPicker, useCategoryOptions } from '../../components/assetPickers';
 import { FormEvent, useMemo, useState } from 'react';
 import { api } from '../../api/endpoints';
 import { Button } from '../../components/Button';
@@ -57,6 +59,8 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
   }, [tagPrefix, startNumber, padding, clampedQuantity]);
 
   const preview = tags.length === 0 ? null : tags.length <= 3 ? tags.join(', ') : `${tags[0]}, ${tags[1]} … ${tags[tags.length - 1]}`;
+
+  const categoryOptions = useCategoryOptions(categories);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,11 +138,8 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
 
         <div className="formSectionTitle">{t('assets.identification')}</div>
         <Field label={t('assets.nameLabel')}><TextInput name="name" required /></Field>
-        <Field label={t('assets.categoryLabel')}>
-          <SelectInput value={categoryId} onChange={event => setCategoryId(event.target.value)} required>
-            <option value="">{t('assets.chooseCategory')}</option>
-            {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-          </SelectInput>
+        <Field label={t('assets.categoryLabel')} group={pickerKindFor(categoryOptions.length) === 'segmented'}>
+          <OptionPicker options={categoryOptions} value={categoryId} onChange={setCategoryId} required placeholder={t('assets.chooseCategory')} />
         </Field>
         <Field label={t('assets.locationLabel')}>
           <SelectInput name="location" defaultValue="">
@@ -157,7 +158,7 @@ export function BatchAddModal({ open, onClose, categories, locations, teams, onC
         <Field label={t('assets.manufacturerLabel')}><TextInput name="manufacturer" /></Field>
         <Field label={t('assets.modelLabel')}><TextInput name="model" /></Field>
         <Field label={t('assets.purchasePriceLabel')}><TextInput name="purchasePrice" inputMode="decimal" /></Field>
-        <Field label={t('assets.currencyLabel')}><TextInput name="currency" defaultValue="PLN" maxLength={3} /></Field>
+        <Field label={t('assets.currencyLabel')}><CurrencyPicker /></Field>
         <Field label={t('assets.purchaseDateLabel')}><TextInput name="purchaseDate" type="date" /></Field>
         <Field label={t('assets.warrantyUntilLabel')}><TextInput name="warrantyUntil" type="date" /></Field>
 

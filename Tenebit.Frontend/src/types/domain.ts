@@ -288,6 +288,10 @@ export interface Procedure {
   publishedAt?: string | null;
 }
 
+/** Ogólny stan sprzętu przy zwrocie; szczegóły idą w returnCondition jako wolny tekst. */
+export type ReturnState = 'Working' | 'Damaged' | 'Incomplete';
+export const returnStateValues: ReturnState[] = ['Working', 'Damaged', 'Incomplete'];
+
 export interface AssignmentAssetRequest {
   assetId: string;
   issueCondition?: string | null;
@@ -307,6 +311,8 @@ export interface AssignmentAsset {
   assetTag?: string | null;
   issueCondition: string;
   returnCondition?: string | null;
+  /** Ogólny stan przy zwrocie - osobne pole, żeby dało się po nim filtrować i raportować (US-16). */
+  returnState?: ReturnState | null;
 }
 
 export interface ProcedureAcceptance {

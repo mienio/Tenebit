@@ -1,5 +1,5 @@
 import { Eye, EyeOff, KeyRound, Lock, Pencil, Plus, Trash2, UserMinus, UserPlus } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/endpoints';
 import { Avatar } from '../components/Avatar';
 import { Button } from '../components/Button';
@@ -7,6 +7,9 @@ import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { Modal } from '../components/Modal';
+import { Autocomplete, uniqueSuggestions } from '../components/Autocomplete';
+import { DatePresets, Switch } from '../components/DatePresets';
+import { addMonths, todayIsoLocal } from '../utils/datePresets';
 import { PageHeader } from '../components/PageHeader';
 import { SlidePanel } from '../components/SlidePanel';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
@@ -28,6 +31,9 @@ export function LicensesPage() {
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [selectedPersonId, setSelectedPersonId] = useState('');
   const [seatSaving, setSeatSaving] = useState(false);
+  const [perpetual, setPerpetual] = useState(false);
+  const [expiresAt, setExpiresAt] = useState('');
+  const vendorSuggestions = useMemo(() => uniqueSuggestions((licenses.data ?? []).map(license => license.vendor)), [licenses.data]);
 
   useEffect(() => {
     if (!message) return;
@@ -43,6 +49,13 @@ export function LicensesPage() {
 
   function success(text: string) { setMessage({ type: 'success', text }); }
   function failure(error: unknown, fallback: string) { setMessage({ type: 'error', text: error instanceof Error ? error.message : fallback }); }
+
+  // Licencja bez daty wygaśnięcia przy edycji otwiera się jako bezterminowa.
+  useEffect(() => {
+    if (!modalOpen) return;
+    setExpiresAt(editing?.expiresAt?.slice(0, 10) ?? '');
+    setPerpetual(!!editing && !editing.expiresAt);
+  }, [modalOpen, editing]);
 
   function openCreate() {
     setEditing(null);
@@ -63,7 +76,8 @@ export function LicensesPage() {
       vendor: toNullable(String(form.get('vendor') ?? '')),
       licenseKey: toNullable(String(form.get('licenseKey') ?? '')),
       seatsTotal: Number(form.get('seatsTotal') ?? 0),
-      expiresAt: toNullable(String(form.get('expiresAt') ?? '')),
+      // Licencja bezterminowa zapisuje się bez daty wygaśnięcia, nawet jeśli wcześniej jakąś wpisano (US-14).
+      expiresAt: perpetual ? null : toNullable(expiresAt),
       notes: toNullable(String(form.get('notes') ?? ''))
     };
     if (!body.name) return setMessage({ type: 'error', text: t('licenses.nameRequired') });
@@ -256,10 +270,24 @@ export function LicensesPage() {
       <Modal open={modalOpen} title={editing ? t('licenses.editTitle') : t('licenses.addTitle')} onClose={() => setModalOpen(false)}>
         <form className="formGrid" onSubmit={handleSave} key={editing?.id ?? 'new-license'}>
           <Field label={t('licenses.nameLabel')}><TextInput name="name" defaultValue={editing?.name ?? ''} required /></Field>
-          <Field label={t('licenses.vendorLabel')}><TextInput name="vendor" defaultValue={editing?.vendor ?? ''} /></Field>
+          <Field label={t('licenses.vendorLabel')}><Autocomplete name="vendor" defaultValue={editing?.vendor ?? ''} suggestions={vendorSuggestions} /></Field>
           <Field label={t('licenses.keyLabel')} info={t('licenses.keyFieldHint')}><TextInput name="licenseKey" defaultValue={editing?.canViewLicenseKey ? editing?.licenseKey ?? '' : ''} placeholder={editing && editing.hasLicenseKey && !editing.canViewLicenseKey ? t('licenses.keyHidden') : undefined} /></Field>
           <Field label={t('licenses.seatsTotalLabel')}><TextInput name="seatsTotal" type="number" min={editing?.seatsAssigned ?? 0} defaultValue={editing?.seatsTotal ?? 1} required /></Field>
-          <Field label={t('licenses.expiresAtLabel')}><TextInput name="expiresAt" type="date" defaultValue={editing?.expiresAt ?? ''} /></Field>
+          <Switch checked={perpetual} onChange={setPerpetual} label={t('licenses.perpetual')} hint={t('licenses.perpetualHint')} />
+          {perpetual ? null : (
+            <Field label={t('licenses.expiresAtLabel')}>
+              <div className="dateWithPresets">
+                <TextInput name="expiresAt" type="date" value={expiresAt} onChange={event => setExpiresAt(event.target.value)} />
+                <DatePresets
+                  presets={[
+                    { label: t('presets.plusOneMonth'), compute: () => addMonths(todayIsoLocal(), 1) },
+                    { label: t('presets.plusOneYear'), compute: () => addMonths(todayIsoLocal(), 12) }
+                  ]}
+                  onPick={setExpiresAt}
+                />
+              </div>
+            </Field>
+          )}
           <Field label={t('licenses.notesLabel')}><TextArea name="notes" defaultValue={editing?.notes ?? ''} /></Field>
           <div className="formActions formActions--split">
             <Button type="button" variant="ghost" onClick={() => setModalOpen(false)}>{t('common.cancel')}</Button>

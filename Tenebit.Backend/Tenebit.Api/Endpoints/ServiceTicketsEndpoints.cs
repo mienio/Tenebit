@@ -49,6 +49,10 @@ public static class ServiceTicketsEndpoints
                 (await service.ListPagedAsync(status, page ?? 1, pageSize ?? 25, cancellationToken)).ToHttpResult())
             .WithTags("Service tickets");
 
+        api.MapGet("/service-tickets/vendors", async (ServiceTicketService service, CancellationToken cancellationToken) =>
+                (await service.ListVendorsAsync(cancellationToken)).ToHttpResult())
+            .WithTags("Service tickets");
+
         api.MapGet("/service-tickets/{id:guid}", async (Guid id, ServiceTicketService service, CancellationToken cancellationToken) =>
                 (await service.GetAsync(id, cancellationToken)).ToHttpResult())
             .WithTags("Service tickets");

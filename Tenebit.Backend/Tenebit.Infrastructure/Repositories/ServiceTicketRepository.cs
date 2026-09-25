@@ -21,6 +21,16 @@ public sealed class ServiceTicketRepository : IServiceTicketRepository
             .OrderByDescending(x => x.OpenedAt)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListVendorsAsync(Guid organizationId, int limit, CancellationToken cancellationToken) =>
+        await _db.ServiceTickets
+            .AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.Vendor != "")
+            .GroupBy(x => x.Vendor)
+            .OrderByDescending(group => group.Max(x => x.OpenedAt))
+            .Select(group => group.Key)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
     public async Task<(IReadOnlyList<ServiceTicket> Items, int Total)> ListPagedAsync(Guid organizationId, ServiceTicketStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
         var query = _db.ServiceTickets.AsNoTracking().Where(x => x.OrganizationId == organizationId);

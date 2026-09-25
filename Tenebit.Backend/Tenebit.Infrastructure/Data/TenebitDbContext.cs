@@ -1178,6 +1178,7 @@ public sealed class TenebitDbContext : DbContext, IUnitOfWork
                 owned.Property(x => x.IssueCondition).HasMaxLength(400).IsRequired();
                 owned.Property(x => x.ReturnCondition).HasMaxLength(400);
                 owned.Property(x => x.ReturnResolution).HasConversion<string>().HasMaxLength(40);
+                owned.Property(x => x.ReturnState).HasConversion<string>().HasMaxLength(20);
                 owned.Property(x => x.ReturnLocation).HasMaxLength(200);
                 owned.Property(x => x.ReturnedBy).HasMaxLength(240);
                 owned.Property(x => x.ReturnNotes).HasMaxLength(800);

@@ -25,5 +25,7 @@ public interface IServiceTicketRepository
     Task<IReadOnlyList<ServiceTicket>> ListByAssetAsync(Guid organizationId, Guid assetId, CancellationToken cancellationToken);
     Task<(IReadOnlyList<ServiceTicket> Items, int Total)> ListPagedAsync(Guid organizationId, ServiceTicketStatus? status, int page, int pageSize, CancellationToken cancellationToken);
     Task<(IReadOnlyList<ServiceTicket> Items, int Total)> ListPagedScopedAsync(Guid organizationId, ServiceTicketStatus? status, int page, int pageSize, IReadOnlyCollection<Guid> personIds, IReadOnlyCollection<Guid> teamIds, CancellationToken cancellationToken);
+    /// <summary>Nazwy serwisów użyte już w zgłoszeniach organizacji - podpowiedzi w formularzu nowego zgłoszenia.</summary>
+    Task<IReadOnlyList<string>> ListVendorsAsync(Guid organizationId, int limit, CancellationToken cancellationToken);
     void Add(ServiceTicket ticket);
 }

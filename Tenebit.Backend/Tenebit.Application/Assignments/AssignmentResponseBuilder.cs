@@ -97,7 +97,7 @@ public sealed class AssignmentResponseBuilder
         var items = assignment.Assets.Select(item =>
         {
             var asset = assets.FirstOrDefault(x => x.Id == item.AssetId);
-            return new AssignmentAssetResponse(item.AssetId, asset?.Name, asset?.AssetTag, item.IssueCondition, item.ReturnCondition, item.ReturnedAt, item.ReturnLocation, item.ReturnedBy, item.ReturnResolution, item.ReturnNotes);
+            return new AssignmentAssetResponse(item.AssetId, asset?.Name, asset?.AssetTag, item.IssueCondition, item.ReturnCondition, item.ReturnedAt, item.ReturnLocation, item.ReturnedBy, item.ReturnResolution, item.ReturnNotes, item.ReturnState);
         }).ToList();
 
         var acceptances = assignment.ProcedureAcceptances.Select(acceptance =>

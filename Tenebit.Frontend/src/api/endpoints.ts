@@ -55,6 +55,7 @@ import type {
   PublicAssignment,
   PublicOffboarding,
   PublicOffboardingAnswer,
+  ReturnState,
   MyPermissions,
   RoleInfo,
   RolePermission,
@@ -237,6 +238,7 @@ export const api = {
   assetServiceTickets: (assetId: string) => apiRequest<ServiceTicket[]>(`/api/assets/${assetId}/service-tickets`),
   openServiceTicket: (body: OpenServiceTicketRequest) => apiRequest<ServiceTicket>('/api/service-tickets', { method: 'POST', body: JSON.stringify(body) }),
   completeServiceTicket: (id: string, body: CompleteServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/complete`, { method: 'POST', body: JSON.stringify(body) }),
+  serviceTicketVendors: () => apiRequest<string[]>('/api/service-tickets/vendors'),
   cancelServiceTicket: (id: string, body: CancelServiceTicketRequest) => apiRequest<ServiceTicket>(`/api/service-tickets/${id}/cancel`, { method: 'POST', body: JSON.stringify(body) }),
   evidenceBlob: (id: string) => apiBlob(`/api/evidence/${id}`),
   avatarBlob: () => apiBlob('/api/auth/avatar'),
@@ -348,8 +350,8 @@ export const api = {
   createAssignment: (body: CreateAssignmentRequest) => apiRequest<Assignment>('/api/assignments', { method: 'POST', body: JSON.stringify(body) }),
   createAssignmentWithEvidence: (body: CreateAssignmentRequest, photos: EvidencePhoto[]) => apiRequest<Assignment>('/api/assignments/with-evidence', { method: 'POST', body: buildEvidenceForm(body, photos) }),
   acceptAssignment: (id: string) => apiRequest<Assignment>(`/api/assignments/${id}/accept`, { method: 'POST' }),
-  returnAssignment: (id: string, body: { returnCondition?: string | null; destinationLocation?: string | null; assets?: { assetId: string; returnCondition?: string | null }[] }) => apiRequest<Assignment>(`/api/assignments/${id}/return`, { method: 'POST', body: JSON.stringify(body) }),
-  returnAssetWithEvidence: (assignmentId: string, assetId: string, body: { resolution: string; returnCondition?: string | null; returnLocation?: string | null; notes?: string | null }, photos: File[]) => {
+  returnAssignment: (id: string, body: { returnCondition?: string | null; destinationLocation?: string | null; assets?: { assetId: string; returnCondition?: string | null; returnState?: ReturnState | null }[] }) => apiRequest<Assignment>(`/api/assignments/${id}/return`, { method: 'POST', body: JSON.stringify(body) }),
+  returnAssetWithEvidence: (assignmentId: string, assetId: string, body: { resolution: string; returnState?: ReturnState | null; returnCondition?: string | null; returnLocation?: string | null; notes?: string | null }, photos: File[]) => {
     const form = new FormData();
     form.set('request', JSON.stringify(body));
     photos.forEach((file, index) => form.append(`photo_${index}`, file));

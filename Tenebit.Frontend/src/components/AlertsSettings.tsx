@@ -5,6 +5,7 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { Pagination } from '../components/Pagination';
+import { TagInput } from './TagInput';
 import { EmptyState, ErrorState } from '../components/StateViews';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useI18n } from '../i18n/I18nProvider';
@@ -16,7 +17,7 @@ type Message = { type: 'success' | 'error'; text: string } | null;
 
 type RuleDraft = {
   isEnabled: boolean;
-  thresholds: string;
+  thresholds: number[];
   deliveryMode: AlertDeliveryMode;
   recipientMode: AlertRecipientMode;
   customEmails: string;
@@ -52,7 +53,7 @@ const BUSINESS_DAY_BITS: Record<string, number> = {
 function toRuleDraft(rule: AlertRule): RuleDraft {
   return {
     isEnabled: rule.isEnabled,
-    thresholds: rule.thresholdDays.join(', '),
+    thresholds: [...rule.thresholdDays].sort((a, b) => b - a),
     deliveryMode: rule.deliveryMode,
     recipientMode: rule.recipientMode,
     customEmails: rule.customEmails ?? '',
@@ -78,17 +79,15 @@ function toTimeInput(value: string | null | undefined): string {
   return value.slice(0, 5);
 }
 
-function parseThresholds(text: string): number[] | null {
-  const parts = text.split(',').map(p => p.trim()).filter(Boolean);
-  if (parts.length > 5) return null;
-  const days: number[] = [];
-  for (const part of parts) {
-    if (!/^\d+$/.test(part)) return null;
-    const value = Number(part);
-    if (value > 365) return null;
-    days.push(value);
-  }
-  return days;
+// Te same granice co dawna walidacja pola "30, 7": do 5 progów, każdy to liczba całkowita 0-365.
+export const MAX_THRESHOLDS = 5;
+const QUICK_THRESHOLDS = ['7', '14', '30', '60', '90'];
+
+export function parseThresholdTag(text: string): string | null {
+  const value = text.trim();
+  if (!/^\d+$/.test(value)) return null;
+  const days = Number(value);
+  return days <= 365 ? String(days) : null;
 }
 
 export function AlertsSettings() {
@@ -137,11 +136,7 @@ export function AlertsSettings() {
   async function saveRule(type: AlertType) {
     const draft = drafts[type];
     if (!draft) return;
-    const days = parseThresholds(draft.thresholds);
-    if (days === null) {
-      setMessage({ type: 'error', text: t('alerts.thresholdsInvalid') });
-      return;
-    }
+    const days = draft.thresholds;
     setSavingType(type);
     const body: SaveAlertRuleRequest = {
       isEnabled: draft.isEnabled,
@@ -231,8 +226,17 @@ export function AlertsSettings() {
                     </label>
                   </div>
                   <div className="formGrid">
-                    <Field label={t('alerts.thresholdDays')} info={t('alerts.thresholdDaysHint')}>
-                      <TextInput value={draft.thresholds} onChange={event => updateDraft(type, { thresholds: event.target.value })} placeholder="30, 7" />
+                    <Field label={t('alerts.thresholdDays')} info={t('alerts.thresholdDaysHint')} group>
+                      <TagInput
+                        tags={draft.thresholds.map(String)}
+                        onChange={tags => updateDraft(type, { thresholds: tags.map(Number) })}
+                        parse={parseThresholdTag}
+                        quickValues={QUICK_THRESHOLDS}
+                        max={MAX_THRESHOLDS}
+                        inputMode="numeric"
+                        sort={(a, b) => Number(b) - Number(a)}
+                        placeholder={t('alerts.thresholdAddPlaceholder')}
+                      />
                     </Field>
                     <Field label={t('alerts.deliveryMode')}>
                       <SelectInput value={draft.deliveryMode} onChange={event => updateDraft(type, { deliveryMode: event.target.value as AlertDeliveryMode })}>
@@ -253,7 +257,7 @@ export function AlertsSettings() {
                       <TextInput type="number" min={0} max={14} value={draft.cooldownDays} onChange={event => updateDraft(type, { cooldownDays: Number(event.target.value) || 0 })} />
                     </Field>
                   </div>
-                  <p className="muted">{t('alerts.preview', { type: typeLabel, days: draft.thresholds || '-' })}</p>
+                  <p className="muted">{t('alerts.preview', { type: typeLabel, days: draft.thresholds.join(', ') || '-' })}</p>
                   <div className="formActions formActions--split">
                     <Button type="button" variant="secondary" disabled={testingType === type} icon={<Send size={16} />} onClick={() => sendTest(type)}>{testingType === type ? t('common.saving') : t('alerts.sendTest')}</Button>
                     <Button type="button" disabled={savingType === type} icon={<Save size={16} />} onClick={() => saveRule(type)}>{savingType === type ? t('common.saving') : t('common.save')}</Button>

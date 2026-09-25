@@ -192,6 +192,61 @@ h1, h2, h3, .pageHeader h1, .heroCard h2, .sectionTitle h2, .modalHeader h2, .dr
 
 .input { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 3px; padding: 10px 12px; color: var(--text); background: rgba(255,255,255,.92); }
 .textarea { min-height: 96px; resize: vertical; }
+/* Pole daty z przyciskiem "Dzisiaj" (TextInput type=date/datetime-local). */
+.dateInput { display: flex; gap: 6px; align-items: stretch; min-width: 0; }
+.dateInput .input { flex: 1; min-width: 0; }
+.dateInput__today { flex: 0 0 auto; width: 42px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 3px; background: #fff; color: var(--muted); cursor: pointer; }
+.dateInput__today:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
+.dateInput__today:focus-visible { outline: 3px solid rgba(166, 58, 46, .22); border-color: var(--focus); }
+.dateInput__today:disabled { opacity: .4; cursor: not-allowed; }
+/* Adaptacyjny wybór (OptionPicker): segmented dla 2-4 opcji, lista z wyszukiwarką dla 9+. */
+.segmented { display: flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 3px; background: #fff; overflow: hidden; }
+.segmented__option { flex: 1 1 0; min-width: max-content; position: relative; display: flex; }
+.segmented__option + .segmented__option { border-left: 1px solid var(--border); }
+.segmented__option input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented__option span { flex: 1; min-height: 40px; display: grid; place-items: center; padding: 8px 12px; color: var(--muted); font-weight: 600; font-size: 13px; text-align: center; cursor: pointer; }
+.segmented__option:hover span { background: var(--surface-soft); color: var(--text); }
+.segmented__option--active span, .segmented__option--active:hover span { background: var(--brand); color: #fff; }
+.segmented__option input:focus-visible + span { outline: 3px solid rgba(166, 58, 46, .35); outline-offset: -3px; }
+.segmented__option input:disabled + span { opacity: .5; cursor: not-allowed; }
+.field--invalid .segmented { border-color: var(--danger); }
+.picker { position: relative; min-width: 0; }
+.picker__input { padding-right: 34px; cursor: pointer; }
+.picker__input:focus { cursor: text; }
+.picker__chevron { position: absolute; right: 12px; top: 13px; color: var(--muted); pointer-events: none; }
+.picker__value { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+.picker__list { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px); max-height: 280px; overflow-y: auto; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 3px; box-shadow: var(--shadow); }
+.picker__option { padding: 8px 10px; border-radius: 3px; color: var(--text); font-weight: 500; cursor: pointer; }
+.picker__option--active { background: var(--accent-soft); }
+.picker__option[aria-selected="true"] { font-weight: 700; }
+.picker__group { padding: 8px 10px 4px; color: var(--muted); font-size: 11px; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
+.picker__empty { padding: 8px 10px; color: var(--muted); }
+/* Presety dat i szybkie wartości tagów. */
+.presetRow { display: flex; flex-wrap: wrap; gap: 6px; }
+.presetChip { min-height: 30px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: #fff; color: var(--muted); font-size: 12px; font-weight: 650; cursor: pointer; }
+.presetChip:hover { color: var(--accent); border-color: var(--accent); }
+.presetChip:focus-visible { outline: 3px solid rgba(166, 58, 46, .22); border-color: var(--focus); }
+.presetChip[aria-disabled="true"] { opacity: .5; }
+.presetChip[aria-disabled="true"]:hover { color: var(--muted); border-color: var(--border); }
+.switchField { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; color: var(--text); font-size: 14px; cursor: pointer; }
+.switchField__text { display: grid; gap: 2px; }
+.switchField__text small { color: var(--muted); font-size: 12px; }
+/* Pole tagów (progi alertów, zakres stanowisk procedury). */
+.tagInput { display: grid; gap: 8px; }
+.tagInput__box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 42px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 3px; background: rgba(255,255,255,.92); }
+.tagInput__box:focus-within { outline: 3px solid rgba(166, 58, 46, .22); border-color: var(--focus); }
+.tagInput__tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 9px; border-radius: 999px; background: var(--brand-soft); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-weight: 600; }
+.tagInput__tag button { display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.tagInput__tag button:hover { background: #fff; color: var(--danger); }
+.tagInput__input { flex: 1 1 120px; min-width: 80px; border: 0; outline: 0; background: transparent; padding: 5px 2px; color: var(--text); font: inherit; }
+.tagInput .picker__list { top: 100%; }
+/* Potwierdzenie inline przy akcji zmieniającej stan (US-06). */
+.confirmPopover { position: fixed; z-index: 60; width: 280px; padding: 14px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 3px; box-shadow: var(--shadow); }
+.confirmPopover p { margin: 0 0 12px; color: var(--text); font-size: 14px; line-height: 1.45; }
+.confirmPopover__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.iconButton--stateChange { color: var(--success); border-color: #bbf7d0; background: #f0fdf4; }
+.iconButton--stateChange[aria-expanded="true"] { outline: 3px solid rgba(4, 120, 87, .25); }
+.dateWithPresets { display: grid; gap: 8px; }
 /* Podglad faktury w oknie potwierdzenia zakupu - dane nabywcy, ktore trafia na dokument Paddle. */
 .invoicePreview { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 .invoicePreview h3 { margin: 0 0 10px; font-size: 14px; font-weight: 680; }
@@ -1499,3 +1554,12 @@ button.authIcon:hover { filter: brightness(0.94); }
   .tableWrap--oneLine td.cell-icon,
   .tableWrap--oneLine th:empty:nth-child(-n+2) { display: none; }
 }
+.fieldWithAdd > .segmented, .fieldWithAdd > .picker { flex: 1; min-width: 0; }
+.checkboxGroup__search { display: flex; gap: 12px; align-items: center; }
+.checkboxGroup__search .input { flex: 1; min-width: 0; }
+.checkboxGroup__search small { margin-left: 0; white-space: nowrap; }
+.checkboxGroup label[hidden] { display: none; }
+/* Akcja zmieniająca stan zostaje zielona także po najechaniu - ogólny hover .iconButton jest czerwony ("usuń"). */
+.iconButton--stateChange:hover { color: var(--success); border-color: #86efac; background: #dcfce7; }
+/* Pole nie rozciąga kontrolki na wysokość sąsiedniego pola w tym samym wierszu (np. obok presetów dat). */
+.formGrid > .field { align-content: start; }

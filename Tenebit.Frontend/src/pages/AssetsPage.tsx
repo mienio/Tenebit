@@ -7,6 +7,11 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { GroupedAssetBrowser, type AssetGroup } from '../components/GroupedAssetBrowser';
 import { IconPicker } from '../components/IconPicker';
+import { OptionPicker, pickerKindFor } from '../components/OptionPicker';
+import { Autocomplete } from '../components/Autocomplete';
+import { CurrencyPicker, useCategoryOptions } from '../components/assetPickers';
+import { DatePresets } from '../components/DatePresets';
+import { addMonths } from '../utils/datePresets';
 import { ImportModal } from '../components/ImportModal';
 import { LocationInventoryModal } from '../components/LocationInventoryModal';
 import { LocationAssetBrowser } from '../components/LocationAssetBrowser';
@@ -21,7 +26,7 @@ import { assetStatusValues, categoryTypeValues, locationTypeValues } from '../ut
 import { useI18n } from '../i18n/I18nProvider';
 import { useCelebration } from '../celebration/CelebrationProvider';
 import { useAuth } from '../auth/AuthProvider';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AssetDetailPanel } from './assets/AssetDetailPanel';
 import { BatchAddModal } from './assets/BatchAddModal';
 import { LabelSheetModal, type LabelSize } from './assets/LabelSheetModal';
@@ -60,6 +65,7 @@ export function AssetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { celebrate } = useCelebration();
   const { userEmail, can } = useAuth();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = window.localStorage.getItem(assetsViewStorageKey(userEmail));
     return stored === 'location' || stored === 'person' || stored === 'status' || stored === 'category' ? stored : 'list';
@@ -101,6 +107,9 @@ export function AssetsPage() {
   const { importOpen, openImport, closeImport } = useAssetImport();
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [formLocation, setFormLocation] = useState('');
+  // Daty sterowane, bo presety "Gwarancja do" liczą się od daty zakupu wpisanej w tym samym formularzu (US-12).
+  const [formPurchaseDate, setFormPurchaseDate] = useState('');
+  const [formWarrantyUntil, setFormWarrantyUntil] = useState('');
   const [viewLocation, setViewLocation] = useState<string | null>(null);
   const [viewPersonId, setViewPersonId] = useState<string | null>(null);
   const [revealedFields, setRevealedFields] = useState<Record<string, string>>({});
@@ -122,6 +131,7 @@ export function AssetsPage() {
   );
   const assets = useAsyncData(assetsLoader, [assetsLoader]);
   const categories = useAsyncData(api.categories, []);
+  const categoryOptions = useCategoryOptions(categories.data);
   const locations = useAsyncData(api.locations, []);
   const teams = useAsyncData(api.teams, []);
   const people = useAsyncData(() => api.people(), []);
@@ -193,6 +203,8 @@ export function AssetsPage() {
   const serviceTickets = useAsyncData(serviceTicketsLoader, [serviceTicketsLoader]);
 
   const [serviceTicketModalOpen, setServiceTicketModalOpen] = useState(false);
+  // Serwisy, z których organizacja już korzystała - podpowiedzi w zgłoszeniu (US-13). Ładowane dopiero przy otwarciu okna.
+  const serviceVendors = useAsyncData(() => (serviceTicketModalOpen ? api.serviceTicketVendors() : Promise.resolve(null)), [serviceTicketModalOpen]);
   const [serviceTicketSaving, setServiceTicketSaving] = useState(false);
   const [completingTicket, setCompletingTicket] = useState<ServiceTicket | null>(null);
   const [completingSaving, setCompletingSaving] = useState(false);
@@ -515,6 +527,13 @@ export function AssetsPage() {
     setAssetModalOpen(true);
   }
 
+  useEffect(() => {
+    if (!assetModalOpen) return;
+    const source = editing ?? duplicating;
+    setFormPurchaseDate(source?.purchaseDate?.slice(0, 10) ?? '');
+    setFormWarrantyUntil(source?.warrantyUntil?.slice(0, 10) ?? '');
+  }, [assetModalOpen, editing, duplicating]);
+
   function closeAssetModal() {
     setAssetModalOpen(false);
     setEditing(null);
@@ -821,6 +840,7 @@ export function AssetsPage() {
         onClose={() => setSelected(null)}
         onQr={openQr}
         onEdit={openEdit}
+        onIssue={can('assignments', 'manage') ? asset => navigate(`/assignments?new=1&asset=${asset.id}`) : undefined}
         onDuplicate={openDuplicate}
         onDelete={asset => { setDeleteTarget(asset); setSelected(null); }}
         onViewPerson={setViewPersonId}
@@ -847,12 +867,9 @@ export function AssetsPage() {
           <div className="formSectionTitle">{t('assets.identification')}</div>
           <Field label={t('assets.nameLabel')}><TextInput name="name" defaultValue={prefill?.name ?? ''} required /></Field>
           <Field label={t('assets.tagLabel')}><TextInput name="assetTag" defaultValue={editing?.assetTag ?? ''} required /></Field>
-          <Field label={t('assets.categoryLabel')}>
+          <Field label={t('assets.categoryLabel')} group={pickerKindFor(categoryOptions.length) === 'segmented'}>
             <div className="fieldWithAdd">
-              <SelectInput name="categoryId" value={selectedCategoryId} onChange={event => setSelectedCategoryId(event.target.value)} required>
-                <option value="">{t('assets.chooseCategory')}</option>
-                {categories.data?.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </SelectInput>
+              <OptionPicker name="categoryId" options={categoryOptions} value={selectedCategoryId} onChange={setSelectedCategoryId} required placeholder={t('assets.chooseCategory')} />
               <button type="button" className="iconButton iconButton--add" aria-label={t('settings.addCategory')} title={t('settings.addCategory')} onClick={() => openQuickAdd('category')}><Plus size={18} /></button>
             </div>
           </Field>
@@ -884,9 +901,19 @@ export function AssetsPage() {
           <Field label={t('assets.manufacturerLabel')}><TextInput name="manufacturer" defaultValue={prefill?.manufacturer ?? ''} /></Field>
           <Field label={t('assets.modelLabel')}><TextInput name="model" defaultValue={prefill?.model ?? ''} /></Field>
           <Field label={t('assets.purchasePriceLabel')}><TextInput name="purchasePrice" inputMode="decimal" defaultValue={prefill?.purchasePrice ?? ''} /></Field>
-          <Field label={t('assets.currencyLabel')}><TextInput name="currency" defaultValue={prefill?.currency ?? 'PLN'} maxLength={3} /></Field>
-          <Field label={t('assets.purchaseDateLabel')}><TextInput name="purchaseDate" type="date" defaultValue={prefill?.purchaseDate ?? ''} /></Field>
-          <Field label={t('assets.warrantyUntilLabel')}><TextInput name="warrantyUntil" type="date" defaultValue={prefill?.warrantyUntil ?? ''} /></Field>
+          <Field label={t('assets.currencyLabel')}><CurrencyPicker defaultValue={prefill?.currency} /></Field>
+          <Field label={t('assets.purchaseDateLabel')}><TextInput id="asset-purchase-date" name="purchaseDate" type="date" value={formPurchaseDate} onChange={event => setFormPurchaseDate(event.target.value)} /></Field>
+          <Field label={t('assets.warrantyUntilLabel')}>
+            <div className="dateWithPresets">
+              <TextInput name="warrantyUntil" type="date" value={formWarrantyUntil} onChange={event => setFormWarrantyUntil(event.target.value)} />
+              <DatePresets
+                presets={[12, 24, 36].map(months => ({ label: t('presets.plusMonths', { count: months }), compute: () => (formPurchaseDate ? addMonths(formPurchaseDate, months) : null) }))}
+                onPick={setFormWarrantyUntil}
+                onMissingBase={() => document.getElementById('asset-purchase-date')?.focus()}
+                missingBaseHint={t('presets.needPurchaseDate')}
+              />
+            </div>
+          </Field>
 
           {selectedCategoryFields.length > 0 && (
             <>
@@ -927,10 +954,10 @@ export function AssetsPage() {
 
       <Modal open={serviceTicketModalOpen} title={t('serviceTickets.open')} onClose={() => setServiceTicketModalOpen(false)}>
         <form className="formGrid" onSubmit={openServiceTicket}>
-          <Field label={`${t('serviceTickets.vendor')} *`}><TextInput name="vendor" required /></Field>
+          <Field label={`${t('serviceTickets.vendor')} *`}><Autocomplete name="vendor" required suggestions={serviceVendors.data ?? []} /></Field>
           <Field label={t('serviceTickets.description')}><TextArea name="description" rows={3} /></Field>
           <Field label={t('serviceTickets.estimatedCost')}><TextInput name="estimatedCost" type="number" inputMode="decimal" /></Field>
-          <Field label={t('serviceTickets.currency')}><TextInput name="currency" maxLength={3} /></Field>
+          <Field label={t('serviceTickets.currency')}><CurrencyPicker /></Field>
           <Field label={t('serviceTickets.slaDueAt')}><TextInput name="slaDueAt" type="date" /></Field>
           <div className="formActions formActions--split">
             <Button type="button" variant="ghost" onClick={() => setServiceTicketModalOpen(false)}>{t('common.cancel')}</Button>

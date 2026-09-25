@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { useEffect, useId, useRef, useState, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { CalendarCheck } from 'lucide-react';
 import { useI18n } from '../i18n/I18nProvider';
 
 type ValidatableControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -35,9 +36,13 @@ export function validationMessage(control: ValidatableControl, t: Translate): st
 /// bąbelkuje, ale faza przechwytywania i tak przechodzi przez przodków - dlatego jeden nasłuch na
 /// etykiecie wystarczy, żeby przejąć każdą kontrolkę w środku, wyciszyć dymek i pokazać komunikat
 /// tekstowy pod polem. Działa to w każdym formularzu korzystającym z <Field>, bez zmian w nich samych.
-export function Field({ label, info, children }: { label: string; info?: string; children: React.ReactNode }) {
+/// `group` renderuje pole jako <div role="group"> zamiast <label> - dla kontrolek złożonych z kilku
+/// elementów (grupa przycisków, tagi z przyciskami usuwania). <label> "klika" swoją pierwszą kontrolkę przy
+/// kliknięciu w tekst etykiety, co zaznaczałoby pierwszą opcję albo usuwało pierwszy tag.
+export function Field({ label, info, group, children }: { label: string; info?: string; group?: boolean; children: React.ReactNode }) {
   const { t } = useI18n();
-  const ref = useRef<HTMLLabelElement>(null);
+  const ref = useRef<HTMLLabelElement & HTMLDivElement>(null);
+  const labelId = useId();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,17 +70,87 @@ export function Field({ label, info, children }: { label: string; info?: string;
     };
   }, [t]);
 
+  const className = error ? 'field field--invalid' : 'field';
+  const errorNode = error ? <small className="fieldError" role="alert">{error}</small> : null;
+  if (group) {
+    return (
+      <div ref={ref} className={className} title={info ?? undefined} role="group" aria-labelledby={labelId}>
+        <span id={labelId}>{label}</span>
+        {children}
+        {errorNode}
+      </div>
+    );
+  }
   return (
-    <label ref={ref} className={error ? 'field field--invalid' : 'field'} title={info ?? undefined}>
+    <label ref={ref} className={className} title={info ?? undefined}>
       <span>{label}</span>
       {children}
-      {error ? <small className="fieldError" role="alert">{error}</small> : null}
+      {errorNode}
     </label>
   );
 }
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  if (props.type === 'date' || props.type === 'datetime-local') return <DateInput {...props} />;
   return <input className="input" {...props} />;
+}
+
+const pad = (value: number) => String(value).padStart(2, '0');
+
+/// Dzisiejsza data w strefie przeglądarki. toISOString() dawałby datę UTC, czyli w Polsce między
+/// północą a 2:00 jeszcze wczorajszą.
+export function localTodayIso(now = new Date()): string {
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/// Wartość, którą wpisuje przycisk "Dzisiaj". Dla datetime-local zostawia godzinę już wpisaną w pole,
+/// a gdy jej nie ma - bierze bieżącą, żeby pole od razu było kompletne.
+export function todayInputValue(type: string, current: string, now = new Date()): string {
+  const date = localTodayIso(now);
+  if (type !== 'datetime-local') return date;
+  const time = /T(\d{2}:\d{2})/.exec(current)?.[1] ?? `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  return `${date}T${time}`;
+}
+
+/// Pole daty z przyciskiem "Dzisiaj". Natywny kalendarz wymaga otwarcia i szukania dnia, a puste pole
+/// straszy tylko maską dd.mm.rrrr - jedno kliknięcie w ikonę wpisuje dzisiejszą datę. Wartość ustawiamy
+/// przez natywny setter i zdarzenie `input`, więc działa to tak samo dla pól sterowanych (onChange
+/// dostaje zdarzenie jak od użytkownika) i niesterowanych (FormData czyta wartość z DOM), a <Field>
+/// czyści przy tym komunikat walidacji.
+function DateInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  const { t } = useI18n();
+  const ref = useRef<HTMLInputElement>(null);
+  const today = localTodayIso();
+  const outOfRange = (typeof props.min === 'string' && props.min.slice(0, 10) > today)
+    || (typeof props.max === 'string' && props.max !== '' && props.max.slice(0, 10) < today);
+  const locked = props.disabled || props.readOnly;
+
+  const setToday = () => {
+    const input = ref.current;
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, todayInputValue(input.type, input.value));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  return (
+    <span className="dateInput">
+      <input className="input" {...props} ref={ref} />
+      {locked ? null : (
+        <button
+          type="button"
+          className="dateInput__today"
+          onClick={setToday}
+          disabled={outOfRange}
+          title={t('common.today')}
+          aria-label={t('common.today')}
+        >
+          <CalendarCheck size={16} />
+        </button>
+      )}
+    </span>
+  );
 }
 
 export function SelectInput(props: SelectHTMLAttributes<HTMLSelectElement>) {

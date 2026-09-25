@@ -297,6 +297,20 @@ public class AssignmentServiceTests
     }
 
     [Fact]
+    public void Assignment_ReturnAsset_StoresStructuredReturnStateNextToNotes()
+    {
+        var assignment = new Assignment(Guid.NewGuid(), Guid.NewGuid(), "TEN-TEST-RS", DateTimeOffset.UtcNow, null, null, "tester");
+        var assetId = Guid.NewGuid();
+        assignment.AddAsset(assetId, "ok");
+
+        assignment.ReturnAsset(assetId, ReturnResolution.Returned, DateTimeOffset.UtcNow, "brak ładowarki", null, "tester", null, ReturnState.Incomplete);
+
+        var item = assignment.Assets.Single();
+        Assert.Equal(ReturnState.Incomplete, item.ReturnState);
+        Assert.Equal("brak ładowarki", item.ReturnCondition);
+    }
+
+    [Fact]
     public void Assignment_ReturnAsset_ThrowsWhenAssetNotInAssignment()
     {
         var assignment = new Assignment(Guid.NewGuid(), Guid.NewGuid(), "TEN-TEST-4", DateTimeOffset.UtcNow, null, null, "tester");

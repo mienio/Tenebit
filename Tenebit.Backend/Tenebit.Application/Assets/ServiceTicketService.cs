@@ -42,6 +42,24 @@ public sealed class ServiceTicketService
         return Result<IReadOnlyList<ServiceTicketResponse>>.Success(tickets.Select(Map).ToList());
     }
 
+    /// <summary>
+    /// Serwisy, z których organizacja już korzystała (US-13), od ostatnio użytych. Same nazwy firm, bez
+    /// powiązania z aktywami, więc wystarcza uprawnienie do tworzenia zgłoszeń, bez zawężania zakresu.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<string>>> ListVendorsAsync(CancellationToken cancellationToken)
+    {
+        var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.Manage, cancellationToken);
+        if (access.IsFailure) return Result<IReadOnlyList<string>>.Failure(access.Error!);
+
+        var vendors = await _tickets.ListVendorsAsync(_currentUser.OrganizationId, 200, cancellationToken);
+        var unique = vendors
+            .Select(vendor => vendor.Trim())
+            .Where(vendor => vendor.Length > 0)
+            .DistinctBy(vendor => vendor.ToLowerInvariant())
+            .ToList();
+        return Result<IReadOnlyList<string>>.Success(unique);
+    }
+
     public async Task<Result<ServiceTicketListResponse>> ListPagedAsync(ServiceTicketStatus? status, int page, int pageSize, CancellationToken cancellationToken)
     {
         var access = await _permissions.EnsureAsync(PermissionModules.Assets, PermissionActions.View, cancellationToken);

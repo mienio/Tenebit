@@ -8,6 +8,9 @@ import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Field, SelectInput, TextInput } from '../components/FormFields';
 import { ImportModal } from '../components/ImportModal';
+import { OptionPicker, pickerKindFor } from '../components/OptionPicker';
+import { Autocomplete, uniqueSuggestions } from '../components/Autocomplete';
+import { useInheritedValue } from '../hooks/useInheritedValue';
 import { LocationInventoryModal } from '../components/LocationInventoryModal';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
@@ -56,6 +59,8 @@ export function PeoplePage() {
   const [bulkTeamModal, setBulkTeamModal] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const debouncedSearch = useDebouncedValue(search.trim(), 320);
+  // MPK podąża za domyślnym MPK wybranego zespołu, dopóki ktoś nie wpisze go ręcznie (US-03).
+  const costCenter = useInheritedValue();
 
   const peopleLoader = useMemo(
     () => () => api.peoplePaged({ search: debouncedSearch, sort: sort.key, desc: sort.desc, page, pageSize }),
@@ -67,6 +72,13 @@ export function PeoplePage() {
   const locations = useAsyncData(api.locations, []);
   const rows = useMemo(() => people.data?.items ?? [], [people.data]);
   const totalPeople = people.data?.total ?? 0;
+  const relationTypeOptions = useMemo(() => {
+    const options = (relationTypes.data ?? []).map(type => ({ value: type.name, label: type.name }));
+    // Typ usunięty z ustawień, a wciąż zapisany przy edytowanej osobie - nie może zniknąć z formularza.
+    if (editing?.relationType && !options.some(option => option.value === editing.relationType)) options.unshift({ value: editing.relationType, label: editing.relationType });
+    return options;
+  }, [relationTypes.data, editing]);
+  const jobTitleSuggestions = useMemo(() => uniqueSuggestions((allPeople.data ?? []).map(person => person.jobTitle)), [allPeople.data]);
   const managerCandidates = useMemo(() => (allPeople.data ?? []).filter(p => p.id !== editing?.id), [allPeople.data, editing]);
   const selectedPeople = useMemo(() => rows.filter(person => selectedIds.has(person.id)), [rows, selectedIds]);
   const allOnPageSelected = rows.length > 0 && rows.every(person => selectedIds.has(person.id));
@@ -142,6 +154,16 @@ export function PeoplePage() {
     if (editing || selectedRelationType || !relationTypes.data?.length) return;
     setSelectedRelationType(relationTypes.data[0].name);
   }, [relationTypes.data, editing, selectedRelationType]);
+
+  useEffect(() => {
+    if (personModalOpen) costCenter.reset(editing?.costCenter ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personModalOpen, editing]);
+
+  function selectTeam(teamId: string) {
+    setSelectedTeamId(teamId);
+    costCenter.inherit(teams.data?.find(team => team.id === teamId)?.costCenter);
+  }
 
   useEffect(() => {
     if (!message) return;
@@ -684,23 +706,18 @@ export function PeoplePage() {
           <Field label={t('settings.emailLabel')}><TextInput name="email" type="email" defaultValue={editing?.email ?? createDefaults.email} required /></Field>
           <Field label={t('people.phoneLabel')}><TextInput name="phone" defaultValue={editing?.phone ?? ''} /></Field>
           <Field label={t('people.employeeNumber')}><TextInput name="employeeNumber" defaultValue={editing?.employeeNumber ?? ''} /></Field>
-          <Field label={t('people.relationType')}>
+          <Field label={t('people.relationType')} group={pickerKindFor(relationTypeOptions.length) === 'segmented'}>
             <div className="fieldWithAdd">
-              <SelectInput name="relationType" value={selectedRelationType} onChange={event => setSelectedRelationType(event.target.value)} required>
-                {editing?.relationType && !relationTypes.data?.some(item => item.name === editing.relationType) ? (
-                  <option value={editing.relationType}>{editing.relationType}</option>
-                ) : null}
-                {relationTypes.data?.map(type => <option key={type.id} value={type.name}>{type.name}</option>)}
-              </SelectInput>
+              <OptionPicker name="relationType" options={relationTypeOptions} value={selectedRelationType} onChange={setSelectedRelationType} required placeholder={t('people.relationType')} />
               <button type="button" className="iconButton iconButton--add" aria-label={t('people.addRelationTypeTitle')} title={t('people.addRelationTypeTitle')} onClick={() => setRelationTypeQuickAdd(true)}><Plus size={18} /></button>
             </div>
           </Field>
 
           <div className="formSectionTitle">{t('people.organization')}</div>
-          <Field label={t('people.jobTitleLabel')}><TextInput name="jobTitle" defaultValue={editing?.jobTitle ?? ''} /></Field>
+          <Field label={t('people.jobTitleLabel')}><Autocomplete name="jobTitle" defaultValue={editing?.jobTitle ?? ''} suggestions={jobTitleSuggestions} /></Field>
           <Field label={t('people.teamLabel')}>
             <div className="fieldWithAdd">
-              <SelectInput name="teamId" value={selectedTeamId} onChange={event => setSelectedTeamId(event.target.value)}>
+              <SelectInput name="teamId" value={selectedTeamId} onChange={event => selectTeam(event.target.value)}>
                 <option value="">{t('people.noTeam')}</option>
                 {teams.data?.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
               </SelectInput>
@@ -722,7 +739,7 @@ export function PeoplePage() {
               {locations.data?.map(item => <option key={item.id} value={item.fullPath}>{item.fullPath}</option>)}
             </SelectInput>
           </Field>
-          <Field label={t('people.costCenter')}><TextInput name="costCenter" defaultValue={editing?.costCenter ?? ''} /></Field>
+          <Field label={t('people.costCenter')}><TextInput name="costCenter" value={costCenter.value} onChange={event => costCenter.edit(event.target.value)} /></Field>
           <Field label={t('people.preferredLanguage')}>
             <SelectInput name="preferredLanguage" defaultValue={editing?.preferredLanguage ?? ''}>
               <option value="">{t('people.preferredLanguageFallback')}</option>

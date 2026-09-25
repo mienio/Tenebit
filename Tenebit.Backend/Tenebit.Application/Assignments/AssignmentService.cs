@@ -401,6 +401,7 @@ public sealed class AssignmentService
             var assets = await _assets.GetByIdsAsync(organizationId, assetIds, cancellationToken);
             var categories = await _categories.ListAsync(organizationId, cancellationToken);
             var perAssetConditions = request.Assets?.ToDictionary(x => x.AssetId, x => x.ReturnCondition);
+            var perAssetStates = request.Assets?.Where(x => x.ReturnState.HasValue).ToDictionary(x => x.AssetId, x => x.ReturnState);
             var now = _clock.UtcNow;
 
             foreach (var asset in assets)
@@ -409,7 +410,7 @@ public sealed class AssignmentService
                     ? perAsset
                     : request.ReturnCondition;
                 var category = categories.FirstOrDefault(x => x.Id == asset.CategoryId);
-                ApplyAssetReturn(assignment, asset, category, ReturnResolution.Returned, condition, request.DestinationLocation, null, organizationId, now);
+                ApplyAssetReturn(assignment, asset, category, ReturnResolution.Returned, condition, request.DestinationLocation, null, organizationId, now, perAssetStates?.GetValueOrDefault(asset.Id));
             }
 
             _activity.Add(new ActivityLog(organizationId, "assignment.returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
@@ -444,7 +445,7 @@ public sealed class AssignmentService
             var category = await _categories.GetAsync(organizationId, asset.CategoryId, cancellationToken);
 
             var now = _clock.UtcNow;
-            var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now);
+            var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now, request.ReturnState);
             if (changed)
             {
                 _activity.Add(new ActivityLog(organizationId, "assignment.asset_returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
@@ -501,7 +502,7 @@ public sealed class AssignmentService
                 if (evidenceResult.IsFailure) return Result<AssignmentResponse>.Failure(evidenceResult.Error!);
 
                 var now = _clock.UtcNow;
-                var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now);
+                var changed = ApplyAssetReturn(assignment, asset, category, request.Resolution, request.ReturnCondition, request.ReturnLocation, request.Notes, organizationId, now, request.ReturnState);
                 if (changed)
                 {
                     _activity.Add(new ActivityLog(organizationId, "assignment.asset_returned", "assignment", assignment.Id, _currentUser.Subject, assignment.ProtocolNumber, _clock.UtcNow));
@@ -536,7 +537,7 @@ public sealed class AssignmentService
         _activity.Add(new ActivityLog(organizationId, "reservation.completed", "equipment_reservation", reservation.Id, _currentUser.Subject, reservation.Purpose, now));
     }
 
-    private bool ApplyAssetReturn(Assignment assignment, Asset asset, AssetCategory? category, ReturnResolution resolution, string? returnCondition, string? returnLocation, string? notes, Guid organizationId, DateTimeOffset now)
+    private bool ApplyAssetReturn(Assignment assignment, Asset asset, AssetCategory? category, ReturnResolution resolution, string? returnCondition, string? returnLocation, string? notes, Guid organizationId, DateTimeOffset now, ReturnState? returnState = null)
     {
         var item = assignment.Assets.FirstOrDefault(x => x.AssetId == asset.Id);
         if (item is null || item.ReturnResolution is not null)
@@ -544,7 +545,7 @@ public sealed class AssignmentService
             return false;
         }
 
-        assignment.ReturnAsset(asset.Id, resolution, now, returnCondition, returnLocation, _currentUser.Subject, notes);
+        assignment.ReturnAsset(asset.Id, resolution, now, returnCondition, returnLocation, _currentUser.Subject, notes, returnState);
         ApplyReturnResolutionToAsset(assignment, asset, category, resolution, returnLocation, organizationId, now);
         return true;
     }

@@ -8,6 +8,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DetailGrid, DetailItem } from '../components/DetailGrid';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { Modal } from '../components/Modal';
+import { OptionPicker, pickerKindFor } from '../components/OptionPicker';
+import { useInheritedValue } from '../hooks/useInheritedValue';
 import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { StatusBadge } from '../components/StatusBadge';
@@ -57,6 +59,11 @@ export function OffboardingPage() {
   const [editing, setEditing] = useState<OffboardingCaseDetails | null>(null);
   const [prefillPersonId, setPrefillPersonId] = useState(searchParams.get('personId') ?? '');
   const [modalPersonId, setModalPersonId] = useState('');
+  // Termin zwrotu podąża za datą końca zatrudnienia, a miejsce zwrotu za lokalizacją osoby - dopóki
+  // ktoś ich ręcznie nie zmieni (US-08, US-09).
+  const [employmentEndsAt, setEmploymentEndsAt] = useState('');
+  const returnDue = useInheritedValue();
+  const returnLocation = useInheritedValue();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [startDialog, setStartDialog] = useState<OffboardingCaseSummary | null>(null);
@@ -69,6 +76,7 @@ export function OffboardingPage() {
   const listLoader = useMemo(() => () => api.offboardingPaged({ status: debouncedStatus, page, pageSize }), [debouncedStatus, page]);
   const list = useAsyncData(listLoader, [listLoader]);
   const people = useAsyncData(() => api.people(), []);
+  const locations = useAsyncData(api.locations, []);
   const detailsLoader = useMemo(() => () => (id ? api.offboarding(id) : Promise.resolve(null)), [id]);
   const details = useAsyncData(detailsLoader, [detailsLoader]);
   const activityLoader = useMemo(() => () => (id ? api.activityLog({ entityType: 'offboarding_case', entityId: id, page: 1, pageSize: 20 }) : Promise.resolve(null)), [id]);
@@ -96,6 +104,30 @@ export function OffboardingPage() {
     setModalOpen(true);
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!modalOpen) return;
+    const ends = toLocalDateTimeValue(editing?.case.employmentEndsAt);
+    const due = toLocalDateTimeValue(editing?.case.returnDueDate);
+    setEmploymentEndsAt(ends);
+    // Przy edycji termin, który już różni się od końca zatrudnienia, był ustawiony świadomie - nie nadpisujemy go.
+    returnDue.reset(due, !!editing && due !== ends);
+    returnLocation.reset(editing?.case.defaultReturnLocation ?? '', !!editing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, editing]);
+
+  useEffect(() => {
+    if (!modalOpen || editing || returnLocation.isManual()) return;
+    returnLocation.reset(people.data?.find(person => person.id === modalPersonId)?.location ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, editing, modalPersonId, people.data]);
+
+  const returnLocationOptions = useMemo(() => {
+    const options = (locations.data ?? []).map(item => ({ value: item.fullPath, label: item.fullPath }));
+    // Miejsce wpisane dawniej ręcznie albo lokalizacja spoza listy - zostaje do wyboru, żeby nie zginęła.
+    if (returnLocation.value && !options.some(option => option.value === returnLocation.value)) options.unshift({ value: returnLocation.value, label: returnLocation.value });
+    return options;
+  }, [locations.data, returnLocation.value]);
+
   function openCreate(personId?: string) {
     setEditing(null);
     setPrefillPersonId(personId ?? '');
@@ -112,9 +144,9 @@ export function OffboardingPage() {
     const form = new FormData(event.currentTarget);
     const body = {
       personId: String(form.get('personId') ?? ''),
-      employmentEndsAt: fromLocalDateTimeValue(String(form.get('employmentEndsAt') ?? '')),
-      returnDueDate: fromLocalDateTimeValue(String(form.get('returnDueDate') ?? '')),
-      defaultReturnLocation: toNullable(String(form.get('defaultReturnLocation') ?? '')),
+      employmentEndsAt: fromLocalDateTimeValue(employmentEndsAt),
+      returnDueDate: fromLocalDateTimeValue(returnDue.value),
+      defaultReturnLocation: toNullable(returnLocation.value),
       notes: toNullable(String(form.get('notes') ?? '')),
       processOwnerId: toNullable(String(form.get('processOwnerId') ?? '')),
       blockNewReservations: form.get('blockNewReservations') === 'on',
@@ -272,9 +304,11 @@ export function OffboardingPage() {
               {modalPersonId ? <OffboardingPreviewBlock preview={preview.data} isLoading={preview.isLoading} /> : null}
             </>
           ) : null}
-          <Field label={t('offboarding.employmentEndsAtLabel')}><TextInput name="employmentEndsAt" type="datetime-local" defaultValue={toLocalDateTimeValue(editing?.case.employmentEndsAt)} min={todayIso()} required /></Field>
-          <Field label={t('offboarding.returnDueDateLabel')}><TextInput name="returnDueDate" type="datetime-local" defaultValue={toLocalDateTimeValue(editing?.case.returnDueDate)} min={todayIso()} required /></Field>
-          <Field label={t('offboarding.returnLocationLabel')}><TextInput name="defaultReturnLocation" defaultValue={editing?.case.defaultReturnLocation ?? ''} /></Field>
+          <Field label={t('offboarding.employmentEndsAtLabel')}><TextInput name="employmentEndsAt" type="datetime-local" value={employmentEndsAt} onChange={event => { setEmploymentEndsAt(event.target.value); returnDue.inherit(event.target.value); }} min={todayIso()} required /></Field>
+          <Field label={t('offboarding.returnDueDateLabel')} info={t('offboarding.returnDueInheritHint')}><TextInput name="returnDueDate" type="datetime-local" value={returnDue.value} onChange={event => returnDue.edit(event.target.value)} min={todayIso()} required /></Field>
+          <Field label={t('offboarding.returnLocationLabel')} group={pickerKindFor(returnLocationOptions.length + 1) === 'segmented'}>
+            <OptionPicker name="defaultReturnLocation" options={returnLocationOptions} value={returnLocation.value} onChange={returnLocation.edit} emptyOption={t('offboarding.returnLocationNone')} />
+          </Field>
           <Field label={t('offboarding.processOwnerLabel')}>
             <SelectInput name="processOwnerId" defaultValue={editing?.case.processOwnerId ?? ''}>
               <option value="">{t('common.unassigned')}</option>

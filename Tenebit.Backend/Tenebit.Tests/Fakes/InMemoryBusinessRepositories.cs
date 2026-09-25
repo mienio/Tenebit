@@ -795,6 +795,15 @@ public sealed class InMemoryServiceTicketRepository : IServiceTicketRepository
         return Task.FromResult<(IReadOnlyList<ServiceTicket>, int)>((items, total));
     }
 
+    public Task<IReadOnlyList<string>> ListVendorsAsync(Guid organizationId, int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>(Tickets
+            .Where(x => x.OrganizationId == organizationId && x.Vendor != "")
+            .GroupBy(x => x.Vendor)
+            .OrderByDescending(group => group.Max(x => x.OpenedAt))
+            .Select(group => group.Key)
+            .Take(limit)
+            .ToList());
+
     public HashSet<Guid> AllowedScopedAssetIds { get; } = [];
 
     public void Add(ServiceTicket ticket) => Tickets.Add(ticket);

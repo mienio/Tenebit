@@ -20,7 +20,10 @@ import { TwoFactorCard } from '../components/TwoFactorCard';
 import { AccountLinksCard } from '../components/AccountLinksCard';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, OrganizationUser, PersonRelationTypeOption, Team } from '../types/domain';
+import type { AssetCategory, AssetCategoryType, AssetStatusSetting, JobProfile, Organization, OrganizationUser, PersonRelationTypeOption, Team } from '../types/domain';
+import { OptionPicker, normalizeForSearch } from '../components/OptionPicker';
+import { useInheritedValue } from '../hooks/useInheritedValue';
+import { countryOptions, currencyOptions } from '../utils/referenceData';
 import { categoryTypeValues } from '../utils/labels';
 import { toNullable } from '../utils/format';
 import { CategoryIcon } from '../utils/categoryIcons';
@@ -279,13 +282,14 @@ export function SettingsPage() {
         logoUrl: toNullable(String(form.get('logoUrl') ?? '')),
         // Dane nabywcy na fakturę Paddle. Numer VAT normalizuje backend (usuwa separatory, dokłada
         // prefiks kraju w UE), więc wysyłamy dokładnie to, co wpisano.
-        billingCompanyName: toNullable(String(form.get('billingCompanyName') ?? '')),
+        // Nabywca taki sam jak nazwa firmy = null, czyli "tak jak nazwa" - wtedy dalej za nią podąża.
+        billingCompanyName: String(form.get('billingCompanyName') ?? '').trim() === String(form.get('name') ?? '').trim() ? null : toNullable(String(form.get('billingCompanyName') ?? '')),
         taxId: toNullable(String(form.get('taxId') ?? '')),
         billingAddressLine1: toNullable(String(form.get('billingAddressLine1') ?? '')),
         billingAddressLine2: toNullable(String(form.get('billingAddressLine2') ?? '')),
         billingCity: toNullable(String(form.get('billingCity') ?? '')),
         billingPostalCode: toNullable(String(form.get('billingPostalCode') ?? '')),
-        billingCountry: toNullable(String(form.get('billingCountry') ?? ''))
+        billingCountry: form.get('billingSameCountry') === 'on' ? null : toNullable(String(form.get('billingCountry') ?? ''))
       });
       success(t('settings.companySaved'));
       await organization.reload();
@@ -566,32 +570,7 @@ export function SettingsPage() {
       {tab === 'company' && canManageTab.company ? <div role="tabpanel" id="settings-tabpanel-company" aria-labelledby="settings-tab-company"><Card>
         <div className="sectionTitle"><div><h2>{t('settings.company')}</h2></div></div>
         <form className="formGrid" onSubmit={updateOrganization}>
-          <Field label={t('settings.nameLabel')}><TextInput name="name" defaultValue={organization.data.name} required /></Field>
-          <Field label={t('settings.countryLabel')}><TextInput name="country" defaultValue={organization.data.country} /></Field>
-          <Field label={t('settings.currencyLabel')}><TextInput name="currency" defaultValue={organization.data.currency} /></Field>
-          <Field label={t('settings.timeZoneLabel')}><TextInput name="timeZone" defaultValue={organization.data.timeZone} /></Field>
-          <Field label={t('settings.logoUrlLabel')}><TextInput name="logoUrl" defaultValue={organization.data.logoUrl ?? ''} /></Field>
-
-          {/* Dane nabywcy na fakturze. Paddle jest sprzedawcą (Merchant of Record) i to on wystawia
-              dokument, więc numer VAT trafia na niego tylko stąd - bez tego pola firma nie miała gdzie
-              podać NIP-u i faktura wychodziła jak na osobę prywatną. */}
-          <div className="formSection">
-            <h3>{t('settings.billingDetails')}</h3>
-            <p>{t('settings.billingDetailsHint')}</p>
-          </div>
-          <Field label={t('settings.billingCompanyNameLabel')} info={t('settings.billingCompanyNameHint')}>
-            <TextInput name="billingCompanyName" defaultValue={organization.data.billingCompanyName ?? ''} placeholder={organization.data.name} />
-          </Field>
-          <Field label={t('settings.vatIdLabel')} info={t('settings.vatIdHint')}>
-            <TextInput name="taxId" defaultValue={organization.data.taxId ?? ''} placeholder="PL1234563218" />
-          </Field>
-          <Field label={t('settings.billingAddressLine1Label')}><TextInput name="billingAddressLine1" defaultValue={organization.data.billingAddressLine1 ?? ''} /></Field>
-          <Field label={t('settings.billingAddressLine2Label')}><TextInput name="billingAddressLine2" defaultValue={organization.data.billingAddressLine2 ?? ''} /></Field>
-          <Field label={t('settings.billingPostalCodeLabel')}><TextInput name="billingPostalCode" defaultValue={organization.data.billingPostalCode ?? ''} /></Field>
-          <Field label={t('settings.billingCityLabel')}><TextInput name="billingCity" defaultValue={organization.data.billingCity ?? ''} /></Field>
-          <Field label={t('settings.billingCountryLabel')} info={t('settings.billingCountryHint')}>
-            <TextInput name="billingCountry" defaultValue={organization.data.billingCountry ?? ''} placeholder={organization.data.country} maxLength={2} />
-          </Field>
+          <CompanyFields organization={organization.data} />
 
           <div className="formActions formActions--split"><span className="muted">{t('settings.futureProtocolsHint')}</span><Button icon={<Save size={16} />}>{t('settings.save')}</Button></div>
         </form>
@@ -909,7 +888,7 @@ export function SettingsPage() {
           <Field label={t('settings.nameLabel')}><TextInput name="name" defaultValue={editingProfile?.name ?? ''} required /></Field>
           <Field label={t('settings.descriptionLabel')}><TextArea name="description" defaultValue={editingProfile?.description ?? ''} /></Field>
           <Field label={t('settings.defaultManagerLabel')}><SelectInput name="defaultManagerId" defaultValue={editingProfile?.defaultManagerId ?? ''}><option value="">{t('settings.noneOption')}</option>{people.data?.map(p => <option key={p.id} value={p.id}>{p.fullName}</option>)}</SelectInput></Field>
-          <fieldset className="checkboxGroup"><legend>{t('settings.colEquipmentCategories')}</legend>{categories.data?.map(c => <label key={c.id}><input name="assetCategoryIds" value={c.id} type="checkbox" defaultChecked={editingProfile?.assetCategoryIds.includes(c.id)} /> {c.name} <small>{categoryTypeLabels[c.type]}</small></label>)}</fieldset>
+          <ProfileCategoryChecklist key={editingProfile?.id ?? 'new-profile'} categories={categories.data ?? []} selectedIds={editingProfile?.assetCategoryIds ?? []} typeLabels={categoryTypeLabels} />
           <fieldset className="checkboxGroup"><legend>{t('settings.colProcedures')}</legend>{procedures.data?.map(p => <label key={p.id}><input name="procedureIds" value={p.id} type="checkbox" defaultChecked={editingProfile?.procedureIds.includes(p.id)} /> {p.title}</label>)}</fieldset>
           <div className="formActions formActions--split"><Button type="button" variant="ghost" onClick={() => setModal(null)}>{t('common.cancel')}</Button><Button disabled={profileSaving}>{profileSaving ? t('common.saving') : t('settings.saveProfile')}</Button></div>
         </form>
@@ -967,5 +946,106 @@ function SettingsSearch({ value, onChange, total }: { value: string; onChange: (
       <Field label={t('settings.searchInSection')}><TextInput value={value} onChange={event => onChange(event.target.value)} placeholder={t('settings.searchPlaceholder')} /></Field>
       <span className="toolbarHint"><Search size={16} /> {total} {tPlural('count.results', total)}</span>
     </div>
+  );
+}
+
+/**
+ * Pola profilu firmy i danych do faktury (US-17). Kraj i waluta wybierane z list ISO zamiast wpisywane -
+ * waluta jest domyślną w całej aplikacji (aktywa, zgłoszenia serwisowe). Kraj na fakturze i nabywca
+ * domyślnie idą za krajem i nazwą firmy; ręczna zmiana nabywcy odłącza go do końca edycji.
+ */
+function CompanyFields({ organization }: { organization: Organization }) {
+  const { t, language } = useI18n();
+  const [name, setName] = useState(organization.name);
+  const [country, setCountry] = useState(organization.country);
+  const [currency, setCurrency] = useState(organization.currency);
+  const [sameCountry, setSameCountry] = useState(!organization.billingCountry || organization.billingCountry === organization.country);
+  const [billingCountry, setBillingCountry] = useState(organization.billingCountry ?? organization.country);
+  const buyer = useInheritedValue(organization.billingCompanyName ?? organization.name);
+
+  useEffect(() => {
+    // Nabywca wpisany kiedyś inaczej niż nazwa firmy został odłączony świadomie - nie nadpisujemy go.
+    buyer.reset(organization.billingCompanyName ?? organization.name, !!organization.billingCompanyName && organization.billingCompanyName !== organization.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organization]);
+
+  const countries = useMemo(() => countryOptions(language, organization.country), [language, organization.country]);
+  const billingCountries = useMemo(() => countryOptions(language, organization.billingCountry), [language, organization.billingCountry]);
+  const currencies = useMemo(() => currencyOptions(language, [organization.currency, 'PLN', 'EUR', 'USD']), [language, organization.currency]);
+
+  return (
+    <>
+      <Field label={t('settings.nameLabel')}><TextInput name="name" value={name} onChange={event => { setName(event.target.value); buyer.inherit(event.target.value); }} required /></Field>
+      <Field label={t('settings.countryLabel')}><OptionPicker name="country" options={countries} value={country} onChange={setCountry} required /></Field>
+      <Field label={t('settings.currencyLabel')}><OptionPicker name="currency" options={currencies} value={currency} onChange={setCurrency} required /></Field>
+      <Field label={t('settings.timeZoneLabel')}><TextInput name="timeZone" defaultValue={organization.timeZone} /></Field>
+      <Field label={t('settings.logoUrlLabel')}><TextInput name="logoUrl" defaultValue={organization.logoUrl ?? ''} /></Field>
+
+      {/* Dane nabywcy na fakturze. Paddle jest sprzedawcą (Merchant of Record) i to on wystawia
+          dokument, więc numer VAT trafia na niego tylko stąd - bez tego pola firma nie miała gdzie
+          podać numeru VAT i faktura wychodziła jak na osobę prywatną. */}
+      <div className="formSection">
+        <h3>{t('settings.billingDetails')}</h3>
+        <p>{t('settings.billingDetailsHint')}</p>
+      </div>
+      <Field label={t('settings.billingCompanyNameLabel')} info={t('settings.billingCompanyNameHint')}>
+        <TextInput name="billingCompanyName" value={buyer.value} onChange={event => buyer.edit(event.target.value)} placeholder={name} />
+      </Field>
+      <Field label={t('settings.vatIdLabel')} info={t('settings.vatIdHint')}>
+        <TextInput name="taxId" defaultValue={organization.taxId ?? ''} placeholder="PL1234563218" />
+      </Field>
+      <Field label={t('settings.billingAddressLine1Label')}><TextInput name="billingAddressLine1" defaultValue={organization.billingAddressLine1 ?? ''} /></Field>
+      <Field label={t('settings.billingAddressLine2Label')}><TextInput name="billingAddressLine2" defaultValue={organization.billingAddressLine2 ?? ''} /></Field>
+      <Field label={t('settings.billingPostalCodeLabel')}><TextInput name="billingPostalCode" defaultValue={organization.billingPostalCode ?? ''} /></Field>
+      <Field label={t('settings.billingCityLabel')}><TextInput name="billingCity" defaultValue={organization.billingCity ?? ''} /></Field>
+      <div className="formFullWidth">
+        <label className="checkField"><input type="checkbox" name="billingSameCountry" checked={sameCountry} onChange={event => { setSameCountry(event.target.checked); if (!event.target.checked) setBillingCountry(country); }} /> {t('settings.billingSameCountry')}</label>
+      </div>
+      {sameCountry ? null : (
+        <Field label={t('settings.billingCountryLabel')} info={t('settings.billingCountryHint')}>
+          <OptionPicker name="billingCountry" options={billingCountries} value={billingCountry} onChange={setBillingCountry} required />
+        </Field>
+      )}
+    </>
+  );
+}
+
+/**
+ * Kategorie sprzętu w zestawie stanowiskowym z wyszukiwarką (US-18) - ten sam wzorzec co "Szukaj w tej
+ * sekcji" w Polach niestandardowych. Niepasujące pozycje są tylko ukrywane (atrybut hidden), a nie
+ * odmontowywane: zaznaczone checkboxy zostają w formularzu i trafiają do zapisu także wtedy, gdy filtr
+ * akurat je chowa.
+ */
+function ProfileCategoryChecklist({ categories, selectedIds, typeLabels }: { categories: AssetCategory[]; selectedIds: string[]; typeLabels: Record<AssetCategoryType, string> }) {
+  const { t, language } = useI18n();
+  const [query, setQuery] = useState('');
+  const [checked, setChecked] = useState<Set<string>>(() => new Set(selectedIds));
+  const sorted = useMemo(() => [...categories].sort((a, b) => typeLabels[a.type].localeCompare(typeLabels[b.type], language) || a.name.localeCompare(b.name, language)), [categories, typeLabels, language]);
+  const needle = normalizeForSearch(query.trim());
+  const matches = (category: AssetCategory) => !needle || normalizeForSearch(`${category.name} ${typeLabels[category.type]}`).includes(needle);
+  const visibleCount = sorted.filter(matches).length;
+
+  function toggle(id: string) {
+    setChecked(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <fieldset className="checkboxGroup">
+      <legend>{t('settings.colEquipmentCategories')}</legend>
+      <div className="checkboxGroup__search">
+        <TextInput type="search" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} placeholder={t('settings.searchPlaceholder')} aria-label={t('settings.searchInSection')} />
+        <small>{t('settings.profileCategoriesSelected', { count: checked.size })}</small>
+      </div>
+      {sorted.map(category => (
+        <label key={category.id} hidden={!matches(category)}>
+          <input name="assetCategoryIds" value={category.id} type="checkbox" checked={checked.has(category.id)} onChange={() => toggle(category.id)} /> {category.name} <small>{typeLabels[category.type]}</small>
+        </label>
+      ))}
+      {visibleCount === 0 ? <p className="muted">{t('picker.noResults')}</p> : null}
+    </fieldset>
   );
 }

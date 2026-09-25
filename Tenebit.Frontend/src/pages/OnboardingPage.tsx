@@ -5,6 +5,9 @@ import { api, type EvidencePhoto } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { EvidencePhotoPicker } from '../components/Evidence';
+import { DatePresets, Switch } from '../components/DatePresets';
+import { addDays, addMonths, todayIsoLocal } from '../utils/datePresets';
+import { procedureMatchesJobTitle, parseProcedureScope } from '../utils/procedureScope';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
@@ -28,11 +31,28 @@ export function OnboardingPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [assetFilter, setAssetFilter] = useState('');
+  // Pakiet to zwykle wydanie na stałe - termin zwrotu pokazujemy dopiero dla wydania tymczasowego (US-07).
+  const [temporary, setTemporary] = useState(false);
+  const [dueDate, setDueDate] = useState('');
   const checklist = useAsyncData(() => (selectedPersonId ? api.onboardingChecklist(selectedPersonId) : Promise.resolve(null)), [selectedPersonId]);
   // Which profile's suggestion has already been applied, so a later reload does not overwrite manual edits.
   const appliedProfileRef = useRef<string | null>(null);
 
-  const publishedProcedures = useMemo(() => procedures.data?.filter(item => item.status === 'Published') ?? [], [procedures.data]);
+  const selectedPerson = useMemo(() => people.data?.find(person => person.id === selectedPersonId) ?? null, [people.data, selectedPersonId]);
+  // Procedury, których zakres obejmuje stanowisko wybranej osoby, idą na górę listy z oznaczeniem (US-10).
+  const suggestedProcedureIds = useMemo(() => new Set((procedures.data ?? [])
+    .filter(item => item.status === 'Published' && procedureMatchesJobTitle(item.appliesTo, selectedPerson?.jobTitle))
+    .map(item => item.id)), [procedures.data, selectedPerson]);
+  const publishedProcedures = useMemo(() => (procedures.data?.filter(item => item.status === 'Published') ?? [])
+    .sort((a, b) => Number(suggestedProcedureIds.has(b.id)) - Number(suggestedProcedureIds.has(a.id))), [procedures.data, suggestedProcedureIds]);
+  const suggestedAppliedRef = useRef<string | null>(null);
+
+  // Po wyborze osoby dopasowane procedury zaznaczają się same (dokładane do już zaznaczonych, raz na osobę).
+  useEffect(() => {
+    if (!selectedPersonId || suggestedAppliedRef.current === selectedPersonId || !procedures.data) return;
+    suggestedAppliedRef.current = selectedPersonId;
+    if (suggestedProcedureIds.size) setSelectedProcedureIds(current => [...new Set([...current, ...suggestedProcedureIds])]);
+  }, [selectedPersonId, suggestedProcedureIds, procedures.data]);
   const visibleAssets = useMemo(() => {
     const query = assetFilter.trim().toLowerCase();
     const rows = assets.data ?? [];
@@ -99,7 +119,7 @@ export function OnboardingPage() {
         jobProfileId: selectedJobProfileId || null,
         assetIds: selectedAssetIds,
         procedureIds: selectedProcedureIds,
-        dueDate: toNullable(String(form.get('dueDate') ?? '')),
+        dueDate: temporary ? toNullable(dueDate) : null,
         notes: toNullable(String(form.get('notes') ?? '')),
         assetConditions: Object.fromEntries(selectedAssetIds.map(assetId => [assetId, t(`issueCondition.${issueConditions[assetId] ?? 'ok'}`)]))
       };
@@ -111,6 +131,9 @@ export function OnboardingPage() {
       setIssueConditions({});
       setIssueEvidence({});
       setSelectedJobProfileId('');
+      setTemporary(false);
+      setDueDate('');
+      suggestedAppliedRef.current = null;
       const warningsText = response.warnings.length ? ` ${t('onboarding.warningsTitle')} ${response.warnings.join(' ')}` : '';
       setMessage({ type: 'success', text: t('onboarding.created', { protocol: response.protocolNumber }) + warningsText });
       await Promise.all([assets.reload(), people.reload(), checklist.reload()]);
@@ -189,14 +212,29 @@ export function OnboardingPage() {
             <div className="packageStep__header"><span>4</span><div><strong>{t('onboarding.step4Title')}</strong><small>{t('onboarding.step4Hint')}</small></div></div>
             {!publishedProcedures.length ? <p className="emptyInline">{t('onboarding.noProceduresToChoose')}</p> : (
               <div className="choiceList">
-                {publishedProcedures.map(procedure => <label key={procedure.id} className="choiceRow"><input type="checkbox" checked={selectedProcedureIds.includes(procedure.id)} onChange={() => setSelectedProcedureIds(current => toggle(current, procedure.id))} /> <span><strong>{procedure.title}</strong><small>{t('onboarding.procedureVersion', { version: procedure.version })}</small></span></label>)}
+                {publishedProcedures.map(procedure => <label key={procedure.id} className="choiceRow"><input type="checkbox" checked={selectedProcedureIds.includes(procedure.id)} onChange={() => setSelectedProcedureIds(current => toggle(current, procedure.id))} /> <span><strong>{procedure.title}</strong><small>{t('onboarding.procedureVersion', { version: procedure.version })}{parseProcedureScope(procedure.appliesTo).length ? ` · ${parseProcedureScope(procedure.appliesTo).join(', ')}` : ''}</small></span>{suggestedProcedureIds.has(procedure.id) ? <span className="status status--Published">{t('onboarding.procedureSuggested')}</span> : null}</label>)}
               </div>
             )}
           </section>
 
           <section className="packageStep packageStep--compact">
             <div className="formGrid">
-              <Field label={t('onboarding.dueDateLabel')}><TextInput name="dueDate" type="date" min={new Date().toISOString().slice(0, 10)} /></Field>
+              <Switch checked={temporary} onChange={setTemporary} label={t('onboarding.temporary')} hint={t('onboarding.temporaryHint')} />
+              {temporary ? (
+                <Field label={t('onboarding.dueDateLabel')}>
+                  <div className="dateWithPresets">
+                    <TextInput name="dueDate" type="date" min={todayIsoLocal()} value={dueDate} onChange={event => setDueDate(event.target.value)} required />
+                    <DatePresets
+                      presets={[
+                        { label: t('presets.plusDays', { count: 30 }), compute: () => addDays(todayIsoLocal(), 30) },
+                        { label: t('presets.plusDays', { count: 90 }), compute: () => addDays(todayIsoLocal(), 90) },
+                        { label: t('presets.probationEnd'), compute: () => addMonths(todayIsoLocal(), 3) }
+                      ]}
+                      onPick={setDueDate}
+                    />
+                  </div>
+                </Field>
+              ) : null}
               <Field label={t('onboarding.notesLabel')}><TextArea name="notes" placeholder={t('onboarding.notesPlaceholder')} /></Field>
             </div>
           </section>

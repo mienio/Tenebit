@@ -216,7 +216,7 @@ public sealed class Assignment
     private static IReadOnlyList<AssetEvidenceIntegrityEntry>? ToIntegrityEntries(IReadOnlyList<AssetEvidence>? evidence) =>
         evidence?.Select(x => new AssetEvidenceIntegrityEntry(x.Id, x.Phase, x.Sha256)).ToList();
 
-    public void ReturnAsset(Guid assetId, ReturnResolution resolution, DateTimeOffset returnedAt, string? returnCondition, string? returnLocation, string? returnedBy, string? notes)
+    public void ReturnAsset(Guid assetId, ReturnResolution resolution, DateTimeOffset returnedAt, string? returnCondition, string? returnLocation, string? returnedBy, string? notes, ReturnState? returnState = null)
     {
         if (Status == AssignmentStatus.Cancelled)
         {
@@ -234,7 +234,7 @@ public sealed class Assignment
             return;
         }
 
-        item.Resolve(resolution, returnedAt, returnCondition, returnLocation, returnedBy, notes);
+        item.Resolve(resolution, returnedAt, returnCondition, returnLocation, returnedBy, notes, returnState);
 
         if (Assets.All(x => x.ReturnResolution is not null))
         {

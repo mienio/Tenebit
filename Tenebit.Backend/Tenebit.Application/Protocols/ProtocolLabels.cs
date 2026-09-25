@@ -1,4 +1,5 @@
 using Tenebit.Application.Common;
+using Tenebit.Domain.Assignments;
 
 namespace Tenebit.Application.Protocols;
 
@@ -35,6 +36,9 @@ public sealed record ProtocolLabels(
     string LegalNote,
     string Page)
 {
+    /// <summary>Nazwy ogólnego stanu przy zwrocie (US-16) - trafiają do kolumny "Stan" przed uwagami.</summary>
+    public IReadOnlyDictionary<ReturnState, string> ReturnStates { get; init; } = new Dictionary<ReturnState, string>();
+
     private static readonly ProtocolLabels Polish = new(
         HandoverTitle: "Protokół przekazania sprzętu",
         ReturnTitle: "Protokół zwrotu sprzętu",
@@ -58,7 +62,10 @@ public sealed record ProtocolLabels(
         IntegrityHash: "Suma kontrolna potwierdzenia (SHA-256)",
         LiabilityClause: "Pracownik potwierdza odbiór wymienionego wyżej mienia, przyjmuje je na swój stan i zobowiązuje się używać go zgodnie z przeznaczeniem oraz zwrócić na żądanie pracodawcy albo przy zakończeniu zatrudnienia.",
         LegalNote: "Dokument stanowi potwierdzenie elektroniczne (zapis akceptacji) złożone przez link wysłany na adres pracownika. Nie jest kwalifikowanym podpisem elektronicznym w rozumieniu rozporządzenia eIDAS. Suma kontrolna umożliwia wykrycie zmiany treści protokołu po jego potwierdzeniu.",
-        Page: "Strona");
+        Page: "Strona")
+    {
+        ReturnStates = new Dictionary<ReturnState, string> { [ReturnState.Working] = "Sprawny", [ReturnState.Damaged] = "Uszkodzony", [ReturnState.Incomplete] = "Niekompletny" }
+    };
 
     private static readonly ProtocolLabels English = new(
         HandoverTitle: "Equipment handover protocol",
@@ -83,7 +90,10 @@ public sealed record ProtocolLabels(
         IntegrityHash: "Confirmation checksum (SHA-256)",
         LiabilityClause: "The employee confirms receipt of the property listed above, takes responsibility for it, and undertakes to use it as intended and return it on the employer's request or when the employment ends.",
         LegalNote: "This document is an electronic acknowledgement recorded through a link sent to the employee's address. It is not a qualified electronic signature under the eIDAS Regulation. The checksum makes any change to the protocol after confirmation detectable.",
-        Page: "Page");
+        Page: "Page")
+    {
+        ReturnStates = new Dictionary<ReturnState, string> { [ReturnState.Working] = "Working", [ReturnState.Damaged] = "Damaged", [ReturnState.Incomplete] = "Incomplete" }
+    };
 
     private static readonly ProtocolLabels Spanish = new(
         HandoverTitle: "Protocolo de entrega de equipo",
@@ -108,7 +118,10 @@ public sealed record ProtocolLabels(
         IntegrityHash: "Suma de verificación de la confirmación (SHA-256)",
         LiabilityClause: "El empleado confirma la recepción de los bienes indicados anteriormente, los asume bajo su custodia y se compromete a utilizarlos conforme a su finalidad y a devolverlos a requerimiento del empleador o al finalizar la relación laboral.",
         LegalNote: "Este documento constituye una confirmación electrónica (registro de aceptación) realizada mediante un enlace enviado a la dirección del empleado. No es una firma electrónica cualificada conforme al Reglamento eIDAS. La suma de verificación permite detectar cualquier modificación del protocolo posterior a su confirmación.",
-        Page: "Página");
+        Page: "Página")
+    {
+        ReturnStates = new Dictionary<ReturnState, string> { [ReturnState.Working] = "Funciona", [ReturnState.Damaged] = "Dañado", [ReturnState.Incomplete] = "Incompleto" }
+    };
 
     private static readonly ProtocolLabels German = new(
         HandoverTitle: "Übergabeprotokoll für Arbeitsmittel",
@@ -133,7 +146,10 @@ public sealed record ProtocolLabels(
         IntegrityHash: "Prüfsumme der Bestätigung (SHA-256)",
         LiabilityClause: "Die mitarbeitende Person bestätigt den Empfang der oben aufgeführten Gegenstände, übernimmt sie in ihre Obhut und verpflichtet sich, sie bestimmungsgemäß zu verwenden und auf Verlangen des Arbeitgebers oder bei Beendigung des Arbeitsverhältnisses zurückzugeben.",
         LegalNote: "Dieses Dokument ist eine elektronische Bestätigung (Annahmenachweis), die über einen an die Adresse der mitarbeitenden Person gesendeten Link abgegeben wurde. Es handelt sich nicht um eine qualifizierte elektronische Signatur im Sinne der eIDAS-Verordnung. Die Prüfsumme ermöglicht es, nachträgliche Änderungen am Protokoll zu erkennen.",
-        Page: "Seite");
+        Page: "Seite")
+    {
+        ReturnStates = new Dictionary<ReturnState, string> { [ReturnState.Working] = "Funktionsfähig", [ReturnState.Damaged] = "Beschädigt", [ReturnState.Incomplete] = "Unvollständig" }
+    };
 
 
     private static readonly ProtocolLabels Italian = new(
@@ -159,7 +175,10 @@ public sealed record ProtocolLabels(
         IntegrityHash: "Impronta di verifica della conferma (SHA-256)",
         LiabilityClause: "Il dipendente conferma di aver ricevuto i beni sopra elencati, li prende in custodia e si impegna a utilizzarli conformemente alla loro destinazione nonché a restituirli su richiesta del datore di lavoro o alla cessazione del rapporto di lavoro.",
         LegalNote: "Il presente documento costituisce una conferma elettronica (registrazione dell'accettazione) effettuata tramite un collegamento inviato all'indirizzo del dipendente. Non si tratta di una firma elettronica qualificata ai sensi del regolamento eIDAS. L'impronta di verifica consente di rilevare qualsiasi modifica apportata al verbale dopo la conferma.",
-        Page: "Pagina");
+        Page: "Pagina")
+    {
+        ReturnStates = new Dictionary<ReturnState, string> { [ReturnState.Working] = "Funzionante", [ReturnState.Damaged] = "Danneggiato", [ReturnState.Incomplete] = "Incompleto" }
+    };
 
     private static readonly ProtocolLabels French = new(
         HandoverTitle: "Procès-verbal de remise du matériel",
@@ -184,7 +203,10 @@ public sealed record ProtocolLabels(
         IntegrityHash: "Empreinte de vérification de la confirmation (SHA-256)",
         LiabilityClause: "Le collaborateur confirme la réception des biens énumérés ci-dessus, en prend la garde et s'engage à les utiliser conformément à leur destination ainsi qu'à les restituer à la demande de l'employeur ou à la fin de la relation de travail.",
         LegalNote: "Le présent document constitue une confirmation électronique (enregistrement de l'acceptation) effectuée au moyen d'un lien envoyé à l'adresse du collaborateur. Il ne s'agit pas d'une signature électronique qualifiée au sens du règlement eIDAS. L'empreinte de vérification permet de détecter toute modification du procès-verbal postérieure à sa confirmation.",
-        Page: "Page");
+        Page: "Page")
+    {
+        ReturnStates = new Dictionary<ReturnState, string> { [ReturnState.Working] = "Fonctionnel", [ReturnState.Damaged] = "Endommagé", [ReturnState.Incomplete] = "Incomplet" }
+    };
 
     /// <summary>Każdy język interfejsu ma własną klauzulę. Brak języka lub język spoza listy dostaje
     /// angielską - nie polską, bo protokół czyta osoba, której języka organizacji nie znamy.</summary>

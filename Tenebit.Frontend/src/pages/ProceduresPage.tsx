@@ -5,8 +5,12 @@ import { api } from '../api/endpoints';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Field, TextArea, TextInput } from '../components/FormFields';
+import { Field, TextInput } from '../components/FormFields';
 import { Modal } from '../components/Modal';
+import { OptionPicker, pickerKindFor, type PickerOption } from '../components/OptionPicker';
+import { TagInput } from '../components/TagInput';
+import { uniqueSuggestions } from '../components/Autocomplete';
+import { PROCEDURE_SCOPE_MAX_LENGTH, parseProcedureScope, serializeProcedureScope } from '../utils/procedureScope';
 import { PageHeader } from '../components/PageHeader';
 import { Pagination } from '../components/Pagination';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
@@ -64,6 +68,33 @@ export function ProceduresPage() {
     [editedProcedure, showAcceptances]
   );
   const acceptances = useAsyncData(acceptanceLoader, [acceptanceLoader]);
+  const formOpen = dialog?.mode === 'create' || dialog?.mode === 'edit';
+  // Osoby i zespoły dla pola "Właściciel" oraz stanowiska dla zakresu - ładowane dopiero przy otwarciu formularza.
+  const people = useAsyncData(() => (formOpen ? api.people() : Promise.resolve(null)), [formOpen]);
+  const teams = useAsyncData(() => (formOpen ? api.teams() : Promise.resolve(null)), [formOpen]);
+  const [scopeTags, setScopeTags] = useState<string[]>([]);
+  const [allPositions, setAllPositions] = useState(true);
+  const [owner, setOwner] = useState('');
+  const jobTitleSuggestions = useMemo(() => uniqueSuggestions((people.data ?? []).map(person => person.jobTitle)), [people.data]);
+  const ownerOptions = useMemo(() => {
+    const options: PickerOption[] = [
+      ...(teams.data ?? []).map(team => ({ value: team.name, label: team.name, group: t('procedures.ownerTeams') })),
+      ...(people.data ?? []).filter(person => person.employmentStatus !== 'Inactive').map(person => ({ value: person.fullName, label: person.fullName, group: t('procedures.ownerPeople') }))
+    ];
+    const unique = options.filter((option, index) => options.findIndex(other => other.value === option.value) === index);
+    // Właściciel wpisany dawniej ręcznie ("HR / IT") zostaje do wyboru, żeby edycja go nie gubiła.
+    if (owner && !unique.some(option => option.value === owner)) unique.unshift({ value: owner, label: owner, group: t('procedures.ownerCurrent') });
+    return unique;
+  }, [teams.data, people.data, owner, t]);
+
+  useEffect(() => {
+    if (!formOpen) return;
+    const tags = parseProcedureScope(editedProcedure?.appliesTo);
+    setScopeTags(tags);
+    setAllPositions(tags.length === 0);
+    setOwner(editedProcedure?.owner ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formOpen, editedProcedure?.id]);
 
   useEffect(() => {
     if (!message) return;
@@ -95,13 +126,15 @@ export function ProceduresPage() {
     const body = {
       title: String(form.get('title') ?? '').trim(),
       version: String(form.get('version') ?? '1.0').trim() || '1.0',
-      owner: String(form.get('owner') ?? 'HR / IT').trim() || 'HR / IT',
-      appliesTo: toNullable(String(form.get('appliesTo') ?? '')),
+      owner: owner.trim() || 'HR / IT',
+      appliesTo: allPositions ? null : serializeProcedureScope(scopeTags),
       reviewDate: toNullable(String(form.get('reviewDate') ?? '')),
       requiresAcceptance: form.get('requiresAcceptance') === 'on'
     };
 
     if (!body.title) return setMessage({ type: 'error', text: t('procedures.titleRequired') });
+    if (!allPositions && !scopeTags.length) return setMessage({ type: 'error', text: t('procedures.scopeRequired') });
+    if ((body.appliesTo?.length ?? 0) > PROCEDURE_SCOPE_MAX_LENGTH) return setMessage({ type: 'error', text: t('procedures.scopeTooLong', { max: PROCEDURE_SCOPE_MAX_LENGTH }) });
 
     const wasCreate = !editedProcedure;
     setSaving(true);
@@ -297,9 +330,16 @@ export function ProceduresPage() {
           <form className="formGrid" onSubmit={saveProcedure} key={editedProcedure?.id ?? 'new-procedure'}>
             <Field label={t('procedures.titleLabel')}><TextInput name="title" defaultValue={editedProcedure?.title ?? ''} required /></Field>
             <Field label={t('procedures.versionLabel')}><TextInput name="version" defaultValue={editedProcedure?.version ?? '1.0'} /></Field>
-            <Field label={t('procedures.ownerLabel')}><TextInput name="owner" defaultValue={editedProcedure?.owner ?? 'HR / IT'} /></Field>
+            <Field label={t('procedures.ownerLabel')} group={pickerKindFor(ownerOptions.length + 1) === 'segmented'}>
+              <OptionPicker name="owner" options={ownerOptions} value={owner} onChange={setOwner} emptyOption={t('procedures.ownerNone')} />
+            </Field>
             <Field label={t('procedures.reviewDateLabel')}><TextInput name="reviewDate" type="date" defaultValue={editedProcedure?.reviewDate ?? ''} /></Field>
-            <Field label={t('procedures.scopeLabel')}><TextArea name="appliesTo" defaultValue={editedProcedure?.appliesTo ?? ''} /></Field>
+            <Field label={t('procedures.scopeLabel')} info={t('procedures.scopeHint')} group>
+              <label className="checkField"><input type="checkbox" checked={allPositions} onChange={event => setAllPositions(event.target.checked)} /> {t('procedures.allPositions')}</label>
+              {allPositions ? null : (
+                <TagInput tags={scopeTags} onChange={setScopeTags} suggestions={jobTitleSuggestions} placeholder={t('procedures.scopePlaceholder')} />
+              )}
+            </Field>
             <label className="checkField"><input name="requiresAcceptance" type="checkbox" defaultChecked={editedProcedure?.requiresAcceptance ?? true} /> {t('procedures.requiresAcceptance')}</label>
             <div className="formActions formActions--split">
               <Button type="button" variant="ghost" onClick={() => setDialog(null)}>{t('common.close')}</Button>

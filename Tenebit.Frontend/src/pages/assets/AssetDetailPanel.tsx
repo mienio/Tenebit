@@ -1,4 +1,4 @@
-import { Copy, Eye, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
+import { Copy, Eye, PackageCheck, Pencil, Plus, QrCode, Trash2 } from 'lucide-react';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
 import { SlidePanel } from '../../components/SlidePanel';
@@ -17,6 +17,8 @@ interface AssetDetailPanelProps {
   onClose(): void;
   onQr(asset: Asset): void;
   onEdit(asset: Asset): void;
+  // Brak = użytkownik nie ma prawa tworzyć wydań, przycisk się nie pokazuje.
+  onIssue?(asset: Asset): void;
   onDuplicate(asset: Asset): void;
   onDelete(asset: Asset): void;
   onViewPerson(id: string): void;
@@ -55,6 +57,7 @@ export function AssetDetailPanel(props: AssetDetailPanelProps) {
             </div>
             <div className="rowActions">
               <Button variant="secondary" onClick={() => props.onQr(selected)} icon={<QrCode size={16} />}>{t('assets.qrCode')}</Button>
+              {props.onIssue && selected.status === 'InStock' && <Button onClick={() => props.onIssue!(selected)} icon={<PackageCheck size={16} />}>{t('assets.issueToPerson')}</Button>}
               <Button variant="secondary" onClick={() => props.onEdit(selected)} icon={<Pencil size={16} />}>{t('assets.edit')}</Button>
               <Button variant="secondary" onClick={() => props.onDuplicate(selected)} icon={<Copy size={16} />}>{t('assets.duplicate')}</Button>
               <Button variant="secondary" onClick={() => props.onDelete(selected)} icon={<Trash2 size={16} />}>{t('assets.delete')}</Button>

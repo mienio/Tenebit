@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validationMessage } from './FormFields';
+import { localTodayIso, todayInputValue, validationMessage } from './FormFields';
 import { translations } from '../i18n/translations';
 
 const t = (key: string, params?: Record<string, string | number>) => {
@@ -36,5 +36,18 @@ describe('komunikaty walidacji pól', () => {
 
   it('nieznany powód nadal daje treść, a nie pusty napis', () => {
     expect(validationMessage(control({}), t)).toBe('The value is invalid.');
+  });
+});
+
+describe('przycisk "Dzisiaj" przy polach daty', () => {
+  it('bierze datę lokalną, nie UTC', () => {
+    expect(localTodayIso(new Date(2026, 8, 24, 0, 30))).toBe('2026-09-24');
+  });
+
+  it('w datetime-local zachowuje wpisaną godzinę, a bez niej bierze bieżącą', () => {
+    const now = new Date(2026, 8, 24, 9, 5);
+    expect(todayInputValue('date', '', now)).toBe('2026-09-24');
+    expect(todayInputValue('datetime-local', '2026-01-02T16:30', now)).toBe('2026-09-24T16:30');
+    expect(todayInputValue('datetime-local', '', now)).toBe('2026-09-24T09:05');
   });
 });

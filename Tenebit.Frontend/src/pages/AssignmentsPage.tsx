@@ -7,6 +7,10 @@ import { Card } from '../components/Card';
 import { DetailGrid, DetailItem } from '../components/DetailGrid';
 import { EvidenceGallery, EvidencePhotoPicker } from '../components/Evidence';
 import { Modal } from '../components/Modal';
+import { ConfirmPopover } from '../components/ConfirmPopover';
+import { DatePresets, Switch } from '../components/DatePresets';
+import { OptionPicker } from '../components/OptionPicker';
+import { addDays, endOfMonth, todayIsoLocal } from '../utils/datePresets';
 import { Field, SelectInput, TextArea, TextInput } from '../components/FormFields';
 import { PageHeader } from '../components/PageHeader';
 import { PersonPreviewModal } from '../components/PersonPreviewModal';
@@ -15,7 +19,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAsyncData } from '../hooks/useAsyncData';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import type { AssetEvidence, Assignment, AssignmentStatus } from '../types/domain';
+import { returnStateValues, type AssetEvidence, type Assignment, type AssignmentStatus, type ReturnState } from '../types/domain';
 import { assignmentStatusValues } from '../utils/labels';
 import { formatDate, formatDateTime, toNullable } from '../utils/format';
 import { useI18n } from '../i18n/I18nProvider';
@@ -23,7 +27,6 @@ import { useCelebration } from '../celebration/CelebrationProvider';
 
 const pageSize = 10;
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 function saveBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -60,6 +63,10 @@ export function AssignmentsPage() {
   const [page, setPage] = useState(1);
   const [viewPersonId, setViewPersonId] = useState<string | null>(null);
   const [assetFilter, setAssetFilter] = useState('');
+  // Wydanie na stałe to częstszy przypadek, więc termin zwrotu pojawia się dopiero po wyłączeniu przełącznika (US-05).
+  const [openEnded, setOpenEnded] = useState(true);
+  const [dueDate, setDueDate] = useState('');
+  const [returnStates, setReturnStates] = useState<Record<string, ReturnState>>({});
   const debouncedSearch = useDebouncedValue(search.trim().toLowerCase(), 250);
   const assignmentsLoader = useMemo(
     () => () => api.assignmentsPaged({ search: debouncedSearch || undefined, status: status || undefined, page, pageSize }),
@@ -83,13 +90,17 @@ export function AssignmentsPage() {
     return () => window.clearTimeout(timeout);
   }, [message]);
 
-  // Wejście z palety komend (Ctrl+K) - otwiera formularz wydania i sprząta parametr, żeby odświeżenie
+  // Wejście z palety komend (Ctrl+K) lub z karty sprzętu - otwiera formularz wydania i sprząta parametr, żeby odświeżenie
   // strony nie otwierało go po raz drugi. Ten sam wzorzec co ?addSelf=1 na stronie osób.
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;
+    // ?asset=<id> przychodzi z karty sprzętu ("Wydaj osobie") - od razu zaznacza ten egzemplarz.
+    const assetId = searchParams.get('asset');
+    if (assetId) setSelectedAssetIds([assetId]);
     setDrawerMode('create');
     const next = new URLSearchParams(searchParams);
     next.delete('new');
+    next.delete('asset');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -113,7 +124,7 @@ export function AssignmentsPage() {
         personId,
         assets: selectedAssetIds.map(assetId => ({ assetId, issueCondition: t(`issueCondition.${issueConditions[assetId] ?? 'ok'}`) })),
         procedureIds: selectedProcedureIds,
-        dueDate: toNullable(String(form.get('dueDate') ?? '')),
+        dueDate: openEnded ? null : toNullable(dueDate),
         notes: toNullable(String(form.get('notes') ?? ''))
       };
       const photos: EvidencePhoto[] = selectedAssetIds.flatMap(assetId => (issueEvidence[assetId] ?? []).map(file => ({ assetId, caption: null, file })));
@@ -123,6 +134,8 @@ export function AssignmentsPage() {
       setSelectedProcedureIds([]);
       setIssueConditions({});
       setIssueEvidence({});
+      setOpenEnded(true);
+      setDueDate('');
       setDrawerMode(null);
       celebrate(t('celebration.assignmentCreated'));
       await Promise.all([assignments.reload(), assets.reload()]);
@@ -159,6 +172,7 @@ export function AssignmentsPage() {
           destinationLocation,
           assets: assetsWithoutPhotos.map(asset => ({
             assetId: asset.assetId,
+            returnState: returnStates[asset.assetId],
             returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? ''))
           }))
         });
@@ -171,6 +185,7 @@ export function AssignmentsPage() {
             asset.assetId,
             {
               resolution: 'Returned',
+              returnState: returnStates[asset.assetId],
               returnCondition: toNullable(String(form.get(`returnCondition__${asset.assetId}`) ?? '')),
               returnLocation: destinationLocation,
               notes: null
@@ -188,6 +203,7 @@ export function AssignmentsPage() {
       setDrawerMode(null);
       setSelectedAssignment(null);
       setReturnEvidence({});
+      setReturnStates({});
       setMessage({ type: 'success', text: t('assignments.returned') });
       await Promise.all([assignments.reload(), assets.reload()]);
     } catch (error) {
@@ -267,7 +283,14 @@ export function AssignmentsPage() {
               <td data-label={t('assets.statusLabel')}><StatusBadge status={item.status} /></td>
               <td className="colDropMd" data-label={t('assignments.colAssets')}>{item.assets.length}</td>
               <td className="colDropSm" data-label={t('assignments.colDueDate')}>{formatDate(item.dueDate)}</td>
-              <td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? <button aria-label={t('assignments.acceptAria')} className="iconButton iconButton--success" onClick={() => acceptAssignment(item)}><CheckCircle2 size={16} /></button> : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setReturnEvidence({}); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td>
+              <td><div className="tableActions"><button aria-label={t('assignments.detailsAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setDrawerMode('details'); }}><Eye size={16} /></button>{item.status === 'AwaitingAcceptance' ? (
+                <ConfirmPopover
+                  message={t('assignments.acceptConfirm', { protocol: item.protocolNumber, person: item.personName ?? t('assignments.unknownPerson') })}
+                  confirmLabel={t('assignments.acceptConfirmButton')}
+                  onConfirm={() => acceptAssignment(item)}
+                  trigger={props => <button {...props} type="button" aria-label={t('assignments.acceptAria')} title={t('assignments.acceptAria')} className="iconButton iconButton--stateChange"><CheckCircle2 size={16} /></button>}
+                />
+              ) : null}{item.status === 'Accepted' || item.status === 'Overdue' ? <button aria-label={t('assignments.returnAria')} className="iconButton" onClick={() => { setSelectedAssignment(item); setReturnEvidence({}); setReturnStates({}); setDrawerMode('return'); }}><RotateCcw size={16} /></button> : null}</div></td>
             </tr>)}
           </tbody></table></div>
           <Pagination page={page} total={totalAssignments} pageSize={pageSize} onPageChange={setPage} />
@@ -277,7 +300,22 @@ export function AssignmentsPage() {
       <Modal open={drawerMode === 'create'} title={t('assignments.newAssignment')} onClose={() => setDrawerMode(null)} width="wide">
         <form className="formGrid" onSubmit={createAssignment}>
           <Field label={t('assignments.personLabel')}><SelectInput name="personId" required><option value="">{t('assignments.choosePersonOption')}</option>{people.data?.filter(person => person.employmentStatus === 'Active').map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}</SelectInput></Field>
-          <Field label={t('assignments.dueDateLabel')}><TextInput name="dueDate" type="date" min={todayIso()} /></Field>
+          <Switch checked={openEnded} onChange={setOpenEnded} label={t('assignments.openEnded')} hint={t('assignments.openEndedHint')} />
+          {openEnded ? null : (
+            <Field label={t('assignments.dueDateLabel')}>
+              <div className="dateWithPresets">
+                <TextInput name="dueDate" type="date" min={todayIsoLocal()} value={dueDate} onChange={event => setDueDate(event.target.value)} required />
+                <DatePresets
+                  presets={[
+                    { label: t('presets.plusDays', { count: 7 }), compute: () => addDays(todayIsoLocal(), 7) },
+                    { label: t('presets.plusDays', { count: 30 }), compute: () => addDays(todayIsoLocal(), 30) },
+                    { label: t('presets.endOfMonth'), compute: () => endOfMonth(todayIsoLocal()) }
+                  ]}
+                  onPick={setDueDate}
+                />
+              </div>
+            </Field>
+          )}
           <Field label={t('assignments.notesLabel')}><TextArea name="notes" /></Field>
           <fieldset className="choiceBox"><legend>{t('assignments.assetsFromStock')}</legend>{!assets.data?.length ? <p className="muted">{t('assignments.noAssetsInStock')}</p> : <>
           {assets.data.length > 8 && <TextInput value={assetFilter} onChange={event => setAssetFilter(event.target.value)} placeholder={t('common.filterList')} />}
@@ -307,8 +345,18 @@ export function AssignmentsPage() {
         <form className="formGrid" onSubmit={returnAssignment} key={selectedAssignment?.id ?? 'return'}>
           {selectedAssignment?.assets.map(asset => (
             <div key={asset.assetId} style={{ gridColumn: '1 / -1', display: 'grid', gap: '8px' }}>
-              <Field label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '-' })}>
-                <TextArea name={`returnCondition__${asset.assetId}`} placeholder={t('assignments.returnConditionPlaceholder')} required rows={2} />
+              <Field label={t('assignments.returnConditionFor', { name: asset.assetName ?? asset.assetTag ?? '-' })} group>
+                <OptionPicker
+                  kind="segmented"
+                  name={`returnState__${asset.assetId}`}
+                  options={returnStateValues.map(value => ({ value, label: t(`returnState.${value}`) }))}
+                  value={returnStates[asset.assetId] ?? ''}
+                  onChange={value => setReturnStates(current => ({ ...current, [asset.assetId]: value as ReturnState }))}
+                  required
+                />
+              </Field>
+              <Field label={t('assignments.returnNotesLabel')}>
+                <TextArea name={`returnCondition__${asset.assetId}`} placeholder={t('assignments.returnConditionPlaceholder')} rows={2} />
               </Field>
               <EvidencePhotoPicker files={returnEvidence[asset.assetId] ?? []} onChange={files => setReturnEvidence(current => ({ ...current, [asset.assetId]: files }))} />
             </div>
@@ -375,7 +423,7 @@ function AssignmentDetails({ assignment, onViewPerson }: { assignment: Assignmen
         <DetailItem label={t('assignments.dueLabel')} value={formatDate(assignment.dueDate)} />
         <DetailItem label={t('assignments.notesFieldLabel')} value={assignment.notes ?? t('assignments.notesFallback')} />
       </DetailGrid>
-      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '-'}</small></div><span>{asset.returnCondition ?? asset.issueCondition}</span></div>)}</div></Card>
+      <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.assetsSectionTitle')}</h2><p>{t('assignments.assetsSectionDesc')}</p></div></div><div className="listRows">{assignment.assets.map(asset => <div className="listRow" key={asset.assetId}><div><strong>{asset.assetName ?? t('assignments.unnamedAsset')}</strong><small>{asset.assetTag ?? '-'}</small></div><span>{asset.returnState ? <strong>{t(`returnState.${asset.returnState}`)}</strong> : null}{asset.returnState && asset.returnCondition ? ' · ' : null}{asset.returnCondition ?? (asset.returnState ? null : asset.issueCondition)}</span></div>)}</div></Card>
       <AssignmentEvidence assignment={assignment} />
       <Card className="card--flat"><div className="sectionTitle"><div><h2>{t('assignments.proceduresSectionTitle')}</h2><p>{t('assignments.proceduresSectionDesc')}</p></div></div><div className="listRows">{assignment.procedureAcceptances.length ? assignment.procedureAcceptances.map(item => <div className="listRow" key={item.id}><div><strong>{item.procedureTitle ?? t('assignments.unnamedProcedure')}</strong><small>{formatDateTime(item.sentAt)}</small></div><div className="rowActions"><StatusBadge status={item.status} /><button type="button" className="iconButton" aria-label={t('assignments.openProcedureAria')} onClick={() => navigate(`/procedures?open=${item.procedureId}`)}><ExternalLink size={16} /></button></div></div>) : <p className="muted">{t('assignments.noProceduresInPackage')}</p>}</div></Card>
       <Card className="card--flat">

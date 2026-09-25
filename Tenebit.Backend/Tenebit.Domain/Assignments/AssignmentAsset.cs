@@ -21,11 +21,13 @@ public sealed class AssignmentAsset
     public string? ReturnLocation { get; private set; }
     public string? ReturnedBy { get; private set; }
     public ReturnResolution? ReturnResolution { get; private set; }
+    public ReturnState? ReturnState { get; private set; }
     public string? ReturnNotes { get; private set; }
 
-    public void Resolve(ReturnResolution resolution, DateTimeOffset returnedAt, string? returnCondition, string? returnLocation, string? returnedBy, string? notes)
+    public void Resolve(ReturnResolution resolution, DateTimeOffset returnedAt, string? returnCondition, string? returnLocation, string? returnedBy, string? notes, ReturnState? returnState = null)
     {
         ReturnResolution = resolution;
+        ReturnState = returnState;
         ReturnedAt = returnedAt;
         ReturnCondition = string.IsNullOrWhiteSpace(returnCondition) ? "Bez uwag" : returnCondition.Trim();
         ReturnLocation = string.IsNullOrWhiteSpace(returnLocation) ? null : returnLocation.Trim();

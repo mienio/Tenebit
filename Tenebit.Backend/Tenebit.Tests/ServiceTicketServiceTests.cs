@@ -45,6 +45,24 @@ public class ServiceTicketServiceTests
     }
 
     [Fact]
+    public async Task ListVendorsAsync_ReturnsOwnOrganizationVendorsOnce()
+    {
+        var (service, user, tickets, _, _) = CreateService();
+        tickets.Add(new ServiceTicket(user.OrganizationId, Guid.NewGuid(), "Dell Serwis Gwarancyjny", null, null));
+        tickets.Add(new ServiceTicket(user.OrganizationId, Guid.NewGuid(), "dell serwis gwarancyjny", null, null));
+        tickets.Add(new ServiceTicket(user.OrganizationId, Guid.NewGuid(), "Lenovo Care", null, null));
+        tickets.Add(new ServiceTicket(Guid.NewGuid(), Guid.NewGuid(), "Obca firma", null, null));
+
+        var result = await service.ListVendorsAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, result.Value!.Count);
+        Assert.Contains(result.Value, vendor => vendor.Equals("Dell Serwis Gwarancyjny", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Lenovo Care", result.Value);
+        Assert.DoesNotContain("Obca firma", result.Value);
+    }
+
+    [Fact]
     public async Task CompleteAsync_ValidResultStatus_UpdatesAssetAndTicket()
     {
         var (service, user, tickets, assets, _) = CreateService();

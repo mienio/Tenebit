@@ -148,7 +148,10 @@ public sealed class ProtocolPdfService
                     AssetTag: asset?.AssetTag,
                     SerialNumber: asset?.SerialNumber,
                     // Po zwrocie liczy się stan zwrotu - to on jest przedmiotem ewentualnego sporu.
-                    Condition: item.ReturnCondition ?? item.IssueCondition,
+                    // Ogólny stan zwrotu idzie przed uwagami; "Bez uwag" to tylko domyślny wpis pustego pola.
+                    Condition: item.ReturnState is { } state && labels.ReturnStates.TryGetValue(state, out var stateLabel)
+                        ? (string.IsNullOrWhiteSpace(item.ReturnCondition) || item.ReturnCondition == "Bez uwag" ? stateLabel : $"{stateLabel} - {item.ReturnCondition}")
+                        : item.ReturnCondition ?? item.IssueCondition,
                     Value: asset?.PurchasePrice,
                     Currency: asset?.Currency,
                     Status: item.ReturnResolution?.ToString());
