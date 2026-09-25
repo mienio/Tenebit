@@ -905,7 +905,7 @@ export function AssetsPage() {
           <Field label={t('assets.purchaseDateLabel')}><TextInput id="asset-purchase-date" name="purchaseDate" type="date" value={formPurchaseDate} onChange={event => setFormPurchaseDate(event.target.value)} /></Field>
           <Field label={t('assets.warrantyUntilLabel')}>
             <div className="dateWithPresets">
-              <TextInput name="warrantyUntil" type="date" value={formWarrantyUntil} onChange={event => setFormWarrantyUntil(event.target.value)} />
+              <TextInput name="warrantyUntil" type="date" value={formWarrantyUntil} onChange={event => setFormWarrantyUntil(event.target.value)} min={formPurchaseDate || undefined} />
               <DatePresets
                 presets={[12, 24, 36].map(months => ({ label: t('presets.plusMonths', { count: months }), compute: () => (formPurchaseDate ? addMonths(formPurchaseDate, months) : null) }))}
                 onPick={setFormWarrantyUntil}

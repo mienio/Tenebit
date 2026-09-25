@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useI18n } from '../i18n/I18nProvider';
 
 export interface PickerOption {
@@ -197,7 +197,9 @@ function SearchablePicker({ options, name, current, onPick, required, disabled, 
         onBlur={close}
         onKeyDown={onKeyDown}
       />
-      <ChevronDown className="picker__chevron" size={16} aria-hidden />
+      {/* Lupa zamiast strzałki: przy 9+ opcjach pole jest polem tekstowym z wyszukiwaniem, nie zwykłym
+          selectem, a sama strzałka w dół nie mówiła tego wystarczająco wyraźnie (QA 25.09.2026). */}
+      <Search className="picker__chevron" size={16} aria-hidden />
       {/* Nośnik wartości dla FormData i walidacji `required`. Nie `type="hidden"` i nie readOnly - takie
           pola przeglądarka pomija przy walidacji, a pusty wymagany wybór ma zatrzymać zapis. */}
       <input className="picker__value" tabIndex={-1} aria-hidden name={name} value={current} required={required} onChange={() => undefined} />

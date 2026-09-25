@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { localTodayIso, todayInputValue, validationMessage } from './FormFields';
+import { localTodayIso, todayInputValue, validationMessage, yearRangeError } from './FormFields';
 import { translations } from '../i18n/translations';
 
 const t = (key: string, params?: Record<string, string | number>) => {
@@ -36,6 +36,27 @@ describe('komunikaty walidacji pól', () => {
 
   it('nieznany powód nadal daje treść, a nie pusty napis', () => {
     expect(validationMessage(control({}), t)).toBe('The value is invalid.');
+  });
+
+  it('błąd niestandardowy (setCustomValidity) pokazuje dokładnie ten komunikat', () => {
+    expect(validationMessage(control({ customError: true }, { validationMessage: 'The year must be between 1900 and 2076.' }), t))
+      .toBe('The year must be between 1900 and 2076.');
+  });
+});
+
+describe('sensowny zakres roku w polach daty', () => {
+  it('łapie rok spoza zakresu, np. wpisany przez pomyłkę jako dzień/miesiąc (QA 25.09.2026: "0005")', () => {
+    expect(yearRangeError('0005-02-09', t)).toContain('1900');
+  });
+
+  it('nie zgłasza błędu dla rozsądnych dat, pustej wartości ani niepełnego wpisu', () => {
+    expect(yearRangeError('2026-09-25', t)).toBe('');
+    expect(yearRangeError('', t)).toBe('');
+    expect(yearRangeError('202', t)).toBe('');
+  });
+
+  it('łapie też datę zbyt odległą w przyszłości', () => {
+    expect(yearRangeError('9999-01-01', t)).not.toBe('');
   });
 });
 

@@ -305,7 +305,7 @@ export function OffboardingPage() {
             </>
           ) : null}
           <Field label={t('offboarding.employmentEndsAtLabel')}><TextInput name="employmentEndsAt" type="datetime-local" value={employmentEndsAt} onChange={event => { setEmploymentEndsAt(event.target.value); returnDue.inherit(event.target.value); }} min={todayIso()} required /></Field>
-          <Field label={t('offboarding.returnDueDateLabel')} info={t('offboarding.returnDueInheritHint')}><TextInput name="returnDueDate" type="datetime-local" value={returnDue.value} onChange={event => returnDue.edit(event.target.value)} min={todayIso()} required /></Field>
+          <Field label={t('offboarding.returnDueDateLabel')} info={t('offboarding.returnDueInheritHint')}><TextInput name="returnDueDate" type="datetime-local" value={returnDue.value} onChange={event => returnDue.edit(event.target.value)} min={employmentEndsAt || todayIso()} required /></Field>
           <Field label={t('offboarding.returnLocationLabel')} group={pickerKindFor(returnLocationOptions.length + 1) === 'segmented'}>
             <OptionPicker name="defaultReturnLocation" options={returnLocationOptions} value={returnLocation.value} onChange={returnLocation.edit} emptyOption={t('offboarding.returnLocationNone')} />
           </Field>

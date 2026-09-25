@@ -12,6 +12,7 @@ export function validationMessage(control: ValidatableControl, t: Translate): st
   const validity = control.validity;
   const input = control as HTMLInputElement;
 
+  if (validity.customError) return control.validationMessage;
   if (validity.valueMissing) return t('validation.required');
   if (validity.typeMismatch) {
     if (input.type === 'email') return t('validation.email');
@@ -112,6 +113,21 @@ export function todayInputValue(type: string, current: string, now = new Date())
   return `${date}T${time}`;
 }
 
+const MIN_YEAR = 1900;
+const MAX_YEAR = new Date().getFullYear() + 50;
+
+/// Rok poza rozsądnym zakresem, wpisany bez żadnego ostrzeżenia przeglądarki. Natywny <input type="date">
+/// dzieli się na trzy segmenty sterowane pozycją kursora, nie parsowaniem tekstu - wpisanie "po ludzku"
+/// ciągu cyfr ze slashami (np. wklejone `09/25/2026`) rozjeżdża się z tym, czego oczekuje kontrolka,
+/// i cicho produkuje datę w stylu "09.02.0005" zamiast błędu walidacji (QA zgłoszenie 25.09.2026).
+/// Sama wartość jest przy tym syntaktycznie poprawną datą, więc validity API przeglądarki jej nie łapie -
+/// stąd ręczny setCustomValidity, włączony w ten sam mechanizm co reszta walidacji w <Field>.
+export function yearRangeError(value: string, t: Translate): string {
+  const year = Number(value.slice(0, 4));
+  if (value.length < 4 || !Number.isFinite(year)) return '';
+  return year < MIN_YEAR || year > MAX_YEAR ? t('validation.yearRange', { min: MIN_YEAR, max: MAX_YEAR }) : '';
+}
+
 /// Pole daty z przyciskiem "Dzisiaj". Natywny kalendarz wymaga otwarcia i szukania dnia, a puste pole
 /// straszy tylko maską dd.mm.rrrr - jedno kliknięcie w ikonę wpisuje dzisiejszą datę. Wartość ustawiamy
 /// przez natywny setter i zdarzenie `input`, więc działa to tak samo dla pól sterowanych (onChange
@@ -124,6 +140,25 @@ function DateInput(props: InputHTMLAttributes<HTMLInputElement>) {
   const outOfRange = (typeof props.min === 'string' && props.min.slice(0, 10) > today)
     || (typeof props.max === 'string' && props.max !== '' && props.max.slice(0, 10) < today);
   const locked = props.disabled || props.readOnly;
+
+  // Rok poza zakresem ustawia customValidity na każdą zmianę (żeby złapać ją także przy zapisie formularza
+  // bez opuszczania pola), a dopiero na blur wywołuje reportValidity() - to ono odpala zdarzenie `invalid`,
+  // które <Field> już przechwytuje i pokazuje jako zwykły komunikat pod polem, bez czekania na submit.
+  useEffect(() => {
+    const input = ref.current;
+    if (!input) return;
+    const sync = () => input.setCustomValidity(yearRangeError(input.value, t));
+    const onBlur = () => { sync(); if (!input.validity.valid) input.reportValidity(); };
+    sync();
+    input.addEventListener('input', sync);
+    input.addEventListener('change', sync);
+    input.addEventListener('blur', onBlur);
+    return () => {
+      input.removeEventListener('input', sync);
+      input.removeEventListener('change', sync);
+      input.removeEventListener('blur', onBlur);
+    };
+  }, [t]);
 
   const setToday = () => {
     const input = ref.current;
